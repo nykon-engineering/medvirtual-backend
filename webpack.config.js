@@ -1,5 +1,5 @@
 const path = require('path');
-const webpack = require('webpack'); // <- Importa o webpack corretamente
+const webpack = require('webpack'); 
 
 module.exports = {
   entry: './src/lambda.ts',
@@ -8,7 +8,13 @@ module.exports = {
   module: {
     rules: [{ test: /\.ts$/, use: 'ts-loader', exclude: /node_modules/ }],
   },
-  resolve: { extensions: ['.ts', '.js'] },
+  resolve: { 
+    extensions: ['.ts', '.js'],
+    fallback: {
+      // Workaround for error 'class-transformer/storage' ausente
+      'class-transformer/storage': false,
+    },
+  },
   output: {
     filename: 'index.js', //The lambda is configured to use index.js as the entry point
     path: path.resolve(__dirname, 'dist'),
@@ -23,7 +29,10 @@ module.exports = {
     }),
   ],
   externals: {
-    // Ignora o AWS SDK porque ele já está disponível no ambiente Lambda
+    // Ignore o AWS SDK because it is in lambda environment
     'aws-sdk': 'commonjs aws-sdk',
+    'class-transformer/storage': 'commonjs class-transformer/storage',
   },
+
+  devtool: 'source-map', // Generate source maps for debugging
 };
