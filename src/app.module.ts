@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { WorkosService } from './workos/workos.service';
+import { WorkosModule } from './workos/workos.module';
 
 @Module({
   imports: [
@@ -11,10 +13,11 @@ import { PrismaModule } from './prisma/prisma.module';
       isGlobal: true,
     }),
     UserModule,
-    PrismaModule
+    PrismaModule,
+    WorkosModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, WorkosService],
 })
 export class AppModule {}
 
