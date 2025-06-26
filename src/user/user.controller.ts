@@ -1,33 +1,32 @@
 import { Body, Controller, Inject, Get, Query, Res } from '@nestjs/common';
-import { UserService } from './user.service';
-import { Prisma } from '@prisma/client';
-import { WorkosService } from '../workos/workos.service';
 import { Response } from 'express';
+
+import { UserService } from './user.service';
+
+/*
+    1.User is redirected to workOs for authentication.
+    2.User login/register with the SSO chosed
+    3.WorkOs redirects back to our backedn with a code.
+    4.I use code to get user profile from Workos.
+*/
 
 @Controller('user')
 export class UserController {
     @Inject()
     private readonly userService: UserService;
-    private readonly workosService: WorkosService;
 
-    @Get('signup')
-    async signUp(@Query('code') code: string, @Res() res: Response) {
+    @Get('workOsCallback')
+    async workOsCallback(@Query('code') code: string, @Res() res: Response){
         try{
-            const profile = await this.workosService.getProfile(code);
-
-            const payload = {
-                id: profile.id,
-                email: profile.email,
-                firstName: profile.firstName,
-            }
-
-            //configurate JWT
-            const token = '';
-
-            res.redirect(`http://localhost:3000?token=${token}`);
-        }catch (error) {   
-            console.log('Error in auth:', error);
-            res.status(500).send('Authentication failed');
+            const token = await this.userService.handleUser(code);
+            return res.status(200).json({  
+                message: 'User authenticated successfully',
+                token: token,
+            });
+        }catch (error) {
+            console.error('Authentication Error:', error);
+            return res.status(500).send('Authentication failed');
         }
     }
+
 }
