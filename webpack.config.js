@@ -1,12 +1,17 @@
 const path = require('path');
 const webpack = require('webpack'); 
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const nodeExternals = require('webpack-node-externals');
 
 module.exports = {
   entry: './src/lambda.ts',
   target: 'node',
   mode: 'production',
   module: {
-    rules: [{ test: /\.ts$/, use: 'ts-loader', exclude: /node_modules/ }],
+    rules: [{ 
+      test: /\.ts$/, 
+      use: 'ts-loader', 
+      exclude: [/node_modules/, /\.spec\.ts$/, /test/] }],
   },
   resolve: { 
     extensions: ['.ts', '.js'],
@@ -27,12 +32,26 @@ module.exports = {
     new webpack.IgnorePlugin({
       resourceRegExp: /^@grpc\/grpc-js|@grpc\/proto-loader|kafkajs|mqtt|nats|ioredis|amqplib|amqp-connection-manager$/,
     }),
+    //Copy the Swagger UI assets to the dist folder
+    new CopyWebpackPlugin({
+      patterns: [
+        path.resolve(__dirname, 'node_modules/swagger-ui-dist/swagger-ui.css'),
+        path.resolve(__dirname, 'node_modules/swagger-ui-dist/swagger-ui-bundle.js'),
+        path.resolve(__dirname, 'node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js'),
+        path.resolve(__dirname, 'node_modules/swagger-ui-dist/favicon-16x16.png'),
+        path.resolve(__dirname, 'node_modules/swagger-ui-dist/favicon-32x32.png'),
+        
+      ],
+    }),
   ],
-  externals: {
-    // Ignore o AWS SDK because it is in lambda environment
-    'aws-sdk': 'commonjs aws-sdk',
-    'class-transformer/storage': 'commonjs class-transformer/storage',
-  },
+  externals: [
+    nodeExternals(),
+    {
+      // Ignore o AWS SDK because it is in lambda environment
+      'aws-sdk': 'commonjs aws-sdk',
+      'class-transformer/storage': 'commonjs class-transformer/storage',
+    },
+  ],
 
   devtool: 'source-map', // Generate source maps for debugging
 };

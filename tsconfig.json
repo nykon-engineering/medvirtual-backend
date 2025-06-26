@@ -16,6 +16,10 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": false,
     "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
-  }
+    "noFallthroughCasesInSwitch": false,
+    "types": ["node"],
+    "moduleResolution": "node",
+    "esModuleInterop": true
+  },
+  "exclude": ["**/*.spec.ts", "test", "node_modules"]
 }

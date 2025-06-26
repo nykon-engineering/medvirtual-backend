@@ -1,0 +1,34 @@
+#File responsible for simulate a lambda locally
+service: nest-api-local
+
+org: null
+app: null
+dashboard: false
+
+provider:
+  name: aws
+  runtime: nodejs16.x
+  region: us-east-1
+  stage: dev
+  memorySize: 512
+  timeout: 10
+
+functions:
+  api:
+    handler: dist/index.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: any
+          cors: true
+
+plugins:
+  - serverless-offline
+
+custom:
+  serverless-offline:
+    noPrependStageInUrl: true
+    
+package:
+  individually: true
+  excludeDevDependencies: true
