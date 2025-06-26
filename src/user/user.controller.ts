@@ -1,7 +1,8 @@
-import { Body, Controller, Inject, Get, Query, Res } from '@nestjs/common';
+import { Body, Controller, Inject, Get, Query, Res, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 
 import { UserService } from './user.service';
+import { AuthGuard } from '../auth/auth.guard';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -27,6 +28,12 @@ export class UserController {
             console.error('Authentication Error:', error);
             return res.status(500).send('Authentication failed');
         }
+    }
+
+    @UseGuards(AuthGuard)
+    @Get(':id')
+    async getUserById(@Query('id', ParseIntPipe) id: number) {
+        return this.userService.findById(id)
     }
 
 }

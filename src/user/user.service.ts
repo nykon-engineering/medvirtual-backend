@@ -22,6 +22,12 @@ export class UserService {
     });
   }
 
+  async findById(id: number): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
+  }
+
 
   async handleUser(code: string): Promise<string> {
     const profile = await this.workosService.getProfile(code);
