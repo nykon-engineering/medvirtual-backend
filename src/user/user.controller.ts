@@ -1,39 +1,35 @@
-import { Body, Controller, Inject, Get, Query, Res, ParseIntPipe, UseGuards } from '@nestjs/common';
-import { Response } from 'express';
+import { Body, Controller, Inject, Get, Query, Res, ParseIntPipe, UseGuards, Patch, Delete, NotFoundException } from '@nestjs/common';
 
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
-
-/*
-    1.User is redirected to workOs for authentication.
-    2.User login/register with the SSO chosed
-    3.WorkOs redirects back to our backedn with a code.
-    4.I use code to get user profile from Workos.
-*/
+import { CreateUserDto } from './dto/createUser.dto';
 
 @Controller('user')
 export class UserController {
     @Inject()
     private readonly userService: UserService;
 
-    @Get('workOsCallback')
-    async workOsCallback(@Query('code') code: string, @Res() res: Response){
-        try{
-            const token = await this.userService.handleUser(code);
-            return res.status(200).json({  
-                message: 'User authenticated successfully',
-                token: token,
-            });
-        }catch (error) {
-            console.error('Authentication Error:', error);
-            return res.status(500).send('Authentication failed');
-        }
-    }
-
     @UseGuards(AuthGuard)
     @Get(':id')
     async getUserById(@Query('id', ParseIntPipe) id: number) {
-        return this.userService.findById(id)
+        return this.userService.findById(id);
     }
 
+    @UseGuards(AuthGuard)
+    @Get(':organizationId')
+    async getUsersByOrganizationId(@Query('organizationId') organizationId: string) {
+        return this.userService.findByOrganizationId(organizationId);
+    }
+
+    @UseGuards(AuthGuard)
+    @Patch(':id')
+    async updateUser(@Query('id', ParseIntPipe) id: number, @Body() userData: CreateUserDto) {
+        return this.userService.update(id, userData);
+    }
+
+    @UseGuards(AuthGuard)
+    @Delete(':id')
+    async deleteUser(@Query('id', ParseIntPipe) id: number) {
+        return this.userService.delete(id);
+    }
 }

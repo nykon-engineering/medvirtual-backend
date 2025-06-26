@@ -7,6 +7,7 @@ import { WorkosModule } from '../workos/workos.module';
 @Module({
   providers: [UserService],
   controllers: [UserController],
-  imports: [PrismaModule, WorkosModule]
+  imports: [PrismaModule, WorkosModule],
+  exports: [UserService]
 })
 export class UserModule {}
