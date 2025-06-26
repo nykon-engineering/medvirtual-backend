@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Get, Query, Res, ParseIntPipe, UseGuards, Patch, Delete, NotFoundException } from '@nestjs/common';
+import { Body, Controller, Inject, Get, Param, ParseIntPipe, UseGuards, Patch, Delete, NotFoundException } from '@nestjs/common';
 
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -11,25 +11,25 @@ export class UserController {
 
     @UseGuards(AuthGuard)
     @Get(':id')
-    async getUserById(@Query('id', ParseIntPipe) id: number) {
+    async getUserById(@Param('id', ParseIntPipe) id: number) {
         return this.userService.findById(id);
     }
 
     @UseGuards(AuthGuard)
     @Get(':organizationId')
-    async getUsersByOrganizationId(@Query('organizationId') organizationId: string) {
+    async getUsersByOrganizationId(@Param('organizationId') organizationId: string) {
         return this.userService.findByOrganizationId(organizationId);
     }
 
     @UseGuards(AuthGuard)
     @Patch(':id')
-    async updateUser(@Query('id', ParseIntPipe) id: number, @Body() userData: CreateUserDto) {
+    async updateUser(@Param('id', ParseIntPipe) id: number, @Body() userData: CreateUserDto) {
         return this.userService.update(id, userData);
     }
 
     @UseGuards(AuthGuard)
     @Delete(':id')
-    async deleteUser(@Query('id', ParseIntPipe) id: number) {
+    async deleteUser(@Param('id', ParseIntPipe) id: number) {
         return this.userService.delete(id);
     }
 }

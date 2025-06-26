@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Post, Query, Res } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Res } from '@nestjs/common';
 import { Response } from 'express';
 
 import { AuthService } from './auth.service';
@@ -22,7 +22,7 @@ export class AuthController {
     }
 
     @Get('workOs')
-    async workOs(@Query('code') code: string, @Res() res: Response){
+    async workOs(@Param('code') code: string, @Res() res: Response){
         try{
             const token = await this.authService.handleUser(code);
             return res.status(200).json({  
