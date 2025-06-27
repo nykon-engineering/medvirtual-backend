@@ -45,7 +45,7 @@ module.exports = {
     }),
   ],
   externals: [
-    nodeExternals(),
+    
     {
       // Ignore o AWS SDK because it is in lambda environment
       'aws-sdk': 'commonjs aws-sdk',

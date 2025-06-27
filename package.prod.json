@@ -2,6 +2,7 @@
   "name": "medvirtual_back",
   "version": "0.0.1",
   "dependencies": {
+    "@codegenie/serverless-express": "^4.16.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",

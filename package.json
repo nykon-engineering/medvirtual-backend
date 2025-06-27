@@ -24,6 +24,7 @@
     "deploy:aws": "./deploy.sh && aws lambda update-function-code --function-name MedVirtualBackendNest --zip-file fileb://lambda.zip"
   },
   "dependencies": {
+    "@codegenie/serverless-express": "^4.16.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
