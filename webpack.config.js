@@ -1,7 +1,6 @@
 const path = require('path');
 const webpack = require('webpack'); 
 const CopyWebpackPlugin = require('copy-webpack-plugin');
-const nodeExternals = require('webpack-node-externals');
 
 module.exports = {
   entry: './src/lambda.ts',
@@ -40,7 +39,6 @@ module.exports = {
         path.resolve(__dirname, 'node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js'),
         path.resolve(__dirname, 'node_modules/swagger-ui-dist/favicon-16x16.png'),
         path.resolve(__dirname, 'node_modules/swagger-ui-dist/favicon-32x32.png'),
-        
       ],
     }),
   ],
