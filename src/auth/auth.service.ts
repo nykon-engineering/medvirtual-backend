@@ -6,9 +6,10 @@ import { WorkosService } from '../workos/workos.service';
 
 @Injectable()
 export class AuthService {
-    @Inject()
-    private readonly userService: UserService;
-    private readonly workosService: WorkosService
+  constructor(
+    private readonly userService: UserService,
+    private readonly workosService: WorkosService,
+  ) {}
 
     async handleUser(code: string): Promise<string> {
         const profile = await this.workosService.getProfile(code);
@@ -16,6 +17,7 @@ export class AuthService {
             throw new Error('Failed to retrieve user profile from WorkOS');
         }
         let user = await this.userService.findByEmail(profile.email);
+
         if (!user) {
           user = await this.userService.create({
             email: profile.email,
@@ -31,7 +33,15 @@ export class AuthService {
         });
         
         return token;
+  }
+
+  async signIn(): Promise<string> {
+    const authorizationUrl = await this.workosService.getUrl();
+    if (!authorizationUrl) {
+      throw new Error('Failed to generate authorization URL');
     }
+    return authorizationUrl;
+  }
 
 
 }
