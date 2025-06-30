@@ -12,23 +12,28 @@ export class AuthService {
   ) {}
 
     async handleUser(code: string): Promise<string> {
-        const profile = await this.workosService.getProfile(code);
-        if (!profile) {
-            throw new Error('Failed to retrieve user profile from WorkOS');
-        }
-        let user = await this.userService.findByEmail(profile.email);
+        console.log('Received code 2:', code);
+        
+        const user = await this.workosService.getUserByCode(code);
+        console.log('User profile:', user);
 
         if (!user) {
-          user = await this.userService.create({
-            email: profile.email,
-            name: `${profile.firstName} ${profile.lastName}`,
-            role: profile.role?.slug || 'user',
-            workosId: profile.id,
-            organizationId: profile.organizationId || 'default',
+            throw new Error('Failed to retrieve user profile from WorkOS');
+        }
+        
+        let userDB = await this.userService.findByEmail(user.email);
+
+        if (!userDB) {
+          userDB = await this.userService.create({
+            email: user.email,
+            name: `${user.firstName} ${user.lastName}`,
+            role: user.role?.slug || 'user',
+            workosId: user.id,
+            organizationId: user.organizationId || 'default',
           });
         }
-    
-        const token = jwt.sign({id: user.id}, process.env.JWT_SECRET, {
+        console.log('User created or found:', userDB);
+        const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
           expiresIn: '1h',
         });
         

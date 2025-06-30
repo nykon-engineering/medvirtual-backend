@@ -29,6 +29,7 @@ export class AuthController {
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
     async callback(@Query('code') code: string, @Res() res: Response){
+        console.log('Received code:', code);
         try{
             const token = await this.authService.handleUser(code);
             return res.status(200).json({  
@@ -48,7 +49,6 @@ export class AuthController {
     async signIn(@Res() res: Response) {
         const url = await this.authService.signIn();
         if (!url) {
-            console.error('Failed to generate authorization URL');
             return res.status(500).send('Failed to generate authorization URL');
         }
         return res.redirect(url);

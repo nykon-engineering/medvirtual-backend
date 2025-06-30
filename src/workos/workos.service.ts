@@ -12,28 +12,40 @@ export class WorkosService {
     });
   }
 
-  async getProfile(code: string) {
-    const response = await this.workos.sso.getProfileAndToken({
-      code,
-      clientId: process.env.WORKOS_CLIENT_ID || '',
-    });
+  async getUserByCode(code: string): Promise<any> {
+    if (!code) {
+      throw new Error('Code is required for authentication');
+    }
+    try{
+      console.log('Authenticating with WorkOS using code:', code);
+      
+      const user = await this.workos.userManagement.authenticateWithCode(
+        {
+          code,
+          clientId: process.env.WORKOS_CLIENT_ID!,
+        }
+      );
 
-    return response.profile;
+      console.log('User profile retrievedx:', user);
+      if (!user) {
+        throw new Error('Failed to retrieve user from WorkOS');
+      }
+      return user;
+    } catch (error) {
+      throw new Error('Failed to retrieve user profile from WorkOS');
+    }
   }
 
   async getUrl(){
-    console.log('Arrived in getAuthorization method');
     try{
       const authorizationUrl = await this.workos.userManagement.getAuthorizationUrl(
       {
         provider: 'authkit',
         redirectUri: process.env.WORKOS_REDIRECT_URL+'/auth/callback',
-        clientId: process.env.WORKOS_CLIENT_ID || '',
+        clientId: process.env.WORKOS_CLIENT_ID!,
       });
-      console.log('Authorization URL:', authorizationUrl);
       return authorizationUrl;
     } catch (error) { 
-      console.error('Error generating authorization URL:', error);
       throw new Error('Failed to generate authorization URL');
     }
   }
