@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Param, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
 
 import { AuthService } from './auth.service';
@@ -42,16 +42,30 @@ export class AuthController {
         }
     }
 
-    @Get('signIn')
+    @Get('workOs')
     @ApiOperation({ summary: 'Generate authorizationUrl from WorkOs' })
     @ApiResponse({ status: 200, description: 'Url generated succesfully' })
     @ApiResponse({ status: 500, description: 'Url generated failed' })
-    async signIn(@Res() res: Response) {
+    async workOs(@Res() res: Response) {
         const url = await this.authService.signIn();
         if (!url) {
             return res.status(500).send('Failed to generate authorization URL');
         }
         return res.redirect(url);
+    }
+
+    @Post('signIn')
+    async sigin(@Body('data') data: any, @Res() res: Response) {
+        try {
+            const token = await this.authService.handleUser(data.code);
+            return res.status(200).json({
+                message: 'User authenticated successfully',
+                token: token,
+            });
+        } catch (error) {
+            console.error('Authentication Error:', error);
+            return res.status(500).send('Authentication failed');
+        }
     }
 
 }

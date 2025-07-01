@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 
 import { UserService } from '../user/user.service';
@@ -39,12 +39,22 @@ export class AuthService {
         return token;
   }
 
-  async signIn(): Promise<string> {
+  async workOsSignIn(): Promise<string> {
     const authorizationUrl = await this.workosService.getUrl();
     if (!authorizationUrl) {
       throw new Error('Failed to generate authorization URL');
     }
     return authorizationUrl;
+  }
+
+  async signin(data: any): Promise<string> {
+    const user = await this.userService.findByEmail(data.email);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const token = jwt.compareSync(data.password, user.password);
+
   }
 
 
