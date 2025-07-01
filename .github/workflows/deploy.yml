@@ -55,9 +55,11 @@ jobs:
         working-directory: lambda-package
         run: zip -r ../lambda.zip . > /dev/null
 
+      - name: 🚀 Setup AWS CLI
+        uses: aws-actions/setup-cli@v2
+
       - name: 🚀 Deploy at AWS Lambda
-        uses: aws-actions/aws-cli@v1
-        with:
+        run: |
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
