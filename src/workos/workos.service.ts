@@ -17,16 +17,12 @@ export class WorkosService {
       throw new Error('Code is required for authentication');
     }
     try{
-      console.log('Authenticating with WorkOS using code:', code);
-      
       const user = await this.workos.userManagement.authenticateWithCode(
         {
           code,
           clientId: process.env.WORKOS_CLIENT_ID!,
         }
       );
-
-      console.log('User profile retrievedx:', user);
       if (!user) {
         throw new Error('Failed to retrieve user from WorkOS');
       }

@@ -12,15 +12,14 @@ export class AuthService {
   ) {}
 
     async handleUser(code: string): Promise<string> {
-        console.log('Received code 2:', code);
-        
-        const user = await this.workosService.getUserByCode(code);
-        console.log('User profile:', user);
-
-        if (!user) {
+        const result = await this.workosService.getUserByCode(code);
+        if (!result) {
             throw new Error('Failed to retrieve user profile from WorkOS');
         }
-        
+
+        const user = result.user;
+        console.log('User:', user);
+        console.log('Email:', user.email);
         let userDB = await this.userService.findByEmail(user.email);
 
         if (!userDB) {
