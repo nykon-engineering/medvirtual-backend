@@ -2,6 +2,8 @@
 import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcryptjs';
+
 
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkosService } from '../workos/workos.service';
@@ -12,7 +14,16 @@ export class UserService {
   private readonly prisma: PrismaService;
 
   async create(userData: Prisma.UserCreateInput): Promise<User> {
-    return this.prisma.user.create({ data: userData });
+
+    const {password, ...rest} = userData;
+    const hash = await bcrypt.hash(password, 10);
+    
+    const newUserData = {
+      ...rest,
+      password: hash,
+    }
+
+    return this.prisma.user.create({ data: newUserData });
   }
 
   async findByEmail(email: string): Promise<User | null> {

@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Inject, Param, Post, Query, Res } from '@nestjs/common';
 import { Response } from 'express';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { AuthService } from './auth.service';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+
+import { SignInDto } from './dto/SignIn.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -47,25 +49,39 @@ export class AuthController {
     @ApiResponse({ status: 200, description: 'Url generated succesfully' })
     @ApiResponse({ status: 500, description: 'Url generated failed' })
     async workOs(@Res() res: Response) {
-        const url = await this.authService.signIn();
+        const url = await this.authService.workOsSignIn();
         if (!url) {
             return res.status(500).send('Failed to generate authorization URL');
         }
         return res.redirect(url);
     }
 
-    @Post('signIn')
-    async sigin(@Body('data') data: any, @Res() res: Response) {
-        try {
-            const token = await this.authService.handleUser(data.code);
-            return res.status(200).json({
-                message: 'User authenticated successfully',
-                token: token,
-            });
-        } catch (error) {
-            console.error('Authentication Error:', error);
-            return res.status(500).send('Authentication failed');
-        }
+    @Post('signin')
+    @ApiOperation({ summary: 'SignIn from our own database' })
+    @ApiResponse({ status: 200, description: 'User authenticated successfully' })
+    @ApiResponse({ status: 401, description: 'User not found with this email' })
+    @ApiResponse({ status: 401, description: 'Signin method is wrong' })
+    @ApiResponse({ status: 400, description: 'Invalid Password' })
+    @ApiResponse({ status: 500, description: 'Authentication failed' })
+    async signIn(@Body() data: SignInDto) {
+        
+    const token = await this.authService.signIn(data);
+    return {
+        statusCode: 200,
+        message: 'User authenticated successfully',
+        token,
+        };
+    }
+
+    @Post('signup')
+    async signUp(@Body() data: SignInDto) {
+
+        const code = await this.authService.signUp(data);
+        return {
+            statusCode: 200,
+            message: 'Code sent successfully',
+            code,
+        };
     }
 
 }

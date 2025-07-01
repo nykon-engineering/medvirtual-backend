@@ -3,10 +3,11 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UserModule } from '../user/user.module';
 import { WorkosModule } from '../workos/workos.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService],
-  imports: [UserModule, WorkosModule],
+  imports: [UserModule, WorkosModule, MailModule],
 })
 export class AuthModule {}
