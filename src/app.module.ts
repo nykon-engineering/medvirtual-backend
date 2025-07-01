@@ -6,6 +6,7 @@ import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { WorkosService } from './workos/workos.service';
 import { WorkosModule } from './workos/workos.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -14,7 +15,8 @@ import { WorkosModule } from './workos/workos.module';
     }),
     UserModule,
     PrismaModule,
-    WorkosModule
+    WorkosModule,
+    AuthModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

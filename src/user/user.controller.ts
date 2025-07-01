@@ -1,33 +1,49 @@
-import { Body, Controller, Inject, Get, Query, Res } from '@nestjs/common';
-import { UserService } from './user.service';
-import { Prisma } from '@prisma/client';
-import { WorkosService } from '../workos/workos.service';
-import { Response } from 'express';
+import { Body, Controller, Inject, Get, Param, ParseIntPipe, UseGuards, Patch, Delete, NotFoundException } from '@nestjs/common';
 
+import { UserService } from './user.service';
+import { AuthGuard } from '../auth/auth.guard';
+import { CreateUserDto } from './dto/createUser.dto';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { stat } from 'fs';
+
+@ApiTags('User')
 @Controller('user')
 export class UserController {
     @Inject()
     private readonly userService: UserService;
-    private readonly workosService: WorkosService;
 
-    @Get('signup')
-    async signUp(@Query('code') code: string, @Res() res: Response) {
-        try{
-            const profile = await this.workosService.getProfile(code);
+    @UseGuards(AuthGuard)
+    @ApiOperation({ summary: 'Get user using ID' })
+    @ApiResponse({ status: 200, description: 'User found successfully.' })
+    @Get(':id')
+    async getUserById(@Param('id', ParseIntPipe) id: number) {
+        return this.userService.findById(id);
+    }
 
-            const payload = {
-                id: profile.id,
-                email: profile.email,
-                firstName: profile.firstName,
-            }
+    @UseGuards(AuthGuard)
+    @ApiOperation({ summary: 'Get all users of the specific organization' })
+    @ApiResponse({ status: 200, description: 'Users found successfully.' })
+    @ApiResponse({ status: 404, description: 'No users found in this organization.' })
+    @Get(':organizationId')
+    async getUsersByOrganizationId(@Param('organizationId') organizationId: string) {
+        return this.userService.findByOrganizationId(organizationId);
+    }
 
-            //configurate JWT
-            const token = '';
+    @UseGuards(AuthGuard)
+    @ApiOperation({ summary: 'Update user' })
+    @ApiResponse({ status: 200, description: 'User updated successfully.' })
+    @ApiResponse({ status: 400, description: 'Failed to update user' })
+    @Patch(':id')
+    async updateUser(@Param('id', ParseIntPipe) id: number, @Body() userData: CreateUserDto) {
+        return this.userService.update(id, userData);
+    }
 
-            res.redirect(`http://localhost:3000?token=${token}`);
-        }catch (error) {   
-            console.log('Error in auth:', error);
-            res.status(500).send('Authentication failed');
-        }
+    @UseGuards(AuthGuard)
+    @ApiOperation({ summary: 'Delete user' })
+    @ApiResponse({ status: 200, description: 'User deleted successfully.' })
+    @ApiResponse({ status: 400, description: 'Failed to delete user' })
+    @Delete(':id')
+    async deleteUser(@Param('id', ParseIntPipe) id: number) {
+        return this.userService.delete(id);
     }
 }
