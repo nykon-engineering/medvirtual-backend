@@ -20,7 +20,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "deploy:local": "npm run prisma:generate && npm run build:webpack && npx nodemon --watch src --exec \"npx serverless offline\"",
+    "clean:prisma": "rm -rf node_modules/.prisma",
+    "deploy:local": "npm run clean:prisma && npm install && npm run prisma:generate && npm run build:webpack && npx nodemon --watch src --exec \"npx serverless offline\"",
     "deploy:aws": "./deploy.sh"
   },
   "dependencies": {
