@@ -25,11 +25,11 @@ jobs:
       - name: 📦 remove binaries from macOs
         run: rm -rf node_modules/.prisma
 
-      - name: 🧱 Prisma by docker
-        run: docker run --rm -v $(pwd):/app -w /app node:18 npx prisma generate
-
       - name: Update binaryTargets for production (Linux)
         run: sed -i 's/binaryTargets = \["native"\]/binaryTargets = \["rhel-openssl-1.0.x"\]/' prisma/schema.prisma
+
+      - name: 🧱 Prisma by docker
+        run: docker run --rm -v $(pwd):/app -w /app node:18 npx prisma generate
 
       - name: 🔨 Build with Webpack
         run: npx webpack --config webpack.config.js
