@@ -105,9 +105,7 @@ export class AuthService {
       subject: 'Verification Code',
       text: `Your verification code is: ${code}`,
     });
-    if(!mailSent){
-      throw new BadRequestException('Failed to send verification code');
-    }
+    
     
     return code;
 
