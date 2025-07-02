@@ -93,7 +93,9 @@ export class AuthService {
       authenticationMethod: authenticationMethod,
       organizationId: 'default',
     });
-
+    
+    console.log(newUser);
+    
     const code = generateVerificationCode(6);
     if (!code){
       throw new BadRequestException('Failed to generate verification code');

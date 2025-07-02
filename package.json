@@ -8,10 +8,11 @@
   "scripts": {
     "build": "nest build",
     "prisma:generate": "prisma generate",
+    "prisma:clean": "rm -rf node_modules/.prisma",
     "build:webpack": "webpack --config webpack.config.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "start:dev": "npx prisma generate && npx nodemon --watch src --ext ts --exec \"npx serverless offline\"",
+    "dev": "npm run prisma:clean && npm install && npm run prisma:generate && npx nodemon",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
@@ -20,9 +21,6 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "clean:prisma": "rm -rf node_modules/.prisma",
-    "deploy:local": "npm run clean:prisma && npm install && npm run prisma:generate && npm run build:webpack && npx nodemon --watch src --exec \"npx serverless offline\"",
-    "deploy:aws": "./deploy.sh"
   },
   "dependencies": {
     "@codegenie/serverless-express": "^4.16.0",

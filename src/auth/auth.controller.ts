@@ -5,6 +5,7 @@ import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 
 import { SignInDto } from './dto/SignIn.dto';
+import { SignUpDto } from './dto/SignUp.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -74,7 +75,11 @@ export class AuthController {
     }
 
     @Post('signup')
-    async signUp(@Body() data: SignInDto) {
+    @ApiOperation({ summary: 'SignUp from our own database' })
+    @ApiResponse({ status: 400, description: 'User already exists with this email' })
+    @ApiResponse({ status: 500, description: 'Failed to generate verification code' })
+    @ApiResponse({ status: 200, description: 'Code sent successfully' })
+    async signUp(@Body() data: SignUpDto) {
 
         const code = await this.authService.signUp(data);
         return {
