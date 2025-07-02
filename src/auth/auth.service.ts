@@ -5,7 +5,10 @@ import * as bcrypt from 'bcryptjs';
 import { UserService } from '../user/user.service';
 import { WorkosService } from '../workos/workos.service';
 import { MailService } from '../mail/mail.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { generateVerificationCode } from '../utils/generateCode.util'
+import { signUpReturnDto } from './dto/signupReturn.dto';
+
 
 
 @Injectable()
@@ -13,13 +16,18 @@ export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly workosService: WorkosService,
-    private readonly mailService: MailService
+    private readonly mailService: MailService,
+    private readonly prisma: PrismaService
   ) {}
 
     async handleUser(code: string): Promise<string> {
+      const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
+        if (!code) {
+            throw new BadRequestException('Code is required');
+        }
         const result = await this.workosService.getUserByCode(code);
         if (!result) {
-            throw new Error('Failed to retrieve user profile from WorkOS');
+            throw new BadRequestException('Failed to retrieve user profile from WorkOS');
         }
 
         const user = result.user;
@@ -36,11 +44,32 @@ export class AuthService {
             status: 'active',
             authenticationMethod: result.authenticationMethod,
             organizationId: result.organizationId || 'default',
+            jobTitle: user.jobTitle || 'default',
+            companyName: user.companyName || 'default',
+            verified: true, // Assuming SSO users are verified by default
           });
         }
         const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
           expiresIn: '1h',
         });
+
+        //revoke previous sessions of this user before I create the new session
+        await this.prisma.session.updateMany({
+          where: { userId: user.id },
+          data: { isRevoked: true },
+        });
+
+        const session = await this.prisma.session.create({
+          data:{
+            userId: userDB.id,
+            token: token,
+            expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
+          }
+        })
+
+        if (!session) {
+          throw new BadRequestException('Failed to create session');
+        }
         
         return token;
   }
@@ -54,6 +83,7 @@ export class AuthService {
   }
 
   async signIn(data: any): Promise<string> {
+    const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (!user) {
@@ -64,6 +94,10 @@ export class AuthService {
       throw new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used');
     }
 
+    if (!user.verified) {
+      throw new UnauthorizedException('User not verified');
+    }
+
     const isMatch = await bcrypt.compare(data.password, user.password);
     if (!isMatch) {
       throw new BadRequestException('Invalid password');
@@ -72,44 +106,144 @@ export class AuthService {
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
+
+    //revoke previous sessions of this user before I create the new session
+    await this.prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { isRevoked: true },
+    });
+
+    const session = await this.prisma.session.create({
+      data:{
+        userId: user.id,
+        token: token,
+        expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
+      }
+    })
+
+    if (!session) {
+      throw new BadRequestException('Failed to create session');
+    }
     return token;
   }
 
-  async signUp(data: any): Promise<string> {
+  async signUp(data: any): Promise<signUpReturnDto> {
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
+  
     if (user) {
       throw new BadRequestException('User already exists with this email');
     }
-
     const hashedPassword = await bcrypt.hash(data.password, 10);
+
     const newUser = await this.userService.create({
       email: data.email,
       name: `${data.firstName} ${data.lastName}`,
       role: data.role || 'user',
-      workosId: '',
+      workosId: 'default',
       password: hashedPassword,
       status: 'active',
       authenticationMethod: authenticationMethod,
       organizationId: 'default',
+      jobTitle: data.jobTitle || 'default',
+      companyName: data.companyName || 'default',
     });
-
+    
     const code = generateVerificationCode(6);
     if (!code){
       throw new BadRequestException('Failed to generate verification code');
     }
 
-    const mailSent = await this.mailService.sendMail(
+    // Send verification code via email
+    await this.mailService.sendMail(
     {
       to:data.email,
       subject: 'Verification Code',
       text: `Your verification code is: ${code}`,
     });
-    
-    
-    return code;
 
+    // Store the verification code in the database with an expiration time
+    const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const storeCode = await this.prisma.emailVerification.create({
+        data: {
+          userId: newUser.id,
+          code: code,
+          expiresAt: codeExpiresAt,
+        }
+      });
+    if (!storeCode) {
+      throw new BadRequestException('Failed to store verification code');
+    }
+
+    return {
+      code,
+      email: data.email
+    };
   }
 
+  async verifyCode(data: signUpReturnDto): Promise<boolean> {
+    if (!data.code || !data.email) {
+      throw new BadRequestException('Code and email are required');
+    }
+
+    const user = await this.userService.findByEmail(data.email);
+    if (!user) {
+      throw new BadRequestException('User not found with this email');
+    }
+    //Verify if the code exists for this user
+    const verificationCode = await this.prisma.emailVerification.findFirst({
+      where: {
+        userId: user.id,
+        code: data.code,
+      },
+    });
+    if (!verificationCode) {
+      throw new BadRequestException('Invalid verification code');
+    }
+    if (verificationCode.verified !== false) {
+      throw new BadRequestException('Code already verified');
+    }
+
+    //Update code status to verified
+    const updatedCode = await this.prisma.emailVerification.update({
+      where: { id: verificationCode.id },
+      data: { verified: true },
+    });
+    if (!updatedCode) {
+      throw new BadRequestException('Failed to verify code');
+    }
+
+    //Update user verified to true
+    await this.prisma.user.update({
+      where:{
+        id: user.id,
+      },
+      data: {
+        verified: true,
+      }
+    })
+
+    return true;
+  }
+
+
+
+  async logout (token: string): Promise<boolean> {
+    if (!token) {
+      throw new BadRequestException('Token is required');
+    }
+    
+    const revodeToken = await this.prisma.session.updateMany({
+      where: { token },
+      data: { isRevoked: true },
+    });
+
+    if (!revodeToken) {
+      throw new BadRequestException('Failed to revoke token');
+    }
+
+    return true;
+
+  }
 
 }

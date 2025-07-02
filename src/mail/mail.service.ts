@@ -17,6 +17,7 @@ export class MailService {
       },
     });
   }
+  
 
   async sendMail(options: SendMailOptions): Promise<void> {
     await this.transporter.sendMail({

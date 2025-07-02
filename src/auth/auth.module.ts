@@ -4,10 +4,11 @@ import { AuthService } from './auth.service';
 import { UserModule } from '../user/user.module';
 import { WorkosModule } from '../workos/workos.module';
 import { MailModule } from '../mail/mail.module';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService],
-  imports: [UserModule, WorkosModule, MailModule],
+  imports: [UserModule, WorkosModule, MailModule, PrismaModule],
 })
 export class AuthModule {}

@@ -9,5 +9,5 @@ export function generateVerificationCode(length): string {
     result += chars[bytes[i] % chars.length];
   }
 
-  return result;
+  return result.toUpperCase();
 }

@@ -13,14 +13,12 @@ $ npm install
 ## Compile and run the project
 
 ```bash
-# development
-$ npm run start
 
-# watch mode
-$ npm run start:dev
+# development / watch mode
+$ npm run dev
 
 # production mode
-$ npm run start:prod
+# //Just with CICD in the github action
 ```
 
 ## Run tests
@@ -38,9 +36,7 @@ $ npm run test:cov
 
 ## Deployment
 
-!important : It isn't configurated yet
-This backend will be hosting on Aws Lamba with automatic deploy using github actions and aws cli. 
-For that goal, when this repository is ready, we need to run the command bellow:
+this application there  automatic deploy using github actions.
 
 ```bash
 $ npm run deploy

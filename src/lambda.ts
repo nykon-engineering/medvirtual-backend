@@ -16,7 +16,7 @@ async function bootstrapServer(): Promise<any> {
 
   //Inicialize the Swagger configuration
   const config = new DocumentBuilder()
-  .setTitle('My API documentation')
+  .setTitle('MedVirtual Backend')
   .setDescription('API documentation for our backend application developed in  NestJS')
   .setVersion('1.0')
   .build();
