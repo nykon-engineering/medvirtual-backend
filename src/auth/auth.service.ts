@@ -20,6 +20,7 @@ export class AuthService {
   ) {}
 
     async handleUser(code: string): Promise<string> {
+      const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
         if (!code) {
             throw new BadRequestException('Code is required');
         }
@@ -48,11 +49,17 @@ export class AuthService {
           expiresIn: '1h',
         });
 
+        //revoke previous sessions of this user before I create the new session
+        await this.prisma.session.updateMany({
+          where: { userId: user.id },
+          data: { isRevoked: true },
+        });
+
         const session = await this.prisma.session.create({
           data:{
             userId: userDB.id,
             token: token,
-            expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+            expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
           }
         })
 
@@ -72,6 +79,7 @@ export class AuthService {
   }
 
   async signIn(data: any): Promise<string> {
+    const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (!user) {
@@ -90,29 +98,47 @@ export class AuthService {
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
+
+    //revoke previous sessions of this user before I create the new session
+    await this.prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { isRevoked: true },
+    });
+
+    const session = await this.prisma.session.create({
+      data:{
+        userId: user.id,
+        token: token,
+        expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
+      }
+    })
+
+    if (!session) {
+      throw new BadRequestException('Failed to create session');
+    }
+
     return token;
   }
 
   async signUp(data: any): Promise<string> {
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
+  
     if (user) {
       throw new BadRequestException('User already exists with this email');
     }
-
     const hashedPassword = await bcrypt.hash(data.password, 10);
+
     const newUser = await this.userService.create({
       email: data.email,
       name: `${data.firstName} ${data.lastName}`,
       role: data.role || 'user',
-      workosId: '',
+      workosId: 'default',
       password: hashedPassword,
       status: 'active',
       authenticationMethod: authenticationMethod,
       organizationId: 'default',
     });
-    
-    console.log(newUser);
     
     const code = generateVerificationCode(6);
     if (!code){

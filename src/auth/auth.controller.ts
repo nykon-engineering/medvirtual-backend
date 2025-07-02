@@ -77,6 +77,7 @@ export class AuthController {
     @ApiResponse({ status: 401, description: 'User not found with this email' })
     @ApiResponse({ status: 401, description: 'Signin method is wrong' })
     @ApiResponse({ status: 400, description: 'Invalid Password' })
+    @ApiResponse({ status: 400, description: 'Failed to create session' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
     async signIn(@Body() data: SignInDto) {
         

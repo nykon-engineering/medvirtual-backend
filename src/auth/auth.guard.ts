@@ -2,7 +2,6 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { PrismaService } from '../prisma/prisma.service';
 import * as jwt from 'jsonwebtoken';
 import { Request } from 'express';
-import { User } from '@prisma/client';
 
 
 @Injectable()
@@ -36,10 +35,14 @@ export class AuthGuard implements CanActivate {
         },
         include: {user: true},
       })
-      
+
+      if (!session) {
+        throw new UnauthorizedException('Invalid session');
+      }
+      req['user'] = session.user;
       return true
     } catch (error) {
-      return false;
+      throw new UnauthorizedException('Invalid or expired token');
     }
     
   }

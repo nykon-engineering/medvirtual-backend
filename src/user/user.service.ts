@@ -20,7 +20,6 @@ export class UserService {
       ...rest,
       password: hash,
     }
-
     return this.prisma.user.create({ data: newUserData });
   }
 
