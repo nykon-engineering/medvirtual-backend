@@ -4,9 +4,7 @@ import { Prisma, User } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
-
 import { PrismaService } from '../prisma/prisma.service';
-import { WorkosService } from '../workos/workos.service';
 
 @Injectable()
 export class UserService {

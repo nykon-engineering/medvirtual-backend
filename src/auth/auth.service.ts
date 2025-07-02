@@ -5,7 +5,9 @@ import * as bcrypt from 'bcryptjs';
 import { UserService } from '../user/user.service';
 import { WorkosService } from '../workos/workos.service';
 import { MailService } from '../mail/mail.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { generateVerificationCode } from '../utils/generateCode.util'
+
 
 
 @Injectable()
@@ -13,13 +15,17 @@ export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly workosService: WorkosService,
-    private readonly mailService: MailService
+    private readonly mailService: MailService,
+    private readonly prisma: PrismaService
   ) {}
 
     async handleUser(code: string): Promise<string> {
+        if (!code) {
+            throw new BadRequestException('Code is required');
+        }
         const result = await this.workosService.getUserByCode(code);
         if (!result) {
-            throw new Error('Failed to retrieve user profile from WorkOS');
+            throw new BadRequestException('Failed to retrieve user profile from WorkOS');
         }
 
         const user = result.user;
@@ -41,6 +47,18 @@ export class AuthService {
         const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
           expiresIn: '1h',
         });
+
+        const session = await this.prisma.session.create({
+          data:{
+            userId: userDB.id,
+            token: token,
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+          }
+        })
+
+        if (!session) {
+          throw new BadRequestException('Failed to create session');
+        }
         
         return token;
   }
@@ -107,11 +125,25 @@ export class AuthService {
       subject: 'Verification Code',
       text: `Your verification code is: ${code}`,
     });
-    
-    
     return code;
-
   }
 
+  async logout (token: string): Promise<boolean> {
+    if (!token) {
+      throw new BadRequestException('Token is required');
+    }
+    
+    const revodeToken = await this.prisma.session.updateMany({
+      where: { token },
+      data: { isRevoked: true },
+    });
+
+    if (!revodeToken) {
+      throw new BadRequestException('Failed to revoke token');
+    }
+
+    return true;
+
+  }
 
 }
