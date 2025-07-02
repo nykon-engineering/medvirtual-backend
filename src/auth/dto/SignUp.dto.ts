@@ -10,14 +10,13 @@ export class SignUpDto {
 
   @ApiProperty({ required: true, description: 'User last Name' })
   @IsString()
-  lastname: string;
+  lastName: string;
 
   @ApiProperty({ required: true, description: 'User email address' })
   @IsEmail()
   email: string;
 
-  @ApiProperty({ required: true, description: 'User role' })
-  @IsString()
+  @ApiProperty({ required: false, description: 'User role' })
   role: string;
 
   @ApiProperty({ required: true, description: 'User password' })

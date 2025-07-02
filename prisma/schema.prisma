@@ -15,14 +15,18 @@ model User {
   email     String   @unique
   organizationId  String
   name      String
+  jobTitle  String
+  companyName String
   role      String
-  workosId  String   @unique
+  workosId  String  
   password  String
   authenticationMethod String
   status   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   Sessions Session[]
+  EmailVerifications EmailVerification[]
+  verified Boolean  @default(false)
 }
 
 model Session {
@@ -33,4 +37,14 @@ model Session {
   createdAt  DateTime @default(now())
   expiresAt  DateTime
   isRevoked  Boolean  @default(false)
+}
+
+model EmailVerification {
+  id         String   @id @default(uuid())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  code       String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  verified   Boolean  @default(false)
 }

@@ -7,7 +7,8 @@ import { AuthService } from './auth.service';
 import { SignInDto } from './dto/SignIn.dto';
 import { SignUpDto } from './dto/SignUp.dto';
 import { stat } from 'fs';
-import { LogoutDto } from './dto/logOu.dto';
+import { LogoutDto } from './dto/logOut.dto';
+import { signUpReturnDto } from './dto/signupReturn.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -75,7 +76,8 @@ export class AuthController {
     @ApiOperation({ summary: 'SignIn from our own database' })
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
     @ApiResponse({ status: 401, description: 'User not found with this email' })
-    @ApiResponse({ status: 401, description: 'Signin method is wrong' })
+    @ApiResponse({ status: 401, description: 'User does not use this authentication method. You need to Sign in with the first method you have used' })
+    @ApiResponse({ status: 401, description: 'User not verified' })
     @ApiResponse({ status: 400, description: 'Invalid Password' })
     @ApiResponse({ status: 400, description: 'Failed to create session' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
@@ -92,7 +94,8 @@ export class AuthController {
     @Post('signup')
     @ApiOperation({ summary: 'SignUp from our own database' })
     @ApiResponse({ status: 400, description: 'User already exists with this email' })
-    @ApiResponse({ status: 500, description: 'Failed to generate verification code' })
+    @ApiResponse({ status: 400, description: 'Failed to generate verification code' })
+    @ApiResponse({ status: 400, description: 'Failed to store verification code' })
     @ApiResponse({ status: 200, description: 'Code sent successfully' })
     async signUp(@Body() data: SignUpDto) {
 
@@ -103,6 +106,28 @@ export class AuthController {
             code
         }
     }
+
+    @Post('verify-code')
+    @Redirect()
+    @ApiBody({ type: signUpReturnDto })
+    @ApiOperation({ summary: 'Verify code for user registration' })
+    @ApiResponse({ status: 302, description: 'User registered successfully', type: Redirect })
+    @ApiResponse({ status: 400, description: 'Failed to verify code' })
+    @ApiResponse({ status: 400, description: 'Code and email are required' })
+    @ApiResponse({ status: 400, description: 'User not found with this email' })
+    @ApiResponse({ status: 400, description: 'Invalid verification code' })
+    @ApiResponse({ status: 400, description: 'Code already verified' })
+    async verifyCode(@Body() data: signUpReturnDto) {
+        const result = await this.authService.verifyCode(data);
+        if (!result) {
+            return {
+                statusCode: 400,
+                message: 'Failed to verify code'
+            };
+        }
+        return {url: '/login'};
+    }
+
 
     @Post('logout')
     @Redirect()

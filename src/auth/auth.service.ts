@@ -7,6 +7,7 @@ import { WorkosService } from '../workos/workos.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateVerificationCode } from '../utils/generateCode.util'
+import { signUpReturnDto } from './dto/signupReturn.dto';
 
 
 
@@ -43,6 +44,9 @@ export class AuthService {
             status: 'active',
             authenticationMethod: result.authenticationMethod,
             organizationId: result.organizationId || 'default',
+            jobTitle: user.jobTitle || 'default',
+            companyName: user.companyName || 'default',
+            verified: true, // Assuming SSO users are verified by default
           });
         }
         const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
@@ -90,6 +94,10 @@ export class AuthService {
       throw new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used');
     }
 
+    if (!user.verified) {
+      throw new UnauthorizedException('User not verified');
+    }
+
     const isMatch = await bcrypt.compare(data.password, user.password);
     if (!isMatch) {
       throw new BadRequestException('Invalid password');
@@ -116,11 +124,10 @@ export class AuthService {
     if (!session) {
       throw new BadRequestException('Failed to create session');
     }
-
     return token;
   }
 
-  async signUp(data: any): Promise<string> {
+  async signUp(data: any): Promise<signUpReturnDto> {
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
   
@@ -138,6 +145,8 @@ export class AuthService {
       status: 'active',
       authenticationMethod: authenticationMethod,
       organizationId: 'default',
+      jobTitle: data.jobTitle || 'default',
+      companyName: data.companyName || 'default',
     });
     
     const code = generateVerificationCode(6);
@@ -145,14 +154,79 @@ export class AuthService {
       throw new BadRequestException('Failed to generate verification code');
     }
 
-    const mailSent = await this.mailService.sendMail(
+    // Send verification code via email
+    await this.mailService.sendMail(
     {
       to:data.email,
       subject: 'Verification Code',
       text: `Your verification code is: ${code}`,
     });
-    return code;
+
+    // Store the verification code in the database with an expiration time
+    const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const storeCode = await this.prisma.emailVerification.create({
+        data: {
+          userId: newUser.id,
+          code: code,
+          expiresAt: codeExpiresAt,
+        }
+      });
+    if (!storeCode) {
+      throw new BadRequestException('Failed to store verification code');
+    }
+
+    return {
+      code,
+      email: data.email
+    };
   }
+
+  async verifyCode(data: signUpReturnDto): Promise<boolean> {
+    if (!data.code || !data.email) {
+      throw new BadRequestException('Code and email are required');
+    }
+
+    const user = await this.userService.findByEmail(data.email);
+    if (!user) {
+      throw new BadRequestException('User not found with this email');
+    }
+    //Verify if the code exists for this user
+    const verificationCode = await this.prisma.emailVerification.findFirst({
+      where: {
+        userId: user.id,
+        code: data.code,
+      },
+    });
+    if (!verificationCode) {
+      throw new BadRequestException('Invalid verification code');
+    }
+    if (verificationCode.verified !== false) {
+      throw new BadRequestException('Code already verified');
+    }
+
+    //Update code status to verified
+    const updatedCode = await this.prisma.emailVerification.update({
+      where: { id: verificationCode.id },
+      data: { verified: true },
+    });
+    if (!updatedCode) {
+      throw new BadRequestException('Failed to verify code');
+    }
+
+    //Update user verified to true
+    await this.prisma.user.update({
+      where:{
+        id: user.id,
+      },
+      data: {
+        verified: true,
+      }
+    })
+
+    return true;
+  }
+
+
 
   async logout (token: string): Promise<boolean> {
     if (!token) {
