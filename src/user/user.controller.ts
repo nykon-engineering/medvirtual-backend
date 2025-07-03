@@ -33,6 +33,7 @@ export class UserController {
     @ApiOperation({ summary: 'Update user' })
     @ApiResponse({ status: 200, description: 'User updated successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to update user' })
+    @ApiResponse({ status: 404, description: 'User not found' })
     @Patch(':id')
     async updateUser(@Param('id', ParseIntPipe) id: number, @Body() userData: CreateUserDto) {
         return this.userService.update(id, userData);

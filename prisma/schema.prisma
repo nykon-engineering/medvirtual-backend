@@ -11,22 +11,25 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
+  id              Int      @id @default(autoincrement())
+  email           String   @unique
   organizationId  String
-  name      String
-  jobTitle  String
-  companyName String
-  role      String
-  workosId  String  
-  password  String
+  first_name      String
+  last_name       String
+  phone           String
+  avatar          String
+  jobTitle        String
+  companyName     String
+  role            String
+  workosId        String  
+  password        String
   authenticationMethod String
-  status   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status         String
   Sessions Session[]
   EmailVerifications EmailVerification[]
-  verified Boolean  @default(false)
+  verified       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Session {

@@ -52,10 +52,22 @@ export class UserService {
 
   async update(id: number, userData: Prisma.UserUpdateInput): Promise<User> {
     try {
-      await this.findById(id);
+      let user;
+      const currentUser = await this.findById(id);
+      if (!currentUser){
+        throw new NotFoundException(`User not found`);
+      }
+
+      //verify user to update status
+      if (userData.jobTitle && userData.companyName && currentUser.status === 'incomplete') {
+        user = {...userData, status: 'active'};
+      }else{
+        user = {...userData};
+      }
+      
       return await this.prisma.user.update({
         where: { id },
-        data: userData,
+        data: user,
       });
     } catch (error){
       throw new BadRequestException(`Failed to update user: ${error.message}`);

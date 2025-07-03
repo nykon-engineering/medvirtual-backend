@@ -9,6 +9,7 @@ import { SignUpDto } from './dto/SignUp.dto';
 import { stat } from 'fs';
 import { LogoutDto } from './dto/logOut.dto';
 import { signUpReturnDto } from './dto/signupReturn.dto';
+import { resendCodeDto } from './dto/resendCode.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -66,10 +67,7 @@ export class AuthController {
                 message: 'Authentication failed'
             }
         }
-        return {
-            statusCode: 302,
-            url
-        }
+        return {url: url};
     }
 
     @Post('signin')
@@ -99,11 +97,12 @@ export class AuthController {
     @ApiResponse({ status: 200, description: 'Code sent successfully' })
     async signUp(@Body() data: SignUpDto) {
 
-        const code = await this.authService.signUp(data);
+        const result = await this.authService.signUp(data);
         return {
             statusCode: 200,
             message: 'Code sent successfully',
-            code
+            code: result.code,
+            email: result.email
         }
     }
 
@@ -126,6 +125,24 @@ export class AuthController {
             };
         }
         return {url: '/login'};
+    }
+
+    @Post('resend-code')
+    @ApiOperation({ summary: 'Resend verification code to user email' })
+    @ApiBody({ type: String })
+    @ApiResponse({ status: 200, description: 'Code sent successfully' })
+    @ApiResponse({ status: 400, description: 'Email is required' })
+    @ApiResponse({ status: 400, description: 'User not found with this email' })
+    @ApiResponse({ status: 400, description: 'Failed to invalidate previous verification code' })
+    @ApiResponse({ status: 400, description: 'Failed to generate verification code' })
+    async resendCode(@Body() email: resendCodeDto) {
+        const result = await this.authService.resendCode(email);
+        return {
+            statusCode: 200,
+            message: 'Code sent successfully',
+            code: result.code,
+            email: result.email
+        }
     }
 
 
