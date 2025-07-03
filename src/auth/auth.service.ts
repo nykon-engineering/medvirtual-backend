@@ -37,16 +37,19 @@ export class AuthService {
         if (!userDB) {
           userDB = await this.userService.create({
             email: user.email,
-            name: `${user.firstName} ${user.lastName}`,
+            organizationId: result.organizationId || '',
+            first_name: user.first_name,
+            last_name: user.last_name,
+            phone: user.phone || '',
+            avatar: user.profile_picture_url || '',
+            jobTitle: user.jobTitle || '',
+            companyName: user.companyName || '',
             role: user.role?.slug || 'user',
             workosId: user.id,
             password: '', // Password is not used for SSO users
-            status: 'active',
             authenticationMethod: result.authenticationMethod,
-            organizationId: result.organizationId || 'default',
-            jobTitle: user.jobTitle || 'default',
-            companyName: user.companyName || 'default',
-            verified: true, // Assuming SSO users are verified by default
+            status: 'incomplete',
+            verified: user.email_verified,
           });
         }
         const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
@@ -138,16 +141,20 @@ export class AuthService {
 
     const newUser = await this.userService.create({
       email: data.email,
-      name: `${data.firstName} ${data.lastName}`,
+      organizationId: '',
+      first_name: data.firstName,
+      last_name: data.lastName,
+      phone: '',
+      avatar: '',
+      jobTitle: data.jobTitle,
+      companyName: data.companyName,
       role: data.role || 'user',
-      workosId: 'default',
-      password: hashedPassword,
-      status: 'active',
+      workosId: '',
+      password: hashedPassword, // Password is not used for SSO users
       authenticationMethod: authenticationMethod,
-      organizationId: 'default',
-      jobTitle: data.jobTitle || 'default',
-      companyName: data.companyName || 'default',
-    });
+      status: 'active',
+      verified: false, // Initially set to false until the user verifies their email
+    })
     
     const code = generateVerificationCode(6);
     if (!code){
@@ -195,6 +202,7 @@ export class AuthService {
       where: {
         userId: user.id,
         code: data.code,
+        verified: false, //return just if the code is not verified yet
       },
     });
     if (!verificationCode) {
@@ -226,6 +234,48 @@ export class AuthService {
     return true;
   }
 
+  async resendCode(email: string): Promise<signUpReturnDto> {
+
+    //invalidate previuos code from this user
+    if (!email) {
+      throw new BadRequestException('Email is required');
+    }
+    const user = await this.userService.findByEmail(email);
+    if (!user) {
+      throw new BadRequestException('User not found with this email');
+    }
+    const invalidateCode = await this.prisma.emailVerification.updateMany({
+      where: {
+        userId: user.id,
+      },
+      data: { 
+        verified: true // Mark as verified to invalidate
+      }, 
+    });
+    if (!invalidateCode) {
+      throw new BadRequestException('Failed to invalidate previous verification code');
+    }
+
+    //generate new code
+    const code = generateVerificationCode(6);
+    if (!code){
+      throw new BadRequestException('Failed to generate verification code');
+    }
+
+    // Send verification code via email
+    await this.mailService.sendMail(
+    {
+      to:user.email,
+      subject: 'Verification Code',
+      text: `Your verification code is: ${code}`,
+    });
+
+    return {
+      code,
+      email: user.email
+    }
+
+  }
 
 
   async logout (token: string): Promise<boolean> {
