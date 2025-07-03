@@ -67,10 +67,7 @@ export class AuthController {
                 message: 'Authentication failed'
             }
         }
-        return {
-            statusCode: 302,
-            url
-        }
+        return {url: url};
     }
 
     @Post('signin')
