@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcryptjs'; 
 
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { forgotDto } from './dto/forgot.dto';
+import { ResetPasswordDto } from './dto/resetPassword.dto';
 
 @Injectable()
 export class RecoverypassService {
@@ -23,7 +25,7 @@ export class RecoverypassService {
         }
 
         //create hash with the email and the current date with expiration time
-        const hash = jwt.sign({id: user.id, email: user.email}, process.env.JWT_SECRET, {
+        const hash = jwt.sign({id: user.id}, process.env.JWT_SECRET, {
             expiresIn: '10m',
         });
 
@@ -40,7 +42,52 @@ export class RecoverypassService {
         if(!emailSent) {
             throw new BadRequestException('Error sending recovery email');
         }
-        
         return true;
+    }
+
+
+    async verifyCode(hash: string): Promise<Boolean> {
+        if (!hash) {
+            throw new NotFoundException('Hash is empty or not found');
+        }
+        //verify the hash validate
+        try{
+            const payload = jwt.verify(hash, process.env.JWT_SECRET);
+            return true;
+        }catch (error) {
+            throw new BadRequestException('Hash is expired or invalid');
+        }
+    }
+
+    async resetPassword(data: ResetPasswordDto): Promise<Boolean> {
+
+        const { hash, newPassword } = data;
+        if (!hash) {
+            throw new BadRequestException('Hash is required');
+        }
+        if (!newPassword) {
+            throw new BadRequestException('New password is required');
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        
+        //verify the hash validate
+        try {
+            const payload = jwt.verify(hash, process.env.JWT_SECRET);
+            const userId = payload['id'];
+
+            if (!userId) {
+                throw new NotFoundException('User ID not found in hash');
+            }
+            //update the user password
+            await this.prisma.user.update({
+                where: { id: userId },
+                data: { password: hashedPassword },
+            });
+
+            return true;
+        } catch (error) {
+            throw new BadRequestException('Hash is expired or invalid');
+        }
     }
 }
