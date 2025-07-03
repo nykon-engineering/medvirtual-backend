@@ -19,13 +19,19 @@ export class MailService {
   }
   
 
-  async sendMail(options: SendMailOptions): Promise<void> {
-    await this.transporter.sendMail({
+  async sendMail(options: SendMailOptions): Promise<boolean> {
+    const result = await this.transporter.sendMail({
       from: `"${process.env.MAIL_FROM_NAME}" <${process.env.MAIL_FROM}>`,
       to: options.to,
       subject: options.subject,
       text: options.text,
-      html: options.html, // opcional
+      html: options.html, 
     });
+
+    if (!result || !result.accepted || result.accepted.length === 0) {
+      return false; 
+    }
+
+    return true; 
   }
 }
