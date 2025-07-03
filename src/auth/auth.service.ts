@@ -8,6 +8,7 @@ import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateVerificationCode } from '../utils/generateCode.util'
 import { signUpReturnDto } from './dto/signupReturn.dto';
+import { resendCodeDto } from './dto/resendCode.dto';
 
 
 
@@ -234,13 +235,14 @@ export class AuthService {
     return true;
   }
 
-  async resendCode(email: string): Promise<signUpReturnDto> {
+  async resendCode(email: resendCodeDto): Promise<signUpReturnDto> {
 
     //invalidate previuos code from this user
     if (!email) {
       throw new BadRequestException('Email is required');
     }
-    const user = await this.userService.findByEmail(email);
+    console.log(email);
+    const user = await this.userService.findByEmail(email.email);
     if (!user) {
       throw new BadRequestException('User not found with this email');
     }

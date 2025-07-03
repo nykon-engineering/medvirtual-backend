@@ -9,6 +9,7 @@ import { SignUpDto } from './dto/SignUp.dto';
 import { stat } from 'fs';
 import { LogoutDto } from './dto/logOut.dto';
 import { signUpReturnDto } from './dto/signupReturn.dto';
+import { resendCodeDto } from './dto/resendCode.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -137,7 +138,7 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'User not found with this email' })
     @ApiResponse({ status: 400, description: 'Failed to invalidate previous verification code' })
     @ApiResponse({ status: 400, description: 'Failed to generate verification code' })
-    async resendCode(@Body() email: string) {
+    async resendCode(@Body() email: resendCodeDto) {
         const result = await this.authService.resendCode(email);
         return {
             statusCode: 200,
