@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { generateVerificationCode } from '../utils/generateCode.util'
 import { signUpReturnDto } from './dto/signupReturn.dto';
 import { resendCodeDto } from './dto/resendCode.dto';
+import { SignInDto } from './dto/SignIn.dto';
 
 
 
@@ -38,7 +39,7 @@ export class AuthService {
         if (!userDB) {
           userDB = await this.userService.create({
             email: user.email,
-            organizationId: result.organizationId || '',
+            organization: result.organizationId ? { connect: { id: result.organizationId } } : undefined,
             first_name: user.first_name,
             last_name: user.last_name,
             phone: user.phone || '',
@@ -86,8 +87,8 @@ export class AuthService {
     return authorizationUrl;
   }
 
-  async signIn(data: any): Promise<string> {
-    const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
+  async signIn(data: SignInDto): Promise<string> {
+    const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000;
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (!user) {
@@ -101,8 +102,11 @@ export class AuthService {
     if (!user.verified) {
       throw new UnauthorizedException('User not verified');
     }
+    //console.log(`[${user.password}]`);
+    //console.log(`[${data.password}]`);
 
     const isMatch = await bcrypt.compare(data.password, user.password);
+    //console.log(isMatch);
     if (!isMatch) {
       throw new BadRequestException('Invalid password');
     }
@@ -142,7 +146,7 @@ export class AuthService {
 
     const newUser = await this.userService.create({
       email: data.email,
-      organizationId: '',
+      organization: undefined,
       first_name: data.firstName,
       last_name: data.lastName,
       phone: '',

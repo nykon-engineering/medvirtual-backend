@@ -16,7 +16,7 @@ export class UserController {
     @ApiOperation({ summary: 'Get user using ID' })
     @ApiResponse({ status: 200, description: 'User found successfully.' })
     @Get(':id')
-    async getUserById(@Param('id', ParseIntPipe) id: number) {
+    async getUserById(@Param('id') id: string) {
         return this.userService.findById(id);
     }
 
@@ -35,7 +35,7 @@ export class UserController {
     @ApiResponse({ status: 400, description: 'Failed to update user' })
     @ApiResponse({ status: 404, description: 'User not found' })
     @Patch(':id')
-    async updateUser(@Param('id', ParseIntPipe) id: number, @Body() userData: CreateUserDto) {
+    async updateUser(@Param('id') id: string, @Body() userData: CreateUserDto) {
         return this.userService.update(id, userData);
     }
 
@@ -44,7 +44,7 @@ export class UserController {
     @ApiResponse({ status: 200, description: 'User deleted successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to delete user' })
     @Delete(':id')
-    async deleteUser(@Param('id', ParseIntPipe) id: number) {
+    async deleteUser(@Param('id') id: string) {
         return this.userService.delete(id);
     }
 }
