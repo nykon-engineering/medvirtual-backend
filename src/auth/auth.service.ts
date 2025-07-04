@@ -167,6 +167,7 @@ export class AuthService {
     }
 
     // Send verification code via email
+    /*
     const mailSent = await this.mailService.sendMail(
     {
       to:data.email,
@@ -177,6 +178,7 @@ export class AuthService {
     if(!mailSent) { 
       throw new BadRequestException('Failed to send verification email');
     }
+    */
 
     
     // Store the verification code in the database with an expiration time
@@ -274,12 +276,18 @@ export class AuthService {
     }
 
     // Send verification code via email
-    await this.mailService.sendMail(
+    /*
+    const mailSent = await this.mailService.sendMail(
     {
       to:user.email,
       subject: 'Verification Code',
       text: `Your verification code is: ${code}`,
     });
+
+    if (!mailSent) { 
+      throw new BadRequestException('Failed to send verification email');
+    }
+    */
 
     return {
       code,

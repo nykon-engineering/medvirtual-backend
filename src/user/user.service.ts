@@ -20,7 +20,7 @@ export class UserService {
       ...rest,
       password: hash,
     }
-    console.log(newUserData);
+    
     return this.prisma.user.create({ data: newUserData });
   }
 
