@@ -167,13 +167,18 @@ export class AuthService {
     }
 
     // Send verification code via email
-    await this.mailService.sendMail(
+    const mailSent = await this.mailService.sendMail(
     {
       to:data.email,
       subject: 'Verification Code',
       text: `Your verification code is: ${code}`,
     });
 
+    if(!mailSent) { 
+      throw new BadRequestException('Failed to send verification email');
+    }
+
+    
     // Store the verification code in the database with an expiration time
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
     const storeCode = await this.prisma.emailVerification.create({
