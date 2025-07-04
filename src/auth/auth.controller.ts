@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, Redirect, Res } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
@@ -6,10 +6,12 @@ import { AuthService } from './auth.service';
 
 import { SignInDto } from './dto/SignIn.dto';
 import { SignUpDto } from './dto/SignUp.dto';
-import { stat } from 'fs';
 import { LogoutDto } from './dto/logOut.dto';
 import { signUpReturnDto } from './dto/signupReturn.dto';
 import { resendCodeDto } from './dto/resendCode.dto';
+import { AuthGuard } from './auth.guard';
+import { CurrentUser } from './current-user.decorator';
+import { User } from '@prisma/client';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -26,9 +28,10 @@ export class AuthController {
     private readonly authService: AuthService
 
     @Get('test')
+    @UseGuards(AuthGuard)
     @ApiOperation({ summary: 'Route for test the ser' })
-    async test(){
-        return { message: 'Auth endpoint is working' };
+    async test(@CurrentUser() user: User){
+        return { message: 'Auth endpoint is working', user };
     }
 
     @Get('callback')
