@@ -6,10 +6,11 @@ import { PrismaService } from '../prisma/prisma.service';
 
 import * as jwt from 'jsonwebtoken';
 import { Module } from '@nestjs/common';
-import { hash } from 'crypto';
+import { hash, verify } from 'crypto';
 
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(),
+  verify: jest.fn(),
 }));
 
 describe('Forgot password', () => {
@@ -90,7 +91,7 @@ describe('reset password', () => {
   it ('Should return 400 if the hash is empty', async () =>{
     const dataFake = { hash: '', newPassword: 'newPassword123' };
 
-    expect(service2.resetPassword(dataFake)).rejects.toThrow('Hash is empty or not found'); //verify that the error is thrown
+    expect(service2.resetPassword(dataFake)).rejects.toThrow('Hash is required'); //verify that the error is thrown
   });
 
   it ('should return 400 if new password is empty', () => {
@@ -99,14 +100,15 @@ describe('reset password', () => {
     expect(service2.resetPassword(dataFake)).rejects.toThrow('New password is required'); //verify that the error is thrown
   });
 
-  it ('should return not found if the user does not exist', async () =>{
+  it ('should return not found if the user does not exist in the hash', async () =>{
     const dataFake = { hash: 'validHash123', newPassword: 'newPassword123' };
     const userFake = null;
 
-    service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user not found
+    (jwt.verify as jest.Mock).mockReturnValue({}); //SIMULATE A VALID TOKEN, BUT WITHOUT USER ID
 
-    await expect(service2.resetPassword(dataFake)).rejects.toThrow('User with this email does not exist'); //verify that the error is thrown
-  })
+    expect(service2.resetPassword(dataFake)).rejects.toThrow('User ID not found in hash'); //verify that the error is thrown
+
+  });
 
   it ('should return 400 if the hash is expired or invalid', () => {
     const dataFake = { hash: 'validHash123', newPassword: 'newPassword123' };
@@ -126,9 +128,9 @@ describe('reset password', () => {
 
     service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user found
 
-    (jwt.verify as jest.Mock).mockReturnValue({ id: userFake.id }); // Simulate successful token verification
-    service2['prisma'].user.update = jest.fn().mockResolvedValue({}); // Mock successful user update
-    service2['mail'].sendMail = jest.fn().mockResolvedValue(true); // Mock email sending true
-    expect(service2.resetPassword(dataFake)).resolves.toBe(true); //verify that the function returns true
+    (jwt.verify as jest.Mock).mockReturnValue({ id: userFake.id }); 
+    service2['prisma'].user.update = jest.fn().mockResolvedValue({}); 
+    service2['mail'].sendMail = jest.fn().mockResolvedValue(true); 
+    expect(service2.resetPassword(dataFake)).resolves.toBe(true); 
   })
 })
