@@ -138,6 +138,8 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'User not found with this email' })
     @ApiResponse({ status: 400, description: 'Failed to invalidate previous verification code' })
     @ApiResponse({ status: 400, description: 'Failed to generate verification code' })
+    @ApiResponse({ status: 400, description: 'Failed to store verification code' })
+    @ApiResponse({ status: 400, description: 'Failed to send verification email' })
     async resendCode(@Body() email: resendCodeDto) {
         const result = await this.authService.resendCode(email);
         return {

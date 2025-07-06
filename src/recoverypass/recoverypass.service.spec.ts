@@ -5,6 +5,8 @@ import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 import * as jwt from 'jsonwebtoken';
+import { Module } from '@nestjs/common';
+import { hash } from 'crypto';
 
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(),
@@ -36,8 +38,6 @@ describe('Forgot password', () => {
     
     await expect(result).rejects.toThrow('User with this email does not exist'); //verify that the error is thrown
   });
-
-
 
   it('Should return 400 if there issue in generate code', async () => {
     const fakeUser = { id: 1, email : 'paulo@paulo.com', name: 'Paulo' };
@@ -75,3 +75,60 @@ describe('Forgot password', () => {
 
 });
 
+describe('reset password', () => {
+
+  let service2: RecoverypassService;
+  beforeEach(async() => {
+    const module2: TestingModule = await Test.createTestingModule({
+      providers: [RecoverypassService, UserService, PrismaService, MailService],
+      imports: [],
+    }).compile();
+
+    service2 = module2.get<RecoverypassService>(RecoverypassService);
+  })
+
+  it ('Should return 400 if the hash is empty', async () =>{
+    const dataFake = { hash: '', newPassword: 'newPassword123' };
+
+    expect(service2.resetPassword(dataFake)).rejects.toThrow('Hash is empty or not found'); //verify that the error is thrown
+  });
+
+  it ('should return 400 if new password is empty', () => {
+    const dataFake = {hash: 'validHash123', newPassword: ''};
+
+    expect(service2.resetPassword(dataFake)).rejects.toThrow('New password is required'); //verify that the error is thrown
+  });
+
+  it ('should return not found if the user does not exist', async () =>{
+    const dataFake = { hash: 'validHash123', newPassword: 'newPassword123' };
+    const userFake = null;
+
+    service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user not found
+
+    await expect(service2.resetPassword(dataFake)).rejects.toThrow('User with this email does not exist'); //verify that the error is thrown
+  })
+
+  it ('should return 400 if the hash is expired or invalid', () => {
+    const dataFake = { hash: 'validHash123', newPassword: 'newPassword123' };
+    const userFake = {id: "1", email: "test@test.com", name: "Test User"};
+
+    service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user found
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      throw new Error('Invalid token'); // Simulate an error in token verification
+    });
+
+    expect(service2.resetPassword(dataFake)).rejects.toThrow('Hash is expired or invalid'); //verify that the error is thrown
+  });
+
+  it ('should return 200 if the password is reset successfully', () => {
+    const dataFake = { hash: 'validHash123', newPassword: 'newPassword123' };
+    const userFake = {id: "1", email: "test@test.com", name: "Test User"};
+
+    service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user found
+
+    (jwt.verify as jest.Mock).mockReturnValue({ id: userFake.id }); // Simulate successful token verification
+    service2['prisma'].user.update = jest.fn().mockResolvedValue({}); // Mock successful user update
+    service2['mail'].sendMail = jest.fn().mockResolvedValue(true); // Mock email sending true
+    expect(service2.resetPassword(dataFake)).resolves.toBe(true); //verify that the function returns true
+  })
+})

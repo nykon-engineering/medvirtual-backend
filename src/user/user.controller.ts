@@ -35,6 +35,7 @@ export class UserController {
     @ApiResponse({ status: 400, description: 'Failed to update user' })
     @ApiResponse({ status: 404, description: 'User not found' })
     @Patch(':id')
+    //refactor to use CurrentUser decorator
     async updateUser(@Param('id') id: string, @Body() userData: CreateUserDto) {
         return this.userService.update(id, userData);
     }
