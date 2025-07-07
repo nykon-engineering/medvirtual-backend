@@ -33,7 +33,6 @@ export class WorkosService {
       throw new Error('Failed to retrieve user profile from WorkOS', error);
     }
   }
-  client_01JXXFHDN9NQXQBCPE093A1F9X
 
   async getUrl(){
     try{
