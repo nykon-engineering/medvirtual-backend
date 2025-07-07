@@ -12,6 +12,8 @@ import { resendCodeDto } from './dto/resendCode.dto';
 import { AuthGuard } from './auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import { User } from '@prisma/client';
+import { RolesGuard } from './roles.guard';
+import { Roles } from './roles.decorator';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -28,8 +30,9 @@ export class AuthController {
     private readonly authService: AuthService
 
     @Get('test')
-    @UseGuards(AuthGuard)
-    @ApiOperation({ summary: 'Route for test the ser' })
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('admin')
+    @ApiOperation({ summary: 'Route for test the server' })
     async test(@CurrentUser() user: User){
         return { message: 'Auth endpoint is working', user };
     }
@@ -97,12 +100,12 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'User already exists with this email' })
     @ApiResponse({ status: 400, description: 'Failed to generate verification code' })
     @ApiResponse({ status: 400, description: 'Failed to store verification code' })
-    @ApiResponse({ status: 200, description: 'Code sent successfully' })
+    @ApiResponse({ status: 201, description: 'Code sent successfully' })
     async signUp(@Body() data: SignUpDto) {
 
         const result = await this.authService.signUp(data);
         return {
-            statusCode: 200,
+            statusCode: 201,
             message: 'Code sent successfully',
             code: result.code,
             email: result.email
