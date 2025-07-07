@@ -1,6 +1,7 @@
 // src/workos/workos.service.ts
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { WorkOS } from '@workos-inc/node';
+import { throwDeprecation } from 'process';
 
 @Injectable()
 export class WorkosService {
@@ -26,11 +27,11 @@ export class WorkosService {
         }
       );
       if (!user) {
-        throw new Error('Failed to retrieve user from WorkOS');
+        throw new BadRequestException('Failed to retrieve user from WorkOS');
       }
       return user;
     } catch (error) {
-      throw new Error('Failed to retrieve user profile from WorkOS');
+      throw new BadRequestException('Failed to authenticate user with WorkOS');
     }
   }
 

@@ -45,14 +45,26 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to create session' })
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
-    async callback(@Query('code') code: string){
+    async callback(@Query('code') code: string, @Res({ passthrough: true }) res: Response) {
         
         const token = await this.authService.handleUser(code);
-        return {
+        
+        /*return {
             statusCode: 200,
             message: 'User authenticated successfully',
             token: token,
-        };
+        };*/
+
+        // Seta o token como cookie httpOnly
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            secure: false, // só funciona via HTTPS
+            sameSite: 'lax',
+            maxAge: 60 * 60 * 1000, // 1 hora
+        });
+  
+      // Redireciona para o frontend (SPA)
+      res.redirect('http://localhost:8080/home');
     
     }
 
