@@ -26,18 +26,23 @@ export class AuthService {
 
     async handleUser(code: string): Promise<string> {
       const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
+      console.log('code arriving in service:', code);
         if (!code) {
             throw new BadRequestException('Code is required');
         }
         const result = await this.workosService.getUserByCode(code);
+        console.log('result in service:', result);
         if (!result) {
             throw new BadRequestException('Failed to retrieve user profile from WorkOS');
         }
 
         const user = result.user;
+        console.log('User in service:', user);
         let userDB = await this.userService.findByEmail(user.email);
+        console.log('User from DB:', userDB);
 
         if (!userDB) {
+          console.log('Creating new user in DB');
           userDB = await this.userService.create({
             email: user.email,
             first_name: user.first_name || '',
@@ -84,7 +89,7 @@ export class AuthService {
     if (!authorizationUrl) {
       throw new Error('Failed to generate authorization URL');
     }
-    console.log('workos route:', authorizationUrl);
+    //console.log('workos route:', authorizationUrl);
     return authorizationUrl;
   }
 
