@@ -23,6 +23,7 @@ export class UserService {
     const newUser = await this.prisma.user.create({
       data: newUserData,
     })
+    console.log('Newuser created in db: ',newUser);
     return newUser;
   }
 
