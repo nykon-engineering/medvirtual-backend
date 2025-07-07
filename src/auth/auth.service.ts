@@ -76,7 +76,6 @@ export class AuthService {
         if (!session) {
           throw new BadRequestException('Failed to create session');
         }
-        
         return token;
   }
 
@@ -85,6 +84,7 @@ export class AuthService {
     if (!authorizationUrl) {
       throw new Error('Failed to generate authorization URL');
     }
+    console.log('workos route:', authorizationUrl);
     return authorizationUrl;
   }
 

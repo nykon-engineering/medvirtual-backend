@@ -45,23 +45,18 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to create session' })
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
-    async callback(@Query('code') code: string, @Res() res: Response){
-        try{
-            const token = await this.authService.handleUser(code);
-            return {
-                statusCode: 200,
-                message: 'User authenticated successfully',
-                token,
-            };
-        }catch (error) {
-            return {
-                statusCode: 500,
-                message: 'Authentication failed'
-            }
-        }
+    async callback(@Query('code') code: string){
+        
+        const token = await this.authService.handleUser(code);
+        return {
+            statusCode: 200,
+            message: 'User authenticated successfully',
+            token: token,
+        };
+    
     }
 
-    @Get('workOs')
+    @Get('workos')
     @Redirect()
     @ApiOperation({ summary: 'Generate authorizationUrl from WorkOs' })
     @ApiResponse({ status: 200, description: 'Url generated succesfully' })
@@ -117,7 +112,7 @@ export class AuthController {
     @Redirect()
     @ApiBody({ type: signUpReturnDto })
     @ApiOperation({ summary: 'Verify code for user registration' })
-    @ApiResponse({ status: 302, description: 'User registered successfully', type: Redirect })
+    @ApiResponse({ status: 302, description: 'User registered successfully'})
     @ApiResponse({ status: 400, description: 'Failed to verify code' })
     @ApiResponse({ status: 400, description: 'Code and email are required' })
     @ApiResponse({ status: 400, description: 'User not found with this email' })
@@ -159,7 +154,7 @@ export class AuthController {
     @Redirect()
     @ApiOperation({ summary: 'Logout user' })
     @ApiBody({ type: LogoutDto })
-    @ApiResponse({ status: 302, description: 'User logged out successfully', type: Redirect })
+    @ApiResponse({ status: 302, description: 'User logged out successfully' })
     @ApiResponse({ status: 400, description: 'Token is required' })
     @ApiResponse({ status: 400, description: 'Failed to revoke token' })
     @ApiResponse({ status: 500, description: 'Failed to log out user' })
@@ -190,7 +185,7 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
-    async inviteUser(@Body() data: SignUpDto, @CurrentUser() user: User) {
+    async inviteUser(@Body() data: inviteUserDto, @CurrentUser() user: User) {
         const result = await this.authService.inviteUser(data, user);
         if (result) {
             return {
