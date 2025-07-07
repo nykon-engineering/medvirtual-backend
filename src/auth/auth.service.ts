@@ -10,6 +10,8 @@ import { generateVerificationCode } from '../utils/generateCode.util'
 import { signUpReturnDto } from './dto/signupReturn.dto';
 import { resendCodeDto } from './dto/resendCode.dto';
 import { SignInDto } from './dto/SignIn.dto';
+import { inviteUserDto } from './dto/InviteUser.dto';
+import { User } from '@prisma/client';
 
 
 
@@ -33,15 +35,13 @@ export class AuthService {
         }
 
         const user = result.user;
-
         let userDB = await this.userService.findByEmail(user.email);
 
         if (!userDB) {
           userDB = await this.userService.create({
             email: user.email,
-            organization: result.organizationId ? { connect: { id: result.organizationId } } : undefined,
-            first_name: user.first_name,
-            last_name: user.last_name,
+            first_name: user.first_name || '',
+            last_name: user.last_name || '',
             phone: user.phone || '',
             avatar: user.profile_picture_url || '',
             jobTitle: user.jobTitle || '',
@@ -51,9 +51,10 @@ export class AuthService {
             password: '', // Password is not used for SSO users
             authenticationMethod: result.authenticationMethod,
             status: 'incomplete',
-            verified: user.email_verified,
+            verified: user.email_verified || false,
           });
         }
+
         const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
           expiresIn: '1h',
         });
@@ -327,5 +328,53 @@ export class AuthService {
     return true;
 
   }
+
+  async inviteUser(data: inviteUserDto, currentUser: User): Promise<boolean>{
+
+    if (!data.email || !data.role) {
+      throw new BadRequestException('Email or role are invalid');
+    }
+
+    const newUser = await this.userService.findByEmail(data.email);
+    if (newUser) {
+      throw new BadRequestException('User already exists');
+    }
+
+
+    const code = generateVerificationCode(6);
+    if (!code){
+      throw new BadRequestException('Failed to generate invite code');
+    }
+
+    // Send verification code via email
+    /*const mailSent = await this.mailService.sendMail(
+    {
+      to:data.email,
+      subject: 'Verification Code',
+      text: `Hi, ${data.email} Your invitation code is: ${code}`,
+    });
+
+    if(!mailSent) { 
+      throw new BadRequestException('Failed to send verification email');
+    }
+    */
+
+
+    // Store the verification code in the database with an expiration time
+    const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const storeCode = await this.prisma.emailInvitation.create({
+        data: {
+          userId: currentUser.id,
+          email_from: data.email,
+          code: code,
+          expiresAt: codeExpiresAt,
+        }
+      });
+    if (!storeCode) {
+      throw new BadRequestException('Failed to store invite code');
+    }
+
+    return true;
+  } 
 
 }

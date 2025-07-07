@@ -119,6 +119,7 @@ model User {
   status         String
   Sessions Session[]
   EmailVerifications EmailVerification[]
+  EmailInvitations EmailInvitation[]
   verified       Boolean  @default(false)
   tickets        Ticket[]
   createdAt      DateTime @default(now())
@@ -145,6 +146,17 @@ model EmailVerification {
   userId     String
   user       User     @relation(fields: [userId], references: [id])
   code       String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  verified   Boolean  @default(false)
+}
+
+model EmailInvitation {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  code       String
+  email_from String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   verified   Boolean  @default(false)

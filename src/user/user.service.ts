@@ -12,7 +12,6 @@ export class UserService {
   private readonly prisma: PrismaService;
 
   async create(userData: Prisma.UserCreateInput): Promise<User> {
-
     const {password, ...rest} = userData;
     const hash = await bcrypt.hash(password, 10);
     
@@ -20,8 +19,11 @@ export class UserService {
       ...rest,
       password: hash,
     }
-    
-    return this.prisma.user.create({ data: newUserData });
+
+    const newUser = await this.prisma.user.create({
+      data: newUserData,
+    })
+    return newUser;
   }
 
   async findByEmail(email: string): Promise<User | null> {
