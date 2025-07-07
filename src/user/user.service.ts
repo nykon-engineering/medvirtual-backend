@@ -20,7 +20,7 @@ export class UserService {
       ...rest,
       password: hash,
     }
-    console.log(newUserData);
+    
     return this.prisma.user.create({ data: newUserData });
   }
 
@@ -30,7 +30,7 @@ export class UserService {
     });
   }
 
-  async findById(id: number): Promise<User | null> {
+  async findById(id: string): Promise<User | null> {
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
@@ -50,7 +50,7 @@ export class UserService {
     return users;
   }
 
-  async update(id: number, userData: Prisma.UserUpdateInput): Promise<User> {
+  async update(id: string, userData: Prisma.UserUpdateInput): Promise<User> {
     try {
       let user;
       const currentUser = await this.findById(id);
@@ -64,6 +64,7 @@ export class UserService {
       }else{
         user = {...userData};
       }
+      console.log(user);
       
       return await this.prisma.user.update({
         where: { id },
@@ -75,7 +76,7 @@ export class UserService {
     
   }
 
-  async delete(id: number): Promise<User> {
+  async delete(id: string): Promise<User> {
     try {
       await this.findById(id);
       return await this.prisma.user.delete({
