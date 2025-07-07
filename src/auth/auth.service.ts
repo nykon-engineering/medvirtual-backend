@@ -10,6 +10,7 @@ import { generateVerificationCode } from '../utils/generateCode.util'
 import { signUpReturnDto } from './dto/signupReturn.dto';
 import { resendCodeDto } from './dto/resendCode.dto';
 import { SignInDto } from './dto/SignIn.dto';
+import { inviteUserDto } from './dto/InviteUser.dto';
 
 
 
@@ -327,5 +328,11 @@ export class AuthService {
     return true;
 
   }
+
+  async inviteUser(data: inviteUserDto): Promise<boolean>{
+
+    
+    return true;
+  } 
 
 }

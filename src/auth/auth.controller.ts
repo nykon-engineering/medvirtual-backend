@@ -14,6 +14,7 @@ import { CurrentUser } from './current-user.decorator';
 import { User } from '@prisma/client';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
+import { inviteUserDto } from './dto/InviteUser.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -176,6 +177,19 @@ export class AuthController {
                 message: 'Failed to log out user'
             };
         }
+    }
+
+    @Post('invite')
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('admin', 'SuperAdmin')
+    @ApiOperation({ summary: 'An admin invites a new user to the platform' })
+    @ApiBody({ type: inviteUserDto })
+    @ApiResponse({ status: 201, description: 'Invitation sent successfully to new.user@client.com.' })
+    @ApiResponse({ status: 400, description: 'Email or role are invalid' })
+    @ApiResponse({ status: 409, description: 'User already exists' })
+    @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
+    async inviteUser(@Body() data: SignUpDto) {
+        const result = await this.authService.inviteUser(data);
     }
 
 }
