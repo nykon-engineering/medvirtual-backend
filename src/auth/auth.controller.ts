@@ -49,21 +49,13 @@ export class AuthController {
         
         const token = await this.authService.handleUser(code);
         
-        /*return {
-            statusCode: 200,
-            message: 'User authenticated successfully',
-            token: token,
-        };*/
-
-        // Seta o token como cookie httpOnly
         res.cookie('authToken', token, {
             httpOnly: true,
-            secure: false, // só funciona via HTTPS
-            sameSite: 'lax',
+            secure: false,
+            sameSite: 'none',
             maxAge: 60 * 60 * 1000, // 1 hora
         });
   
-      // Redireciona para o frontend (SPA)
       res.redirect('http://localhost:8080/home');
     
     }
