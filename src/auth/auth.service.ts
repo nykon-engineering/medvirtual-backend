@@ -102,11 +102,11 @@ export class AuthService {
     if (!user.verified) {
       throw new UnauthorizedException('User not verified');
     }
-    //console.log(`[${user.password}]`);
-    //console.log(`[${data.password}]`);
+    console.log(`[${user.password}]`);
+    console.log(`[${data.password}]`);
 
     const isMatch = await bcrypt.compare(data.password, user.password);
-    //console.log(isMatch);
+    console.log(isMatch);
     if (!isMatch) {
       throw new BadRequestException('Invalid password');
     }
@@ -142,7 +142,6 @@ export class AuthService {
     if (user) {
       throw new BadRequestException('User already exists with this email');
     }
-    const hashedPassword = await bcrypt.hash(data.password, 10);
 
     const newUser = await this.userService.create({
       email: data.email,
@@ -155,7 +154,7 @@ export class AuthService {
       companyName: data.companyName,
       role: data.role || 'user',
       workosId: '',
-      password: hashedPassword, // Password is not used for SSO users
+      password: data.password, // Password is not used for SSO users
       authenticationMethod: authenticationMethod,
       status: 'active',
       verified: false, // Initially set to false until the user verifies their email
@@ -167,7 +166,7 @@ export class AuthService {
     }
 
     // Send verification code via email
-    /*
+    
     const mailSent = await this.mailService.sendMail(
     {
       to:data.email,
@@ -178,7 +177,7 @@ export class AuthService {
     if(!mailSent) { 
       throw new BadRequestException('Failed to send verification email');
     }
-    */
+    
 
     
     // Store the verification code in the database with an expiration time
@@ -257,6 +256,8 @@ export class AuthService {
     if (!user) {
       throw new BadRequestException('User not found with this email');
     }
+
+    //here I need to hash the userId
     const invalidateCode = await this.prisma.emailVerification.updateMany({
       where: {
         userId: user.id,
@@ -275,8 +276,19 @@ export class AuthService {
       throw new BadRequestException('Failed to generate verification code');
     }
 
+    const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const storeCode = await this.prisma.emailVerification.create({
+        data: {
+          userId: user.id,
+          code: code,
+          expiresAt: codeExpiresAt,
+        }
+      });
+    if (!storeCode) {
+      throw new BadRequestException('Failed to store verification code');
+    }
+
     // Send verification code via email
-    /*
     const mailSent = await this.mailService.sendMail(
     {
       to:user.email,
@@ -287,7 +299,7 @@ export class AuthService {
     if (!mailSent) { 
       throw new BadRequestException('Failed to send verification email');
     }
-    */
+    
 
     return {
       code,

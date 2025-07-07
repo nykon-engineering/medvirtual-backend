@@ -64,6 +64,7 @@ export class UserService {
       }else{
         user = {...userData};
       }
+      console.log(user);
       
       return await this.prisma.user.update({
         where: { id },
