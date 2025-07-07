@@ -186,10 +186,19 @@ export class AuthController {
     @ApiBody({ type: inviteUserDto })
     @ApiResponse({ status: 201, description: 'Invitation sent successfully to new.user@client.com.' })
     @ApiResponse({ status: 400, description: 'Email or role are invalid' })
+    @ApiResponse({ status: 400, description: 'Failed to generate invite code' })
+    @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
-    async inviteUser(@Body() data: SignUpDto) {
-        const result = await this.authService.inviteUser(data);
+    async inviteUser(@Body() data: SignUpDto, @CurrentUser() user: User) {
+        const result = await this.authService.inviteUser(data, user);
+        if (result) {
+            return {
+                statusCode: 201,
+                message: 'Invitation sent successfully',
+                url: '/login'
+            };
+        }
     }
 
 }
