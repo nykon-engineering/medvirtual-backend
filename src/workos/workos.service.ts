@@ -30,7 +30,7 @@ export class WorkosService {
       }
       return user;
     } catch (error) {
-      throw new Error('Failed to retrieve user profile from WorkOS', error);
+      throw new Error('Failed to retrieve user profile from WorkOS');
     }
   }
 
