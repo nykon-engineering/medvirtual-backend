@@ -13,6 +13,10 @@ import { SignInDto } from './dto/SignIn.dto';
 import { inviteUserDto } from './dto/InviteUser.dto';
 import { User } from '@prisma/client';
 import { verifyCodeDto } from './dto/verifyCode.dto';
+import getVerificationCodeTemplate from '../utils/email-templates/verification-code';
+import InviteSignup from '../utils/email-templates/invite-signup';
+import { SignUpDto } from './dto/SignUp.dto';
+import { verifyCodeDtoReturn } from './dto/verifyCodeReturn.dto';
 
 
 
@@ -140,7 +144,7 @@ export class AuthService {
     return token;
   }
 
-  async signUp(data: any): Promise<signUpReturnDto> {
+  async signUp(data: SignUpDto): Promise<signUpReturnDto> {
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
   
@@ -171,19 +175,18 @@ export class AuthService {
     }
 
     // Send verification code via email
+    const emailBody = getVerificationCodeTemplate(code);
     const mailSent = await this.mailService.sendMail(
     {
-      from: 'MedVirtual <onboarding@resend.dev>',
+      from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,
       subject: 'Verification Code',
-      html: `Your verification code is: ${code}`,
+      html: emailBody,
     });
    
     if(!mailSent) { 
       throw new BadRequestException('Failed to send verification email');
     }
-  
-
     
     // Store the verification code in the database with an expiration time
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
@@ -203,12 +206,11 @@ export class AuthService {
     });
 
     return {
-      code,
       token:token,
     };
   }
 
-  async verifyCode(data: signUpReturnDto): Promise<verifyCodeDto> {
+  async verifyCode(data: verifyCodeDto): Promise<verifyCodeDtoReturn> {
     if (!data.code || !data.token) {
       throw new BadRequestException('Code and token are required');
     }
@@ -290,7 +292,6 @@ export class AuthService {
     if (!email) {
       throw new BadRequestException('Email is required');
     }
-    console.log(email);
     const user = await this.userService.findByEmail(email.email);
     if (!user) {
       throw new BadRequestException('User not found with this email');
@@ -328,18 +329,18 @@ export class AuthService {
     }
 
     // Send verification code via email
-    /*
+    const emailBody = getVerificationCodeTemplate(code);
     const mailSent = await this.mailService.sendMail(
     {
-      to:user.email,
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: user.email,
       subject: 'Verification Code',
-      text: `Your verification code is: ${code}`,
+      html: emailBody,
     });
-
-    if (!mailSent) { 
+   
+    if(!mailSent) { 
       throw new BadRequestException('Failed to send verification email');
     }
-      */
     
 
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
@@ -347,7 +348,6 @@ export class AuthService {
     });
 
     return {
-      code,
       token:token,
     };
 
@@ -389,19 +389,20 @@ export class AuthService {
       throw new BadRequestException('Failed to generate invite code');
     }
 
-    // Send verification code via email
-    /*const mailSent = await this.mailService.sendMail(
+    // Send signup link via email
+    const inviteLink = `${process.env.FRONTEND_URL}/signup?code=${code}`;
+    const emailBody = InviteSignup(inviteLink);
+    const mailSent = await this.mailService.sendMail(
     {
-      to:data.email,
-      subject: 'Verification Code',
-      text: `Hi, ${data.email} Your invitation code is: ${code}`,
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: data.email,
+      subject: 'MedVirtual Invitation',
+      html: emailBody,
     });
-
+   
     if(!mailSent) { 
-      throw new BadRequestException('Failed to send verification email');
+      throw new BadRequestException('Failed to send invitation email');
     }
-    */
-
 
     // Store the verification code in the database with an expiration time
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos

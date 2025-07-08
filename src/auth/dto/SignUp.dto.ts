@@ -21,4 +21,12 @@ export class SignUpDto {
   @ApiProperty({ required: true, description: 'User password' })
   @MinLength(6)
   password: string;
+
+  @ApiProperty({ required: false, description: 'User Job title' })
+  @IsString()
+  jobTitle: string;
+
+  @ApiProperty({ required: false, description: 'User company nanme' })
+  @IsString()
+  companyName: string
 }
