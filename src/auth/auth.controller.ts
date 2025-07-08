@@ -191,6 +191,7 @@ export class AuthController {
     @ApiResponse({ status: 201, description: 'Invitation sent successfully to new.user@client.com.' })
     @ApiResponse({ status: 400, description: 'Email or role are invalid' })
     @ApiResponse({ status: 400, description: 'Failed to generate invite code' })
+    @ApiResponse({ status: 400, description: 'Failed to send invitation email' })
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })

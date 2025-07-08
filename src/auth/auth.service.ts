@@ -13,6 +13,8 @@ import { SignInDto } from './dto/SignIn.dto';
 import { inviteUserDto } from './dto/InviteUser.dto';
 import { User } from '@prisma/client';
 import { verifyCodeDto } from './dto/verifyCode.dto';
+import getVerificationCodeTemplate from 'src/utils/email-templates/verification-code';
+import InviteSignup from 'src/utils/email-templates/invite-signup';
 
 
 
@@ -170,13 +172,16 @@ export class AuthService {
       throw new BadRequestException('Failed to generate verification code');
     }
 
+    
+
     // Send verification code via email
+    const emailBody = getVerificationCodeTemplate(code);
     const mailSent = await this.mailService.sendMail(
     {
       from: 'MedVirtual <onboarding@resend.dev>',
       to: data.email,
       subject: 'Verification Code',
-      html: `Your verification code is: ${code}`,
+      html: emailBody,
     });
    
     if(!mailSent) { 
@@ -290,7 +295,6 @@ export class AuthService {
     if (!email) {
       throw new BadRequestException('Email is required');
     }
-    console.log(email);
     const user = await this.userService.findByEmail(email.email);
     if (!user) {
       throw new BadRequestException('User not found with this email');
@@ -328,18 +332,18 @@ export class AuthService {
     }
 
     // Send verification code via email
-    /*
+    const emailBody = getVerificationCodeTemplate(code);
     const mailSent = await this.mailService.sendMail(
     {
-      to:user.email,
+      from: 'MedVirtual <onboarding@resend.dev>',
+      to: user.email,
       subject: 'Verification Code',
-      text: `Your verification code is: ${code}`,
+      html: emailBody,
     });
-
-    if (!mailSent) { 
+   
+    if(!mailSent) { 
       throw new BadRequestException('Failed to send verification email');
     }
-      */
     
 
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
@@ -389,19 +393,20 @@ export class AuthService {
       throw new BadRequestException('Failed to generate invite code');
     }
 
-    // Send verification code via email
-    /*const mailSent = await this.mailService.sendMail(
+    // Send signup link via email
+    const inviteLink = `${process.env.FRONTEND_URL}/signup?code=${code}`;
+    const emailBody = InviteSignup(inviteLink);
+    const mailSent = await this.mailService.sendMail(
     {
-      to:data.email,
-      subject: 'Verification Code',
-      text: `Hi, ${data.email} Your invitation code is: ${code}`,
+      from: 'MedVirtual <onboarding@resend.dev>',
+      to: data.email,
+      subject: 'MedVirtual Invitation',
+      html: emailBody,
     });
-
+   
     if(!mailSent) { 
-      throw new BadRequestException('Failed to send verification email');
+      throw new BadRequestException('Failed to send invitation email');
     }
-    */
-
 
     // Store the verification code in the database with an expiration time
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos

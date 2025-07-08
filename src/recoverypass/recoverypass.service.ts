@@ -7,6 +7,7 @@ import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { forgotDto } from './dto/forgot.dto';
 import { ResetPasswordDto } from './dto/resetPassword.dto';
+import getResetPasswordTemplate from './../utils/email-templates/reset-password';
 
 @Injectable()
 export class RecoverypassService {
@@ -33,16 +34,23 @@ export class RecoverypassService {
             throw new BadRequestException('Error generating recovery hash');
         }
 
-        //send email with the hash
-        const emailSent = await this.mail.sendMail({
-            to:user.email,
-            subject: 'Authentication Code',
-            text: `Email with the button with a link and hash: ${hash}`,
-        })
-        if(!emailSent) {
-            throw new BadRequestException('Error sending recovery email');
+        
+        // Send verification code via email
+        const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/reset-password?hash=${hash}`);
+        const mailSent = await this.mail.sendMail(
+        {
+        from: 'MedVirtual <onboarding@resend.dev>',
+        to: user.email,
+        subject: 'Reset Password',
+        html: emailBody,
+        });
+    
+        if(!mailSent) { 
+        throw new BadRequestException('Error sending recovery email');
         }
-        return true;
+
+        return true
+        
     }
 
 
