@@ -15,6 +15,7 @@ import { User } from '@prisma/client';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
 import { inviteUserDto } from './dto/InviteUser.dto';
+import { verifyCodeDto } from './dto/verifyCode.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -108,18 +109,18 @@ export class AuthController {
             statusCode: 201,
             message: 'Code sent successfully',
             code: result.code,
-            email: result.email
+            token: result.token
         }
     }
 
     @Post('verify-code')
-    @Redirect()
     @ApiBody({ type: signUpReturnDto })
     @ApiOperation({ summary: 'Verify code for user registration' })
     @ApiResponse({ status: 302, description: 'User registered successfully'})
     @ApiResponse({ status: 400, description: 'Failed to verify code' })
-    @ApiResponse({ status: 400, description: 'Code and email are required' })
-    @ApiResponse({ status: 400, description: 'User not found with this email' })
+    @ApiResponse({ status: 400, description: 'Code and token are required' })
+    @ApiResponse({ status: 401, description: 'Invalid token' })
+    @ApiResponse({ status: 400, description: 'User not found' })
     @ApiResponse({ status: 400, description: 'Invalid verification code' })
     @ApiResponse({ status: 400, description: 'Code already verified' })
     async verifyCode(@Body() data: signUpReturnDto) {
@@ -130,7 +131,11 @@ export class AuthController {
                 message: 'Failed to verify code'
             };
         }
-        return {url: '/login'};
+        return {
+            statusCode: 200,
+            message: 'Code verified and User logged in successfully',
+            token: result,
+        };
     }
 
     @Post('resend-code')
@@ -149,7 +154,7 @@ export class AuthController {
             statusCode: 200,
             message: 'Code sent successfully',
             code: result.code,
-            email: result.email
+            token: result.token
         }
     }
 
