@@ -1,35 +1,29 @@
-import { Injectable } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
-import { SendMailOptions } from './interfaces/send-email.interface';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { Resend } from 'resend';
 
 @Injectable()
 export class MailService {
-  private transporter: nodemailer.Transporter;
-
-  constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.MAIL_HOST,
-      port: process.env.MAIL_PORT,
-      secure: process.env.MAIL_SECURE === 'true', // true para 465, false para outras portas
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
-  }
   
+  async sendMail(options): Promise<boolean> {
+    
+    if (!process.env.RESEND_API_KEY) {
+      throw new BadRequestException('RESEND_API_KEY is not set in environment variables');
+    }
 
-  async sendMail(options: SendMailOptions): Promise<boolean> {
-    const result = await this.transporter.sendMail({
-      from: `"${process.env.MAIL_FROM_NAME}" <${process.env.MAIL_FROM}>`,
+    if (!options || !options.from || !options.to || !options.subject || !options.html) {
+      throw new BadRequestException('Invalid email options provided');
+    }
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    const result= await resend.emails.send({
+      from: options.from,
       to: options.to,
       subject: options.subject,
-      text: options.text,
-      html: options.html, 
+      html: options.html,
     });
 
-    if (!result || !result.accepted || result.accepted.length === 0) {
-      return false; 
+    if (!result) {
+      throw new BadRequestException('Failed to send email');
     }
 
     return true; 

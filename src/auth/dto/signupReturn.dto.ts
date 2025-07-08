@@ -8,5 +8,5 @@ export class signUpReturnDto {
 
     @ApiProperty({ required: true, description: 'The user email filled in the /sigunp page' })
     @IsEmail()
-    email: string;
+    token: string;
 }
