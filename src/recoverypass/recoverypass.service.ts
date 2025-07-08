@@ -7,7 +7,7 @@ import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { forgotDto } from './dto/forgot.dto';
 import { ResetPasswordDto } from './dto/resetPassword.dto';
-import getResetPasswordTemplate from './../utils/email-templates/reset-password';
+import getResetPasswordTemplate from '../utils/email-templates/reset-password';
 
 @Injectable()
 export class RecoverypassService {
@@ -39,7 +39,7 @@ export class RecoverypassService {
         const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/reset-password?hash=${hash}`);
         const mailSent = await this.mail.sendMail(
         {
-        from: 'MedVirtual <onboarding@resend.dev>',
+        from: 'MedVirtual <noreply@medvirtual.ai>',
         to: user.email,
         subject: 'Reset Password',
         html: emailBody,

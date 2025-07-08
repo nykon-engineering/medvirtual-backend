@@ -1,12 +1,8 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsString } from "class-validator";
 
-export class verifyCodeDto{
+export class verifyCodeDtoReturn{
     @ApiProperty({ required: true, description: 'The code to verify' })
-    @IsString()
-    code: string;
-    
-    @ApiProperty({ required: true, description: 'The token to verify' })
     @IsString()
     token: string;
 }

@@ -47,18 +47,14 @@ export class AuthController {
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
     async callback(@Query('code') code: string, @Res({ passthrough: true }) res: Response) {
-        
-        const token = await this.authService.handleUser(code);
-        
+        const token = await this.authService.handleUser(code);   
         res.cookie('authToken', token, {
             httpOnly: true,
             secure: false,
             sameSite: 'none',
             maxAge: 60 * 60 * 1000, // 1 hora
         });
-  
-      res.redirect('http://localhost:8080/home');
-    
+        res.redirect('http://localhost:8080/home');
     }
 
     @Get('workos')
@@ -87,7 +83,6 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to create session' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
     async signIn(@Body() data: SignInDto) {
-        
         const token = await this.authService.signIn(data);
         return {
             statusCode: 200,
@@ -103,12 +98,10 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to store verification code' })
     @ApiResponse({ status: 201, description: 'Code sent successfully' })
     async signUp(@Body() data: SignUpDto) {
-
         const result = await this.authService.signUp(data);
         return {
             statusCode: 201,
             message: 'Code sent successfully',
-            code: result.code,
             token: result.token
         }
     }
@@ -123,7 +116,7 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'User not found' })
     @ApiResponse({ status: 400, description: 'Invalid verification code' })
     @ApiResponse({ status: 400, description: 'Code already verified' })
-    async verifyCode(@Body() data: signUpReturnDto) {
+    async verifyCode(@Body() data: verifyCodeDto) {
         const result = await this.authService.verifyCode(data);
         if (!result) {
             return {
@@ -153,7 +146,6 @@ export class AuthController {
         return {
             statusCode: 200,
             message: 'Code sent successfully',
-            code: result.code,
             token: result.token
         }
     }
