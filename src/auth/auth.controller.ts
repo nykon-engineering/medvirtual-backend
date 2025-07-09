@@ -187,8 +187,8 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
-    async inviteUser(@Body() data: inviteUserDto, @CurrentUser() user: User) {
-        const result = await this.authService.inviteUser(data, user);
+    async inviteUser(@Body() data: inviteUserDto) {
+        const result = await this.authService.inviteUser(data);
         if (result) {
             return {
                 statusCode: 201,

@@ -372,7 +372,7 @@ export class AuthService {
 
   }
 
-  async inviteUser(data: inviteUserDto, currentUser: User): Promise<string>{
+  async inviteUser(data: inviteUserDto): Promise<string>{
     const authenticationMethod = 'OwnSign'
 
     const user = await this.userService.findByEmail(data.email);
