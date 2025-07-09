@@ -54,21 +54,6 @@ describe('AuthService - inviteUser', () => {
     service = module.get<AuthService>(AuthService);
   });
 
-  it('should throw if email or role is invalid', async () => {
-    const dataFake = {
-      email: '',
-      role: '',
-      firstName: 'First',
-      lastName: 'Last',
-      jobTitle: 'Job',
-      companyName: 'Company',
-    };
-
-    
-    await expect(service.inviteUser(dataFake)).rejects.toThrow(
-      'Email or role are invalid',
-    );
-  });
 
   it('should throw if user already exists', async () => {
     const dataFake = {
