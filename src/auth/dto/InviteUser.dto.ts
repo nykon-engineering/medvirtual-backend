@@ -17,4 +17,12 @@ export class inviteUserDto {
     @IsNotEmpty()
     @IsString()
     lastName: string;
+
+    @IsNotEmpty()
+    @IsString()
+    jobTitle: string;
+
+    @IsNotEmpty()
+    @IsString()
+    companyName: string;
 }

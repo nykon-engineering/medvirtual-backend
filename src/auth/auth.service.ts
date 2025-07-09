@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
@@ -17,6 +17,7 @@ import getVerificationCodeTemplate from '../utils/email-templates/verification-c
 import InviteSignup from '../utils/email-templates/invite-signup';
 import { SignUpDto } from './dto/SignUp.dto';
 import { verifyCodeDtoReturn } from './dto/verifyCodeReturn.dto';
+import { SetPasswordDto } from './dto/setPassword.dto';
 
 
 
@@ -353,7 +354,6 @@ export class AuthService {
 
   }
 
-
   async logout (token: string): Promise<boolean> {
     if (!token) {
       throw new BadRequestException('Token is required');
@@ -372,25 +372,41 @@ export class AuthService {
 
   }
 
-  async inviteUser(data: inviteUserDto, currentUser: User): Promise<boolean>{
+  async inviteUser(data: inviteUserDto, currentUser: User): Promise<string>{
+    const authenticationMethod = 'OwnSign'
 
-    if (!data.email || !data.role) {
-      throw new BadRequestException('Email or role are invalid');
-    }
-
-    const newUser = await this.userService.findByEmail(data.email);
-    if (newUser) {
+    const user = await this.userService.findByEmail(data.email);
+    if (user) {
       throw new BadRequestException('User already exists');
     }
 
+    const newUser = await this.userService.create({
+      email: data.email,
+      organization: undefined,
+      first_name: data.firstName,
+      last_name: data.lastName,
+      phone: '',
+      avatar: '',
+      jobTitle: data.jobTitle,
+      companyName: data.companyName,
+      role: data.role || 'user',
+      workosId: '',
+      password: '', // Password is not used for SSO users
+      authenticationMethod: authenticationMethod,
+      status: 'invited',
+      verified: false, // Initially set to false until the user verifies their email
+    })
 
-    const code = generateVerificationCode(6);
+    const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
+
     if (!code){
       throw new BadRequestException('Failed to generate invite code');
     }
 
     // Send signup link via email
-    const inviteLink = `${process.env.FRONTEND_URL}/signup?code=${code}`;
+    const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
     const emailBody = InviteSignup(inviteLink);
     const mailSent = await this.mailService.sendMail(
     {
@@ -408,7 +424,7 @@ export class AuthService {
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
     const storeCode = await this.prisma.emailInvitation.create({
         data: {
-          userId: currentUser.id,
+          userId: newUser.id,
           email_from: data.email,
           code: code,
           expiresAt: codeExpiresAt,
@@ -418,7 +434,101 @@ export class AuthService {
       throw new BadRequestException('Failed to store invite code');
     }
 
-    return true;
+    return `Invitation sent successfully to ${data.email}`;
   } 
 
+
+  async getInvite(code: string): Promise<SignUpDto> {
+
+    if (!code){
+      throw new BadRequestException('Token is required');
+    }
+
+    let decodedToken; 
+    try {
+      decodedToken = jwt.verify(code, process.env.JWT_SECRET);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const emailInvitation = await this.prisma.emailInvitation.findFirst({
+      where: {
+        userId : decodedToken.id,
+        code: code
+      },
+    })
+
+    if (!emailInvitation){
+      throw new NotFoundException('Token not found!')
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: decodedToken.id
+      }
+    })
+
+    if(!user){
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      firstName: user.first_name,
+      lastName: user.last_name,
+      email: user.email,
+      role: user.role,
+      password: '',
+      jobTitle: user.jobTitle,
+      companyName: user.companyName,
+    };
+
+
+  }
+
+
+  async setPassword(data: SetPasswordDto): Promise<string>{
+
+    let decodedToken; 
+    try {
+      decodedToken = jwt.verify(data.token, process.env.JWT_SECRET);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+    //verify again if this token exists in our database: 
+    const emailInvitation = await this.prisma.emailInvitation.findFirst({
+      where: {
+        userId : decodedToken.id,
+        code: data.token
+      },
+    })
+    if (!emailInvitation){
+      throw new NotFoundException('Token not found!')
+    }
+
+    //find user in our database
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: decodedToken.id
+      }
+    })
+    if(!user){
+      throw new NotFoundException('User not found');
+    }
+
+    //set password and update status to prospect
+    const updatePass = await this.prisma.user.update({
+      data: { 
+        password: data.password,
+        status: 'prospect'
+      },
+      where: {id: decodedToken.id}
+    })
+
+    if (!updatePass){
+      throw new BadRequestException('Error in set user password')
+    }
+
+
+    return 'Password has been set successfully. You can now log in.';
+  }
 }

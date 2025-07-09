@@ -16,6 +16,7 @@ import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
 import { inviteUserDto } from './dto/InviteUser.dto';
 import { verifyCodeDto } from './dto/verifyCode.dto';
+import { SetPasswordDto } from './dto/setPassword.dto';
 
 /*
     1.User is redirected to workOs for authentication.
@@ -181,7 +182,6 @@ export class AuthController {
     @ApiOperation({ summary: 'An admin invites a new user to the platform' })
     @ApiBody({ type: inviteUserDto })
     @ApiResponse({ status: 201, description: 'Invitation sent successfully to new.user@client.com.' })
-    @ApiResponse({ status: 400, description: 'Email or role are invalid' })
     @ApiResponse({ status: 400, description: 'Failed to generate invite code' })
     @ApiResponse({ status: 400, description: 'Failed to send invitation email' })
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
@@ -192,10 +192,42 @@ export class AuthController {
         if (result) {
             return {
                 statusCode: 201,
-                message: 'Invitation sent successfully',
-                url: '/login'
+                message: result
             };
         }
     }
+
+    @Post('get-invite')
+    @ApiOperation({ summary: 'Get user data from email' })
+    @ApiBody({ type: String })
+    @ApiResponse({ status: 200, description: 'User data retrieved successfully' })
+    @ApiResponse({ status: 400, description: 'Token is required' })
+    @ApiResponse({ status: 400, description: 'Invalid Token' })
+    @ApiResponse({ status: 404, description: 'Token not found' })
+    @ApiResponse({ status: 404, description: 'User not found' })
+    async getInvite(@Body() token: string) {
+        const user = await this.authService.getInvite(token);
+        return {
+            statusCode: 200,
+            message: 'User data retrieved successfully',
+            user
+        };
+    }
+
+    @Post('set-password')
+    @ApiOperation({ summary: 'Allows a new uset to set their password using a valid invitation'})
+    @ApiBody({ type: SetPasswordDto})
+    @ApiResponse({ status: 200, description: 'Password has been set successfully. You can now log in.' })
+    @ApiResponse({ status: 400, description: 'Invalid token' })
+    @ApiResponse({ status: 404, description: 'Token not found' })
+    @ApiResponse({ status: 404, description: 'User not found' })
+    @ApiResponse({ status: 400, description: 'Error in set user password' })
+    async setPassword(@Body() data: SetPasswordDto){
+        const result = await this.authService.setPassword(data);
+        return {
+            message: "Password has been set successfully. You can now log in."
+        }
+    }
+
 
 }
