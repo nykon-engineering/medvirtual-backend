@@ -1,16 +1,29 @@
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+
 import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkosService } from '../workos/workos.service';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { generateVerificationCode } from '../utils/generateCode.util';
+
+
 import * as jwt from 'jsonwebtoken';
-import { verify } from 'crypto';
+import * as bcrypt from 'bcryptjs';
 
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(() => 'mocked-jwt-token'),
   verify: jest.fn(() =>  'mocked-jwt-token-verify' )
+}));
+
+jest.mock('../utils/generateCode.util', () => ({
+  generateVerificationCode: jest.fn(),
+}))
+
+jest.mock('bcryptjs', () => ({
+  hash: jest.fn(() => 'hashed-password'),
+  compare: jest.fn(() => true),
 }));
 
 describe('AuthService - handleUser', () => {
@@ -141,29 +154,256 @@ describe('AuthService - WorkOsSign', () => {
 
 describe('AuthService - SignIn', () => {
   let service: AuthService;
-  let userServiceMock: {
-    findByEmail: jest.Mock;
-  };
+  let user: UserService;
+  let prisma: PrismaService;
+  let mail: MailService;
 
   beforeEach(async () => {
-    
+    const userMock = {
+      create: jest.fn(),
+      findByEmail: jest.fn(),
+    }
+    const mailMock = {
+      sendMail: jest.fn(),
+    }
+    const prismaMock = {
+      session: {
+        create: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    }
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
+      providers : [
         AuthService,
-        { provide: UserService, useValue: userServiceMock },
-        { provide: MailService, useValue: {} },
-        { provide: PrismaService, useValue: {} },
+        { provide: UserService, useValue: userMock },
+        { provide: MailService, useValue: mailMock },
+        { provide: PrismaService, useValue: prismaMock },
         { provide: WorkosService, useValue: {} }, // vazio se não usar
-      ],
+      ]
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    
+    user = module.get<UserService>(UserService);
+    mail = module.get<MailService>(MailService);
+    prisma = module.get<PrismaService>(PrismaService);
+  });
+
+  //should return 400 if the session is not created - Failed to create session
+  //should return 200 if everything is ok
+
+  it('should return 401 if the user not found', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    user.findByEmail = jest.fn().mockResolvedValue(null);
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new BadRequestException('User not found with this email'),
+    );
   })
+
+  it('should return 401 if the method is wrong', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: 'differentMethod',
+    });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used')
+    );
+  })
+
+  it('should return 401 if the user is not verified', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: false,
+    });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('User not verified'),
+    );
+  })
+
+  it('should return 400 if the password is invalid', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: true,
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new BadRequestException('Invalid password'),
+    );
+  })
+
+  it('should return 400 if the session is not created', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: true,
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    (jwt.sign as jest.Mock).mockImplementation(() => 'mocked-jwt-token');
+    prisma.session.create = jest.fn().mockResolvedValue(null);
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new BadRequestException('Failed to create session'),
+    );
+  })
+
+  it('should return 200 if everything is ok', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: true,
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    (jwt.sign as jest.Mock).mockImplementation(() => 'mocked-jwt-token');
+    prisma.session.create = jest.fn().mockResolvedValue(true);
+
+    await expect(service.signIn(dataFake)).resolves.toEqual('mocked-jwt-token')
+  })
+
 })
 
 
 
+
+
+
+describe('AuthService - Signup', () => {
+  let service: AuthService;
+  let user: UserService;
+  let mail: MailService
+  let prisma: PrismaService
+
+  let userServiceMock = {
+    findByEmail: jest.fn(),
+  };
+
+  let mailmock = {
+    sendMail: jest.fn(),
+  }
+
+  let prismamock = {
+    emailVerification: {
+      create: jest.fn(),
+    },
+  }
+  
+  const datafake = { 
+    firstName: 'Test',
+    lastName: 'User',
+    password: 'testpassword',
+    role: 'User',
+    jobTitle: 'Tester',
+    companyName: 'TestCompany',
+    email: 'test@test.com'
+  }
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UserService, useValue: userServiceMock },
+        { provide: MailService, useValue: mailmock },
+        { provide: PrismaService, useValue: prismamock },
+        { provide: WorkosService, useValue: {} },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+    user = module.get<UserService>(UserService);
+    mail = module.get<MailService>(MailService);
+    prisma = module.get<PrismaService>(PrismaService);
+  });
+
+  //should return 400 if Failed to store verification code
+  //should return 200 if everything is ok
+
+  it('should return 400 if User already exists with this email', async () => {
+    user.findByEmail = jest.fn().mockResolvedValue({ id: 'existing-userId' });
+    await expect(service.signUp(datafake)).rejects.toThrow(
+      new BadRequestException('User already exists with this email'),
+    )
+  });
+
+  it('should return 400 if Failed to create user', async () => {
+    user.findByEmail = jest.fn().mockResolvedValue(null);
+    user.create = jest.fn().mockResolvedValue(null);
+
+    await expect(service.signUp(datafake)).rejects.toThrow(
+      new BadRequestException('Failed to create user'),
+    );
+
+  })
+
+  it('should return 400 if Failed to generate verification code', async () => {
+    user.findByEmail = jest.fn().mockResolvedValue(null);
+    user.create = jest.fn().mockResolvedValue(true);
+    (generateVerificationCode as jest.Mock).mockReturnValue(null);
+    await expect(service.signUp(datafake)).rejects.toThrow(
+      new BadRequestException('Failed to generate verification code'),
+    );
+
+  })
+
+  it('should return 400 if failed to send verification email', async () => {
+    user.findByEmail = jest.fn().mockResolvedValue(null);
+    user.create = jest.fn().mockResolvedValue(true);
+    (generateVerificationCode as jest.Mock).mockReturnValue('12345');
+    mail.sendMail = jest.fn().mockResolvedValue(false);
+
+    await expect(service.signUp(datafake)).rejects.toThrow(
+      new BadRequestException('Failed to send verification email'),
+    );
+  })
+  
+  it('should return 400 if failed to store verification code', async() => {
+    user.findByEmail = jest.fn().mockResolvedValue(null);
+    user.create = jest.fn().mockResolvedValue(true);
+    (generateVerificationCode as jest.Mock).mockReturnValue('12345');
+    mail.sendMail = jest.fn().mockResolvedValue(true);
+
+    prisma.emailVerification.create = jest.fn().mockResolvedValue(null);
+
+    await expect(service.signUp(datafake)).rejects.toThrow(
+      new BadRequestException('Failed to store verification code'),
+    );    
+  })
+
+  it ('should return 200 if everything is ok', async () => {
+    user.findByEmail = jest.fn().mockResolvedValue(null);
+    user.create = jest.fn().mockResolvedValue(true);
+    (generateVerificationCode as jest.Mock).mockReturnValue('12345');
+    mail.sendMail = jest.fn().mockResolvedValue(true);
+
+    prisma.emailVerification.create = jest.fn().mockResolvedValue(true);
+
+    jest.spyOn(jwt, 'sign').mockImplementation(() => 'mocked-jwt-token');
+
+    await expect(service.signUp(datafake)).resolves.toEqual({
+      token: 'mocked-jwt-token'
+    })
+  })
+
+})
 
 describe('AuthService - inviteUser', () => {
   let service: AuthService;
