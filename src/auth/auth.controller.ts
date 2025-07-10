@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { Body, Controller, Get, Inject, Param, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';

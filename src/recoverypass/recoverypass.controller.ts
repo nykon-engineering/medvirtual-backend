@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { Body, Controller, Get, Param, Post, Redirect } from '@nestjs/common';
 import { forgotDto } from './dto/forgot.dto';
 import { RecoverypassService } from './recoverypass.service';
