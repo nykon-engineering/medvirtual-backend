@@ -22,6 +22,7 @@ export class RecoverypassController {
     @ApiResponse({ status: 200, description: 'Recovery password email sent successfully'})
     @ApiResponse({ status: 500, description: 'Recovery password failed'})
     async forgotPassword(@Body() email: forgotDto){
+        console.log('Arriving in the controller: ', email);
         const result = await this.recoverypassService.forgotPassword(email);
         if (!result) {
             return { status: 500, message: 'Recovery password failed' };
