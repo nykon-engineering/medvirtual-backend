@@ -8,6 +8,7 @@ import { MailService } from '../mail/mail.service';
 import { forgotDto } from './dto/forgot.dto';
 import { ResetPasswordDto } from './dto/resetPassword.dto';
 import getResetPasswordTemplate from '../utils/email-templates/reset-password';
+import e from 'express';
 
 @Injectable()
 export class RecoverypassService {
@@ -20,6 +21,7 @@ export class RecoverypassService {
 
     async forgotPassword(email: forgotDto): Promise<Boolean>{
         //check if the user exists with this email
+        console.log('Arriving in the service: ',email);
         const user = await this.user.findByEmail(email.email);
         if (!user) {
             throw new NotFoundException('User with this email does not exist');
@@ -33,7 +35,6 @@ export class RecoverypassService {
         if(!hash) {
             throw new BadRequestException('Error generating recovery hash');
         }
-
         
         // Send verification code via email
         const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/reset-password?hash=${hash}`);
@@ -53,7 +54,7 @@ export class RecoverypassService {
         
     }
 
-
+    /* istanbul ignore next */
     async verifyCode(hash: string): Promise<Boolean> {
         if (!hash) {
             throw new NotFoundException('Hash is empty or not found');

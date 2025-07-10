@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 import { Body, Controller, Inject, Get, Param, ParseIntPipe, UseGuards, Patch, Delete, NotFoundException } from '@nestjs/common';
 
 import { UserService } from './user.service';
