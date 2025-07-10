@@ -4,12 +4,13 @@ import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkosService } from '../workos/workos.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
+import { verify } from 'crypto';
 
-// Mock fixo para jwt.sign
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(() => 'mocked-jwt-token'),
+  verify: jest.fn(() =>  'mocked-jwt-token-verify' )
 }));
 
 describe('AuthService - inviteUser', () => {
@@ -99,3 +100,82 @@ describe('AuthService - inviteUser', () => {
     expect(prismaMock.emailInvitation.create).toHaveBeenCalled();
   });
 });
+
+
+describe('AuthService - GetInvite', () => {
+
+  let service: AuthService;
+  let prisma: PrismaService;
+
+  beforeEach(async () =>{
+
+    const prismamock = {
+      emailInvitation: {
+        findFirst: jest.fn(),
+      },
+      user: {
+        findFirst: jest.fn(),
+      },
+    }
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UserService, useValue: {} },
+        { provide: MailService, useValue: {} },
+        { provide: PrismaService, useValue: prismamock },
+        { provide: WorkosService, useValue: {} }, 
+      ],
+    }).compile();
+    
+    service = module.get<AuthService>(AuthService);
+    prisma = module.get<PrismaService>(PrismaService);
+  })
+
+  it ('should return 400 if the token is not provided', async () => {
+    await expect(service.getInvite('')).rejects.toThrow(
+      new BadRequestException('Token is required'),
+    );
+  });
+
+  it('should return 404 if the token is not found', async () => {
+    const token= 'tokenFake';
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      throw new UnauthorizedException('Invalid token')
+    })
+  });
+
+  it('should return 404 if the token is not found', async () => {
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      return { id: 'UserIdfake' };
+    });
+    prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(null);
+
+    await expect(service.getInvite('valid-token')).rejects.toThrow(
+      new BadRequestException('Token not found!'),
+    );
+  });
+
+  it('should return 404 if the user is not found', async () => {
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      return { id: 'UserIdfake' };
+    });
+    prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
+    prisma.user.findFirst = jest.fn().mockResolvedValue(false);
+
+    await expect(service.getInvite('valid-token')).rejects.toThrow(
+      new BadRequestException('User not found!'),
+    );
+  })
+
+  it('should return user object if everything is ok', async () => {
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      return { id: 'UserIdfake' };
+    });
+    prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
+    prisma.user.findFirst = jest.fn().mockResolvedValue(true);
+    const result = await service.getInvite('valid-token');
+    expect(result).toBeTruthy(); // Assuming the user object is returned as true for simplicity
+  })
+
+  
+})
