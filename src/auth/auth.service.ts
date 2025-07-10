@@ -164,6 +164,9 @@ export class AuthService {
       status: 'active',
       verified: false, // Initially set to false until the user verifies their email
     })
+    if (!newUser) {
+      throw new BadRequestException('Failed to create user');
+    }
     
     const code = generateVerificationCode(6);
     if (!code){
