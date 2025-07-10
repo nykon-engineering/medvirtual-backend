@@ -1,7 +1,7 @@
 /* istanbul ignore file */
-import { Body, Controller, Get, Param, Post, Redirect } from '@nestjs/common';
+import { Body, Controller, Post } from '@nestjs/common';
 import { RecoverypassService } from './recoverypass.service';
-import { ApiBody, ApiOperation, ApiProperty, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ResetPasswordDto } from './dto/resetPassword.dto';
 import { forgotDto } from './dto/forgot.dto';
 
@@ -36,7 +36,6 @@ export class RecoverypassController {
     }
 
     @Post('set-password')
-    @Redirect('/login')
     @ApiOperation({ summary: 'Reset the password using the authentication code' })
     @ApiBody({ type: ResetPasswordDto })
     @ApiResponse({ status: 400, description: 'Hash is required' })
@@ -50,6 +49,9 @@ export class RecoverypassController {
         if (!result) {
             return { status: 500, message: 'Recovery password failed' };
         }
-        return { url: '/login' }
+        return { 
+            status: 200,
+            message: 'Password reset successfully, redirecting to login page',
+         }
     }
 }
