@@ -10,9 +10,7 @@ import { generateVerificationCode } from '../utils/generateCode.util';
 
 
 import * as jwt from 'jsonwebtoken';
-import { verify } from 'crypto';
-import { first } from 'rxjs';
-import { send } from 'process';
+import * as bcrypt from 'bcryptjs';
 
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(() => 'mocked-jwt-token'),
@@ -22,6 +20,11 @@ jest.mock('jsonwebtoken', () => ({
 jest.mock('../utils/generateCode.util', () => ({
   generateVerificationCode: jest.fn(),
 }))
+
+jest.mock('bcryptjs', () => ({
+  hash: jest.fn(() => 'hashed-password'),
+  compare: jest.fn(() => true),
+}));
 
 describe('AuthService - handleUser', () => {
   
@@ -149,6 +152,141 @@ describe('AuthService - WorkOsSign', () => {
   })
 })
 
+describe('AuthService - SignIn', () => {
+  let service: AuthService;
+  let user: UserService;
+  let prisma: PrismaService;
+  let mail: MailService;
+
+  beforeEach(async () => {
+    const userMock = {
+      create: jest.fn(),
+      findByEmail: jest.fn(),
+    }
+    const mailMock = {
+      sendMail: jest.fn(),
+    }
+    const prismaMock = {
+      session: {
+        create: jest.fn(),
+        updateMany: jest.fn(),
+      },
+    }
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers : [
+        AuthService,
+        { provide: UserService, useValue: userMock },
+        { provide: MailService, useValue: mailMock },
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: WorkosService, useValue: {} }, // vazio se não usar
+      ]
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+    user = module.get<UserService>(UserService);
+    mail = module.get<MailService>(MailService);
+    prisma = module.get<PrismaService>(PrismaService);
+  });
+
+  //should return 400 if the session is not created - Failed to create session
+  //should return 200 if everything is ok
+
+  it('should return 401 if the user not found', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    user.findByEmail = jest.fn().mockResolvedValue(null);
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new BadRequestException('User not found with this email'),
+    );
+  })
+
+  it('should return 401 if the method is wrong', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: 'differentMethod',
+    });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used')
+    );
+  })
+
+  it('should return 401 if the user is not verified', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: false,
+    });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('User not verified'),
+    );
+  })
+
+  it('should return 400 if the password is invalid', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: true,
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new BadRequestException('Invalid password'),
+    );
+  })
+
+  it('should return 400 if the session is not created', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: true,
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    (jwt.sign as jest.Mock).mockImplementation(() => 'mocked-jwt-token');
+    prisma.session.create = jest.fn().mockResolvedValue(null);
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new BadRequestException('Failed to create session'),
+    );
+  })
+
+  it('should return 200 if everything is ok', async () => {
+    const dataFake = {email: 'test@test.com', password: 'testpassword'};
+    const authenticationMethod = 'OwnSign'
+    user.findByEmail = jest.fn().mockResolvedValue({
+      id: 'existing-user-id',
+      authenticationMethod: authenticationMethod,
+      verified: true,
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    (jwt.sign as jest.Mock).mockImplementation(() => 'mocked-jwt-token');
+    prisma.session.create = jest.fn().mockResolvedValue(true);
+
+    await expect(service.signIn(dataFake)).resolves.toEqual('mocked-jwt-token')
+  })
+
+})
+
+
+
+
+
+
 describe('AuthService - Signup', () => {
   let service: AuthService;
   let user: UserService;
@@ -266,9 +404,6 @@ describe('AuthService - Signup', () => {
   })
 
 })
-
-
-
 
 describe('AuthService - inviteUser', () => {
   let service: AuthService;
