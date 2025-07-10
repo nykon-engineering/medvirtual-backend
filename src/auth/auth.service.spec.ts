@@ -179,3 +179,96 @@ describe('AuthService - GetInvite', () => {
 
   
 })
+
+describe('AuthService - SetPassword', () => {
+  let service: AuthService;
+  let prisma: PrismaService;
+
+  beforeEach(async () => {
+
+    const prismamock = {
+      emailInvitation: {
+        findFirst: jest.fn(),
+      },
+      user: {
+        findFirst: jest.fn(),
+      },
+    }
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UserService, useValue: {} },
+        { provide: MailService, useValue: {} },
+        { provide: PrismaService, useValue: prismamock },
+        { provide: WorkosService, useValue: {} }, 
+      ]
+    }).compile();
+    service = module.get<AuthService>(AuthService);
+    prisma = module.get<PrismaService>(PrismaService);
+  })
+
+  it('should return 404 if the token is not found', async () => {
+    const token= 'tokenFake';
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      throw new UnauthorizedException('Invalid token')
+    })
+  });
+
+  it('should return 404 if the token is not found', async () => {
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      return { id: 'UserIdfake' };
+    });
+    prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(null);
+
+    await expect(service.getInvite('valid-token')).rejects.toThrow(
+      new BadRequestException('Token not found!'),
+    );
+  });
+
+  it('should return 404 if the user is not found', async () => {
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      return { id: 'UserIdfake' };
+    });
+    prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
+    prisma.user.findFirst = jest.fn().mockResolvedValue(false);
+
+    await expect(service.getInvite('valid-token')).rejects.toThrow(
+      new BadRequestException('User not found!'),
+    );
+  })
+
+  it('should return 400 if there error in set user password', async () => {
+    const dataFake = {
+      token: 'valid-token',
+      password: 'valid-password',
+      confirmPassword: 'valid-password',
+    };
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      return { id: 'UserIdfake' };
+    });
+    prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
+    prisma.user.findFirst = jest.fn().mockResolvedValue(true);
+    prisma.user.update = jest.fn().mockResolvedValue(false);
+
+    await expect(service.setPassword(dataFake)).rejects.toThrow(
+      new BadRequestException('Error in set user password'),
+    );
+  })
+
+  it('should return message if everything is ok', async () => {
+    const dataFake = {
+      token: 'valid-token',
+      password: 'valid-password',
+      confirmPassword: 'valid-password',
+    };
+    (jwt.verify as jest.Mock).mockImplementation(() => {
+      return { id: 'UserIdfake' };
+    });
+    prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
+    prisma.user.findFirst = jest.fn().mockResolvedValue(true);
+    prisma.user.update = jest.fn().mockResolvedValue(true);
+
+    await expect(service.setPassword(dataFake)).resolves.toBe('Password has been set successfully. You can now log in.')
+  })
+})
