@@ -13,6 +13,158 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn(() =>  'mocked-jwt-token-verify' )
 }));
 
+describe('AuthService - handleUser', () => {
+  
+  let service: AuthService;
+  let prisma: PrismaService;
+  let workOS: WorkosService;
+  let user: UserService;
+
+  beforeEach(async () => {
+
+    const workOSmock = {
+      getUser: jest.fn(),
+    }
+
+    const prismaMock  = {
+      session: {
+        updateMany: jest.fn(),
+        create: jest.fn(),
+      },
+    };
+
+    const userMock = {
+      findByEmail: jest.fn(),
+      create: jest.fn(),
+    }
+
+    const module : TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UserService, useValue: userMock },
+        { provide: MailService, useValue: {} },
+        { provide: PrismaService, useValue: prismaMock },
+        { provide: WorkosService, useValue: workOSmock }, // vazio se não usar
+      ],
+    }).compile();
+  
+    service = module.get<AuthService>(AuthService);
+    prisma = module.get<PrismaService>(PrismaService);
+    workOS = module.get<WorkosService>(WorkosService);
+    user = module.get<UserService>(UserService);
+  })
+
+  //should return 400 if the code is not provided
+  //should return 400 if workOS return is invalid
+  //should return 400 if the session is not created
+  //should return 200 if everything is ok
+
+  it('should return 400 if the code is not provided', async () => {  
+    await expect(service.handleUser('')).rejects.toThrow(
+      new BadRequestException('Code is required')
+    )
+  })
+
+  it('should return 400 if workOS return is invalid', async () => {
+    const code = 'invalid-code';
+    workOS.getUserByCode = jest.fn().mockResolvedValue(null),
+
+    await expect(service.handleUser(code)).rejects.toThrow(
+      new BadRequestException('Failed to retrieve user profile from WorkOS')
+    );
+  })
+
+  it('should return 400 if the session is not created', async () => {
+    const code = 'valid-code';
+    workOS.getUserByCode = jest.fn().mockResolvedValue({ user: { id: '1', email: 'test@test.com'} });
+    user.findByEmail = jest.fn().mockResolvedValue({})
+   
+    jest.spyOn(jwt, 'sign').mockImplementation(() => 'mocked-jwt-token');
+
+    prisma.session.updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    prisma.session.create = jest.fn().mockResolvedValue(null);
+
+    await expect(service.handleUser(code)).rejects.toThrow(
+      new BadRequestException('Failed to create session')
+    );
+  })
+
+  it('should return 200 if everything is ok', async () => {
+    const code = 'valid-code';
+    workOS.getUserByCode = jest.fn().mockResolvedValue({ user: { id: '1', email: 'test@test.com'} });
+    user.findByEmail = jest.fn().mockResolvedValue({})
+   
+    jest.spyOn(jwt, 'sign').mockImplementation(() => 'mocked-jwt-token');
+
+    prisma.session.updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    prisma.session.create = jest.fn().mockResolvedValue(true);
+
+    await expect(service.handleUser(code)).resolves.toEqual('mocked-jwt-token')
+  })
+
+})
+
+describe('AuthService - WorkOsSign', () => {
+  let service: AuthService;
+  let workOS: WorkosService;
+
+  beforeEach(async () => {
+    const workosmock ={
+      getUrl: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers:[
+        AuthService,
+        { provide: UserService, useValue: {} },
+        { provide: MailService, useValue: {} },
+        { provide: PrismaService, useValue: {} },
+        { provide: WorkosService, useValue: workosmock },
+      ]
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+    workOS = module.get<WorkosService>(WorkosService);
+  });
+
+  //shoul return error if the url is not generated
+  //should return 200 if the url is generated
+
+  it ('should return error if the url is not generated', async () => {
+    workOS.getUrl = jest.fn().mockReturnValue(null);
+
+    await expect(service.workOsSignIn()).rejects.toThrow(
+      new Error('Failed to generate authorization URL'),
+    );
+  })
+})
+
+describe('AuthService - SignIn', () => {
+  let service: AuthService;
+  let userServiceMock: {
+    findByEmail: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: UserService, useValue: userServiceMock },
+        { provide: MailService, useValue: {} },
+        { provide: PrismaService, useValue: {} },
+        { provide: WorkosService, useValue: {} }, // vazio se não usar
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+    
+  })
+})
+
+
+
+
 describe('AuthService - inviteUser', () => {
   let service: AuthService;
   let userServiceMock: {
@@ -100,7 +252,6 @@ describe('AuthService - inviteUser', () => {
     expect(prismaMock.emailInvitation.create).toHaveBeenCalled();
   });
 });
-
 
 describe('AuthService - GetInvite', () => {
 

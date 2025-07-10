@@ -30,64 +30,59 @@ export class AuthService {
     private readonly prisma: PrismaService
   ) {}
 
-    async handleUser(code: string): Promise<string> {
+  async handleUser(code: string): Promise<string> {
       const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
-      console.log('code arriving in service:', code);
-        if (!code) {
-            throw new BadRequestException('Code is required');
-        }
-        const result = await this.workosService.getUserByCode(code);
-        console.log('result in service:', result);
-        if (!result) {
-            throw new BadRequestException('Failed to retrieve user profile from WorkOS');
-        }
+      if (!code) {
+          throw new BadRequestException('Code is required');
+      }
+      const result = await this.workosService.getUserByCode(code);
+      if (!result) {
+          throw new BadRequestException('Failed to retrieve user profile from WorkOS');
+      }
 
-        const user = result.user;
-        console.log('User in service:', user);
-        let userDB = await this.userService.findByEmail(user.email);
-        console.log('User from DB:', userDB);
+      const user = result.user;
+      let userDB = await this.userService.findByEmail(user.email);
 
-        if (!userDB) {
-          console.log('Creating new user in DB');
-          userDB = await this.userService.create({
-            email: user.email,
-            first_name: user.first_name || '',
-            last_name: user.last_name || '',
-            phone: user.phone || '',
-            avatar: user.profile_picture_url || '',
-            jobTitle: user.jobTitle || '',
-            companyName: user.companyName || '',
-            role: user.role?.slug || 'user',
-            workosId: user.id,
-            password: '', // Password is not used for SSO users
-            authenticationMethod: result.authenticationMethod,
-            status: 'incomplete',
-            verified: user.email_verified || false,
-          });
-        }
-
-        const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
-          expiresIn: '1h',
+      if (!userDB) {
+        userDB = await this.userService.create({
+          email: user.email,
+          first_name: user.first_name || '',
+          last_name: user.last_name || '',
+          phone: user.phone || '',
+          avatar: user.profile_picture_url || '',
+          jobTitle: user.jobTitle || '',
+          companyName: user.companyName || '',
+          role: user.role?.slug || 'user',
+          workosId: user.id,
+          password: '', // Password is not used for SSO users
+          authenticationMethod: result.authenticationMethod,
+          status: 'incomplete',
+          verified: user.email_verified || false,
         });
+      }
 
-        //revoke previous sessions of this user before I create the new session
-        await this.prisma.session.updateMany({
-          where: { userId: user.id },
-          data: { isRevoked: true },
-        });
+      const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
+        expiresIn: '1h',
+      });
 
-        const session = await this.prisma.session.create({
-          data:{
-            userId: userDB.id,
-            token: token,
-            expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
-          }
-        })
+      //revoke previous sessions of this user before I create the new session
+      await this.prisma.session.updateMany({
+        where: { userId: user.id },
+        data: { isRevoked: true },
+      });
 
-        if (!session) {
-          throw new BadRequestException('Failed to create session');
+      const session = await this.prisma.session.create({
+        data:{
+          userId: userDB.id,
+          token: token,
+          expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
         }
-        return token;
+      })
+
+      if (!session) {
+        throw new BadRequestException('Failed to create session');
+      }
+      return token;
   }
 
   async workOsSignIn(): Promise<string> {
