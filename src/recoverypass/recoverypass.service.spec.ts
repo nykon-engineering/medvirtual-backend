@@ -31,6 +31,12 @@ describe('Forgot password', () => {
     expect(service).toBeDefined();
   });
 
+  it('should return 400 if email is empty', async () => {
+    const email = { email: '' }; //pass the parameter as an object
+
+    await expect(service.forgotPassword(email)).rejects.toThrow('Email is required'); //verify that the error is thrown
+  })
+
   it ('Should return 404 if the user does not exist', async () => {
     const email = "teste@teste.com";
 
