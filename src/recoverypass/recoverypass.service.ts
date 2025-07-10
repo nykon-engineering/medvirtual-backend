@@ -22,6 +22,9 @@ export class RecoverypassService {
     async forgotPassword(email: forgotDto): Promise<Boolean>{
         //check if the user exists with this email
         console.log('Arriving in the service: ',email);
+        if (!email || !email.email) {
+            throw new BadRequestException('Email is required');
+        }
         const user = await this.user.findByEmail(email.email);
         if (!user) {
             throw new NotFoundException('User with this email does not exist');
@@ -52,20 +55,6 @@ export class RecoverypassService {
 
         return true
         
-    }
-
-    /* istanbul ignore next */
-    async verifyCode(hash: string): Promise<Boolean> {
-        if (!hash) {
-            throw new NotFoundException('Hash is empty or not found');
-        }
-        //verify the hash validate
-        try{
-            const payload = jwt.verify(hash, process.env.JWT_SECRET);
-            return true;
-        }catch (error) {
-            throw new BadRequestException('Hash is expired or invalid');
-        }
     }
 
     async resetPassword(data: ResetPasswordDto): Promise<Boolean> {
