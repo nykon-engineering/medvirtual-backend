@@ -7,17 +7,20 @@ import { WorkosService } from '../workos/workos.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateVerificationCode } from '../utils/generateCode.util'
-import { signUpReturnDto } from './dto/signupReturn.dto';
-import { resendCodeDto } from './dto/resendCode.dto';
-import { SignInDto } from './dto/SignIn.dto';
-import { inviteUserDto } from './dto/InviteUser.dto';
-import { User } from '@prisma/client';
-import { verifyCodeDto } from './dto/verifyCode.dto';
+import { AuthSignUpReturnDto } from './dto/authSignupReturn.dto';
+import { AuthResendCodeDto } from './dto/authResendCode.dto';
+import { AuthSignInDto } from './dto/authSignIn.dto';
+import { AuthInviteUserDto } from './dto/authInviteUser.dto';
+import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
 import getVerificationCodeTemplate from '../utils/email-templates/verification-code';
 import InviteSignup from '../utils/email-templates/invite-signup';
-import { SignUpDto } from './dto/SignUp.dto';
-import { verifyCodeDtoReturn } from './dto/verifyCodeReturn.dto';
-import { SetPasswordDto } from './dto/setPassword.dto';
+import { AuthSignUpDto } from './dto/authSignUp.dto';
+import { AuthVerifyCodeDtoReturn } from './dto/authVerifyCodeReturn.dto';
+import { AuthSetPasswordDto } from './dto/authSetPassword.dto';
+import { AuthLogoutDto } from './dto/authLogOut.dto';
+import { AuthGetInviteDto } from './dto/authGetInvite.dto';
+import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
+import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
 
 
 
@@ -94,7 +97,7 @@ export class AuthService {
     return authorizationUrl;
   }
 
-  async signIn(data: SignInDto): Promise<string> {
+  async signIn(data: AuthSignInDto): Promise<string> {
     const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000;
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
@@ -140,7 +143,7 @@ export class AuthService {
     return token;
   }
 
-  async signUp(data: SignUpDto): Promise<signUpReturnDto> {
+  async signUp(data: AuthSignUpDto): Promise<AuthSignUpReturnDto> {
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
   
@@ -209,7 +212,7 @@ export class AuthService {
     };
   }
 
-  async verifyCode(data: verifyCodeDto): Promise<verifyCodeDtoReturn> {
+  async verifyCode(data: AuthVerifyCodeDto): Promise<AuthVerifyCodeDtoReturn> {
     if (!data.code || !data.token) {
       throw new BadRequestException('Code and token are required');
     }
@@ -285,7 +288,7 @@ export class AuthService {
     return token;
   }
 
-  async resendCode(email: resendCodeDto): Promise<signUpReturnDto> {
+  async resendCode(email: AuthResendCodeDto): Promise<AuthResendCodeReturnDto> {
 
     //invalidate previuos code from this user
     if (!email) {
@@ -352,7 +355,8 @@ export class AuthService {
 
   }
 
-  async logout (token: string): Promise<boolean> {
+  async logout (data: AuthLogoutDto): Promise<boolean> {
+    const {token} = data;
     if (!token) {
       throw new BadRequestException('Token is required');
     }
@@ -370,7 +374,7 @@ export class AuthService {
 
   }
 
-  async inviteUser(data: inviteUserDto): Promise<string>{
+  async inviteUser(data: AuthInviteUserDto): Promise<string>{
     const authenticationMethod = 'OwnSign'
 
     const user = await this.userService.findByEmail(data.email);
@@ -436,15 +440,15 @@ export class AuthService {
   } 
 
 
-  async getInvite(code: string): Promise<SignUpDto> {
-
-    if (!code){
+  async getInvite(data: AuthGetInviteDto): Promise<any> {
+    const {token} = data;
+    if (!token){
       throw new BadRequestException('Token is required');
     }
 
     let decodedToken; 
     try {
-      decodedToken = jwt.verify(code, process.env.JWT_SECRET);
+      decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     } catch (error) {
       throw new UnauthorizedException('Invalid token');
     }
@@ -452,7 +456,7 @@ export class AuthService {
     const emailInvitation = await this.prisma.emailInvitation.findFirst({
       where: {
         userId : decodedToken.id,
-        code: code
+        code: token
       },
     })
 
@@ -475,7 +479,6 @@ export class AuthService {
       lastName: user.last_name,
       email: user.email,
       role: user.role,
-      password: '',
       jobTitle: user.jobTitle,
       companyName: user.companyName,
     };
@@ -484,7 +487,7 @@ export class AuthService {
   }
 
 
-  async setPassword(data: SetPasswordDto): Promise<string>{
+  async setPassword(data: AuthSetPasswordDto): Promise<string>{
 
     let decodedToken; 
     try {

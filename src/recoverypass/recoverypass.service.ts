@@ -5,10 +5,9 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
-import { forgotDto } from './dto/forgot.dto';
-import { ResetPasswordDto } from './dto/resetPassword.dto';
+import { RecoveryForgotPasswordDto } from './dto/recoveryForgotPassword.dto';
 import getResetPasswordTemplate from '../utils/email-templates/reset-password';
-import e from 'express';
+import { RecoveryResetPasswordDto } from './dto/recoveryResetPassword.dto';
 
 @Injectable()
 export class RecoverypassService {
@@ -19,7 +18,7 @@ export class RecoverypassService {
         private readonly mail: MailService
     ){}
 
-    async forgotPassword(email: forgotDto): Promise<Boolean>{
+    async forgotPassword(email: RecoveryForgotPasswordDto): Promise<Boolean>{
         //check if the user exists with this email
         console.log('Arriving in the service: ',email);
         if (!email || !email.email) {
@@ -57,7 +56,7 @@ export class RecoverypassService {
         
     }
 
-    async resetPassword(data: ResetPasswordDto): Promise<Boolean> {
+    async resetPassword(data: RecoveryResetPasswordDto): Promise<Boolean> {
 
         const { hash, newPassword } = data;
         if (!hash) {
