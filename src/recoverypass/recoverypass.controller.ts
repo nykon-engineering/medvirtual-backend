@@ -1,5 +1,5 @@
 /* istanbul ignore file */
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { RecoverypassService } from './recoverypass.service';
@@ -16,6 +16,7 @@ export class RecoverypassController {
     ){}
 
     @Post('forgot')
+    @HttpCode(200)
     @ApiBody({ type: RecoveryForgotPasswordDto})
     @ApiOperation({ summary: 'Request a password recovery email' })
     @ApiResponse({ status: 400, description: 'Email is required'})
@@ -29,7 +30,6 @@ export class RecoverypassController {
         if (!result) {
             return { status: 500, message: 'Recovery password failed' };
         }
-
         return {
             status: 200,
             message: 'Recovery password email sent successfully'
@@ -37,6 +37,7 @@ export class RecoverypassController {
     }
 
     @Post('set-password')
+    @HttpCode(200)
     @ApiBody({ type: RecoveryResetPasswordDto })
     @ApiOperation({ summary: 'Reset the password using the authentication code' })
      //I found a issue here, where I add the ResetPasswordDto, the swagger see this Dto for all routes
@@ -54,6 +55,6 @@ export class RecoverypassController {
         return { 
             status: 200,
             message: 'Password reset successfully, redirecting to login page',
-         }
+        }
     }
 }
