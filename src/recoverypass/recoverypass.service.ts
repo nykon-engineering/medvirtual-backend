@@ -34,7 +34,6 @@ export class RecoverypassService {
         });
 
         if(!hash) throw new BadRequestException('Error generating recovery hash');
-            
         
         // Send verification code via email
         const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/set-password?t=${hash}`);
@@ -47,20 +46,14 @@ export class RecoverypassService {
         });
     
         if(!mailSent) throw new BadRequestException('Error sending recovery email');
-         
         
         return true
     }
 
     async setPassword(data: RecoveryResetPasswordDto): Promise<Boolean> {
-
         const { token, password } = data;
-        if (!token) {
-            throw new BadRequestException('Hash is required');
-        }
-        if (!password) {
-            throw new BadRequestException('New password is required');
-        }
+        if (!token) throw new BadRequestException('Hash is required');
+        if (!password) throw new BadRequestException('New password is required');
 
         const hashedPassword = await bcrypt.hash(password, 10);
         
@@ -69,9 +62,7 @@ export class RecoverypassService {
             const payload = jwt.verify(token, process.env.JWT_SECRET);
             const userId = payload['id'];
 
-            if (!userId) {
-                throw new NotFoundException('User ID not found in hash');
-            }
+            if (!userId) throw new NotFoundException('User ID not found in hash');
             //update the user password
             await this.prisma.user.update({
                 where: { id: userId },

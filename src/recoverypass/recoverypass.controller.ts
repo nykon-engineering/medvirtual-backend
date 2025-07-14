@@ -40,7 +40,6 @@ export class RecoverypassController {
     @HttpCode(200)
     @ApiBody({ type: RecoveryResetPasswordDto })
     @ApiOperation({ summary: 'Reset the password using the authentication code' })
-     //I found a issue here, where I add the ResetPasswordDto, the swagger see this Dto for all routes
     @ApiResponse({ status: 400, description: 'Hash is required' })
     @ApiResponse({ status: 400, description: 'New password is required' })
     @ApiResponse({ status: 404, description: 'User ID not found in hash' })

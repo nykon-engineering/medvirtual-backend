@@ -1,5 +1,5 @@
 /* istanbul ignore file */
-import { Body, Controller, Get, Inject, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 
@@ -78,6 +78,7 @@ export class AuthController {
     }
 
     @Post('signin')
+    @HttpCode(200)
     @ApiBody({ type: AuthSignInDto })
     @ApiOperation({ summary: 'SignIn from our own database' })
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
@@ -98,6 +99,7 @@ export class AuthController {
 
 
     @Post('signup')
+    @HttpCode(201)
     @ApiBody({ type: AuthSignUpDto })
     @ApiOperation({ summary: 'SignUp from our own database' })
     @ApiResponse({ status: 400, description: 'User already exists with this email' })
@@ -114,6 +116,7 @@ export class AuthController {
     }
 
     @Post('verify-code')
+    @HttpCode(200)
     @ApiBody({ type: AuthVerifyCodeDto })
     @ApiOperation({ summary: 'Verify code for user registration' })
     @ApiResponse({ status: 302, description: 'User registered successfully'})
@@ -139,6 +142,7 @@ export class AuthController {
     }
 
     @Post('resend-code')
+    @HttpCode(200)
     @ApiBody({ type: AuthResendCodeDto })
     @ApiOperation({ summary: 'Resend verification code to user email' })
     @ApiResponse({ status: 200, description: 'Code sent successfully' })
@@ -159,6 +163,7 @@ export class AuthController {
 
 
     @Post('logout')
+    @HttpCode(302)
     @ApiBody({ type: AuthLogoutDto })
     @Redirect()
     @ApiOperation({ summary: 'Logout user' })
@@ -183,6 +188,7 @@ export class AuthController {
     }
 
     @Post('invite')
+    @HttpCode(201)
     @ApiBody({ type: AuthInviteUserDto })
     @UseGuards(AuthGuard, RolesGuard)
     @Roles('admin', 'SuperAdmin')
@@ -204,6 +210,7 @@ export class AuthController {
     }
 
     @Post('get-invite')
+    @HttpCode(200)
     @ApiBody({ type: AuthGetInviteDto })
     @ApiOperation({ summary: 'Get user data from email' })
     @ApiResponse({ status: 200, description: 'User data retrieved successfully' })
@@ -217,6 +224,7 @@ export class AuthController {
     }
 
     @Post('set-password')
+    @HttpCode(200)
     @ApiBody({ type: AuthSetPasswordDto })
     @ApiOperation({ summary: 'Allows a new uset to set their password using a valid invitation'})
     @ApiResponse({ status: 200, description: 'Password has been set successfully. You can now log in.' })
