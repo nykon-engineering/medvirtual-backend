@@ -1,23 +1,25 @@
 /* istanbul ignore file */
-import { Body, Controller, Get, Inject, Param, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
-import { Response } from 'express';
+import { Body, Controller, Get, Inject, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 
 import { AuthService } from './auth.service';
 
-import { SignInDto } from './dto/SignIn.dto';
-import { SignUpDto } from './dto/SignUp.dto';
-import { LogoutDto } from './dto/logOut.dto';
-import { signUpReturnDto } from './dto/signupReturn.dto';
-import { resendCodeDto } from './dto/resendCode.dto';
+import { AuthSignInDto } from './dto/authSignIn.dto';
+import { AuthSignUpDto } from './dto/authSignUp.dto';
+import { AuthLogoutDto } from './dto/authLogOut.dto';
+import { AuthResendCodeDto } from './dto/authResendCode.dto';
+import { AuthInviteUserDto } from './dto/authInviteUser.dto';
+import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
+import { AuthSetPasswordDto } from './dto/authSetPassword.dto';
+import { AuthGetInviteDto } from './dto/authGetInvite.dto';
+
 import { AuthGuard } from './auth.guard';
 import { CurrentUser } from './current-user.decorator';
-import { User } from '@prisma/client';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
-import { inviteUserDto } from './dto/InviteUser.dto';
-import { verifyCodeDto } from './dto/verifyCode.dto';
-import { SetPasswordDto } from './dto/setPassword.dto';
+import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
+
 
 /*
     1.User is redirected to workOs for authentication.
@@ -37,7 +39,7 @@ export class AuthController {
     @UseGuards(AuthGuard, RolesGuard)
     @Roles('admin')
     @ApiOperation({ summary: 'Route for test the server' })
-    async test(@CurrentUser() user: User){
+    async test(@CurrentUser() user: { id: string, email: string, name: string, role: string }) {
         return { message: 'Auth endpoint is working', user };
     }
 
@@ -76,6 +78,7 @@ export class AuthController {
     }
 
     @Post('signin')
+    @ApiBody({ type: AuthSignInDto })
     @ApiOperation({ summary: 'SignIn from our own database' })
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
     @ApiResponse({ status: 401, description: 'User not found with this email' })
@@ -84,7 +87,7 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Invalid Password' })
     @ApiResponse({ status: 400, description: 'Failed to create session' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
-    async signIn(@Body() data: SignInDto) {
+    async signIn(@Body() data: AuthSignInDto) {
         const token = await this.authService.signIn(data);
         return {
             statusCode: 200,
@@ -93,13 +96,15 @@ export class AuthController {
             };
     }
 
+
     @Post('signup')
+    @ApiBody({ type: AuthSignUpDto })
     @ApiOperation({ summary: 'SignUp from our own database' })
     @ApiResponse({ status: 400, description: 'User already exists with this email' })
     @ApiResponse({ status: 400, description: 'Failed to generate verification code' })
     @ApiResponse({ status: 400, description: 'Failed to store verification code' })
     @ApiResponse({ status: 201, description: 'Code sent successfully' })
-    async signUp(@Body() data: SignUpDto) {
+    async signUp(@Body() data: AuthSignUpDto) {
         const result = await this.authService.signUp(data);
         return {
             statusCode: 201,
@@ -109,7 +114,7 @@ export class AuthController {
     }
 
     @Post('verify-code')
-    @ApiBody({ type: signUpReturnDto })
+    @ApiBody({ type: AuthVerifyCodeDto })
     @ApiOperation({ summary: 'Verify code for user registration' })
     @ApiResponse({ status: 302, description: 'User registered successfully'})
     @ApiResponse({ status: 400, description: 'Failed to verify code' })
@@ -118,7 +123,7 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'User not found' })
     @ApiResponse({ status: 400, description: 'Invalid verification code' })
     @ApiResponse({ status: 400, description: 'Code already verified' })
-    async verifyCode(@Body() data: verifyCodeDto) {
+    async verifyCode(@Body() data: AuthVerifyCodeDto) {
         const result = await this.authService.verifyCode(data);
         if (!result) {
             return {
@@ -134,8 +139,8 @@ export class AuthController {
     }
 
     @Post('resend-code')
+    @ApiBody({ type: AuthResendCodeDto })
     @ApiOperation({ summary: 'Resend verification code to user email' })
-    @ApiBody({ type: String })
     @ApiResponse({ status: 200, description: 'Code sent successfully' })
     @ApiResponse({ status: 400, description: 'Email is required' })
     @ApiResponse({ status: 400, description: 'User not found with this email' })
@@ -143,7 +148,7 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to generate verification code' })
     @ApiResponse({ status: 400, description: 'Failed to store verification code' })
     @ApiResponse({ status: 400, description: 'Failed to send verification email' })
-    async resendCode(@Body() email: resendCodeDto) {
+    async resendCode(@Body() email: AuthResendCodeDto) {
         const result = await this.authService.resendCode(email);
         return {
             statusCode: 200,
@@ -154,15 +159,15 @@ export class AuthController {
 
 
     @Post('logout')
+    @ApiBody({ type: AuthLogoutDto })
     @Redirect()
     @ApiOperation({ summary: 'Logout user' })
-    @ApiBody({ type: LogoutDto })
     @ApiResponse({ status: 302, description: 'User logged out successfully' })
     @ApiResponse({ status: 400, description: 'Token is required' })
     @ApiResponse({ status: 400, description: 'Failed to revoke token' })
     @ApiResponse({ status: 500, description: 'Failed to log out user' })
-    async logout(@Body() token:string){
-        const result = await this.authService.logout(token);
+    async logout(@Body() data: AuthLogoutDto){
+        const result = await this.authService.logout({token: data.token});
         if (result) {
             return {
                 statusCode: 302,
@@ -178,17 +183,17 @@ export class AuthController {
     }
 
     @Post('invite')
+    @ApiBody({ type: AuthInviteUserDto })
     @UseGuards(AuthGuard, RolesGuard)
     @Roles('admin', 'SuperAdmin')
     @ApiOperation({ summary: 'An admin invites a new user to the platform' })
-    @ApiBody({ type: inviteUserDto })
     @ApiResponse({ status: 201, description: 'Invitation sent successfully to new.user@client.com.' })
     @ApiResponse({ status: 400, description: 'Failed to generate invite code' })
     @ApiResponse({ status: 400, description: 'Failed to send invitation email' })
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
-    async inviteUser(@Body() data: inviteUserDto) {
+    async inviteUser(@Body() data: AuthInviteUserDto) {
         const result = await this.authService.inviteUser(data);
         if (result) {
             return {
@@ -199,31 +204,27 @@ export class AuthController {
     }
 
     @Post('get-invite')
+    @ApiBody({ type: AuthGetInviteDto })
     @ApiOperation({ summary: 'Get user data from email' })
-    @ApiBody({ type: String })
     @ApiResponse({ status: 200, description: 'User data retrieved successfully' })
     @ApiResponse({ status: 400, description: 'Token is required' })
     @ApiResponse({ status: 400, description: 'Invalid Token' })
     @ApiResponse({ status: 404, description: 'Token not found' })
     @ApiResponse({ status: 404, description: 'User not found' })
-    async getInvite(@Body() token: string) {
-        const user = await this.authService.getInvite(token);
-        return {
-            statusCode: 200,
-            message: 'User data retrieved successfully',
-            user
-        };
+    async getInvite(@Body() data: AuthGetInviteDto) : Promise<any>{
+        const user = await this.authService.getInvite(data);
+        return user;
     }
 
     @Post('set-password')
+    @ApiBody({ type: AuthSetPasswordDto })
     @ApiOperation({ summary: 'Allows a new uset to set their password using a valid invitation'})
-    @ApiBody({ type: SetPasswordDto})
     @ApiResponse({ status: 200, description: 'Password has been set successfully. You can now log in.' })
     @ApiResponse({ status: 400, description: 'Invalid token' })
     @ApiResponse({ status: 404, description: 'Token not found' })
     @ApiResponse({ status: 404, description: 'User not found' })
     @ApiResponse({ status: 400, description: 'Error in set user password' })
-    async setPassword(@Body() data: SetPasswordDto){
+    async setPassword(@Body() data: AuthSetPasswordDto){
         const result = await this.authService.setPassword(data);
         return {
             message: "Password has been set successfully. You can now log in."

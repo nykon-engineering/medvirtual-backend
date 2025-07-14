@@ -12,6 +12,9 @@ module.exports = {
       use: 'ts-loader', 
       exclude: [/node_modules/, /\.spec\.ts$/, /test/] }],
   },
+  optimization: {
+    minimize: false, // Disable minimization for easier debugging
+  },
   resolve: { 
     extensions: ['.ts', '.js'],
     fallback: {

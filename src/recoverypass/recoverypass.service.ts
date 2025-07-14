@@ -5,10 +5,9 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
-import { forgotDto } from './dto/forgot.dto';
-import { ResetPasswordDto } from './dto/resetPassword.dto';
+import { RecoveryForgotPasswordDto } from './dto/recoveryForgotPassword.dto';
 import getResetPasswordTemplate from '../utils/email-templates/reset-password';
-import e from 'express';
+import { RecoveryResetPasswordDto } from './dto/recoveryResetPassword.dto';
 
 @Injectable()
 export class RecoverypassService {
@@ -19,9 +18,8 @@ export class RecoverypassService {
         private readonly mail: MailService
     ){}
 
-    async forgotPassword(email: forgotDto): Promise<Boolean>{
+    async forgotPassword(email: RecoveryForgotPasswordDto): Promise<Boolean>{
         //check if the user exists with this email
-        console.log('Arriving in the service: ',email);
         if (!email || !email.email) {
             throw new BadRequestException('Email is required');
         }
@@ -40,7 +38,7 @@ export class RecoverypassService {
         }
         
         // Send verification code via email
-        const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/reset-password?hash=${hash}`);
+        const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/set-password?t=${hash}`);
         const mailSent = await this.mail.sendMail(
         {
         from: 'MedVirtual <noreply@medvirtual.ai>',
@@ -57,21 +55,21 @@ export class RecoverypassService {
         
     }
 
-    async resetPassword(data: ResetPasswordDto): Promise<Boolean> {
+    async setPassword(data: RecoveryResetPasswordDto): Promise<Boolean> {
 
-        const { hash, newPassword } = data;
-        if (!hash) {
+        const { token, password } = data;
+        if (!token) {
             throw new BadRequestException('Hash is required');
         }
-        if (!newPassword) {
+        if (!password) {
             throw new BadRequestException('New password is required');
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(password, 10);
         
         //verify the hash validate
         try {
-            const payload = jwt.verify(hash, process.env.JWT_SECRET);
+            const payload = jwt.verify(token, process.env.JWT_SECRET);
             const userId = payload['id'];
 
             if (!userId) {
