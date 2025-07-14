@@ -1,5 +1,5 @@
 export const EmailHeader = `
-    <div style="background:#01546B;padding:40px 20px;text-align:center;">
+    <div style="background:#00B2E2;padding:40px 20px;text-align:center;">
             <svg width="225" height="68" viewBox="0 0 225 68" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <g filter="url(#filter0_d_511_5958)">
                     <path d="M63.1786 39.183H63.0852L58.3482 26.209H50.3359V49.0798H55.6203V33.4024H55.7583L61.4164 49.0798H64.8452L70.5033 33.4024H70.6435V49.0798H75.9279V26.209H67.9134L63.1786 39.183Z" fill="white" />

@@ -1,17 +1,26 @@
 import { EmailHeader, EmailFooter } from "./components"
 
 export default function getVerificationCodeTemplate(verificationCode: string) {
-    return (`
+  return (`
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100&display=swap" rel="stylesheet"> <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      font-family: "Be Vietnam Pro",
+      font-style: normal
+    }
+  </style>
   <title>Verify Your Account</title>
 </head>
 
-<body style="margin:0;padding:0;width:100%!important;min-width:100%;background-color:#f4f4f4;font-family:monospace;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<body style="margin:0;padding:0;width:100%!important;min-width:100%;background-color:#f4f4f4;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
   <div style="max-width:600px;margin:0 auto;background-color:#ffffff;">
     ${EmailHeader}
 
@@ -21,7 +30,7 @@ export default function getVerificationCodeTemplate(verificationCode: string) {
         please use the verification code below.
       </p>
 
-      <div style="background-color:#f8f9fa;border:2px dashed #01546B;border-radius:12px;padding:30px 20px;margin:0px 0px 56px 0;text-align:center;">
+      <div style="background-color:#f8f9fa;border:2px dashed #00B2E2;border-radius:12px;padding:30px 20px;margin:0px 0px 56px 0;text-align:center;">
         <div style="color:#666666;font-size:14px;font-weight:500;text-transform:uppercase;letter-spacing:1px;margin-bottom:15px;">
           Your Verification Code
         </div>

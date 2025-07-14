@@ -1,18 +1,26 @@
 import { EmailHeader, EmailFooter } from "./components"
 
-export default function InviteSignup(inviteLink: string){
+export default function InviteSignup(inviteLink: string) {
 
-    return (
-        `
+  return (
+    `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100&display=swap" rel="stylesheet"> <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      font-family: "Be Vietnam Pro",
+      font-style: normal
+    }
+  </style>
   <title>Invite Signup</title>
 </head>
 
-<body style="margin:0;padding:0;width:100%!important;min-width:100%;background-color:#f4f4f4;font-family:monospace;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<body style="margin:0;padding:0;width:100%!important;min-width:100%;background-color:#f4f4f4;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
   <div style="max-width:600px;margin:0 auto;background-color:#ffffff;">
     ${EmailHeader}
 
@@ -22,7 +30,7 @@ export default function InviteSignup(inviteLink: string){
       </p>
 
       <div style="text-align: center; margin: 32px 0;">
-        <a href="${inviteLink}" style="display: inline-block; padding: 16px 32px; background-color: #01546B; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin-bottom:16px">
+        <a href="${inviteLink}" style="display: inline-block; padding: 16px 32px; background-color: #00B2E2; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; margin-bottom:16px">
           Accept Invite
         </a>
       </div>
@@ -41,5 +49,5 @@ export default function InviteSignup(inviteLink: string){
 </body>
 </html>
         `
-    )
+  )
 }

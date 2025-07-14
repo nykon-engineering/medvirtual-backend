@@ -8,10 +8,19 @@ export default function getResetPasswordTemplate(userName: string, resetLink: st
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100&display=swap" rel="stylesheet"> <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      font-family: "Be Vietnam Pro",
+      font-style: normal
+    }
+  </style>
     <title>Password Reset - MedVirtual</title>
 </head>
 
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background-color: #f8fafc; line-height: 1.6;">
+<body style="margin: 0; padding: 0; background-color: #f8fafc; line-height: 1.6;">
     <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
 
         ${EmailHeader}
@@ -30,7 +39,7 @@ export default function getResetPasswordTemplate(userName: string, resetLink: st
             </p>
 
             <div style="text-align: center; margin: 32px 0;">
-                <a href="${resetLink}" style="display: inline-block; padding: 16px 32px; background-color: #01546B; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                <a href="${resetLink}" style="display: inline-block; padding: 16px 32px; background-color: #00B2E2; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
                     Reset Password
                 </a>
             </div>
