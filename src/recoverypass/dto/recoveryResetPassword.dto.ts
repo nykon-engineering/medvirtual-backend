@@ -5,10 +5,10 @@ export class RecoveryResetPasswordDto {
     @ApiProperty({ required: true, description: 'The authentication code hash' })
     @IsString()
     @IsNotEmpty()
-    hash: string;
+    token: string;
 
     @ApiProperty({ required: true, description: 'The new password to set' })
     @IsStrongPassword()
     @IsNotEmpty()
-    newPassword: string;
+    password: string;
 }

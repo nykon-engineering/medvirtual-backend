@@ -20,7 +20,6 @@ export class RecoverypassService {
 
     async forgotPassword(email: RecoveryForgotPasswordDto): Promise<Boolean>{
         //check if the user exists with this email
-        console.log('Arriving in the service: ',email);
         if (!email || !email.email) {
             throw new BadRequestException('Email is required');
         }
@@ -39,7 +38,7 @@ export class RecoverypassService {
         }
         
         // Send verification code via email
-        const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/reset-password?hash=${hash}`);
+        const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/set-password?t=${hash}`);
         const mailSent = await this.mail.sendMail(
         {
         from: 'MedVirtual <noreply@medvirtual.ai>',
@@ -56,21 +55,21 @@ export class RecoverypassService {
         
     }
 
-    async resetPassword(data: RecoveryResetPasswordDto): Promise<Boolean> {
+    async setPassword(data: RecoveryResetPasswordDto): Promise<Boolean> {
 
-        const { hash, newPassword } = data;
-        if (!hash) {
+        const { token, password } = data;
+        if (!token) {
             throw new BadRequestException('Hash is required');
         }
-        if (!newPassword) {
+        if (!password) {
             throw new BadRequestException('New password is required');
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(password, 10);
         
         //verify the hash validate
         try {
-            const payload = jwt.verify(hash, process.env.JWT_SECRET);
+            const payload = jwt.verify(token, process.env.JWT_SECRET);
             const userId = payload['id'];
 
             if (!userId) {

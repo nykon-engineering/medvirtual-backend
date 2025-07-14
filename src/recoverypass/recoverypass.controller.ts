@@ -18,14 +18,13 @@ export class RecoverypassController {
     @Post('forgot')
     @ApiBody({ type: RecoveryForgotPasswordDto})
     @ApiOperation({ summary: 'Request a password recovery email' })
-    @ApiResponse({ status: 404, description: 'Email is required'})
+    @ApiResponse({ status: 400, description: 'Email is required'})
     @ApiResponse({ status: 404, description: 'User with this email does not exist'})
     @ApiResponse({ status: 400, description: 'Error generating recovery hash'})
     @ApiResponse({ status: 400, description: 'Error sending recovery email'})
     @ApiResponse({ status: 200, description: 'Recovery password email sent successfully'})
     @ApiResponse({ status: 500, description: 'Recovery password failed'})
     async forgotPassword(@Body() email: RecoveryForgotPasswordDto){
-        console.log('Arriving in the controller: ', email);
         const result = await this.recoverypassService.forgotPassword(email);
         if (!result) {
             return { status: 500, message: 'Recovery password failed' };
@@ -37,7 +36,7 @@ export class RecoverypassController {
         }
     }
 
-    @Post('reset-password')
+    @Post('set-password')
     @ApiBody({ type: RecoveryResetPasswordDto })
     @ApiOperation({ summary: 'Reset the password using the authentication code' })
      //I found a issue here, where I add the ResetPasswordDto, the swagger see this Dto for all routes
@@ -47,8 +46,8 @@ export class RecoverypassController {
     @ApiResponse({ status: 400, description: 'Hash is expired or invalid' })
     @ApiResponse({ status: 200, description: 'Password reset successfully, redirecting to login page' })
     @ApiResponse({ status: 500, description: 'Recovery password failed' })
-    async resetPassword(@Body() data: RecoveryResetPasswordDto) {
-        const result = await this.recoverypassService.resetPassword(data);
+    async setPassword(@Body() data: RecoveryResetPasswordDto) {
+        const result = await this.recoverypassService.setPassword(data);  
         if (!result) {
             return { status: 500, message: 'Recovery password failed' };
         }
