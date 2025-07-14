@@ -33,9 +33,8 @@ export class RecoverypassService {
             expiresIn: '10m',
         });
 
-        if(!hash) {
-            throw new BadRequestException('Error generating recovery hash');
-        }
+        if(!hash) throw new BadRequestException('Error generating recovery hash');
+            
         
         // Send verification code via email
         const emailBody = getResetPasswordTemplate(user.first_name, `https://medvirtual.com/set-password?t=${hash}`);
@@ -47,12 +46,10 @@ export class RecoverypassService {
         html: emailBody,
         });
     
-        if(!mailSent) { 
-        throw new BadRequestException('Error sending recovery email');
-        }
-
-        return true
+        if(!mailSent) throw new BadRequestException('Error sending recovery email');
+         
         
+        return true
     }
 
     async setPassword(data: RecoveryResetPasswordDto): Promise<Boolean> {
