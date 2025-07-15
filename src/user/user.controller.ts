@@ -5,6 +5,8 @@ import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateUserDto } from './dto/createUser.dto';
+import { CurrentUser } from 'dist/auth/current-user.decorator';
+import { User } from '@prisma/client';
 
 
 @ApiTags('User')
@@ -18,7 +20,6 @@ export class UserController {
     @UseGuards(AuthGuard)
     @ApiOperation({ summary: 'Get user using ID' })
     @ApiResponse({ status: 200, description: 'User found successfully.' })
-    
     async getUserById(@Param('id') id: string) {
         return this.userService.findById(id);
     }
@@ -51,5 +52,17 @@ export class UserController {
     @ApiResponse({ status: 400, description: 'Failed to delete user' })
     async deleteUser(@Param('id') id: string) {
         return this.userService.delete(id);
+    }
+
+    @Patch('update-status/:id')
+    @ApiBody({ type: CreateUserDto })
+    @UseGuards(AuthGuard)
+    @ApiOperation({ summary: 'Update user status from prospect to client' })
+    @ApiResponse({ status: 200, description: 'User updated successfully.' })
+    @ApiResponse({ status: 400, description: 'Failed to update user' })
+    @ApiResponse({ status: 404, description: 'User not found' })
+    //refactor to use CurrentUser decorator
+    async updateStatus(@Param('id') id: string) {
+        return this.userService.updateStatus(id);
     }
 }

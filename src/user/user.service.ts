@@ -87,6 +87,24 @@ export class UserService {
     } catch (error) {
       throw new BadRequestException(`Failed to delete user: ${error.message}`);
     }
+  }
+
+  async updateStatus(id: string): Promise<User> {
+    try {
+      const currentUser = await this.findById(id);
+      if (!currentUser) throw new NotFoundException(`User not found`);
+      if (currentUser.status !== 'prospect')  new BadRequestException(`User status is not prospect`);
+      
+      
+      return await this.prisma.user.update({
+        where: { id },
+        data:{
+          status: 'client'
+        }
+      });
+    } catch (error){
+      throw new BadRequestException(`Failed to update user status: ${error.message}`);
+    }
     
   }
 
