@@ -5,7 +5,7 @@ import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateUserDto } from './dto/createUser.dto';
-import { CurrentUser } from 'dist/auth/current-user.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '@prisma/client';
 
 
