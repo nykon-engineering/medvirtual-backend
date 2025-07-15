@@ -493,7 +493,7 @@ describe('AuthService - inviteUser', () => {
   });
 });
 
-describe('AuthService - GetInvite', () => {
+describe('AuthService - getUser', () => {
 
   let service: AuthService;
   let prisma: PrismaService;
@@ -523,7 +523,7 @@ describe('AuthService - GetInvite', () => {
   })
 
   it ('should return 400 if the token is not provided', async () => {
-    await expect(service.getInvite('')).rejects.toThrow(
+    await expect(service.getUser({ token : ''})).rejects.toThrow(
       new BadRequestException('Token is required'),
     );
   });
@@ -541,7 +541,7 @@ describe('AuthService - GetInvite', () => {
     });
     prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(null);
 
-    await expect(service.getInvite('valid-token')).rejects.toThrow(
+    await expect(service.getUser({ token: 'valid-token'})).rejects.toThrow(
       new BadRequestException('Token not found!'),
     );
   });
@@ -553,7 +553,7 @@ describe('AuthService - GetInvite', () => {
     prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
     prisma.user.findFirst = jest.fn().mockResolvedValue(false);
 
-    await expect(service.getInvite('valid-token')).rejects.toThrow(
+    await expect(service.getUser({ token: 'valid-token'})).rejects.toThrow(
       new BadRequestException('User not found!'),
     );
   })
@@ -564,7 +564,7 @@ describe('AuthService - GetInvite', () => {
     });
     prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
     prisma.user.findFirst = jest.fn().mockResolvedValue(true);
-    const result = await service.getInvite('valid-token');
+    const result = await service.getUser({ token: 'valid-token'});
     expect(result).toBeTruthy(); // Assuming the user object is returned as true for simplicity
   })
 
@@ -612,7 +612,7 @@ describe('AuthService - SetPassword', () => {
     });
     prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(null);
 
-    await expect(service.getInvite('valid-token')).rejects.toThrow(
+    await expect(service.getUser({ token: 'valid-token'})).rejects.toThrow(
       new BadRequestException('Token not found!'),
     );
   });
@@ -624,7 +624,7 @@ describe('AuthService - SetPassword', () => {
     prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
     prisma.user.findFirst = jest.fn().mockResolvedValue(false);
 
-    await expect(service.getInvite('valid-token')).rejects.toThrow(
+    await expect(service.getUser({ token: 'valid-token'})).rejects.toThrow(
       new BadRequestException('User not found!'),
     );
   })

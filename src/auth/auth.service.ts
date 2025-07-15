@@ -376,7 +376,7 @@ export class AuthService {
 
   async inviteUser(data: AuthInviteUserDto): Promise<string>{
     const authenticationMethod = 'OwnSign'
-
+    console.log('data:', data);
     const user = await this.userService.findByEmail(data.email);
     if (user) {
       throw new BadRequestException('User already exists');
@@ -440,7 +440,7 @@ export class AuthService {
   } 
 
 
-  async getInvite(data: AuthGetInviteDto): Promise<any> {
+  async getUser(data: AuthGetInviteDto): Promise<any> {
     const {token} = data;
     if (!token){
       throw new BadRequestException('Token is required');

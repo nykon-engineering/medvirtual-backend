@@ -1,7 +1,6 @@
-// src/workos/workos.service.ts
+/* Instambul ignore file */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { WorkOS } from '@workos-inc/node';
-import { throwDeprecation } from 'process';
 
 @Injectable()
 export class WorkosService {

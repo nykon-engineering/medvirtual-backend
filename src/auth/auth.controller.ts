@@ -19,6 +19,7 @@ import { CurrentUser } from './current-user.decorator';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
 import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
+import { User } from '@prisma/client';
 
 
 /*
@@ -199,7 +200,8 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
-    async inviteUser(@Body() data: AuthInviteUserDto) {
+    async inviteUser(@Body() data: AuthInviteUserDto, @CurrentUser() user : User) {
+        console.log(user);
         const result = await this.authService.inviteUser(data);
         if (result) {
             return {
@@ -209,7 +211,7 @@ export class AuthController {
         }
     }
 
-    @Post('get-invite')
+    @Post('get-user')
     @HttpCode(200)
     @ApiBody({ type: AuthGetInviteDto })
     @ApiOperation({ summary: 'Get user data from email' })
@@ -219,7 +221,7 @@ export class AuthController {
     @ApiResponse({ status: 404, description: 'Token not found' })
     @ApiResponse({ status: 404, description: 'User not found' })
     async getInvite(@Body() data: AuthGetInviteDto) : Promise<any>{
-        const user = await this.authService.getInvite(data);
+        const user = await this.authService.getUser(data);
         return user;
     }
 
