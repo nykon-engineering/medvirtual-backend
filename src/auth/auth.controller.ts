@@ -201,7 +201,7 @@ export class AuthController {
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
     async inviteUser(@Body() data: AuthInviteUserDto, @CurrentUser() user : User) {
-        const result = await this.authService.inviteUser(data);
+        const result = await this.authService.inviteUser(data, user);
         if (result) {
             return {
                 statusCode: 201,
@@ -236,7 +236,9 @@ export class AuthController {
     async setPassword(@Body() data: AuthSetPasswordDto){
         const result = await this.authService.setPassword(data);
         return {
-            message: "Password has been set successfully. You can now log in."
+            statusCode: 200,
+            message: "Password has been set successfully. You can now log in.",
+            result: result
         }
     }
 

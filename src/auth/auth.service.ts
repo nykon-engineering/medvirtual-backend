@@ -21,6 +21,7 @@ import { AuthLogoutDto } from './dto/authLogOut.dto';
 import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
 import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
+import { User } from '@prisma/client';
 
 
 
@@ -151,9 +152,17 @@ export class AuthService {
       throw new BadRequestException('User already exists with this email');
     }
 
+    //when a user use the direct signup route, it means that this user don't have organization previously created
+    const organization = await this.prisma.organization.create({
+      data: {
+        name: data.companyName || 'Default Organization',
+        
+      },
+    })
+
     const newUser = await this.userService.create({
       email: data.email,
-      organization: undefined,
+      organization: { connect: { id: organization.id } },
       first_name: data.firstName,
       last_name: data.lastName,
       phone: '',
@@ -374,21 +383,26 @@ export class AuthService {
 
   }
 
-  async inviteUser(data: AuthInviteUserDto): Promise<string>{
+  async inviteUser(data: AuthInviteUserDto, CurrentUser: User): Promise<string>{
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (user) {
       throw new BadRequestException('User already exists');
     }
 
+    // Check if the current user has an organization
+    if (!CurrentUser || !CurrentUser.organizationId) {
+      throw new BadRequestException('Current user does not belong to any organization');
+    }
+
     const newUser = await this.userService.create({
       email: data.email,
-      organization: undefined,
-      first_name: data.firstName,
-      last_name: data.lastName,
+      organization: { connect: { id: CurrentUser.organizationId } }, 
+      first_name: '',
+      last_name: '',
       phone: '',
       avatar: '',
-      jobTitle: data.jobTitle,
+      jobTitle: '',
       companyName: data.companyName,
       role: data.role || 'user',
       workosId: '',
@@ -399,7 +413,7 @@ export class AuthService {
     })
 
     const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
+      expiresIn: '24h',
     });
 
     if (!code){
@@ -438,7 +452,6 @@ export class AuthService {
     return `Invitation sent successfully to ${data.email}`;
   } 
 
-
   async getUser(data: AuthGetInviteDto): Promise<any> {
     const {token} = data;
     if (!token){
@@ -474,11 +487,8 @@ export class AuthService {
     }
 
     return {
-      firstName: user.first_name,
-      lastName: user.last_name,
       email: user.email,
       role: user.role,
-      jobTitle: user.jobTitle,
       companyName: user.companyName,
     };
 
@@ -518,6 +528,9 @@ export class AuthService {
     //set password and update status to prospect
     const updatePass = await this.prisma.user.update({
       data: { 
+        first_name: data.firstName,
+        last_name: data.lastName,
+        jobTitle: data.jobTitle,
         password: data.password,
         status: 'prospect'
       },
@@ -529,6 +542,29 @@ export class AuthService {
     }
 
 
-    return 'Password has been set successfully. You can now log in.';
+    //Create a new JWT for keep the user logged in
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
+
+    //revoke previous sessions of this user before I create the new session
+    await this.prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { isRevoked: true },
+    });
+
+    const session = await this.prisma.session.create({
+      data:{
+        userId: user.id,
+        token: token,
+        expiresAt: new Date(Date.now() +  Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000), 
+      }
+    })
+
+    if (!session) {
+      throw new BadRequestException('Failed to create session');
+    }
+    return token;
+
   }
 }
