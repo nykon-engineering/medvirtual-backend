@@ -376,7 +376,6 @@ export class AuthService {
 
   async inviteUser(data: AuthInviteUserDto): Promise<string>{
     const authenticationMethod = 'OwnSign'
-    console.log('data:', data);
     const user = await this.userService.findByEmail(data.email);
     if (user) {
       throw new BadRequestException('User already exists');

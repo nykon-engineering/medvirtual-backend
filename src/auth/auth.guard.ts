@@ -26,9 +26,7 @@ export class AuthGuard implements CanActivate {
     }
 
     try{
-      console.log('chegou....');
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      console.log(payload)
       const session = await this.prisma.session.findFirst({
         where:{
           token,

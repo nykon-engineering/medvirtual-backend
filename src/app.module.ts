@@ -8,6 +8,7 @@ import { WorkosService } from './workos/workos.service';
 import { WorkosModule } from './workos/workos.module';
 import { AuthModule } from './auth/auth.module';
 import { RecoverypassModule } from './recoverypass/recoverypass.module';
+import { HubspotModule } from './hubspot/hubspot.module';
 
 @Module({
   imports: [
@@ -18,7 +19,8 @@ import { RecoverypassModule } from './recoverypass/recoverypass.module';
     PrismaModule,
     WorkosModule,
     AuthModule,
-    RecoverypassModule
+    RecoverypassModule,
+    HubspotModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],
