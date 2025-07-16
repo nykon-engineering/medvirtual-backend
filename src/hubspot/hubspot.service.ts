@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 
@@ -39,8 +39,7 @@ export class HubspotService {
             })
             return response;
         }catch (error) {
-            console.error('Error fetching candidates from HubSpot:', error);
-            throw error;
+            throw new BadRequestException(`Error fetching candidates: ${error.message}`);
         }
     }
 
