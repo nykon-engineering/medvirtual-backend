@@ -20,6 +20,7 @@ async function bootstrapServer(): Promise<any> {
   .setTitle('MedVirtual Backend')
   .setDescription('API documentation for our backend application developed in  NestJS')
   .setVersion('1.0')
+  .addServer('/dev')
   .build();
 
   const document = SwaggerModule.createDocument(app, config);
