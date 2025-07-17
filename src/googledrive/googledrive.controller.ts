@@ -1,21 +1,21 @@
 import { Controller, Get, Param } from '@nestjs/common';
-import { GoogleService} from './googledrive.service';
+import { GoogledriveService } from './googledrive.service';
 
 @Controller('googledrive')
 export class GoogledriveController {
     constructor(
-        private readonly googleService: GoogleService
+        private readonly googledriveService : GoogledriveService
     ){}
 
     @Get('/list-files/:folderId')
     async listFilesInFolder(folderId: string) {
-        return this.googleService.listFilesInFolder(folderId);
+        return this.googledriveService.listFilesInFolder(folderId);
     }
 
     @Get('download-file/:fileId')
     async downloadFile(@Param('fileId') fileId: string) {
         const destinationPath = `./downloads-resume/`;
-        return this.googleService.downloadFile(fileId, destinationPath);
+        return this.googledriveService.downloadFile(fileId, destinationPath);
     }
 
 }

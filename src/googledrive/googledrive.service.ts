@@ -1,12 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { google } from 'googleapis';
-import { OAuth2Client} from 'google-auth-Library'
+import { google, Auth } from 'googleapis';
 import * as fs from 'fs';
-import * as path from 'path';
 
 @Injectable()
 export class GoogledriveService {
-    private oauth2Client: OAuth2Client;
+    private readonly oauth2Client: Auth.OAuth2Client;
 
     constructor() {
         this.oauth2Client = new google.auth.OAuth2(
@@ -34,8 +32,6 @@ export class GoogledriveService {
 
     async downloadFile(fileId: string, destinationPath: string) {
         const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
-
-
         const response = await drive.files.get({
             fileId: fileId,
             alt: 'media',
