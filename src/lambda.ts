@@ -6,14 +6,23 @@ import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import express from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AuthModule } from './auth/auth.module';
+import { ValidationPipe } from '@nestjs/common';
 
 let cachedServer;
 
 async function bootstrapServer(): Promise<any> {
   const expressApp = express();
+  expressApp.use(express.json());
   const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
   await app.enableCors();
+
+  await app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, 
+      forbidNonWhitelisted: false, 
+      transform: true,
+    }),
+  );
 
   //Inicialize the Swagger configuration
   const config = new DocumentBuilder()
