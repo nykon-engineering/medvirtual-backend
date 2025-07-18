@@ -15,11 +15,15 @@ esbuild.build({
   entryPoints: ['./src/lambda.ts'],
   bundle: true,
   platform: 'node',
+  format: 'cjs',
   target: 'node18',
   outfile: 'dist/index.js',
   sourcemap: true,
-  minify: true,
-  external: ['aws-sdk', 'class-transformer/storage'],
+  minify: false,
+  external: ['aws-sdk', 'class-transformer/storage', 'he'],
+  banner: {
+    js: 'exports.handler = require("./index").handler;',
+  },
   plugins: [
     nodeExternalsPlugin(),
     copyStaticFiles({
