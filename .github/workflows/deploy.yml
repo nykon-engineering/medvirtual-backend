@@ -43,7 +43,6 @@ jobs:
           mkdir lambda-package
           cp -r dist/* lambda-package/
           cp -r prisma/schema.prisma lambda-package/prisma/
-          cp -r prisma/migrations/*.sql lambda-package/prisma/migrations/
           cp package.prod.json lambda-package/package.json
           if [ -f .env ]; then cp .env lambda-package/; else echo "⚠️  Arquivo .env não encontrado, ignorando..."; fi
 
