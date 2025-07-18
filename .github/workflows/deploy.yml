@@ -14,6 +14,7 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
+      NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
       - name: 🧾 Code Checkout
@@ -33,6 +34,7 @@ jobs:
 
       - name: 🔨 Build with Webpack
         run: npx webpack --config webpack.config.js
+          
 
       - name: 📁 Build lambda-package
         run: |
