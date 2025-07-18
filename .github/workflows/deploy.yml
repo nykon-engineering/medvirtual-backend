@@ -30,7 +30,7 @@ jobs:
         run: sed -i 's/binaryTargets = \["native"\]/binaryTargets = \["rhel-openssl-1.0.x"\]/' prisma/schema.prisma
 
       - name: 🧱 Prisma by docker
-        run: docker run --rm -v $(pwd):/app -w /app -e PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 node:18 npx prisma@6.12.0 generate
+        run: docker run --rm -v $(pwd):/app -w /app -e PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 node:18 npx prisma@6.10.0 generate
 
       - name: 🔨 Build with webpack
         #run: npm run build:esbuild
