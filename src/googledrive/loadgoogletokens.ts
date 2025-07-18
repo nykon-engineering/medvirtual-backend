@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import { OAuth2Client } from 'google-auth-library';
 
 export function loadGoogleTokens(): any | null {
   const tokenPath = process.env.GOOGLE_FILE_TOKENS || 'google-tokens.json';
@@ -9,7 +8,6 @@ export function loadGoogleTokens(): any | null {
     console.warn('Token file not found!.');
     return null;
   }
-
   // Verify if the file is empty
   const stats = fs.statSync(tokenPath);
   if (stats.size === 0) {
