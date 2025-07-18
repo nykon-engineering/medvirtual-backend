@@ -32,8 +32,8 @@ jobs:
       - name: 🧱 Prisma by docker
         run: docker run --rm -v $(pwd):/app -w /app -e PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1 node:18 npx prisma@6.12.0 generate
 
-      - name: 🔨 Build with esbuild
-        run: npm run build
+      - name: 🔨 Build with Webpack
+        run: npx webpack --config webpack.config.js
           
 
       - name: 📁 Build lambda-package
