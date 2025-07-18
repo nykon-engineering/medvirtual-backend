@@ -12,13 +12,32 @@ export class GoogledriveService {
             process.env.GOOGLE_CLIENTE_SECRET,
             process.env.GOOGLE_REDIRECT_URI
         );
-
-        this.oauth2Client.setCredentials({
-            access_token: process.env.GOOGLE_ACCESS_TOKEN,
-            refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-        });
     }
-    
+
+    generateAuthUrl(): string {
+        const scopes = [
+          'https://www.googleapis.com/auth/drive.readonly',
+        ];
+
+        const url =  this.oauth2Client.generateAuthUrl({
+          access_type: 'offline',
+          scope: scopes,
+          prompt: 'consent',
+        });
+
+        console.log('Authorize this app by visiting this url:', url);
+        return url;
+    }
+
+    async getTokens(code: string) {
+        const { tokens } = await this.oauth2Client.getToken(code);
+        this.oauth2Client.setCredentials(tokens);
+        return tokens;
+    }
+
+    getOAuthClient() {
+        return this.oauth2Client;
+    }
 
     async listFilesInFolder(folderId: string) {
         const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
