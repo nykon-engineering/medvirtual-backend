@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { google, Auth } from 'googleapis';
 import * as fs from 'fs';
+
+import { loadGoogleTokens } from './loadgoogletokens';
 
 @Injectable()
 export class GoogledriveService {
@@ -8,13 +10,11 @@ export class GoogledriveService {
 
     constructor() {
         this.oauth2Client = new google.auth.OAuth2(
-            process.env.GOOGLE_CLIENTE_ID,
-            process.env.GOOGLE_CLIENTE_SECRET,
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
             process.env.GOOGLE_REDIRECT_URI
         );
     }
-
-
 
 
     generateAuthUrl(): string {
@@ -35,14 +35,19 @@ export class GoogledriveService {
     async getTokens(code: string) {
         const { tokens } = await this.oauth2Client.getToken(code);
         this.oauth2Client.setCredentials(tokens);
+        fs.writeFileSync(`${process.env.GOOGLE_FILE_TOKENS}`, JSON.stringify(tokens)); //here I'll save this tokens to a file for later use
         return tokens;
     }
 
-    getOAuthClient() {
-        return this.oauth2Client;
-    }
 
     async listFilesInFolder(folderId: string) {
+
+        const tokens = loadGoogleTokens();
+        if (!tokens) {
+            throw new BadRequestException('Google tokens not found. Please authenticate first.');
+        } 
+        this.oauth2Client.setCredentials(tokens);
+
         const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
         const response = await drive.files.list({
             q: `'${folderId}' in parents`,
@@ -53,6 +58,13 @@ export class GoogledriveService {
     }
 
     async downloadFile(fileId: string, destinationPath: string) {
+        const tokens = loadGoogleTokens();
+        if (!tokens) {
+            throw new BadRequestException('Google tokens not found. Please authenticate first.');
+        } 
+        this.oauth2Client.setCredentials(tokens);
+
+
         const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
         const response = await drive.files.get({
             fileId: fileId,

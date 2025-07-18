@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Res, Query } from '@nestjs/common';
+import { Controller, Get, Param, Res, Query, Redirect } from '@nestjs/common';
 import { GoogledriveService } from './googledrive.service';
-import { Response } from 'express';
+
+
 
 @Controller('googledrive')
 export class GoogledriveController {
@@ -9,15 +10,21 @@ export class GoogledriveController {
     ){}
 
     @Get()
-    async redirectToGoogle(@Res() res: Response) {
+    @Redirect()
+    async redirectToGoogle() {
         const url = await this.googledriveService.generateAuthUrl();
-        return res.redirect(url);
+        return {url: url};
     }
 
     @Get('callback')
     async handleGoogleCallback(@Query('code') code: string) {
         const tokens = await this.googledriveService.getTokens(code);
-        return tokens;
+        //return tokens;
+        console.log('Tokens received:', tokens);
+        return { 
+            status: 200,
+            message: 'Authentication successful! Tokens received.'
+        };
     }
 
     @Get('/list-files/:folderId')
