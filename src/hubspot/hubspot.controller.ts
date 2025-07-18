@@ -12,8 +12,7 @@ import { Roles } from '../auth/roles.decorator';
 @Controller('hubspot')
 export class HubspotController {
 
-    @Inject()
-    private readonly hubspotService: HubspotService;
+    constructor(private readonly hubspotService: HubspotService){}
 
     //public route for while
    

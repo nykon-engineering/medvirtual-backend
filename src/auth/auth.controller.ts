@@ -33,8 +33,7 @@ import { User } from '@prisma/client';
 @Controller('auth')
 export class AuthController {
 
-    @Inject()
-    private readonly authService: AuthService
+    constructor(private readonly authService: AuthService){}
 
     @Get('test')
     @UseGuards(AuthGuard, RolesGuard)
