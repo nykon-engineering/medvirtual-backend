@@ -49,6 +49,9 @@ jobs:
       - name: 📦 Install just production dependencies
         working-directory: lambda-package
         run: npm install --omit=dev
+      
+      - name: 🧹 Remove arquivos .map
+        run: find lambda-package -name "*.map" -type f -delete
 
       - name: 📦 Copy prisma binaries
         run: |
