@@ -54,5 +54,6 @@ module.exports = {
     },
   ],
 
-  devtool: 'source-map', // Generate source maps for debugging
+  //devtool: 'source-map', // Generate source maps for debugging
+  devtool: false;
 };
