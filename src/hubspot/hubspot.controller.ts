@@ -1,18 +1,31 @@
-import { Controller, Inject, Get } from '@nestjs/common';
+import { Controller, Post, UseGuards, HttpCode, Body } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
+
 import { HubspotService } from './hubspot.service';
-import { ApiBearerAuth, ApiHeader, ApiOperation } from '@nestjs/swagger';
+import { Roles } from '../auth/roles.decorator';
+import { GetCandidatesDto } from './dto/get-candidates.dto';
+import { AuthGuard } from '../auth/auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
 
 @Controller('hubspot')
 export class HubspotController {
 
-    @Inject()
-    private readonly hubspotService: HubspotService;
+    constructor(private readonly hubspotService: HubspotService){}
 
+    
     //public route for while
-    @ApiOperation({ summary: 'Get candidates from HubSpot on the FOR STAFFING stage' })
-    @Get('candidates')
-    async getCandidates() {
-        return this.hubspotService.getCandidates();
+    @Post('candidates')
+    //@UseGuards(AuthGuard, RolesGuard)
+    //@Roles('user', 'admin', 'SuperAdmin')
+    @HttpCode(200)
+    @ApiOperation({ summary: 'Get candidates from HubSpot with dynamic filters' })
+    @ApiBody({ type: GetCandidatesDto })
+    @ApiResponse({ status: 200, description: 'Returns candidates below dynamic filters' })
+    @ApiResponse({ status: 400, description: 'Data is required' })
+    @ApiResponse({ status: 400, description: 'Virtual Assistant identifier is required' })
+    @ApiResponse({ status: 400, description: 'Error fetching candidates' })
+    async getCandidates(@Body() data: GetCandidatesDto) {
+        return this.hubspotService.getCandidates(data);
     }
 }
 
