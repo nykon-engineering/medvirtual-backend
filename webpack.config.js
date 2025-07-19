@@ -53,7 +53,6 @@ module.exports = {
       'class-transformer/storage': 'commonjs class-transformer/storage',
     },
   ],
-
   //devtool: 'source-map', // Generate source maps for debugging
-  devtool: false;
+  devtool: false
 };
