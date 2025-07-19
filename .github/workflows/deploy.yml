@@ -74,7 +74,8 @@ jobs:
             aws lambda update-function-code \
               --function-name $LAMBDA_FUNCTION_NAME \
               --zip-file fileb://lambda.zip \
-              --no-cli-pager
+              --no-cli-pager \
+              --output text
 
       - name: 🧹 Clean temp files
         run: rm -rf lambda-package lambda.zip
