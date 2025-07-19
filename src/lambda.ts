@@ -35,7 +35,10 @@ async function bootstrapServer(): Promise<any> {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('documentation', app, document);
 
+  console.time('bootstrap');
   await app.init();
+  console.timeEnd('bootstrap');
+
   return createServer(expressApp);
 }
 
