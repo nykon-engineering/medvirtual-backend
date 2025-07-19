@@ -13,9 +13,8 @@ import { User } from '@prisma/client';
 @Controller('user')
 export class UserController {
     
-    @Inject()
-    private readonly userService: UserService;
-
+    constructor(private readonly userService: UserService){}
+    
     @Get(':id')
     @UseGuards(AuthGuard)
     @ApiOperation({ summary: 'Get user using ID' })

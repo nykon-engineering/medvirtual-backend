@@ -8,8 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class UserService {
-  @Inject()
-  private readonly prisma: PrismaService;
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(userData: Prisma.UserCreateInput): Promise<User> {
     const {password, ...rest} = userData;

@@ -33,8 +33,7 @@ import { User } from '@prisma/client';
 @Controller('auth')
 export class AuthController {
 
-    @Inject()
-    private readonly authService: AuthService
+    constructor(private readonly authService: AuthService){}
 
     @Get('test')
     @UseGuards(AuthGuard, RolesGuard)
@@ -192,7 +191,7 @@ export class AuthController {
     @HttpCode(201)
     @ApiBody({ type: AuthInviteUserDto })
     @UseGuards(AuthGuard, RolesGuard)
-    @Roles('user', 'admin', 'SuperAdmin')
+    @Roles('admin', 'SuperAdmin')
     @ApiOperation({ summary: 'An admin invites a new user to the platform' })
     @ApiResponse({ status: 201, description: 'Invitation sent successfully to new.user@client.com.' })
     @ApiResponse({ status: 400, description: 'Failed to generate invite code' })

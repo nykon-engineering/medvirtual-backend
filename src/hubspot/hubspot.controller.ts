@@ -17,6 +17,7 @@ export class HubspotController {
     @Post('candidates')
     //@UseGuards(AuthGuard, RolesGuard)
     //@Roles('user', 'admin', 'SuperAdmin')
+
     @HttpCode(200)
     @ApiOperation({ summary: 'Get candidates from HubSpot with dynamic filters' })
     @ApiBody({ type: GetCandidatesDto })
