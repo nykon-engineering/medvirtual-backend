@@ -9,6 +9,7 @@ export class HubspotService {
     private hubspotClient: Client;
 
     constructor() {
+        console.log('Hubspot Access Token:', process.env.HUBSPOT_ACCESS_TOKEN)
         this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
     }
 

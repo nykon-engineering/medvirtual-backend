@@ -21,8 +21,7 @@ import { GoogledriveModule } from './googledrive/googledrive.module';
     WorkosModule,
     AuthModule,
     RecoverypassModule,
-    HubspotModule,
-    GoogledriveModule
+    //HubspotModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

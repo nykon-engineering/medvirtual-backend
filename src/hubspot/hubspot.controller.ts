@@ -1,5 +1,4 @@
-/*  istanbul ignore file */
-import { Controller, Inject, Get, Body, Post, HttpCode, UseGuards } from '@nestjs/common';
+import { Controller, Post, UseGuards, HttpCode, Body } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 import { HubspotService } from './hubspot.service';
@@ -13,11 +12,12 @@ export class HubspotController {
 
     constructor(private readonly hubspotService: HubspotService){}
 
+    
     //public route for while
-   
     @Post('candidates')
-    @UseGuards(AuthGuard, RolesGuard)
-    @Roles('user', 'admin', 'SuperAdmin')
+    //@UseGuards(AuthGuard, RolesGuard)
+    //@Roles('user', 'admin', 'SuperAdmin')
+
     @HttpCode(200)
     @ApiOperation({ summary: 'Get candidates from HubSpot with dynamic filters' })
     @ApiResponse({ status: 200, description: 'Returns candidates below dynamic filters' })
