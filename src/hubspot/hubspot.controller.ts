@@ -13,12 +13,9 @@ export class HubspotController {
 
     constructor(private readonly hubspotService: HubspotService){}
 
-    
-    //public route for while
     @Post('candidates')
-    //@UseGuards(AuthGuard, RolesGuard)
-    //@Roles('user', 'admin', 'SuperAdmin')
-
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('user', 'admin', 'SuperAdmin')
     @HttpCode(200)
     @ApiOperation({ summary: 'Get candidates from HubSpot with dynamic filters' })
     @ApiBody({type: GetCandidatesDto, description: 'Data to get candidates from HubSpot', required: true})
