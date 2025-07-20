@@ -1,20 +1,22 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { google, Auth } from 'googleapis';
 import * as fs from 'fs';
+import axios from 'axios';
+import { OAuth2Client } from 'google-auth-library';
 
 import { loadGoogleTokens } from './loadgoogletokens';
 
 @Injectable()
 export class GoogledriveService {
-    private readonly oauth2Client: Auth.OAuth2Client;
+    private readonly oauth2Client: OAuth2Client;
 
     constructor() {
-        this.oauth2Client = new google.auth.OAuth2(
+        this.oauth2Client = new OAuth2Client(
             process.env.GOOGLE_CLIENT_ID,
             process.env.GOOGLE_CLIENT_SECRET,
             process.env.GOOGLE_REDIRECT_URI
         );
     }
+
 
     generateAuthUrl(): string {
         const scopes = [
@@ -40,7 +42,53 @@ export class GoogledriveService {
 
 
     async listFilesInFolder(folderId: string) {
+        const tokens = loadGoogleTokens();
+        if (!tokens || !tokens.access_token) {
+          throw new BadRequestException('Google tokens not found. Please authenticate first.');
+        }
+    
+        const res = await axios.get('https://www.googleapis.com/drive/v3/files', {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+          },
+          params: {
+            q: `'${folderId}' in parents`,
+            fields: 'files(id,name,mimeType)',
+          },
+        });
+    
+        return res.data.files;
+      }
+    
+      async downloadFile(fileId: string, destinationPath: string) {
+        const tokens = loadGoogleTokens();
+        if (!tokens || !tokens.access_token) {
+          throw new BadRequestException('Google tokens not found. Please authenticate first.');
+        }
+    
+        const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+          },
+          params: {
+            alt: 'media',
+          },
+          responseType: 'stream',
+        });
+    
+        return new Promise((resolve, reject) => {
+          const dest = fs.createWriteStream(destinationPath);
+          response.data
+            .on('end', () => resolve(`File downloaded to ${destinationPath}`))
+            .on('error', (err) => reject(`Error downloading file: ${err}`))
+            .pipe(dest);
+        });
+      }
 
+
+
+    /*
+    async listFilesInFolder(folderId: string) {
         const tokens = loadGoogleTokens();
         if (!tokens) {
             throw new BadRequestException('Google tokens not found. Please authenticate first.');
@@ -84,4 +132,5 @@ export class GoogledriveService {
                 .pipe(dest);
         });
     }
+        */
 }

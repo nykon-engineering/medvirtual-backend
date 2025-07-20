@@ -22,7 +22,7 @@ import { GoogledriveModule } from './googledrive/googledrive.module';
     AuthModule,
     RecoverypassModule,
     HubspotModule,
-    //GoogledriveModule
+    GoogledriveModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],
