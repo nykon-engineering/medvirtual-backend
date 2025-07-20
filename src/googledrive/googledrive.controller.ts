@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Res, Query, Redirect } from '@nestjs/common';
+import { Controller, Get, Param, Query, Redirect } from '@nestjs/common';
 import { GoogledriveService } from './googledrive.service';
 
 
