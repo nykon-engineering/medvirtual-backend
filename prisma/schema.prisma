@@ -167,6 +167,7 @@ model Organization {
   name          String
   email         String?
   type          String?
+  email         String?
   hubspot_id    String?     @unique
   status        UserStatus  @default(active)
   address       String?
