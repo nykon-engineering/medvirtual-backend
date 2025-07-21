@@ -62,102 +62,65 @@ export class GoogledriveService {
 
 
     async listFilesInFolder(folderId: string) {
-
         const tokens = await this.prisma.googleToken.findFirst({
           orderBy: { createdAt: 'desc' },
         });
-
-        if (!tokens || !tokens.accessToken) {
+        if (!tokens) {
           throw new BadRequestException('Google tokens not found. Please authenticate first.');
         }
-    
-        const res = await axios.get('https://www.googleapis.com/drive/v3/files', {
-          headers: {
-            Authorization: `Bearer ${tokens.accessToken}`,
-          },
-          params: {
-            q: `'${folderId}' in parents`,
-            fields: 'files(id,name,mimeType)',
-          },
+        this.oauth2Client.setCredentials({
+          access_token: tokens.accessToken || '',
+          refresh_token: tokens.refreshToken || '',
         });
-    
-        return res.data.files;
+
+        await this.oauth2Client.getAccessToken(); // here is the key to renew the token
+
+        try {
+          const res = await axios.get('https://www.googleapis.com/drive/v3/files', {
+            headers: {
+              Authorization: `Bearer ${tokens.accessToken}`,
+            },
+            params: {
+              q: `'${folderId}' in parents`,
+              fields: 'files(id,name,mimeType)',
+              supportsAllDrives: true,
+              includeItemsFromAllDrives: true,
+            },
+          });
+          return res.data.files;
+          }catch(error){
+            throw new BadRequestException(`Failed to list files in folder: ${error}`);
+          }
       }
     
-      async downloadFile(fileId: string, destinationPath: string) {
-        const tokens = await this.prisma.googleToken.findFirst({
-          orderBy: { createdAt: 'desc' },
-        });
-        
-        if (!tokens || !tokens.accessToken) {
-          throw new BadRequestException('Google tokens not found. Please authenticate first.');
-        }
-    
-        const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-          headers: {
-            Authorization: `Bearer ${tokens.accessToken}`,
-          },
-          params: {
-            alt: 'media',
-          },
-          responseType: 'stream',
-        });
-    
-        return new Promise((resolve, reject) => {
-          const dest = fs.createWriteStream(destinationPath);
-          response.data
-            .on('end', () => resolve(`File downloaded to ${destinationPath}`))
-            .on('error', (err) => reject(`Error downloading file: ${err}`))
-            .pipe(dest);
-        });
+    async downloadFile(fileId: string, filename: string) {
+      const tokens = await this.prisma.googleToken.findFirst({
+        orderBy: { createdAt: 'desc' },
+      });
+      
+      if (!tokens || !tokens.accessToken) {
+        throw new BadRequestException('Google tokens not found. Please authenticate first.');
       }
+  
+      const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+        },
+        params: {
+          alt: 'media',
+        },
+        responseType: 'stream',
+      });
 
-
-
-    /*
-    async listFilesInFolder(folderId: string) {
-        const tokens = loadGoogleTokens();
-        if (!tokens) {
-            throw new BadRequestException('Google tokens not found. Please authenticate first.');
-        } 
-        this.oauth2Client.setCredentials(tokens);
-
-        const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
-        const response = await drive.files.list({
-            q: `'${folderId}' in parents`,
-            fields: 'files(id, name, mimeType)',
-        });
-
-        return response.data.files;
+      const destinationPath = `/tmp/${filename}`; //save in the /tmp directory because we're working on the aws lambda
+  
+      return new Promise((resolve, reject) => {
+        const dest = fs.createWriteStream(destinationPath);
+        response.data
+          .on('end', () => resolve(`File downloaded to ${destinationPath}`))
+          .on('error', (err) => reject(`Error downloading file: ${err}`))
+          .pipe(dest);
+      });
     }
 
-    async downloadFile(fileId: string, destinationPath: string) {
-        const tokens = loadGoogleTokens();
-        if (!tokens) {
-            throw new BadRequestException('Google tokens not found. Please authenticate first.');
-        } 
-        this.oauth2Client.setCredentials(tokens);
-
-
-        const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
-        const response = await drive.files.get({
-            fileId: fileId,
-            alt: 'media',
-        }, { responseType: 'stream' });
-
-        console.log(response);
-
-        return new Promise((resolve, reject) => {
-            const dest = fs.createWriteStream(destinationPath);
-            response.data
-                .on('end', () => {
-                    resolve(`File downloaded to ${destinationPath}`);
-                })
-                .on('error', (err) => {
-                    reject(`Error downloading file: ${err}`);
-                })
-                .pipe(dest);
-        });
-    }
-        */
 }
