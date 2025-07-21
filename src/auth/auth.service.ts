@@ -297,17 +297,23 @@ export class AuthService {
     return token;
   }
 
-  async resendCode(email: AuthResendCodeDto): Promise<AuthResendCodeReturnDto> {
-
-    //invalidate previuos code from this user
-    if (!email) {
-      throw new BadRequestException('Email is required');
+  async resendCode(data: AuthResendCodeDto): Promise<AuthResendCodeReturnDto> {
+    if (!data.token) {
+      throw new BadRequestException('Token are required');
     }
-    const user = await this.userService.findByEmail(email.email);
+    //Verify if the token is valid
+    let decodedToken; 
+    try {
+      decodedToken = jwt.verify(data.token, process.env.JWT_SECRET);
+    } catch (error) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const user = await this.userService.findById(decodedToken.id);
     if (!user) {
-      throw new BadRequestException('User not found with this email');
+      throw new BadRequestException('User not found');
     }
-
+    
     //here I need to hash the userId
     const invalidateCode = await this.prisma.emailVerification.updateMany({
       where: {
