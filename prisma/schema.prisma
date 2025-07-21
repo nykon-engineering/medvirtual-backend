@@ -347,3 +347,15 @@ model Ticket {
   @@index([created_at], name: "idx_tickets_created_at")
 }
 
+
+model GoogleToken {
+  id            String   @id @default(uuid())
+  accessToken   String
+  refreshToken  String
+  scope         String?
+  tokenType     String?
+  expiryDate    BigInt?   // timestamp em milissegundos
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
