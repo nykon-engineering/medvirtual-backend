@@ -38,14 +38,13 @@ export class GoogledriveService {
       if (!code) {
         throw new BadRequestException('Authorization code is required.');
       }
-      console.log('code:', code)
       const { tokens } = await this.oauth2Client.getToken(code);
       this.oauth2Client.setCredentials(tokens);
       console.log('tokens:', tokens);
       if (!tokens){
           throw new BadRequestException('Failed to retrieve tokens from Google.');
       }
-      await this.prisma.googleToken.create({
+      const saveToken = await this.prisma.googleToken.create({
         data: {
           accessToken: tokens.access_token || 'undefined',
           refreshToken: tokens.refresh_token || 'undefined',
@@ -54,6 +53,10 @@ export class GoogledriveService {
           expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date).getTime() : null,
         }
       })
+
+      if (!saveToken) {
+        throw new BadRequestException('Failed to save tokens to the database.');
+      }
       return tokens;
     }
 

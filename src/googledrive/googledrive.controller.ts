@@ -20,7 +20,6 @@ export class GoogledriveController {
     async handleGoogleCallback(@Query('code') code: string) {
         const tokens = await this.googledriveService.getTokens(code);
         //return tokens;
-        console.log('Tokens received:', tokens);
         return { 
             status: 200,
             message: 'Authentication successful! Tokens received.'
@@ -28,7 +27,7 @@ export class GoogledriveController {
     }
 
     @Get('/list-files/:folderId')
-    async listFilesInFolder(folderId: string) {
+    async listFilesInFolder(@Query('folderId') folderId: string) {
         return this.googledriveService.listFilesInFolder(folderId);
     }
 
