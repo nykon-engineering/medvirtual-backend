@@ -4,12 +4,15 @@ import axios from 'axios';
 import { OAuth2Client } from 'google-auth-library';
 
 import { loadGoogleTokens } from './loadgoogletokens';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class GoogledriveService {
     private readonly oauth2Client: OAuth2Client;
 
-    constructor() {
+    constructor(
+      private readonly prisma: PrismaService
+    ) {
         this.oauth2Client = new OAuth2Client(
             process.env.GOOGLE_CLIENT_ID,
             process.env.GOOGLE_CLIENT_SECRET,
@@ -28,28 +31,46 @@ export class GoogledriveService {
           scope: scopes,
           prompt: 'consent',
         });
-
-        console.log('Authorize this app by visiting this url:', url);
         return url;
     }
 
     async getTokens(code: string) {
-        const { tokens } = await this.oauth2Client.getToken(code);
-        this.oauth2Client.setCredentials(tokens);
-        fs.writeFileSync(`${process.env.GOOGLE_FILE_TOKENS}`, JSON.stringify(tokens)); //here I'll save this tokens to a file for later use
-        return tokens;
+      if (!code) {
+        throw new BadRequestException('Authorization code is required.');
+      }
+      console.log('code:', code)
+      const { tokens } = await this.oauth2Client.getToken(code);
+      this.oauth2Client.setCredentials(tokens);
+      console.log('tokens:', tokens);
+      if (!tokens){
+          throw new BadRequestException('Failed to retrieve tokens from Google.');
+      }
+      await this.prisma.googleToken.create({
+        data: {
+          accessToken: tokens.access_token || 'undefined',
+          refreshToken: tokens.refresh_token || 'undefined',
+          scope: tokens.scope,
+          tokenType: tokens.token_type,
+          expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date).getTime() : null,
+        }
+      })
+      return tokens;
     }
 
 
     async listFilesInFolder(folderId: string) {
-        const tokens = loadGoogleTokens();
-        if (!tokens || !tokens.access_token) {
+
+        const tokens = await this.prisma.googleToken.findFirst({
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (!tokens || !tokens.accessToken) {
           throw new BadRequestException('Google tokens not found. Please authenticate first.');
         }
     
         const res = await axios.get('https://www.googleapis.com/drive/v3/files', {
           headers: {
-            Authorization: `Bearer ${tokens.access_token}`,
+            Authorization: `Bearer ${tokens.accessToken}`,
           },
           params: {
             q: `'${folderId}' in parents`,
@@ -61,14 +82,17 @@ export class GoogledriveService {
       }
     
       async downloadFile(fileId: string, destinationPath: string) {
-        const tokens = loadGoogleTokens();
-        if (!tokens || !tokens.access_token) {
+        const tokens = await this.prisma.googleToken.findFirst({
+          orderBy: { createdAt: 'desc' },
+        });
+        
+        if (!tokens || !tokens.accessToken) {
           throw new BadRequestException('Google tokens not found. Please authenticate first.');
         }
     
         const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
           headers: {
-            Authorization: `Bearer ${tokens.access_token}`,
+            Authorization: `Bearer ${tokens.accessToken}`,
           },
           params: {
             alt: 'media',
