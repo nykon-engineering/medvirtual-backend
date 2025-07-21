@@ -5,5 +5,5 @@ export class AuthResendCodeDto{
     @ApiProperty({ required: true, description: 'The email to which the code will be resent' })
     @IsEmail()
     @IsNotEmpty()
-    email: string;
+    token: string;
 }

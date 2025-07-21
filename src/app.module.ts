@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { RecoverypassModule } from './recoverypass/recoverypass.module';
 import { HubspotModule } from './hubspot/hubspot.module';
 import { GoogledriveModule } from './googledrive/googledrive.module';
+import { OrganizationModule } from './organization/organization.module';
 
 @Module({
   imports: [
@@ -22,7 +23,8 @@ import { GoogledriveModule } from './googledrive/googledrive.module';
     AuthModule,
     RecoverypassModule,
     HubspotModule,
-    GoogledriveModule
+    GoogledriveModule,
+    OrganizationModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

@@ -26,6 +26,12 @@ export class HubspotController {
     async getCandidates(@Body() data: GetCandidatesDto) {
         return this.hubspotService.getCandidates(data);
     }
+
+    @Post('webhook')
+    async webhook(@Body() body: any) {
+        //console.log('Received webhook:', body);
+        return body;
+    }
 }
 
 
