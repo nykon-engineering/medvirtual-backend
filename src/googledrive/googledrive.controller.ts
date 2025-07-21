@@ -27,7 +27,7 @@ export class GoogledriveController {
     }
 
     @Get('/list-files/:folderId')
-    async listFilesInFolder(@Query('folderId') folderId: string) {
+    async listFilesInFolder(@Param('folderId') folderId: string) {
         return this.googledriveService.listFilesInFolder(folderId);
     }
 

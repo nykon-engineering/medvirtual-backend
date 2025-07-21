@@ -1,5 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import { IsArray, IsNotEmpty, IsOptional, isString, IsString, ValidateNested } from "class-validator";
+import { filter } from "rxjs";
 
 
 export class filtersGetCandidatesDto{
@@ -16,9 +18,14 @@ export class GetCandidatesDto {
     @IsNotEmpty()
     virtualAssistant: string;
 
-    @ApiProperty({ description: 'Array with names fields to show on return', type: [String], example: ['name', 'id', 'agent_status', 'status', 'stage', 'country', 'date_of_birth', 'email',] })
-    properties?: string[];
+    @ApiProperty({ description: 'Array with names fields to show on return', type: [String], example: ['name', 'id', 'agent_status', 'status', 'stage', 'country', 'date_of_birth', 'email'] })
+    @IsString({ each: true })
+    properties: string[];
 
-    @ApiProperty({ description: 'Object with field and value to apply on search', type: () => filtersGetCandidatesDto, isArray: true, example: [{ field: 'pipeline', value: '99999999' }, { field: 'stage', value: '99999999' }] })
-    filters?: filtersGetCandidatesDto[];
+    @ApiProperty({ description: 'Object with field and value to apply on search', type: [filtersGetCandidatesDto] , example: [{ field: 'pipeline', value: '99999999' }, { field: 'stage', value: '99999999' }] })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => filtersGetCandidatesDto)
+    filters: filtersGetCandidatesDto[];
 }
