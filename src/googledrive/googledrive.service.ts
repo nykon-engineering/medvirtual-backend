@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import axios from 'axios';
 import { OAuth2Client } from 'google-auth-library';
 
-import { loadGoogleTokens } from './loadgoogletokens';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
