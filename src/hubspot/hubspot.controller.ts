@@ -33,14 +33,7 @@ export class HubspotController {
         return body;
     }
 
-    @Get('download')
-    async downloadFile(@Query('url') url: string, @Query('name') name: string) {
-        if (!url || !name) return { error: 'url and name are required' };
-
-        const filePath = await this.hubspotService.downloadFile(url, name);
-        return { message: 'Download completed', filePath };
-    }
-
+   
     @Post('candidates-download')
     //@UseGuards(AuthGuard, RolesGuard)
     //@Roles('user', 'admin', 'SuperAdmin')

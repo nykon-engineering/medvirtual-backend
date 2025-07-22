@@ -1,9 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 import axios from 'axios';
+import * as path from 'path';
 import { OAuth2Client } from 'google-auth-library';
 
 import { PrismaService } from '../prisma/prisma.service';
+
+
 
 @Injectable()
 export class GoogledriveService {
@@ -126,6 +129,7 @@ export class GoogledriveService {
       }
     
     async downloadFile(fileId: string, filename: string) {
+      console.log('entrou...', fileId, filename);
       const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
       if (!tokens) {
         throw new BadRequestException('Google tokens not found. Please authenticate first.');
@@ -141,7 +145,8 @@ export class GoogledriveService {
         responseType: 'stream',
       });
 
-      const destinationPath = `/tmp/${filename}`; //save in the /tmp directory because we're working on the aws lambda
+      const destinationPath = path.resolve(__dirname, 'downloads', filename);
+      //const destinationPath = `/tmp/${filename}`; //save in the /tmp directory because we're working on the aws lambda
   
       return new Promise((resolve, reject) => {
         const dest = fs.createWriteStream(destinationPath);
