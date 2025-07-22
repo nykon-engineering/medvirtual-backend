@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 import { GoogledriveService } from '../googledrive/googledrive.service';
+import { console } from 'inspector';
 
 
 @Injectable()
@@ -48,7 +49,38 @@ export class HubspotService {
       return match ? match[1] : null;
     }
     
+    async webhook(data: any): Promise<any> {
+        // Process the webhook data as needed
+        console.log('Webhook received:', data);
 
+        if (data.subscriptionType === 'object.propertyChange'){
+            console.log('=====>Property change detected:', data);
+            /*
+                patch in database just propertychanged in 'propertyName' and 'propertyValue'
+
+                the enpoint to get more details about this candidate is: https://api.hubapi.com/crm/v3/objects/p20630393_Virtual_Assistant/${objectId}  or call our own endpoint : https://gqwni79cgk.execute-api.us-east-1.amazonaws.com/dev/hubspot/candidates
+
+                we need to check the database schema.:
+                   processing_status = hs_pipeline_stage (each stage ther a differente number [
+                   942502182 - New candidates
+                   1119641993 - Incomplete Information
+                   1119641994 - Follow Up candidates
+                   966446725 - For account Manager Interview
+                   261075105 - Available Candidates
+                   1087596819 - Available Candidates - Part Time
+                   1087596820 - Endorsed to Client - Part Time
+                   261137285 - Endorsed to Client
+                   261173426 - Pairing booked
+                   261214844 - hired
+                   261173427 - For endorsement to VS
+                   261173428 - Lost
+
+                   ] )
+            */
+            
+        }
+        return { status: 'success', message: 'Webhook processed successfully' };
+    }
 
     
     //Here I have a test fucntion to get resume_link from hubspot and download it from Google Drive using my own GoogleDriveService
