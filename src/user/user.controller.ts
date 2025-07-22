@@ -6,7 +6,8 @@ import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateUserDto } from './dto/createUser.dto';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { User } from '@prisma/client';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 
 @ApiTags('User')
@@ -16,7 +17,8 @@ export class UserController {
     constructor(private readonly userService: UserService){}
     
     @Get(':id')
-    @UseGuards(AuthGuard)
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('SuperAdmin')
     @ApiOperation({ summary: 'Get user using ID' })
     @ApiResponse({ status: 200, description: 'User found successfully.' })
     async getUserById(@Param('id') id: string) {
@@ -24,7 +26,8 @@ export class UserController {
     }
 
     @Get('organization/:organizationId')
-    @UseGuards(AuthGuard)
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('SuperAdmin')
     @ApiOperation({ summary: 'Get all users of the specific organization' })
     @ApiResponse({ status: 200, description: 'Users found successfully.' })
     @ApiResponse({ status: 404, description: 'No users found in this organization.' })
@@ -34,7 +37,8 @@ export class UserController {
 
     @Patch(':id')
     @ApiBody({ type: CreateUserDto })
-    @UseGuards(AuthGuard)
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('SuperAdmin')
     @ApiOperation({ summary: 'Update user' })
     @ApiResponse({ status: 200, description: 'User updated successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to update user' })
@@ -45,7 +49,8 @@ export class UserController {
     }
 
     @Delete(':id')
-    @UseGuards(AuthGuard)
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('SuperAdmin')
     @ApiOperation({ summary: 'Delete user' })
     @ApiResponse({ status: 200, description: 'User deleted successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to delete user' })
@@ -55,7 +60,8 @@ export class UserController {
 
     @Patch('update-status/:id')
     @ApiBody({ type: CreateUserDto })
-    @UseGuards(AuthGuard)
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('SuperAdmin')
     @ApiOperation({ summary: 'Update user status from prospect to client' })
     @ApiResponse({ status: 200, description: 'User updated successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to update user' })
