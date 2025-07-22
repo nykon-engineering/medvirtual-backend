@@ -60,25 +60,58 @@ export class GoogledriveService {
       return tokens;
     }
 
+    async refreshAccessToken(refreshToken: string) {
+      this.oauth2Client.setCredentials({
+        refresh_token: refreshToken,
+      })
+
+      const {credentials} = await this.oauth2Client.refreshAccessToken();
+
+      return {
+        access_token: credentials.access_token,
+        expiry_date: credentials.expiry_date,
+      }
+    }
+
+    async getValidAccessToken(){
+      const tokens = await this.prisma.googleToken.findFirst({
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!tokens || !tokens.accessToken || !tokens.expiryDate) {
+        throw new BadRequestException('Google tokens not found. Please authenticate first.');
+      }
+
+      const now= Date.now();
+      if (tokens?.expiryDate && now < Number(tokens.expiryDate) - 60 * 1000) {
+        return tokens.accessToken
+      }
+
+      const newTokens = await this.refreshAccessToken(tokens?.refreshToken || '');
+      if(!newTokens || !newTokens.access_token) throw new BadRequestException('Failed to refresh access token.');
+
+      await this.prisma.googleToken.update({
+        where: { id: tokens.id },
+        data: {
+          accessToken: newTokens.access_token,
+          expiryDate: newTokens.expiry_date ? new Date(newTokens.expiry_date).getTime() : null,
+        },
+      })
+
+      return newTokens.access_token;
+    }
+
 
     async listFilesInFolder(folderId: string) {
-        const tokens = await this.prisma.googleToken.findFirst({
-          orderBy: { createdAt: 'desc' },
-        });
+        const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
         if (!tokens) {
           throw new BadRequestException('Google tokens not found. Please authenticate first.');
         }
-        this.oauth2Client.setCredentials({
-          access_token: tokens.accessToken || '',
-          refresh_token: tokens.refreshToken || '',
-        });
-
-        await this.oauth2Client.getAccessToken(); // here is the key to renew the token
+        //console.log('tokens:', tokens);
 
         try {
           const res = await axios.get('https://www.googleapis.com/drive/v3/files', {
             headers: {
-              Authorization: `Bearer ${tokens.accessToken}`,
+              Authorization: `Bearer ${tokens}`,
             },
             params: {
               q: `'${folderId}' in parents`,
@@ -94,17 +127,14 @@ export class GoogledriveService {
       }
     
     async downloadFile(fileId: string, filename: string) {
-      const tokens = await this.prisma.googleToken.findFirst({
-        orderBy: { createdAt: 'desc' },
-      });
-      
-      if (!tokens || !tokens.accessToken) {
+      const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
+      if (!tokens) {
         throw new BadRequestException('Google tokens not found. Please authenticate first.');
       }
   
       const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
         headers: {
-          Authorization: `Bearer ${tokens.accessToken}`,
+          Authorization: `Bearer ${tokens}`,
         },
         params: {
           alt: 'media',
