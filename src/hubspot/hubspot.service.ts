@@ -1,22 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
-import { GetCandidatesDto } from './dto/get-candidates.dto';
-
-import * as fs from 'fs';
-import * as path from 'path';
 import axios from 'axios';
+
+import { extractDriveFileId } from '../common/utils/hubspot.util'
 import { GoogledriveService } from '../googledrive/googledrive.service';
-import { console } from 'inspector';
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
+import { GetCandidatesDto } from './dto/get-candidates.dto';
 
 
 @Injectable()
 export class HubspotService {
 
     private hubspotClient: Client;
-    
-
     constructor(
       private readonly google: GoogledriveService
     ) {
@@ -45,14 +41,8 @@ export class HubspotService {
         }
     }
 
-    async extractDriveFileId(url: string): Promise<string | null> {
-      const match = url.match(/\/d\/([a-zA-Z0-9_-]{25,})/);
-      return match ? match[1] : null;
-    }
-    
-    async webhook(data: any): Promise<any> {
+    async changeDataFromHubspot(data: any): Promise<any> {
         // Process the webhook data as needed
-        console.log('Webhook received:', data);
 
         if (data.subscriptionType === 'object.propertyChange'){
             console.log('=====>Property change detected:', data);
@@ -84,7 +74,6 @@ export class HubspotService {
     }
 
     async changeDataToHubspot(objectId: string, data: changeDataToHubspotDto): Promise<boolean> {
-        if (!data) throw new BadRequestException('Data is required');
         if(!objectId) throw new BadRequestException('Object ID is required');
 
         const body = {
@@ -113,8 +102,8 @@ export class HubspotService {
 
 
     
-    //Here I have a test fucntion to get resume_link from hubspot and download it from Google Drive using my own GoogleDriveService
-    async getCandidates2(data: GetCandidatesDto): Promise<any> {
+    ////=> this service is just a example to read candidates and download resume
+    async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {
       if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');
       try{
           const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant,{
@@ -137,7 +126,7 @@ export class HubspotService {
           for (let i=0; i< response.results.length ; i++){
             const pdfName = `${response.results[i].properties.name}.pdf`;
             const urlFile = response.results[i].properties.resume_link || '';
-            const idFile = await this.extractDriveFileId(urlFile);
+            const idFile = extractDriveFileId(urlFile);
             //console.log('idFile:', idFile);
 
             if (idFile) await this.google.downloadFile(idFile, pdfName);

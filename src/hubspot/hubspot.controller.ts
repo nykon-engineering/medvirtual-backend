@@ -2,12 +2,10 @@ import { Controller, Post, UseGuards, HttpCode, Body, Get, Query, Param } from '
 import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 import { HubspotService } from './hubspot.service';
-
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
-import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 
 @Controller('hubspot')
 export class HubspotController {
@@ -15,8 +13,8 @@ export class HubspotController {
     constructor(private readonly hubspotService: HubspotService){}
 
     @Post('candidates')
-    //@UseGuards(AuthGuard, RolesGuard)
-    //@Roles('user', 'admin', 'SuperAdmin')
+    @UseGuards(AuthGuard, RolesGuard)
+    @Roles('user', 'admin', 'SuperAdmin')
     @HttpCode(200)
     @ApiOperation({ summary: 'Get candidates from HubSpot with dynamic filters' })
     @ApiBody({type: GetCandidatesDto, description: 'Data to get candidates from HubSpot', required: true})
@@ -30,10 +28,14 @@ export class HubspotController {
 
     @Post('webhook')
     async webhook(@Body() data: any) {
-        return this.hubspotService.webhook(data);
+        return this.hubspotService.changeDataFromHubspot(data);
     }
 
-   
+    
+
+
+
+    //=> this route is just a example to read candidates and download resume
     @Post('candidates-download')
     //@UseGuards(AuthGuard, RolesGuard)
     //@Roles('user', 'admin', 'SuperAdmin')
@@ -45,7 +47,7 @@ export class HubspotController {
     @ApiResponse({ status: 400, description: 'Virtual Assistant identifier is required' })
     @ApiResponse({ status: 400, description: 'Error fetching candidates' })
     async getCandidates2(@Body() data: GetCandidatesDto) {
-        return this.hubspotService.getCandidates2(data);
+        return this.hubspotService.getCandidatesAndDownload(data);
     }
 }
 

@@ -17,5 +17,5 @@ export class changeDataToHubspotDto {
     @IsArray()
     @ValidateNested({ each: true })
     @Type(() => changeDataToHubspotItemDto)
-    properties: string[];
+    properties: changeDataToHubspotItemDto[];
 }
