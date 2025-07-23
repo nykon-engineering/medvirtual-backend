@@ -1,4 +1,4 @@
-import { Controller, Post, UseGuards, HttpCode, Body, Get, Query } from '@nestjs/common';
+import { Controller, Post, UseGuards, HttpCode, Body, Get, Query, Param } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 import { HubspotService } from './hubspot.service';
@@ -7,6 +7,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
+import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 
 @Controller('hubspot')
 export class HubspotController {
@@ -28,19 +29,11 @@ export class HubspotController {
     }
 
     @Post('webhook')
-    async webhook(@Body() body: any) {
-        console.log('Received webhook:', body);
-        return body;
+    async webhook(@Body() data: any) {
+        return this.hubspotService.webhook(data);
     }
 
-    @Get('download')
-    async downloadFile(@Query('url') url: string, @Query('name') name: string) {
-        if (!url || !name) return { error: 'url and name are required' };
-
-        const filePath = await this.hubspotService.downloadFile(url, name);
-        return { message: 'Download completed', filePath };
-    }
-
+   
     @Post('candidates-download')
     //@UseGuards(AuthGuard, RolesGuard)
     //@Roles('user', 'admin', 'SuperAdmin')

@@ -6,6 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 @Module({
   controllers: [GoogledriveController],
   providers: [GoogledriveService],
-  imports: [PrismaModule]
+  imports: [PrismaModule],
+  exports: [GoogledriveService]
 })
 export class GoogledriveModule {}
