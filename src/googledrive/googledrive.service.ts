@@ -22,7 +22,7 @@ export class GoogledriveService {
         );
     }
 
-
+    // => start with functions to generate the auth URL and get tokens
     generateAuthUrl(): string {
         const scopes = [
           'https://www.googleapis.com/auth/drive.readonly',
@@ -61,7 +61,10 @@ export class GoogledriveService {
       }
       return tokens;
     }
+    // => finish with functions to generate the auth URL and get tokens
 
+
+    // => functions to refresh the access token and get a valid access token. These are used in the listFilesInFolder and downloadFile functions
     async refreshAccessToken(refreshToken: string) {
       this.oauth2Client.setCredentials({
         refresh_token: refreshToken,
@@ -103,6 +106,8 @@ export class GoogledriveService {
     }
 
 
+
+    // => functions to help me in others internal functions
     async listFilesInFolder(folderId: string) {
         const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
         if (!tokens) {

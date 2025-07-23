@@ -26,16 +26,6 @@ export class GoogledriveController {
         };
     }
 
-    @Get('/list-files/:folderId')
-    async listFilesInFolder(@Param('folderId') folderId: string) {
-        return this.googledriveService.listFilesInFolder(folderId);
-    }
-
-    @Get('download-file/:fileId')
-    async downloadFile(@Param('fileId') fileId: string) {
-        const destinationPath = `./downloads-resume/`;
-        return this.googledriveService.downloadFile(fileId, destinationPath);
-    }
 }
 
 
