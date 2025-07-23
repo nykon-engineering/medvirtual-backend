@@ -8,6 +8,7 @@ import * as path from 'path';
 import axios from 'axios';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { console } from 'inspector';
+import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 
 
 @Injectable()
@@ -81,6 +82,35 @@ export class HubspotService {
         }
         return { status: 'success', message: 'Webhook processed successfully' };
     }
+
+    async changeDataToHubspot(objectId: string, data: changeDataToHubspotDto): Promise<boolean> {
+        if (!data) throw new BadRequestException('Data is required');
+        if(!objectId) throw new BadRequestException('Object ID is required');
+
+        const body = {
+            properties: data.properties.reduce((acc: any, item: any) => {
+                acc[item.field] = item.value;
+                return acc;
+            }, {})
+        }
+        try{
+            const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${objectId}`,
+                body,
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            )
+            return true;
+        }catch (error) {
+            throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
+        }
+    }
+
+
+
 
     
     //Here I have a test fucntion to get resume_link from hubspot and download it from Google Drive using my own GoogleDriveService
