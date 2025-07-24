@@ -1,12 +1,14 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
 
-import { extractDriveFileId } from '../common/utils/hubspot.util'
+import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
+import { hubspotToDbDictionary } from '../common/dictionaries/hubspot-dictionary';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
+import { PrismaService } from '../prisma/prisma.service';
 
 
 @Injectable()
@@ -14,7 +16,8 @@ export class HubspotService {
 
     private hubspotClient: Client;
     constructor(
-      private readonly google: GoogledriveService
+      private readonly google: GoogledriveService,
+      private readonly prisma: PrismaService
     ) {
         this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
     }
@@ -42,35 +45,62 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
-        // Process the webhook data as needed
+        switch (data.subscriptionType) {
+            case 'object.propertyChange':
+                
+                const candidate = await this.prisma.candidate.findUnique({
+                    where: {
+                        hubspot_id: String(data.objectId)
+                    }
+                })
 
-        if (data.subscriptionType === 'object.propertyChange'){
-            console.log('=====>Property change detected:', data);
-            /*
-                patch in database just propertychanged in 'propertyName' and 'propertyValue'
+                if(!candidate) throw new NotFoundException('Candidate not found in the database');
 
-                the enpoint to get more details about this candidate is: https://api.hubapi.com/crm/v3/objects/p20630393_Virtual_Assistant/${objectId}  or call our own endpoint : https://gqwni79cgk.execute-api.us-east-1.amazonaws.com/dev/hubspot/candidates
+                const fieldExists = Object.keys(hubspotToDbDictionary).includes(data.propertyName);
+                if(!fieldExists) return;
 
-                we need to check the database schema.:
-                   processing_status = hs_pipeline_stage (each stage ther a differente number [
-                   942502182 - New candidates
-                   1119641993 - Incomplete Information
-                   1119641994 - Follow Up candidates
-                   966446725 - For account Manager Interview
-                   261075105 - Available Candidates
-                   1087596819 - Available Candidates - Part Time
-                   1087596820 - Endorsed to Client - Part Time
-                   261137285 - Endorsed to Client
-                   261173426 - Pairing booked
-                   261214844 - hired
-                   261173427 - For endorsement to VS
-                   261173428 - Lost
+                const fieldUpdated = hubspotToDbDictionary[data.propertyName];
+                
+                await this.prisma.candidate.update({
+                    where: {
+                        id: candidate.id
+                    },
+                    data: {
+                        [fieldUpdated]: data.propertyValue
+                    }
+                })
+                return true;
 
-                   ] )
-            */
-            
+            case 'object.creation':
+                const properties = Object.keys(hubspotToDbDictionary).join(',');
+                try{
+                    const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${data.objectId}?properties=${properties}`, 
+                        {
+                            headers: {
+                                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        }
+                    )
+
+                    if (!getObject) {
+                        throw new BadRequestException('No object data found');
+                    }
+                    const candidateData = mapHubspotToDb(getObject.data.properties);
+
+                    const createCandidate = await this.prisma.candidate.create({
+                        data: candidateData,
+                    })
+
+                    return true;
+
+                }catch (error) {
+                    throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
+                }
+            case 'object.deletion':
+
+
         }
-        return { status: 'success', message: 'Webhook processed successfully' };
     }
 
     async changeDataToHubspot(objectId: string, data: changeDataToHubspotDto): Promise<boolean> {
