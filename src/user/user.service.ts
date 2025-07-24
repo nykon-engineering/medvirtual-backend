@@ -1,6 +1,6 @@
 
 import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, USER } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userData: Prisma.UserCreateInput): Promise<User> {
+  async create(userData: Prisma.USERCreateInput): Promise<USER> {
     const {password, ...rest} = userData;
     const hash = await bcrypt.hash(password, 10);
     
@@ -19,20 +19,20 @@ export class UserService {
       password: hash,
     }
 
-    const newUser = await this.prisma.user.create({
+    const newUser = await this.prisma.uSER.create({
       data: newUserData,
     })
     return newUser;
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({
+  async findByEmail(email: string): Promise<USER | null> {
+    return this.prisma.uSER.findUnique({
       where: { email },
     });
   }
 
-  async findById(id: string): Promise<User | null> {
-    const user = await this.prisma.user.findUnique({
+  async findById(id: string): Promise<USER | null> {
+    const user = await this.prisma.uSER.findUnique({
       where: { id },
     });
     if (!user) {
@@ -41,9 +41,9 @@ export class UserService {
     return user;
   }
 
-  async findByOrganizationId(organizationId: string): Promise<User[] | null>{
-    const users = await this.prisma.user.findMany({
-      where: { organizationId },
+  async findByOrganizationId(organizationId: string): Promise<USER[] | null>{
+    const users = await this.prisma.uSER.findMany({
+      where: { organization_id: organizationId },
     });
     if (!users || users.length === 0) {
       throw new NotFoundException(`No users found in this organization.`);
@@ -51,7 +51,7 @@ export class UserService {
     return users;
   }
 
-  async update(id: string, userData: Prisma.UserUpdateInput): Promise<User> {
+  async update(id: string, userData: Prisma.USERUpdateInput): Promise<USER> {
     try {
       let user;
       const currentUser = await this.findById(id);
@@ -60,14 +60,14 @@ export class UserService {
       }
 
       //verify user to update status
-      if (userData.jobTitle && userData.companyName && currentUser.status === 'incomplete') {
+      if (userData.job_title && userData.organization_name && currentUser.status === 'incomplete') {
         user = {...userData, status: 'active'};
       }else{
         user = {...userData};
       }
       console.log(user);
       
-      return await this.prisma.user.update({
+      return await this.prisma.uSER.update({
         where: { id },
         data: user,
       });
@@ -77,10 +77,10 @@ export class UserService {
     
   }
 
-  async delete(id: string): Promise<User> {
+  async delete(id: string): Promise<USER> {
     try {
       await this.findById(id);
-      return await this.prisma.user.delete({
+      return await this.prisma.uSER.delete({
         where: { id },
       });
     } catch (error) {
@@ -88,14 +88,14 @@ export class UserService {
     }
   }
 
-  async updateStatus(id: string): Promise<User> {
+  async updateStatus(id: string): Promise<USER> {
     try {
       const currentUser = await this.findById(id);
       if (!currentUser) throw new NotFoundException(`User not found`);
       if (currentUser.status !== 'prospect')  new BadRequestException(`User status is not prospect`);
       
       
-      return await this.prisma.user.update({
+      return await this.prisma.uSER.update({
         where: { id },
         data:{
           status: 'client'

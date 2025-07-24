@@ -64,7 +64,7 @@ export class RecoverypassService {
 
             if (!userId) throw new NotFoundException('User ID not found in hash');
             //update the user password
-            await this.prisma.user.update({
+            await this.prisma.uSER.update({
                 where: { id: userId },
                 data: { password: hashedPassword },
             });

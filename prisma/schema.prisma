@@ -101,40 +101,40 @@ enum TicketStatus {
   closed
 }
 
-model User {
-  id         String   @id @default(uuid())
-  email           String   @unique
-  organizationId  String?
-  organization    Organization? @relation(fields: [organizationId], references: [id])
-  first_name      String
-  last_name       String
-  phone           String
-  avatar          String
-  jobTitle        String
-  companyName     String
-  role            String
-  workosId        String  
-  password        String @db.VarChar(255)
-  authenticationMethod String
-  status         String
-  Sessions Session[]
-  EmailVerifications EmailVerification[]
-  EmailInvitations EmailInvitation[]
-  verified       Boolean  @default(false)
-  tickets        Ticket[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+model USER {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  organization_id   String?
+  organization_name String
+  organization      Organization? @relation(fields: [organization_id], references: [id])
+  first_name        String
+  last_name         String
+  phone             String
+  avatar            String
+  job_title         String
+  role              String
+  workos_id         String  
+  password          String @db.VarChar(255)
+  authentication_method String
+  status            String
+  sessions Session[]
+  email_verifications EmailVerification[]
+  email_invitations EmailInvitation[]
+  verified          Boolean  @default(false)
+  tickets           Ticket[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([email], name: "idx_users_email")
   @@index([role], name: "idx_users_role")
-  @@index([organizationId], name: "idx_users_organization_id")
+  @@index([organization_id], name: "idx_users_organization_id")
   @@index([status], name: "idx_users_status")
 }
 
 model Session {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       USER     @relation(fields: [userId], references: [id])
   token      String
   createdAt  DateTime @default(now())
   expiresAt  DateTime
@@ -144,7 +144,7 @@ model Session {
 model EmailVerification {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       USER     @relation(fields: [userId], references: [id])
   code       String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
@@ -154,7 +154,7 @@ model EmailVerification {
 model EmailInvitation {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       USER     @relation(fields: [userId], references: [id])
   code       String
   email_from String
   expiresAt  DateTime
@@ -172,9 +172,10 @@ model Organization {
   address       String?
   contact_info  String?
   specialties   String?
-  users         User[]
-  hireRequests  HireRequest[]
-  created_at    DateTime    @default(now())
+  users         USER[]
+  hire_requests  HireRequest[]
+  createdAt    DateTime    @default(now())
+  organization_candidates OrganizationCandidate[]
 
   @@index([hubspot_id], name: "idx_organizations_hubspot_id")
   @@index([status], name: "idx_organizations_status")
@@ -187,22 +188,38 @@ model Candidate {
   email                 String
   first_name            String
   last_name             String
-  status                String               @default("available")
-  pay_rate              Decimal?
+  pipeline_status       String               @default("available")
+  hourly_pay_rate       Decimal?
   resume_url            String?
-  experience_years      Int?
+  years_of_experience   Int?
   about_me              String?
+  organization_id       String?
   processed_resume_data Json?
   processing_status     ProcessingStatus     @default(pending)
   processing_error      String?
   processed_at          DateTime?
-  created_at            DateTime             @default(now())
+  createdAt            DateTime             @default(now())
   skills                CandidateSkill[]
   experiences           CandidateExperience[]
   educations            CandidateEducation[]
   panelCandidates       PanelCandidate[]
   selectedInInterviews  Interview[]          @relation("SelectedCandidate")
+  organizationCandidates OrganizationCandidate[]
 }
+
+model OrganizationCandidate {
+  id               String      @id @default(uuid())
+  organization     Organization @relation(fields: [organization_id], references: [id])
+  organization_id  String
+
+  candidate        Candidate    @relation(fields: [candidate_id], references: [id])
+  candidate_id     String
+
+  pipeline_status   String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
 
 model CandidateSkill {
   id               String         @id @default(uuid())
@@ -210,7 +227,7 @@ model CandidateSkill {
   skill_name       String
   proficiency_level ProficiencyLevel?
   skill_type       SkillType      @default(technical)
-  created_at       DateTime       @default(now())
+  createdAt       DateTime       @default(now())
   candidate        Candidate      @relation(fields: [candidate_id], references: [id])
 
   @@index([candidate_id], name: "idx_candidate_skills_candidate_id")
@@ -226,7 +243,7 @@ model CandidateExperience {
   position        String
   duration        String?
   responsibilities String?
-  created_at      DateTime   @default(now())
+  createdAt      DateTime   @default(now())
   candidate       Candidate  @relation(fields: [candidate_id], references: [id])
 
   @@index([candidate_id], name: "idx_candidate_experience_candidate_id")
@@ -240,7 +257,7 @@ model CandidateEducation {
   degree        String
   institution   String
   year          String?
-  created_at    DateTime   @default(now())
+  createdAt    DateTime   @default(now())
   candidate     Candidate  @relation(fields: [candidate_id], references: [id])
 
   @@index([candidate_id], name: "idx_candidate_education_candidate_id")
@@ -256,7 +273,7 @@ model HireRequest {
   requirements String?
   status      HireRequestStatus @default(new_request)
   priority    Priority       @default(medium)
-  created_at  DateTime       @default(now())
+  createdAt  DateTime       @default(now())
   organization Organization @relation(fields: [org_id], references: [id])
   skills      HireRequestSkill[]
   panels      CandidatePanel[]
@@ -264,7 +281,7 @@ model HireRequest {
   @@index([org_id], name: "idx_hire_requests_org_id")
   @@index([status], name: "idx_hire_requests_status")
   @@index([priority], name: "idx_hire_requests_priority")
-  @@index([created_at], name: "idx_hire_requests_created_at")
+  @@index([createdAt], name: "idx_hire_requests_createdAt")
 }
 
 model HireRequestSkill {
@@ -272,7 +289,7 @@ model HireRequestSkill {
   hire_request_id String
   skill_name      String
   required_level  ProficiencyLevel @default(intermediate)
-  created_at      DateTime   @default(now())
+  createdAt      DateTime   @default(now())
   hireRequest     HireRequest @relation(fields: [hire_request_id], references: [id])
 
   @@index([hire_request_id], name: "idx_hire_request_skills_hire_request_id")
@@ -285,7 +302,7 @@ model CandidatePanel {
   hire_request_id String
   status          PanelStatus   @default(created)
   scheduled_date  DateTime?
-  created_at      DateTime      @default(now())
+  createdAt      DateTime      @default(now())
   hireRequest     HireRequest   @relation(fields: [hire_request_id], references: [id])
   panelCandidates PanelCandidate[]
   interviews      Interview[]
@@ -300,7 +317,7 @@ model PanelCandidate {
   panel_id     String
   candidate_id String
   status       PanelCandidateStatus @default(selected)
-  created_at   DateTime             @default(now())
+  createdAt   DateTime             @default(now())
   panel        CandidatePanel       @relation(fields: [panel_id], references: [id])
   candidate    Candidate            @relation(fields: [candidate_id], references: [id])
 
@@ -320,7 +337,7 @@ model Interview {
   selected_candidate_id String?
   decision_date         DateTime?
   expires_at            DateTime?
-  created_at            DateTime        @default(now())
+  createdAt            DateTime        @default(now())
   panel                 CandidatePanel  @relation(fields: [panel_id], references: [id])
   selectedCandidate     Candidate?      @relation("SelectedCandidate", fields: [selected_candidate_id], references: [id])
 
@@ -338,13 +355,13 @@ model Ticket {
   title       String
   description String
   status      TicketStatus @default(open)
-  created_at  DateTime     @default(now())
-  user        User         @relation(fields: [user_id], references: [id])
+  createdAt  DateTime     @default(now())
+  user        USER         @relation(fields: [user_id], references: [id])
 
   @@index([user_id], name: "idx_tickets_user_id")
   @@index([type], name: "idx_tickets_type")
   @@index([status], name: "idx_tickets_status")
-  @@index([created_at], name: "idx_tickets_created_at")
+  @@index([createdAt], name: "idx_tickets_createdAt")
 }
 
 
