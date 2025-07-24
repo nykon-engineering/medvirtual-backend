@@ -1,0 +1,26 @@
+import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
+import { UpdateCandidateDto } from './dto/update-candidate.dto';
+import { USER } from '@prisma/client';
+
+@Injectable()
+export class CandidatesService {
+
+
+  async findAll(user: USER) {
+
+    const {organization_id} = user;
+    //find all candidates from the same origanizationID of the current user
+  }
+
+  async findOne(id: number, user: USER) {
+    return `This action returns a #${id} candidate`;
+  }
+
+  async update(id: number, user: USER, updateCandidateDto: UpdateCandidateDto) {
+    return `This action updates a #${id} candidate`;
+  }
+
+  async remove(id: number, user: USER) {
+    return `This action removes a #${id} candidate`;
+  }
+}

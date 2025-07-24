@@ -21,7 +21,7 @@ import { AuthLogoutDto } from './dto/authLogOut.dto';
 import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
 import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
-import { User } from '@prisma/client';
+import { USER } from '@prisma/client';
 
 
 
@@ -33,6 +33,16 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly prisma: PrismaService
   ) {}
+
+
+  async workOsSignIn(): Promise<string> {
+    const authorizationUrl = await this.workosService.getUrl();
+    if (!authorizationUrl) {
+      throw new Error('Failed to generate authorization URL');
+    }
+    //console.log('workos route:', authorizationUrl);
+    return authorizationUrl;
+  }
 
   async handleUser(code: string): Promise<string> {
       const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
@@ -54,12 +64,12 @@ export class AuthService {
           last_name: user.last_name || '',
           phone: user.phone || '',
           avatar: user.profile_picture_url || '',
-          jobTitle: user.jobTitle || '',
-          companyName: user.companyName || '',
+          job_title: user.jobTitle || '',
+          organization_name: user.companyName || '',
           role: user.role?.slug || 'user',
-          workosId: user.id,
+          workos_id: user.id,
           password: '', // Password is not used for SSO users
-          authenticationMethod: result.authenticationMethod,
+          authentication_method: result.authenticationMethod,
           status: 'incomplete',
           verified: user.email_verified || false,
         });
@@ -89,14 +99,6 @@ export class AuthService {
       return token;
   }
 
-  async workOsSignIn(): Promise<string> {
-    const authorizationUrl = await this.workosService.getUrl();
-    if (!authorizationUrl) {
-      throw new Error('Failed to generate authorization URL');
-    }
-    //console.log('workos route:', authorizationUrl);
-    return authorizationUrl;
-  }
 
   async signIn(data: AuthSignInDto): Promise<string> {
     const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000;
@@ -106,7 +108,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found with this email');
     }
 
-    if (user.authenticationMethod !== authenticationMethod) {
+    if (user.authentication_method !== authenticationMethod) {
       throw new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used');
     }
 
@@ -167,12 +169,12 @@ export class AuthService {
       last_name: data.lastName,
       phone: '',
       avatar: '',
-      jobTitle: data.jobTitle,
-      companyName: data.companyName,
+      job_title: data.jobTitle,
+      organization_name: data.companyName,
       role: data.role || 'user',
-      workosId: '',
+      workos_id: '',
       password: data.password, // Password is not used for SSO users
-      authenticationMethod: authenticationMethod,
+      authentication_method: authenticationMethod,
       status: 'active',
       verified: false, // Initially set to false until the user verifies their email
     })
@@ -263,7 +265,7 @@ export class AuthService {
     }
 
     //Update user verified to true
-    await this.prisma.user.update({
+    await this.prisma.uSER.update({
       where:{
         id: user.id,
       },
@@ -389,7 +391,7 @@ export class AuthService {
 
   }
 
-  async inviteUser(data: AuthInviteUserDto, CurrentUser: User): Promise<string>{
+  async inviteUser(data: AuthInviteUserDto, CurrentUser: USER): Promise<string>{
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (user) {
@@ -397,23 +399,23 @@ export class AuthService {
     }
 
     // Check if the current user has an organization
-    if (!CurrentUser || !CurrentUser.organizationId) {
+    if (!CurrentUser || !CurrentUser.organization_id) {
       throw new BadRequestException('Current user does not belong to any organization');
     }
 
     const newUser = await this.userService.create({
       email: data.email,
-      organization: { connect: { id: CurrentUser.organizationId } }, 
+      organization: { connect: { id: CurrentUser.organization_id } }, 
       first_name: '',
       last_name: '',
       phone: '',
       avatar: '',
-      jobTitle: '',
-      companyName: data.companyName,
+      job_title: '',
+      organization_name: data.companyName,
       role: data.role || 'user',
-      workosId: '',
+      workos_id: '',
       password: '', // Password is not used for SSO users
-      authenticationMethod: authenticationMethod,
+      authentication_method: authenticationMethod,
       status: 'invited',
       verified: false, // Initially set to false until the user verifies their email
     })
@@ -482,7 +484,7 @@ export class AuthService {
       throw new NotFoundException('Token not found!')
     }
 
-    const user = await this.prisma.user.findFirst({
+    const user = await this.prisma.uSER.findFirst({
       where: {
         id: decodedToken.id
       }
@@ -495,7 +497,7 @@ export class AuthService {
     return {
       email: user.email,
       role: user.role,
-      companyName: user.companyName,
+      companyName: user.organization_name,
     };
 
 
@@ -522,7 +524,7 @@ export class AuthService {
     }
 
     //find user in our database
-    const user = await this.prisma.user.findFirst({
+    const user = await this.prisma.uSER.findFirst({
       where: {
         id: decodedToken.id
       }
@@ -532,11 +534,11 @@ export class AuthService {
     }
 
     //set password and update status to prospect
-    const updatePass = await this.prisma.user.update({
+    const updatePass = await this.prisma.uSER.update({
       data: { 
         first_name: data.firstName,
         last_name: data.lastName,
-        jobTitle: data.jobTitle,
+        job_title: data.jobTitle,
         password: data.password,
         status: 'prospect'
       },

@@ -101,42 +101,42 @@ enum TicketStatus {
   closed
 }
 
-model User {
-  id         String   @id @default(uuid())
-  email           String   @unique
-  organizationId  String?
-  organization    Organization? @relation(fields: [organizationId], references: [id])
-  first_name      String
-  last_name       String
-  phone           String
-  avatar          String
-  jobTitle        String
-  companyName     String
-  role            String
-  workosId        String  
-  password        String @db.VarChar(255)
-  authenticationMethod String
-  status         String
-  Sessions Session[]
-  EmailVerifications EmailVerification[]
-  EmailInvitations EmailInvitation[]
-  verified       Boolean  @default(false)
-  tickets        Ticket[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+model USER {
+  id                String   @id @default(uuid())
+  email             String   @unique
+  organization_id   String?
+  organization_name String
+  organization      Organization? @relation(fields: [organization_id], references: [id])
+  first_name        String
+  last_name         String
+  phone             String
+  avatar            String
+  job_title         String
+  role              String
+  workos_id         String  
+  password          String @db.VarChar(255)
+  authentication_method String
+  status            String
+  sessions Session[]
+  email_verifications EmailVerification[]
+  email_invitations EmailInvitation[]
+  verified          Boolean  @default(false)
+  tickets           Ticket[]
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
 
   @@index([email], name: "idx_users_email")
   @@index([role], name: "idx_users_role")
-  @@index([organizationId], name: "idx_users_organization_id")
+  @@index([organization_id], name: "idx_users_organization_id")
   @@index([status], name: "idx_users_status")
 }
 
 model Session {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       USER     @relation(fields: [userId], references: [id])
   token      String
-  createdAt  DateTime @default(now())
+  created_at  DateTime @default(now())
   expiresAt  DateTime
   isRevoked  Boolean  @default(false)
 }
@@ -144,21 +144,21 @@ model Session {
 model EmailVerification {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       USER     @relation(fields: [userId], references: [id])
   code       String
   expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  created_at  DateTime @default(now())
   verified   Boolean  @default(false)
 }
 
 model EmailInvitation {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       USER     @relation(fields: [userId], references: [id])
   code       String
   email_from String
   expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  created_at  DateTime @default(now())
   verified   Boolean  @default(false)
 }
 
@@ -172,8 +172,8 @@ model Organization {
   address       String?
   contact_info  String?
   specialties   String?
-  users         User[]
-  hireRequests  HireRequest[]
+  users         USER[]
+  hire_requests  HireRequest[]
   created_at    DateTime    @default(now())
 
   @@index([hubspot_id], name: "idx_organizations_hubspot_id")
@@ -187,11 +187,12 @@ model Candidate {
   email                 String
   first_name            String
   last_name             String
-  status                String               @default("available")
-  pay_rate              Decimal?
+  pipeline_status       String               @default("available")
+  hourly_pay_rate       Decimal?
   resume_url            String?
-  experience_years      Int?
+  years_of_experience   Int?
   about_me              String?
+  organization_id       String?
   processed_resume_data Json?
   processing_status     ProcessingStatus     @default(pending)
   processing_error      String?
@@ -339,7 +340,7 @@ model Ticket {
   description String
   status      TicketStatus @default(open)
   created_at  DateTime     @default(now())
-  user        User         @relation(fields: [user_id], references: [id])
+  user        USER         @relation(fields: [user_id], references: [id])
 
   @@index([user_id], name: "idx_tickets_user_id")
   @@index([type], name: "idx_tickets_type")
@@ -355,7 +356,7 @@ model GoogleToken {
   scope         String?
   tokenType     String?
   expiryDate    BigInt?   // timestamp em milissegundos
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 }
 

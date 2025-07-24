@@ -19,7 +19,7 @@ import { CurrentUser } from './current-user.decorator';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
 import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
-import { User } from '@prisma/client';
+import { USER } from '@prisma/client';
 
 
 /*
@@ -35,12 +35,20 @@ export class AuthController {
 
     constructor(private readonly authService: AuthService){}
 
-    @Get('test')
-    @UseGuards(AuthGuard, RolesGuard)
-    @Roles('admin')
-    @ApiOperation({ summary: 'Route for test the server' })
-    async test(@CurrentUser() user: { id: string, email: string, name: string, role: string }) {
-        return { message: 'Auth endpoint is working', user };
+    @Get('workos')
+    @Redirect()
+    @ApiOperation({ summary: 'Generate authorizationUrl from WorkOs' })
+    @ApiResponse({ status: 200, description: 'Url generated succesfully' })
+    @ApiResponse({ status: 500, description: 'Url generated failed' })
+    async workOs() {
+        const url = await this.authService.workOsSignIn();
+        if (!url) {
+            return {
+                statusCode: 500,
+                message: 'Authentication failed'
+            }
+        }
+        return {url: url};
     }
 
     @Get('callback')
@@ -60,22 +68,7 @@ export class AuthController {
         });
         res.redirect('http://localhost:8080/home');
     }
-
-    @Get('workos')
-    @Redirect()
-    @ApiOperation({ summary: 'Generate authorizationUrl from WorkOs' })
-    @ApiResponse({ status: 200, description: 'Url generated succesfully' })
-    @ApiResponse({ status: 500, description: 'Url generated failed' })
-    async workOs() {
-        const url = await this.authService.workOsSignIn();
-        if (!url) {
-            return {
-                statusCode: 500,
-                message: 'Authentication failed'
-            }
-        }
-        return {url: url};
-    }
+    
 
     @Post('signin')
     @HttpCode(200)
@@ -199,7 +192,7 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
-    async inviteUser(@Body() data: AuthInviteUserDto, @CurrentUser() user : User) {
+    async inviteUser(@Body() data: AuthInviteUserDto, @CurrentUser() user : USER) {
         const result = await this.authService.inviteUser(data, user);
         if (result) {
             return {

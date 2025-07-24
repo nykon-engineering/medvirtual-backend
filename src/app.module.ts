@@ -11,6 +11,7 @@ import { RecoverypassModule } from './recoverypass/recoverypass.module';
 import { HubspotModule } from './hubspot/hubspot.module';
 import { GoogledriveModule } from './googledrive/googledrive.module';
 import { OrganizationModule } from './organization/organization.module';
+import { CandidatesModule } from './candidates/candidates.module';
 
 @Module({
   imports: [
@@ -24,7 +25,8 @@ import { OrganizationModule } from './organization/organization.module';
     RecoverypassModule,
     HubspotModule,
     GoogledriveModule,
-    OrganizationModule
+    OrganizationModule,
+    CandidatesModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

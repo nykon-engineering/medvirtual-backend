@@ -4,8 +4,8 @@ export const hubspotToDbDictionary : Record<string, string> = {
     email: 'email',
     name: 'first_name',
     nameFake: 'last_name',
-    hs_pipeline_stage: 'status',
-    agreed_hourly_pay_rate: 'pay_rate',
+    hs_pipeline_stage: 'pipeline_status',
+    agreed_hourly_pay_rate: 'hourly_pay_rate',
     resume_link: 'resume_url',
     //experience_years => we dont have on the hubspot
     //about_me => we dont have on the hubspot
