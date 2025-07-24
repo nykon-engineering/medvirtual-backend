@@ -69,6 +69,27 @@ export class HubspotService {
                         [fieldUpdated]: data.propertyValue
                     }
                 })
+
+                /*if (data.propertyName === 'hs_pipeline_stage'){
+                    // Update the organizationCandidate pipeline status
+                    
+                    const currentStage = await this.prisma.organizationCandidate.findUnique({
+                        where: {
+                            candidate_id: candidate.id
+                        }
+                    })
+
+                    if (currentStage){
+                        await this.prisma.organizationCandidate.update({
+                            where: {
+                                id: currentStage.id
+                            },
+                            data: {
+                                pipeline_status: data.propertyValue
+                            }
+                        })
+                }
+                 */
                 return true;
 
             case 'object.creation':
@@ -91,6 +112,11 @@ export class HubspotService {
                     const createCandidate = await this.prisma.candidate.create({
                         data: candidateData,
                     })
+
+                    if (!createCandidate) {
+                        throw new BadRequestException('Error creating candidate in the database');
+                    }
+
 
                     return true;
 

@@ -80,7 +80,7 @@ export class GoogledriveService {
 
     async getValidAccessToken(){
       const tokens = await this.prisma.googleToken.findFirst({
-        orderBy: { created_at: 'desc' },
+        orderBy: { createdAt: 'desc' },
       });
       if (!tokens || !tokens.accessToken || !tokens.expiryDate) {
         throw new BadRequestException('Google tokens not found. Please authenticate first.');
