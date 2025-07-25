@@ -1,4 +1,4 @@
-export const hubspotToDbDictionary : Record<string, string> = {
+export const candidadeToDbDictionary : Record<string, string> = {
 
     hs_object_id: 'hubspot_id',
     email: 'email',
@@ -20,6 +20,6 @@ export const hubspotToDbDictionary : Record<string, string> = {
 
 }
 
-export const dbToHubspotDictionary : Record<string, string> = Object.fromEntries(
-    Object.entries(hubspotToDbDictionary).map(([key, value]) => [value, key])
+export const dbToCandidateDictionary : Record<string, string> = Object.fromEntries(
+    Object.entries(candidadeToDbDictionary).map(([key, value]) => [value, key])
 );
