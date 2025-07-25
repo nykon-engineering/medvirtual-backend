@@ -1,5 +1,3 @@
-import axios from "axios";
-
 export const dbToStageDictionary: Record<number, string> = {
     //id => name
 
@@ -16,8 +14,3 @@ export const dbToStageDictionary: Record<number, string> = {
     261173427: 'For Endorsement to VS',
     261173428: 'Lost'
 }
-
-
-export const stageToDbDictionary: Record<string, number> = Object.fromEntries(
-    Object.entries(dbToStageDictionary).map(([key, value]) => [value, Number(key)])
-);

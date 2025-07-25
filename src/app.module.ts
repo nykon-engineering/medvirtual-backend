@@ -11,7 +11,7 @@ import { RecoverypassModule } from './recoverypass/recoverypass.module';
 import { HubspotModule } from './hubspot/hubspot.module';
 import { GoogledriveModule } from './googledrive/googledrive.module';
 import { OrganizationModule } from './organization/organization.module';
-import { CandidatesModule } from './candidates/candidates.module';
+import { CandidatesModule } from './candidate/candidates.module';
 
 @Module({
   imports: [
