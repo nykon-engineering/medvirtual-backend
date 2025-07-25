@@ -80,26 +80,6 @@ export class HubspotService {
                         }
                     })
     
-                    /*if (data.propertyName === 'hs_pipeline_stage'){
-                        // Update the organizationCandidate pipeline status
-                        
-                        const currentStage = await this.prisma.organizationCandidate.findUnique({
-                            where: {
-                                candidate_id: candidate.id
-                            }
-                        })
-    
-                        if (currentStage){
-                            await this.prisma.organizationCandidate.update({
-                                where: {
-                                    id: currentStage.id
-                                },
-                                data: {
-                                    pipeline_status: data.propertyValue
-                                }
-                            })
-                    }
-                     */
                     return true;
     
                 case 'object.creation':
