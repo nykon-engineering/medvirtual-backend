@@ -6,14 +6,14 @@ import { UserService } from '../user/user.service';
 import { WorkosService } from '../workos/workos.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { generateVerificationCode } from '../utils/generateCode.util'
+import { generateVerificationCode } from '../common/utils/generateCode.util'
 import { AuthSignUpReturnDto } from './dto/authSignupReturn.dto';
 import { AuthResendCodeDto } from './dto/authResendCode.dto';
 import { AuthSignInDto } from './dto/authSignIn.dto';
 import { AuthInviteUserDto } from './dto/authInviteUser.dto';
 import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
-import getVerificationCodeTemplate from '../utils/email-templates/verification-code';
-import InviteSignup from '../utils/email-templates/invite-signup';
+import getVerificationCodeTemplate from '../common/utils/email-templates/verification-code';
+import InviteSignup from '../common/utils/email-templates/invite-signup';
 import { AuthSignUpDto } from './dto/authSignUp.dto';
 import { AuthVerifyCodeDtoReturn } from './dto/authVerifyCodeReturn.dto';
 import { AuthSetPasswordDto } from './dto/authSetPassword.dto';

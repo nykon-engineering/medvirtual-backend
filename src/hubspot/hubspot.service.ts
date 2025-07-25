@@ -4,7 +4,7 @@ import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects'
 import axios from 'axios';
 
 import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
-import { hubspotToDbDictionary } from '../common/dictionaries/hubspot-dictionary';
+import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
@@ -66,10 +66,10 @@ export class HubspotService {
     
                     if(!candidate) throw new NotFoundException('Candidate not found in the database');
     
-                    const fieldExists = Object.keys(hubspotToDbDictionary).includes(event.propertyName);
+                    const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
                     if(!fieldExists) return;
     
-                    const fieldUpdated = hubspotToDbDictionary[event.propertyName];
+                    const fieldUpdated = candidadeToDbDictionary[event.propertyName];
                     
                     await this.prisma.candidate.update({
                         where: {
@@ -80,30 +80,10 @@ export class HubspotService {
                         }
                     })
     
-                    /*if (data.propertyName === 'hs_pipeline_stage'){
-                        // Update the organizationCandidate pipeline status
-                        
-                        const currentStage = await this.prisma.organizationCandidate.findUnique({
-                            where: {
-                                candidate_id: candidate.id
-                            }
-                        })
-    
-                        if (currentStage){
-                            await this.prisma.organizationCandidate.update({
-                                where: {
-                                    id: currentStage.id
-                                },
-                                data: {
-                                    pipeline_status: data.propertyValue
-                                }
-                            })
-                    }
-                     */
                     return true;
     
                 case 'object.creation':
-                    const properties = Object.keys(hubspotToDbDictionary).join(',');
+                    const properties = Object.keys(candidadeToDbDictionary).join(',');
                     try{
                         const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${event.objectId}?properties=${properties}`, 
                             {

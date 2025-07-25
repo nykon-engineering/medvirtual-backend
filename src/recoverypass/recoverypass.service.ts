@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { RecoveryForgotPasswordDto } from './dto/recoveryForgotPassword.dto';
-import getResetPasswordTemplate from '../utils/email-templates/reset-password';
+import getResetPasswordTemplate from '../common/utils/email-templates/reset-password';
 import { RecoveryResetPasswordDto } from './dto/recoveryResetPassword.dto';
 
 @Injectable()
