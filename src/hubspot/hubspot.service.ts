@@ -45,88 +45,101 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
-        switch (data.subscriptionType) {
-            case 'object.propertyChange':
-                
-                const candidate = await this.prisma.candidate.findUnique({
-                    where: {
-                        hubspot_id: String(data.objectId)
-                    }
-                })
+        console.log('Received data:', data);
+        const orderedData = data.sort((a,b)=>{
+            if (a.subscriptionType < b.subscriptionType) return -1;
+            if (a.subscriptionType > b.subscriptionType) return 1;
+            return 0;
+        })
 
-                if(!candidate) throw new NotFoundException('Candidate not found in the database');
+        console.log('Ordered Data:', orderedData);
 
-                const fieldExists = Object.keys(hubspotToDbDictionary).includes(data.propertyName);
-                if(!fieldExists) return;
-
-                const fieldUpdated = hubspotToDbDictionary[data.propertyName];
-                
-                await this.prisma.candidate.update({
-                    where: {
-                        id: candidate.id
-                    },
-                    data: {
-                        [fieldUpdated]: data.propertyValue
-                    }
-                })
-
-                /*if (data.propertyName === 'hs_pipeline_stage'){
-                    // Update the organizationCandidate pipeline status
+        for (const event of orderedData){
+            switch (event.subscriptionType) {
+                case 'object.propertyChange':
                     
-                    const currentStage = await this.prisma.organizationCandidate.findUnique({
+                    const candidate = await this.prisma.candidate.findUnique({
                         where: {
-                            candidate_id: candidate.id
+                            hubspot_id: String(event.objectId)
                         }
                     })
-
-                    if (currentStage){
-                        await this.prisma.organizationCandidate.update({
+    
+                    if(!candidate) throw new NotFoundException('Candidate not found in the database');
+    
+                    const fieldExists = Object.keys(hubspotToDbDictionary).includes(event.propertyName);
+                    if(!fieldExists) return;
+    
+                    const fieldUpdated = hubspotToDbDictionary[event.propertyName];
+                    
+                    await this.prisma.candidate.update({
+                        where: {
+                            id: candidate.id
+                        },
+                        data: {
+                            [fieldUpdated]: event.propertyValue
+                        }
+                    })
+    
+                    /*if (data.propertyName === 'hs_pipeline_stage'){
+                        // Update the organizationCandidate pipeline status
+                        
+                        const currentStage = await this.prisma.organizationCandidate.findUnique({
                             where: {
-                                id: currentStage.id
-                            },
-                            data: {
-                                pipeline_status: data.propertyValue
+                                candidate_id: candidate.id
                             }
                         })
-                }
-                 */
-                return true;
-
-            case 'object.creation':
-                const properties = Object.keys(hubspotToDbDictionary).join(',');
-                try{
-                    const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${data.objectId}?properties=${properties}`, 
-                        {
-                            headers: {
-                                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            }
-                        }
-                    )
-
-                    if (!getObject) {
-                        throw new BadRequestException('No object data found');
+    
+                        if (currentStage){
+                            await this.prisma.organizationCandidate.update({
+                                where: {
+                                    id: currentStage.id
+                                },
+                                data: {
+                                    pipeline_status: data.propertyValue
+                                }
+                            })
                     }
-                    const candidateData = mapHubspotToDb(getObject.data.properties);
-
-                    const createCandidate = await this.prisma.candidate.create({
-                        data: candidateData,
-                    })
-
-                    if (!createCandidate) {
-                        throw new BadRequestException('Error creating candidate in the database');
-                    }
-
-
+                     */
                     return true;
-
-                }catch (error) {
-                    throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
-                }
-            case 'object.deletion':
-
-
+    
+                case 'object.creation':
+                    const properties = Object.keys(hubspotToDbDictionary).join(',');
+                    try{
+                        const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${event.objectId}?properties=${properties}`, 
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            }
+                        )
+    
+                        if (!getObject) {
+                            throw new BadRequestException('No object data found');
+                        }
+                        const candidateData = mapHubspotToDb(getObject.data.properties);
+    
+                        const createCandidate = await this.prisma.candidate.create({
+                            data: candidateData,
+                        })
+    
+                        if (!createCandidate) {
+                            throw new BadRequestException('Error creating candidate in the database');
+                        }
+    
+    
+                        return true;
+    
+                    }catch (error) {
+                        throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
+                    }
+                case 'object.deletion':
+    
+    
+            }
         }
+
+        
     }
 
     async changeDataToHubspot(objectId: string, data: changeDataToHubspotDto): Promise<boolean> {
