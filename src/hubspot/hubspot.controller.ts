@@ -28,7 +28,7 @@ export class HubspotController {
 
     @Post('webhook')
     async webhook(@Body() data: any) {
-        console.log('Webhook received:', data);
+        //console.log('Webhook received:', data);
         return this.hubspotService.changeDataFromHubspot(data);
     }
 
