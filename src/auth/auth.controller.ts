@@ -1,5 +1,5 @@
 /* istanbul ignore file */
-import { Body, Controller, Get, HttpCode, Inject, Patch, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, NotFoundException, Patch, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 
@@ -20,6 +20,8 @@ import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
 import { USER } from '@prisma/client';
 import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
+import { UserService } from '../user/user.service';
+import { first } from 'rxjs';
 
 
 /*
@@ -33,7 +35,11 @@ import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
 @Controller('auth')
 export class AuthController {
 
-    constructor(private readonly authService: AuthService){}
+    constructor(
+        private readonly authService: AuthService,
+        private readonly user: UserService
+
+    ){}
 
     @Get('workos')
     @Redirect()
@@ -83,11 +89,19 @@ export class AuthController {
     @ApiResponse({ status: 500, description: 'Authentication failed' })
     async signIn(@Body() data: AuthSignInDto) {
         const token = await this.authService.signIn(data);
+        const user = await this.user.findByEmail(data.email);
+        if(!user) throw new NotFoundException('user not found')
         return {
             statusCode: 200,
             message: 'User authenticated successfully',
             token,
-            };
+            user: {
+                firstName: user.first_name,
+                lastName: user.last_name,
+                email: user.email,
+                role: user.role
+            } 
+        };
     }
 
 
