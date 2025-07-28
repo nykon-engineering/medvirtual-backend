@@ -9,10 +9,14 @@ import { Organization } from '@prisma/client';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import axios from 'axios';
+import { AuthService } from 'dist/auth/auth.service';
 
 @Injectable()
 export class OrganizationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auth: AuthService
+  ) {}
 
 
   async getOwnerNameById(ownerId) {
@@ -152,13 +156,27 @@ export class OrganizationService {
 
   async create(data: CreateOrganizationDto): Promise<Organization> {
     try {
-      return await this.prisma.organization.create({
+      const organization= await this.prisma.organization.create({
         data: {
           name: data.name,
           contact_info: data.cellphone,
           email: data.email,
         },
       });
+
+      const dataInvitedUser = {
+        email: data.super_admin_email,
+        role: 'system_super_admin',
+        companyName: data.name,
+        organizationId: organization.id,
+      }
+      const newUser = await this.auth.inviteUser(dataInvitedUser);
+      if (!newUser) {
+        throw new BadRequestException('Failed to create super admin user');
+      }
+
+      return organization;
+
     } catch {
       throw new BadRequestException('Failed to create organization');
     }
