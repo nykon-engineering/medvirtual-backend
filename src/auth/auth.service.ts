@@ -532,7 +532,8 @@ export class AuthService {
         last_name: data.lastName,
         job_title: data.jobTitle,
         password: passwordCript,
-        status: data.status
+        status: data.status,
+        verified: true, // Set verified to true after signup
       },
       where: {id: decodedToken.id}
     })

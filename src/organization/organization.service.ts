@@ -170,17 +170,14 @@ export class OrganizationService {
           email: data.email,
         },
       });
-      console.log('Organization: ',organization);
       const dataInvitedUser = {
         email: data.super_admin_email,
-        role: 'system_super_admin',
+        role: 'organization_super_admin',
         companyName: data.name,
         organizationId: organization.id,
       }
-      console.log('DataInviteUser: ',dataInvitedUser);
 
       await this.auth.inviteUser(dataInvitedUser);
-
       
       return organization;
 
