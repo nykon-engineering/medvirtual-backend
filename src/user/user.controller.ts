@@ -18,7 +18,7 @@ export class UserController {
     
     @Get(':id')
     @UseGuards(AuthGuard, RolesGuard)
-    @Roles('SuperAdmin')
+    @Roles('system_super_admin')
     @ApiOperation({ summary: 'Get user using ID' })
     @ApiResponse({ status: 200, description: 'User found successfully.' })
     async getUserById(@Param('id') id: string) {
@@ -27,7 +27,7 @@ export class UserController {
 
     @Get('organization/:organizationId')
     @UseGuards(AuthGuard, RolesGuard)
-    @Roles('SuperAdmin')
+    @Roles('system_super_admin')
     @ApiOperation({ summary: 'Get all users of the specific organization' })
     @ApiResponse({ status: 200, description: 'Users found successfully.' })
     @ApiResponse({ status: 404, description: 'No users found in this organization.' })
@@ -38,7 +38,7 @@ export class UserController {
     @Patch(':id')
     @ApiBody({ type: CreateUserDto })
     @UseGuards(AuthGuard, RolesGuard)
-    @Roles('SuperAdmin')
+    @Roles('system_super_admin')
     @ApiOperation({ summary: 'Update user' })
     @ApiResponse({ status: 200, description: 'User updated successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to update user' })
@@ -50,7 +50,7 @@ export class UserController {
 
     @Delete(':id')
     @UseGuards(AuthGuard, RolesGuard)
-    @Roles('SuperAdmin')
+    @Roles('system_super_admin')
     @ApiOperation({ summary: 'Delete user' })
     @ApiResponse({ status: 200, description: 'User deleted successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to delete user' })
@@ -61,7 +61,7 @@ export class UserController {
     @Patch('update-status/:id')
     @ApiBody({ type: CreateUserDto })
     @UseGuards(AuthGuard, RolesGuard)
-    @Roles('SuperAdmin')
+    @Roles('system_super_admin')
     @ApiOperation({ summary: 'Update user status from prospect to client' })
     @ApiResponse({ status: 200, description: 'User updated successfully.' })
     @ApiResponse({ status: 400, description: 'Failed to update user' })
