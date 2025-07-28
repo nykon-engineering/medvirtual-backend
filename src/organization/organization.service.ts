@@ -155,7 +155,14 @@ export class OrganizationService {
 
   async create(data: CreateOrganizationDto): Promise<Organization> {
     try {
-      console.log('data: ', data)
+      // Check if the organization already exists
+      const existingOrganization = await this.prisma.organization.findUnique({
+        where: { email: data.email },
+      });
+      
+      if (existingOrganization) {
+        throw new BadRequestException('Organization already exists');
+      }
       const organization= await this.prisma.organization.create({
         data: {
           name: data.name,
@@ -170,13 +177,11 @@ export class OrganizationService {
         companyName: data.name,
         organizationId: organization.id,
       }
-      console.log(dataInvitedUser);
-      const newUser = await this.auth.inviteUser(dataInvitedUser);
+      console.log('DataInviteUser: ',dataInvitedUser);
 
-      if (!newUser) {
-        throw new BadRequestException('Failed to create super admin user');
-      }
+      await this.auth.inviteUser(dataInvitedUser);
 
+      
       return organization;
 
     } catch(error) {

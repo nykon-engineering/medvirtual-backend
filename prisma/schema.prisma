@@ -165,7 +165,7 @@ model EmailInvitation {
 model Organization {
   id            String      @id @default(uuid())
   name          String
-  email         String?
+  email         String      @unique
   type          String?
   hubspot_id    String?     @unique
   status        UserStatus  @default(active)
