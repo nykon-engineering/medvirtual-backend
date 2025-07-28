@@ -1,25 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
-import { AuthGetInviteDto } from './authGetInvite.dto';
+import { ApiProperty } from "@nestjs/swagger";
+import { IsString, IsStrongPassword } from "class-validator";
 
-export class AuthSetPasswordDto extends AuthGetInviteDto {
-  @ApiProperty({ required: true, description: 'First name provided by user' })
-  @IsString()
-  firstName: string;
+export class AuthUpdatePasswordDto{
+    @ApiProperty({ required: true, description: 'Old password provided by user' })
+    @IsString()
+    oldPassword: string;
 
-  @ApiProperty({ required: true, description: 'Last name provided by user' })
-  @IsString()
-  lastName: string;
 
-  @ApiProperty({ required: true, description: 'Job title provided by user' })
-  @IsString()
-  jobTitle: string;
-
-  @ApiProperty({ required: true, description: 'password provided by user' })
-  @IsString()
-  password: string;
-
-  @ApiProperty({ required: true, description: 'status provided by frontend' })
-  @IsString()
-  status: string;
+    @ApiProperty({ required: true, description: 'New password provided by user' })
+    @IsString()
+    password: string;
 }

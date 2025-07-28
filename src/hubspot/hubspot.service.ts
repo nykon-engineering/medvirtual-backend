@@ -45,14 +45,14 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
-        console.log('Received data:', data);
+        //console.log('Received data:', data);
         const orderedData = data.sort((a,b)=>{
             if (a.subscriptionType < b.subscriptionType) return -1;
             if (a.subscriptionType > b.subscriptionType) return 1;
             return 0;
         })
 
-        console.log('Ordered Data:', orderedData);
+        //console.log('Ordered Data:', orderedData);
 
         for (const event of orderedData){
             switch (event.subscriptionType) {
@@ -151,11 +151,11 @@ export class HubspotService {
 
 
     
-    ////=> this service is just a example to read candidates and download resume
+    ////=> this service is just a example to read candidates and download resume OR populate our database
     async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {
       if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');
       try{
-          const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant,{
+            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant,{
               filterGroups: [
                   {
                       filters: (data.filters ?? []).map(item => ({
@@ -175,10 +175,18 @@ export class HubspotService {
           for (let i=0; i< response.results.length ; i++){
             const pdfName = `${response.results[i].properties.name}.pdf`;
             const urlFile = response.results[i].properties.resume_link || '';
+            
+            const candidateData = mapHubspotToDb(response.results[i].properties);
+            /*
+            const createCandidate = await this.prisma.candidate.create({
+                            data: candidateData,
+                        }) */
+            console.log('Name:', candidateData);
+            /*
             const idFile = extractDriveFileId(urlFile);
-            //console.log('idFile:', idFile);
-
+            console.log('idFile:', idFile);
             if (idFile) await this.google.downloadFile(idFile, pdfName);
+            */
 
           }
           return response;
