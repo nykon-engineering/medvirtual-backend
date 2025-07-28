@@ -19,7 +19,6 @@ export class OrganizationService {
     private readonly auth: AuthService
   ) {}
 
-
   async getOwnerNameById(ownerId) {
     try {
       const response = await axios.get(`https://api.hubapi.com/crm/v3/owners/${ownerId}`, {
@@ -124,7 +123,6 @@ export class OrganizationService {
   }
   //These functions above is for get organizations from Hubspot
   //======== // ===========
-
 
   async getAll(): Promise<Organization[]> {
 
