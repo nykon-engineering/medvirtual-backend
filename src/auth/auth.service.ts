@@ -525,14 +525,15 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    const passwordCript = await bcrypt.hash(data.password, 10);
     //set password and update status to prospect
     const updatePass = await this.prisma.uSER.update({
       data: { 
         first_name: data.firstName,
         last_name: data.lastName,
         job_title: data.jobTitle,
-        password: data.password,
-        status: 'prospect'
+        password: passwordCript,
+        status: data.status
       },
       where: {id: decodedToken.id}
     })
@@ -540,7 +541,6 @@ export class AuthService {
     if (!updatePass){
       throw new BadRequestException('Error in set user password')
     }
-
 
     //Create a new JWT for keep the user logged in
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {

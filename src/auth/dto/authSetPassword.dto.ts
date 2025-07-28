@@ -19,4 +19,7 @@ export class AuthSetPasswordDto extends AuthGetInviteDto {
   @IsString()
   password: string;
 
+  @ApiProperty({ required: true, description: 'status provided by frontend' })
+  @IsString()
+  status: string;
 }
