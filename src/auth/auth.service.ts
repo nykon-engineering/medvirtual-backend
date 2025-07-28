@@ -156,6 +156,7 @@ export class AuthService {
     const organization = await this.prisma.organization.create({
       data: {
         name: data.companyName || 'Default Organization',
+        email: data.email,
         
       },
     })
