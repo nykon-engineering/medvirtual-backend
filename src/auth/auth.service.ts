@@ -388,24 +388,19 @@ export class AuthService {
     }
 
     return true;
-
   }
 
-  async inviteUser(data: AuthInviteUserDto, CurrentUser: USER): Promise<string>{
+  async inviteUser(data: AuthInviteUserDto): Promise<string>{
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (user) {
       throw new BadRequestException('User already exists');
     }
 
-    // Check if the current user has an organization
-    if (!CurrentUser || !CurrentUser.organization_id) {
-      throw new BadRequestException('Current user does not belong to any organization');
-    }
 
     const newUser = await this.userService.create({
       email: data.email,
-      organization: { connect: { id: CurrentUser.organization_id } }, 
+      organization: { connect: { id: data.organizationId } }, 
       first_name: '',
       last_name: '',
       phone: '',
@@ -444,7 +439,7 @@ export class AuthService {
     }
 
     // Store the verification code in the database with an expiration time
-    const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours - same time as JWT
     const storeCode = await this.prisma.emailInvitation.create({
         data: {
           userId: newUser.id,
@@ -499,13 +494,10 @@ export class AuthService {
       role: user.role,
       companyName: user.organization_name,
     };
-
-
   }
 
 
   async setPassword(data: AuthSetPasswordDto): Promise<string>{
-
     let decodedToken; 
     try {
       decodedToken = jwt.verify(data.token, process.env.JWT_SECRET);

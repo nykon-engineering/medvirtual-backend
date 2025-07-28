@@ -13,4 +13,8 @@ export class AuthInviteUserDto {
     @ApiProperty({ required: false, description: 'User company name' })
     @IsString()
     companyName: string;
+
+    @ApiProperty({ required: true, description: 'Organization ID' })
+    @IsString()
+    organizationId: string;
 }

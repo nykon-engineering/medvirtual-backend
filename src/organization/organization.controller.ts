@@ -6,17 +6,28 @@ import {
   Delete,
   Param,
   HttpCode,
+  Get,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
+import { get } from 'http';
 
 @ApiTags('Organization')
 @Controller('organization')
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
+  
+  @Get()
+  @ApiProperty({ description: 'Get all organizations from hubspot' })
+  async getfromHubspot(){
+    return await this.organizationService.getAllFromHubspot();
+  }
+  //========== // =========
+
+  
   @Post('create')
   @HttpCode(201)
   @ApiBody({ type: CreateOrganizationDto })

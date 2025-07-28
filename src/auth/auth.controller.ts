@@ -71,7 +71,7 @@ export class AuthController {
     
 
     @Post('signin')
-    @HttpCode(200)
+    @HttpCode(200)  
     @ApiBody({ type: AuthSignInDto })
     @ApiOperation({ summary: 'SignIn from our own database' })
     @ApiResponse({ status: 200, description: 'User authenticated successfully' })
@@ -192,8 +192,8 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Failed to store invite code' })
     @ApiResponse({ status: 409, description: 'User already exists' })
     @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
-    async inviteUser(@Body() data: AuthInviteUserDto, @CurrentUser() user : USER) {
-        const result = await this.authService.inviteUser(data, user);
+    async inviteUser(@Body() data: AuthInviteUserDto) {
+        const result = await this.authService.inviteUser(data);
         if (result) {
             return {
                 statusCode: 201,
