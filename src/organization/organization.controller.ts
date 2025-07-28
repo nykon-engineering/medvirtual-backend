@@ -70,6 +70,7 @@ export class OrganizationController {
     description: 'Organization created successfully',
   })
   async create(@Body() data: CreateOrganizationDto) {
+    console.log('Create Organization Data: ', data);
     const org = await this.organizationService.create(data);
     return {
       statusCode: 201,

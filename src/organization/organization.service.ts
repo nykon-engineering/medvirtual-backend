@@ -155,6 +155,7 @@ export class OrganizationService {
 
   async create(data: CreateOrganizationDto): Promise<Organization> {
     try {
+      console.log('data: ', data)
       const organization= await this.prisma.organization.create({
         data: {
           name: data.name,
@@ -162,22 +163,25 @@ export class OrganizationService {
           email: data.email,
         },
       });
-
+      console.log('Organization: ',organization);
       const dataInvitedUser = {
         email: data.super_admin_email,
         role: 'system_super_admin',
         companyName: data.name,
         organizationId: organization.id,
       }
+      console.log(dataInvitedUser);
       const newUser = await this.auth.inviteUser(dataInvitedUser);
+
       if (!newUser) {
         throw new BadRequestException('Failed to create super admin user');
       }
 
       return organization;
 
-    } catch {
-      throw new BadRequestException('Failed to create organization');
+    } catch(error) {
+      console.log(error);
+      throw new BadRequestException('Failed to create organization', error);
     }
   }
 
