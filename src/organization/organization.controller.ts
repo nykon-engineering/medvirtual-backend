@@ -34,7 +34,7 @@ export class OrganizationController {
 
   @Get('')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('SuperAdmin')
+  @Roles('system_super_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get all organizations' })
   @ApiResponse({
@@ -47,7 +47,7 @@ export class OrganizationController {
 
   @Get('/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('Admin','SuperAdmin')
+  @Roles('system_admin','system_super_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get organization by Id' })
   @ApiResponse({
@@ -61,7 +61,7 @@ export class OrganizationController {
   
   @Post('create')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('SuperAdmin')
+  @Roles('system_super_admin')
   @HttpCode(201)
   @ApiBody({ type: CreateOrganizationDto })
   @ApiOperation({ summary: 'Create a new organization' })
@@ -80,7 +80,7 @@ export class OrganizationController {
 
   @Put('edit/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('Admin','SuperAdmin')
+  @Roles('system_admin','system_super_admin')
   @HttpCode(200)
   @ApiBody({ type: UpdateOrganizationDto })
   @ApiOperation({ summary: 'Edit organization info' })
@@ -99,7 +99,7 @@ export class OrganizationController {
 
   @Delete('delete/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('SuperAdmin')
+  @Roles('system_super_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Delete organization' })
   @ApiResponse({
