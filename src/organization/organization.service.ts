@@ -15,7 +15,6 @@ export class OrganizationService {
   constructor(private readonly prisma: PrismaService) {}
 
 
-
   async getOwnerNameById(ownerId) {
     try {
       const response = await axios.get(`https://api.hubapi.com/crm/v3/owners/${ownerId}`, {
@@ -118,11 +117,39 @@ export class OrganizationService {
     */
     return objectOrganization; 
   }
-
-
-
-
+  //These functions above is for get organizations from Hubspot
   //======== // ===========
+
+
+  async getAll(): Promise<Organization[]> {
+
+    try {
+      return await this.prisma.organization.findMany({
+        orderBy: {
+          name: 'asc',
+        },
+      });
+    } catch {
+      throw new NotFoundException('Organizations not found');
+    }
+  }
+
+  async getById(id: string): Promise<Organization> {
+    try {
+      const organization = await this.prisma.organization.findUnique({
+        where: { id },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      return organization;
+    } catch {
+      throw new NotFoundException('Organization not found');
+    }
+  }
+
   async create(data: CreateOrganizationDto): Promise<Organization> {
     try {
       return await this.prisma.organization.create({
