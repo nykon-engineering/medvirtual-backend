@@ -16,12 +16,11 @@ import getVerificationCodeTemplate from '../common/utils/email-templates/verific
 import InviteSignup from '../common/utils/email-templates/invite-signup';
 import { AuthSignUpDto } from './dto/authSignUp.dto';
 import { AuthVerifyCodeDtoReturn } from './dto/authVerifyCodeReturn.dto';
-import { AuthSetPasswordDto } from './dto/authSetPassword.dto';
+import { AuthinvitedUserSignupDto } from './dto/invitedUserSignup.dto';
 import { AuthLogoutDto } from './dto/authLogOut.dto';
 import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
-import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
-import { USER } from '@prisma/client';
+import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
 
 
 
@@ -497,7 +496,7 @@ export class AuthService {
   }
 
 
-  async setPassword(data: AuthSetPasswordDto): Promise<string>{
+  async invitedUserSignup(data: AuthinvitedUserSignupDto): Promise<string>{
     let decodedToken; 
     try {
       decodedToken = jwt.verify(data.token, process.env.JWT_SECRET);
@@ -566,5 +565,27 @@ export class AuthService {
     }
     return token;
 
+  }
+
+  async updatePassword(data: AuthUpdatePasswordDto, user):Promise<boolean>{
+    const { oldPassword, password } = data;
+    if (!oldPassword || !password) {
+      throw new BadRequestException('Old password and new password are required');
+    }
+
+    const userDB = await this.prisma.uSER.findUnique({
+      where: { id: user.id },
+    })
+    if(!userDB) throw new NotFoundException('User not found');
+
+    const isMatch = await bcrypt.compare(oldPassword, userDB.password);
+    if (!isMatch) throw new BadRequestException('Invalid old password');
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const updatedUser = await this.prisma.uSER.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+    return true;
   }
 }

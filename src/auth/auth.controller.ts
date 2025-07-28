@@ -1,5 +1,5 @@
 /* istanbul ignore file */
-import { Body, Controller, Get, HttpCode, Inject, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Patch, Post, Query, Redirect, Res, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 
@@ -11,15 +11,15 @@ import { AuthLogoutDto } from './dto/authLogOut.dto';
 import { AuthResendCodeDto } from './dto/authResendCode.dto';
 import { AuthInviteUserDto } from './dto/authInviteUser.dto';
 import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
-import { AuthSetPasswordDto } from './dto/authSetPassword.dto';
+import { AuthinvitedUserSignupDto } from './dto/invitedUserSignup.dto';
 import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 
 import { AuthGuard } from './auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import { RolesGuard } from './roles.guard';
 import { Roles } from './roles.decorator';
-import { AuthGetInviteReturnDto } from './dto/authGetInviteReturn.dto';
 import { USER } from '@prisma/client';
+import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
 
 
 /*
@@ -216,23 +216,43 @@ export class AuthController {
         return user;
     }
 
-    @Post('set-password')
+    @Post('invited-user-signup')
     @HttpCode(200)
-    @ApiBody({ type: AuthSetPasswordDto })
+    @ApiBody({ type: AuthinvitedUserSignupDto })
     @ApiOperation({ summary: 'Allows a new uset to set their password using a valid invitation'})
     @ApiResponse({ status: 200, description: 'Password has been set successfully. You can now log in.' })
     @ApiResponse({ status: 400, description: 'Invalid token' })
     @ApiResponse({ status: 404, description: 'Token not found' })
     @ApiResponse({ status: 404, description: 'User not found' })
     @ApiResponse({ status: 400, description: 'Error in set user password' })
-    async setPassword(@Body() data: AuthSetPasswordDto){
-        const result = await this.authService.setPassword(data);
+    async invitedUserSignup(@Body() data: AuthinvitedUserSignupDto){
+        const result = await this.authService.invitedUserSignup(data);
         return {
             statusCode: 200,
             message: "Password has been set successfully. You can now log in.",
             result: result
         }
     }
+
+    @Patch('update-password')
+    @HttpCode(200)
+    @ApiBody({ type: AuthUpdatePasswordDto })
+    @UseGuards(AuthGuard)
+    @ApiOperation({ summary: 'Allows a user to set their password' })
+    @ApiResponse({ status: 200, description: 'Password has been set successfully' })
+    @ApiResponse({ status: 400, description: 'Old password and new password are required' })
+    @ApiResponse({ status: 404, description: 'User not found' })
+    @ApiResponse({ status: 400, description: 'Invalid old password' })
+    async updatePassword(@Body() data: AuthUpdatePasswordDto, @CurrentUser() user: USER) {
+        const result = await this.authService.updatePassword(data, user);
+        return {
+            statusCode: 200,
+            message: 'Password has been set successfully',
+            result: result
+        };
+    }
+
+    
 
 
 }
