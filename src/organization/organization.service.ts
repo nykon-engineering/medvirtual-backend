@@ -4,12 +4,13 @@ import {
   BadRequestException,
   Body,
 } from '@nestjs/common';
+import axios from 'axios';
+
 import { PrismaService } from '../prisma/prisma.service';
 import { Organization } from '@prisma/client';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
-import axios from 'axios';
-import { AuthService } from 'dist/auth/auth.service';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class OrganizationService {
