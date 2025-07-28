@@ -6,18 +6,62 @@ import {
   Delete,
   Param,
   HttpCode,
+  Get,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
+
+import { AuthGuard } from '../auth/auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @ApiTags('Organization')
 @Controller('organization')
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
+  
+  @Get('hubspot')
+  @ApiProperty({ description: 'Get all organizations from hubspot' })
+  async getfromHubspot(){
+    return await this.organizationService.getAllFromHubspot();
+  }
+  //========== // =========
+
+
+  @Get('')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('SuperAdmin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Get all organizations' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of organizations retrieved successfully',
+  })
+  async getAll() {
+    return await this.organizationService.getAll();
+  }
+
+  @Get('/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('Admin','SuperAdmin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Get organization by Id' })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization retrieved successfully',
+  })
+  async getById(@Param('id') id: string) {
+    return await this.organizationService.getById(id);
+  }
+
+  
   @Post('create')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('SuperAdmin')
   @HttpCode(201)
   @ApiBody({ type: CreateOrganizationDto })
   @ApiOperation({ summary: 'Create a new organization' })
@@ -35,6 +79,8 @@ export class OrganizationController {
   }
 
   @Put('edit/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('Admin','SuperAdmin')
   @HttpCode(200)
   @ApiBody({ type: UpdateOrganizationDto })
   @ApiOperation({ summary: 'Edit organization info' })
@@ -52,6 +98,8 @@ export class OrganizationController {
   }
 
   @Delete('delete/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('SuperAdmin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Delete organization' })
   @ApiResponse({
