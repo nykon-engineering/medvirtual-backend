@@ -64,8 +64,8 @@ export class HubspotService {
                         }
                     })
     
-                    if(!candidate) return;
-    
+                    if(!candidate) return; // here, I need to refactor to allow create a new candidate if its not exists
+
                     const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
                     if(!fieldExists) return;
     
