@@ -64,7 +64,7 @@ export class HubspotService {
                         }
                     })
     
-                    if(!candidate) throw new NotFoundException('Candidate not found in the database');
+                    if(!candidate) return;
     
                     const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
                     if(!fieldExists) return;
@@ -176,12 +176,26 @@ export class HubspotService {
             const pdfName = `${response.results[i].properties.name}.pdf`;
             const urlFile = response.results[i].properties.resume_link || '';
             
+            
+            /* => function to populate db with the datas from hubspot
             const candidateData = mapHubspotToDb(response.results[i].properties);
-            /*
-            const createCandidate = await this.prisma.candidate.create({
-                            data: candidateData,
-                        }) */
-            console.log('Name:', candidateData);
+            const userReady = await this.prisma.candidate.findUnique({
+                where: {
+                    hubspot_id: String(response.results[i].properties.hs_object_id)
+                }
+            })
+            if(!userReady){
+                console.log('Name:', candidateData);
+                
+                const createCandidate = await this.prisma.candidate.create({
+                    data: candidateData,
+                })
+                console.log('=> Candidate created:', createCandidate.first_name);
+            }else{
+                console.log('===> Candidate already exists:', response.results[i].properties.name);
+            }
+            */
+            
             /*
             const idFile = extractDriveFileId(urlFile);
             console.log('idFile:', idFile);

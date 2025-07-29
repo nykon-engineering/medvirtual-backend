@@ -16,8 +16,9 @@ export function mapHubspotToDb(hubspotData: candidateData): Prisma.CandidateCrea
     for (const [hubspotKey, dbKey] of Object.entries(candidadeToDbDictionary)) {
         if (hubspotKey === 'name' && hubspotData.name) {
           const arrayName = hubspotData.name.trim().split(' ');
-          result['first_name'] = arrayName[0];
-          result['last_name'] = arrayName[arrayName.length - 1] || '';
+          const [firstName, ...restName] = arrayName;
+          result['first_name'] = firstName;
+          result['last_name'] = restName.join(' ') || '';
         } else if (hubspotKey === 'nameFake') {
             //nothing to do. I add nameFake because the database need to see one value and we dont have this value in the hubspot
         } else if (hubspotData[hubspotKey] !== undefined) {
