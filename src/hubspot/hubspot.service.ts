@@ -177,7 +177,7 @@ export class HubspotService {
             const urlFile = response.results[i].properties.resume_link || '';
             
             
-            /* => function to populate db with the datas from hubspot
+            // => function to populate db with the datas from hubspot
             const candidateData = mapHubspotToDb(response.results[i].properties);
             const userReady = await this.prisma.candidate.findUnique({
                 where: {
@@ -194,7 +194,7 @@ export class HubspotService {
             }else{
                 console.log('===> Candidate already exists:', response.results[i].properties.name);
             }
-            */
+            
             
             /*
             const idFile = extractDriveFileId(urlFile);

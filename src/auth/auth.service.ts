@@ -98,7 +98,7 @@ export class AuthService {
   }
 
 
-  async signIn(data: AuthSignInDto): Promise<string> {
+  async signIn(data: AuthSignInDto): Promise<object> {
     const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000;
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
@@ -141,7 +141,17 @@ export class AuthService {
     if (!session) {
       throw new BadRequestException('Failed to create session');
     }
-    return token;
+    return {
+      statusCode: 200,
+      message: 'User authenticated successfully',
+      token: token,
+      user: {
+        firstName: user.first_name,
+        lastName: user.last_name,
+        email: user.email,
+        role: user.role,
+      },
+    };
   }
 
   async signUp(data: AuthSignUpDto): Promise<AuthSignUpReturnDto> {
