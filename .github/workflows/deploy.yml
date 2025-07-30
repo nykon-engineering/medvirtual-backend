@@ -41,10 +41,11 @@ jobs:
 
       - name: 🔨 Build with Webpack
         run: npx webpack --config webpack.config.js
-
+      
       - name: 📁 Prepare Lambda package
         run: |
-          mkdir lambda-package
+          [ -d lambda-package ] && rm -rf lambda-package
+          mkdir -p lambda-package/prisma
           cp -r dist/* lambda-package/
           cp -r prisma/schema.prisma lambda-package/prisma/
           cp package.prod.json lambda-package/package.json
