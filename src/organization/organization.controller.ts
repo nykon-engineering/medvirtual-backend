@@ -31,9 +31,6 @@ export class OrganizationController {
   }
   //========== // =========
 
-
-  
-
   @Get('')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin')
