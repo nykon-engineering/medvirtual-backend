@@ -45,7 +45,7 @@ jobs:
       - name: 📁 Prepare Lambda package
         run: |
           [ -d lambda-package ] && rm -rf lambda-package
-          mkdir lambda-package
+          mkdir -p lambda-package/prisma
           cp -r dist/* lambda-package/
           cp -r prisma/schema.prisma lambda-package/prisma/
           cp package.prod.json lambda-package/package.json
