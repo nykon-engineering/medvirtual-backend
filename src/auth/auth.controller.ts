@@ -87,21 +87,8 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Invalid Password' })
     @ApiResponse({ status: 400, description: 'Failed to create session' })
     @ApiResponse({ status: 500, description: 'Authentication failed' })
-    async signIn(@Body() data: AuthSignInDto) {
-        const token = await this.authService.signIn(data);
-        const user = await this.user.findByEmail(data.email);
-        if(!user) throw new NotFoundException('user not found')
-        return {
-            statusCode: 200,
-            message: 'User authenticated successfully',
-            token,
-            user: {
-                firstName: user.first_name,
-                lastName: user.last_name,
-                email: user.email,
-                role: user.role
-            } 
-        };
+    async signIn(@Body() data: AuthSignInDto) {        
+        return await this.authService.signIn(data);
     }
 
 

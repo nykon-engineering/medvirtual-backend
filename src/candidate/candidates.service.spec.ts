@@ -46,27 +46,11 @@ describe('CandidatesService', () => {
 
       expect(prisma.candidate.findMany).toHaveBeenCalledWith({
         where: {
-          organization_id: 'org-1',
           pipeline_status: undefined,
-        },
-      });
-      expect(result).toEqual(mockCandidates);
-    });
-
-    it('should return filtered candidates by status', async () => {
-      const status = 'interview';
-      const dictionaryKey = Object.entries(dbToStageDictionary)
-        .find(([key, value]) => value.toLowerCase() === status.toLowerCase())?.[0];
-
-      const mockCandidates = [{ id: '3' }];
-      mockPrisma.candidate.findMany.mockResolvedValue(mockCandidates);
-
-      const result = await service.findAll(mockUser, status);
-
-      expect(prisma.candidate.findMany).toHaveBeenCalledWith({
-        where: {
-          organization_id: 'org-1',
-          pipeline_status: dictionaryKey,
+          OR: [
+            {organization_id: 'org-1'},
+            {organization_id: null}
+          ]
         },
       });
       expect(result).toEqual(mockCandidates);

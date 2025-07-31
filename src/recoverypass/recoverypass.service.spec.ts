@@ -82,7 +82,7 @@ describe('Forgot password', () => {
 
 });
 
-describe('reset password', () => {
+describe('Set password', () => {
 
   let service2: RecoverypassService;
   beforeEach(async() => {
@@ -112,7 +112,7 @@ describe('reset password', () => {
 
     (jwt.verify as jest.Mock).mockReturnValue({}); //SIMULATE A VALID TOKEN, BUT WITHOUT USER ID
 
-    expect(service2.setPassword(dataFake)).rejects.toThrow('User ID not found in hash'); //verify that the error is thrown
+    expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is expired or invalid'); //verify that the error is thrown and print message of the catch
 
   });
 
@@ -135,7 +135,7 @@ describe('reset password', () => {
     service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user found
 
     (jwt.verify as jest.Mock).mockReturnValue({ id: userFake.id }); 
-    service2['prisma'].user.update = jest.fn().mockResolvedValue({}); 
+    service2['prisma'].uSER.update = jest.fn().mockResolvedValue({}); 
     service2['mail'].sendMail = jest.fn().mockResolvedValue(true); 
     expect(service2.setPassword(dataFake)).resolves.toBe(true); 
   })

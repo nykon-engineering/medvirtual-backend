@@ -31,8 +31,7 @@ export class OrganizationController {
   }
   //========== // =========
 
-
-  @Get('getall')
+  @Get('')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin')
   @HttpCode(200)

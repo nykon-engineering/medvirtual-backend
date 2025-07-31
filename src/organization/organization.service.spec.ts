@@ -3,8 +3,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrganizationService } from './organization.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
-import { Organization } from '@prisma/client';
+
 
 describe('OrganizationService', () => {
   let service: OrganizationService;
@@ -20,6 +21,10 @@ describe('OrganizationService', () => {
     },
   };
 
+  const mockAuthService = {
+    inviteUser: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -28,6 +33,7 @@ describe('OrganizationService', () => {
           provide: PrismaService,
           useValue: mockPrismaService,
         },
+        { provide: AuthService, useValue: mockAuthService },
       ],
     }).compile();
 
@@ -85,19 +91,23 @@ describe('OrganizationService', () => {
 
   describe('create', () => {
     it('should create and return a new organization', async () => {
-      const dto = { name: 'Org 1', cellphone: '123', email: 'org1@example.com' };
+      const dto = { name: 'Org 1', cellphone: '123', email: 'org1@example.com', super_admin_email: 'admin@admin' };
       const created = { id: '1', name: dto.name, contact_info: dto.cellphone, email: dto.email };
 
+      mockPrismaService.organization.findUnique.mockResolvedValue(null);
       mockPrismaService.organization.create.mockResolvedValue(created);
+
+      mockAuthService.inviteUser.mockResolvedValue(true);
 
       const result = await service.create(dto);
       expect(result).toEqual(created);
     });
 
+    
     it('should throw BadRequestException if creation fails', async () => {
       mockPrismaService.organization.create.mockRejectedValue(new Error());
 
-      await expect(service.create({ name: '', cellphone: '', email: '' })).rejects.toThrow(BadRequestException);
+      await expect(service.create({ name: '', cellphone: '', email: '', super_admin_email: '' })).rejects.toThrow(BadRequestException);
     });
   });
 

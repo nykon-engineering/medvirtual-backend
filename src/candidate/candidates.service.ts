@@ -22,8 +22,12 @@ export class CandidatesService {
     try{
       const candidates = await this.prisma.candidate.findMany({
         where:{
-          organization_id: organization_id,
-          pipeline_status: statusOnDb ? String(statusOnDb) : undefined
+          pipeline_status: statusOnDb ? String(statusOnDb) : undefined,
+          OR: [
+            { organization_id: organization_id },
+            { organization_id: null } // This allows candidates without an organization_id to be included
+          ]
+          
         }
       })
 
