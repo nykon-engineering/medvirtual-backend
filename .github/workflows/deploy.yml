@@ -1,4 +1,4 @@
-name: Deploy at AWS Lambda
+name: PR at AWS Lambda
 
 on:
   pull_request:

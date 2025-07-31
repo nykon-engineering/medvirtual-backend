@@ -1,4 +1,4 @@
-name: Deploy at AWS Lambda
+name: Push and PR at AWS Lambda
 
 on:
   push:
