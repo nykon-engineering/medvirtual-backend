@@ -1,6 +1,9 @@
 name: Deploy at AWS Lambda
 
 on:
+  push:
+    branches:
+      - dev
   pull_request:
     types: [closed]
     branches:
@@ -8,8 +11,10 @@ on:
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true
+    if: github.ref == 'refs/heads/dev' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+
+    environment: ${{ github.ref == 'refs/heads/dev' && 'dev' || 'prod' }}
 
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -17,68 +22,65 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
-      - name: 🧾 Code Checkout
+      - name: 🧾 Checkout
         uses: actions/checkout@v4
 
       - name: 📦 Install dependencies
         run: npm ci
-      
-      - name: 🔥 Remove Prisma cache (opcional)
-        run: rm -rf node_modules/.cache
 
-      - name: 📦 remove binaries from macOs
-        run: rm -rf node_modules/.prisma
+      - name: 🧹 Clean Prisma cache
+        run: |
+          rm -rf node_modules/.cache
+          rm -rf node_modules/.prisma
 
-      - name: Update binaryTargets for production (Linux)
+      - name: 🔄 Update Prisma binaryTarget
         run: sed -i 's/binaryTargets = \["native"\]/binaryTargets = \["rhel-openssl-1.0.x"\]/' prisma/schema.prisma
 
-      - name: 🧱 Prisma by docker
+      - name: 🧱 Prisma generate (Docker)
         run: docker run --rm -v $(pwd):/app -w /app node:18 npx prisma generate
 
-      - name: 🔨 Build with webpack
-        #run: npm run build:esbuild
+      - name: 🔨 Build with Webpack
         run: npx webpack --config webpack.config.js
-
-          
-
-      - name: 📁 Build lambda-package
+      
+      - name: 📁 Prepare Lambda package
         run: |
-          mkdir lambda-package
+          [ -d lambda-package ] && rm -rf lambda-package
+          mkdir -p lambda-package/prisma
           cp -r dist/* lambda-package/
           cp -r prisma/schema.prisma lambda-package/prisma/
           cp package.prod.json lambda-package/package.json
-          if [ -f .env ]; then cp .env lambda-package/; else echo "⚠️  Arquivo .env não encontrado, ignorando..."; fi
+          [ -f .env ] && cp .env lambda-package/
 
-      - name: 📦 Install just production dependencies
+      - name: 📦 Install production deps
         working-directory: lambda-package
         run: npm install --omit=dev
-      
-      - name: 🧹 Remove arquivos .map
+
+      - name: 🧹 Remove source maps
         run: find lambda-package -name "*.map" -type f -delete
 
-      - name: 📦 Copy prisma binaries
+      - name: 📦 Copy Prisma binaries
         run: |
           mkdir -p lambda-package/node_modules/.prisma
           cp -r node_modules/.prisma/* lambda-package/node_modules/.prisma/
 
-      - name: 📦 Build ZIP files
+      - name: 📦 Create Lambda ZIP
         working-directory: lambda-package
         run: zip -r ../lambda.zip . > /dev/null
 
-      - name: 🚀 Setup AWS CLI
+      - name: 🚀 Configure AWS CLI
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: 🚀 Deploy at AWS Lambda
+      - name: 🚀 Deploy to Lambda
         run: |
-            aws lambda update-function-code \
-              --function-name $LAMBDA_FUNCTION_NAME \
-              --zip-file fileb://lambda.zip \
-              --no-cli-pager \
-              --output text
+          aws lambda update-function-code \
+            --function-name $LAMBDA_FUNCTION_NAME \
+            --zip-file fileb://lambda.zip \
+            --no-cli-pager \
+            --output text
 
       - name: 🧹 Clean temp files
         run: rm -rf lambda-package lambda.zip
