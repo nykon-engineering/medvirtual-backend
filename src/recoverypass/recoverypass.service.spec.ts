@@ -82,7 +82,7 @@ describe('Forgot password', () => {
 
 });
 
-describe('reset password', () => {
+describe('Set password', () => {
 
   let service2: RecoverypassService;
   beforeEach(async() => {
@@ -112,7 +112,7 @@ describe('reset password', () => {
 
     (jwt.verify as jest.Mock).mockReturnValue({}); //SIMULATE A VALID TOKEN, BUT WITHOUT USER ID
 
-    expect(service2.setPassword(dataFake)).rejects.toThrow('User ID not found in hash'); //verify that the error is thrown
+    expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is expired or invalid'); //verify that the error is thrown and print message of the catch
 
   });
 
