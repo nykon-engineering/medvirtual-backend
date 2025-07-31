@@ -1,16 +1,20 @@
 import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { USER } from '@prisma/client';
+import * as path from 'path';
+
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
 import { extractDriveFileId } from '../common/utils/hubspot.util';
 import { GoogledriveService } from '../googledrive/googledrive.service';
+import { TextractService } from '../textract/textract.service';
 
 @Injectable()
 export class CandidatesService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly google: GoogledriveService
+    private readonly google: GoogledriveService,
+    private readonly textract: TextractService
   ){}
 
 
@@ -82,8 +86,11 @@ export class CandidatesService {
     const idFile = extractDriveFileId(candidate.resume_url);
     console.log('idFile:', idFile);
     const pdfName = `${candidate.first_name}_${candidate.last_name}_resume.pdf`;
-    if (idFile) await this.google.downloadFile(idFile, pdfName);
+    const downloadDir = path.resolve(__dirname, '/tmp/downloads');
+    if (idFile) await this.google.downloadFile(idFile, pdfName, downloadDir);
 
+    console.log('File downloaded:', pdfName);
+    const extract = await this.textract.readDocument(path.join(downloadDir, pdfName));
 
 
     console.log(candidate)

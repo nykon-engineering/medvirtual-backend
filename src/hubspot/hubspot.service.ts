@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
+import * as path from 'path';
 
 import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
@@ -200,7 +201,8 @@ export class HubspotService {
             // Function to dowload the file
             const idFile = extractDriveFileId(urlFile);
             console.log('idFile:', idFile);
-            if (idFile) await this.google.downloadFile(idFile, pdfName);
+            const downloadDir = path.resolve(__dirname, '/tmp/downloads');
+            if (idFile) await this.google.downloadFile(idFile, pdfName, downloadDir);
             
 
           }

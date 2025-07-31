@@ -6,10 +6,11 @@ import * as fs from 'fs'
 @Injectable()
 export class TextractService {
 
-    async readDocument (file: string): Promise<any> {
+    async readDocument(file: string): Promise<any> {
         console.log("Reading document:", file);
         const client = new TextractClient({ region: 'us-east-1' });
-        const fileBytes = fs.readFileSync('src/textract/sample.pdf');
+        const fileBytes = fs.readFileSync(file);
+        console.log('File size bytes:', fileBytes.length);
 
         const command = new AnalyzeDocumentCommand({
             Document: {

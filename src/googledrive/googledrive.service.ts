@@ -135,14 +135,12 @@ export class GoogledriveService {
           }
       }
     
-    async downloadFile(fileId: string, filename: string) {
+    async downloadFile(fileId: string, filename: string, downloadDir: string) {
       //console.log('entrou...', fileId, filename);
       const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
       if (!tokens) {
         throw new BadRequestException('Google tokens not found. Please authenticate first.');
       }
-      console.log('TOKEN:', tokens);
-      
       const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
         headers: {
           Authorization: `Bearer ${tokens}`,
@@ -152,10 +150,9 @@ export class GoogledriveService {
         },
         responseType: 'stream',
       });
-      console.log('response:', response);
       
       
-      const downloadDir = path.resolve(__dirname, '/tmp/downloads');
+      
 
       if (!fs.existsSync(downloadDir)) {
         fs.mkdirSync(downloadDir, { recursive: true });
