@@ -1,19 +1,17 @@
-name: Deploy at AWS Lambda (Prod Environment)
+name: Deploy at AWS Lambda (Dev environment) 
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
-      - main
+      - dev
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME_PROD }}
+      LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
       NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
