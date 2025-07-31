@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HubspotService } from './hubspot.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import axios from 'axios';
+import { PrismaService } from '../prisma/prisma.service';
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -30,6 +31,14 @@ const googleMock = {
   downloadFile: jest.fn(),
 }
 
+const prismaMock = {
+  candidate: {
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    create: jest.fn(),
+  },
+};
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -51,7 +60,8 @@ describe('HubspotService => GetCandidates', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [HubspotService,
-        {provide: GoogledriveService, useValue: googleMock}
+        {provide: GoogledriveService, useValue: googleMock},
+        {provide: PrismaService, useValue: prismaMock}
       ],
     }).compile();
 
@@ -94,7 +104,8 @@ describe('HubspotService => changeDataToHubspot', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [HubspotService,
-        {provide: GoogledriveService, useValue: googleMock}
+        {provide: GoogledriveService, useValue: googleMock},
+        {provide: PrismaService, useValue: prismaMock}
       ]
     }).compile();
 

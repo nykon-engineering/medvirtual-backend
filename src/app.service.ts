@@ -6,7 +6,7 @@ import * as path from 'path';
 export class AppService {
   
   getHello(): string {
-    return 'Hello from AppService Updated!!';
+    return 'Hello from AppService Updated 2!!';
   }
 
 }

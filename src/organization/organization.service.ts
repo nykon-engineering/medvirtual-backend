@@ -182,7 +182,6 @@ export class OrganizationService {
       return organization;
 
     } catch(error) {
-      console.log(error);
       throw new BadRequestException('Failed to create organization', error);
     }
   }

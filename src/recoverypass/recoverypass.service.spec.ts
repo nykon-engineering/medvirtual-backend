@@ -135,7 +135,7 @@ describe('reset password', () => {
     service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user found
 
     (jwt.verify as jest.Mock).mockReturnValue({ id: userFake.id }); 
-    service2['prisma'].user.update = jest.fn().mockResolvedValue({}); 
+    service2['prisma'].uSER.update = jest.fn().mockResolvedValue({}); 
     service2['mail'].sendMail = jest.fn().mockResolvedValue(true); 
     expect(service2.setPassword(dataFake)).resolves.toBe(true); 
   })

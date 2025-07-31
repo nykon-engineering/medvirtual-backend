@@ -5,7 +5,6 @@ import axios from 'axios';
 
 import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
-import { GoogledriveService } from '../googledrive/googledrive.service';
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,7 +15,6 @@ export class HubspotService {
 
     private hubspotClient: Client;
     constructor(
-      private readonly google: GoogledriveService,
       private readonly prisma: PrismaService
     ) {
         this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
