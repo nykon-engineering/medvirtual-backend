@@ -42,8 +42,9 @@ export class GoogledriveService {
       }
       console.log('code:', code);
       const { tokens } = await this.oauth2Client.getToken(code);
-      this.oauth2Client.setCredentials(tokens);
       console.log('tokens:', tokens);
+      this.oauth2Client.setCredentials(tokens);
+      
       if (!tokens){
           throw new BadRequestException('Failed to retrieve tokens from Google.');
       }
