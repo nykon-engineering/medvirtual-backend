@@ -40,6 +40,7 @@ export class GoogledriveService {
       if (!code) {
         throw new BadRequestException('Authorization code is required.');
       }
+      console.log('code:', code);
       const { tokens } = await this.oauth2Client.getToken(code);
       this.oauth2Client.setCredentials(tokens);
       console.log('tokens:', tokens);

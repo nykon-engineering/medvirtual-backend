@@ -8,6 +8,7 @@ import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictio
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { GoogledriveService } from '../googledrive/googledrive.service';
 
 
 @Injectable()
@@ -15,7 +16,8 @@ export class HubspotService {
 
     private hubspotClient: Client;
     constructor(
-      private readonly prisma: PrismaService
+      private readonly prisma: PrismaService,
+      private readonly google: GoogledriveService
     ) {
         this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
     }
@@ -175,7 +177,7 @@ export class HubspotService {
             const urlFile = response.results[i].properties.resume_link || '';
             
             
-            // => function to populate db with the datas from hubspot
+            /* => function to populate db with the datas from hubspot
             const candidateData = mapHubspotToDb(response.results[i].properties);
             const userReady = await this.prisma.candidate.findUnique({
                 where: {
@@ -192,13 +194,14 @@ export class HubspotService {
             }else{
                 console.log('===> Candidate already exists:', response.results[i].properties.name);
             }
+                */
             
             
-            /*
+            // Function to dowload the file
             const idFile = extractDriveFileId(urlFile);
             console.log('idFile:', idFile);
             if (idFile) await this.google.downloadFile(idFile, pdfName);
-            */
+            
 
           }
           return response;

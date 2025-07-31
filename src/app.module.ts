@@ -12,6 +12,7 @@ import { HubspotModule } from './hubspot/hubspot.module';
 import { GoogledriveModule } from './googledrive/googledrive.module';
 import { OrganizationModule } from './organization/organization.module';
 import { CandidatesModule } from './candidate/candidates.module';
+import { TextractModule } from './textract/textract.module';
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { CandidatesModule } from './candidate/candidates.module';
     HubspotModule,
     GoogledriveModule,
     OrganizationModule,
-    CandidatesModule
+    CandidatesModule,
+    TextractModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

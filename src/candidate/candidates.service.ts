@@ -1,13 +1,16 @@
-import { BadGatewayException, BadRequestException, Injectable } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { USER } from '@prisma/client';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
+import { extractDriveFileId } from '../common/utils/hubspot.util';
+import { GoogledriveService } from '../googledrive/googledrive.service';
 
 @Injectable()
 export class CandidatesService {
 
   constructor(
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly google: GoogledriveService
   ){}
 
 
@@ -57,5 +60,33 @@ export class CandidatesService {
     }
   }
 
+  async processData(id: string){
+
+    if (!id) throw new BadRequestException('Candidate ID is required');
+
+    //get url resume from db
+    //download resume to temp files
+    //send to textract service
+    //call openAi
+    //fill database with datas from openAI
+
+
+    const candidate = await this.prisma.candidate.findUnique({
+      where: {
+        id: id
+      }
+    });
+    if(!candidate) throw new NotFoundException('Candidate not found');
+    if(!candidate.resume_url) throw new BadRequestException('Candidate resume URL is empty');
+
+    const idFile = extractDriveFileId(candidate.resume_url);
+    console.log('idFile:', idFile);
+    const pdfName = `${candidate.first_name}_${candidate.last_name}_resume.pdf`;
+    if (idFile) await this.google.downloadFile(idFile, pdfName);
+
+
+
+    console.log(candidate)
+  } 
  
 }

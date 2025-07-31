@@ -25,6 +25,7 @@
     "madge": "madge --ts-config tsconfig.json src"
   },
   "dependencies": {
+    "@aws-sdk/client-textract": "^3.857.0",
     "@codegenie/serverless-express": "^4.16.0",
     "@hubspot/api-client": "^13.0.0",
     "@nestjs/common": "^11.0.1",
