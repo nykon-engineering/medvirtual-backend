@@ -1,32 +1,41 @@
 import { Injectable } from '@nestjs/common';
-
-import { TextractClient, AnalyzeDocumentCommand } from "@aws-sdk/client-textract";
-import * as fs from 'fs'
+import {Textract } from "@aws-sdk/client-textract";
 
 @Injectable()
 export class TextractService {
+    private textract = new Textract();
 
-    async readDocument(file: string): Promise<any> {
-        console.log("Reading document:", file);
-        const client = new TextractClient({ region: 'us-east-1' });
-        const fileBytes = fs.readFileSync(file);
-        console.log('File size bytes:', fileBytes.length);
-
-        const command = new AnalyzeDocumentCommand({
-            Document: {
-                Bytes: fileBytes
+    async startTextracktJob(file: string): Promise<string> {
+        const response = await this.textract.startDocumentTextDetection({
+            DocumentLocation:{
+                S3Object:{
+                    Bucket: 'medvirtual-documents',
+                    Name: file,
+                },
             },
-            FeatureTypes: ['TABLES', 'FORMS']
-        });
+        })
+        if (!response.JobId) {
+            throw new Error('Failed to start Textract job');
+        }
+        return response.JobId;
+    }
 
-        try {
-            const response = await client.send(command);
-            console.log("Document analyzed successfully:", response);
-            return response;
-        } catch (error) {
-            console.error("Error analyzing document:", error);
-            throw new Error("Failed to analyze document");
+    async getTextractResult(jobId: string): Promise<any> {
+        let status = 'IN_PROGRESS';
+        let attempts = 0;
+        const maxAttempts = 30; 
+
+        while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
+           const { JobStatus} = await this.textract.getDocumentTextDetection({ JobId: jobId });
+           if ( JobStatus === 'SUCCEEDED') break;
+
+           await new Promise(resolve => setTimeout(resolve, 5000)); 
+           attempts++;
         }
 
+        const result = await this.textract.getDocumentTextDetection({ JobId: jobId });
+        const lines = result.Blocks?.filter(b => b.BlockType === 'LINE').map(b => b.Text) ?? [];
+
+        return lines.join('\n');
     }
 }

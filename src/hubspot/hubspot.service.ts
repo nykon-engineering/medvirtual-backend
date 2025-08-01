@@ -46,7 +46,7 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
-        //console.log('Received data:', data);
+        console.log('Received data:', data);
         const orderedData = data.sort((a,b)=>{
             if (a.subscriptionType < b.subscriptionType) return -1;
             if (a.subscriptionType > b.subscriptionType) return 1;

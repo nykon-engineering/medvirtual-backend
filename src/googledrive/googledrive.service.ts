@@ -159,8 +159,6 @@ export class GoogledriveService {
       }
 
       const destinationPath = path.resolve(downloadDir, filename);
-      console.log('destinationPath:', destinationPath);
-      //const destinationPath = `/tmp/${filename}`; //save in the /tmp directory because we're working on the aws lambda
   
       return new Promise((resolve, reject) => {
         const dest = fs.createWriteStream(destinationPath);
