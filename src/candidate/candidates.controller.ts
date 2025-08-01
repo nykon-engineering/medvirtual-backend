@@ -31,7 +31,8 @@ export class CandidatesController {
   @ApiProperty({ description: 'Get a specific candidate by ID' })
   @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
   @ApiResponse({ status: 200, description: 'Candidate retrieved successfully' })
-  @ApiResponse({ status: 400, description: 'Failed to fetch candidate' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @ApiResponse({ status: 401, description: 'Candidate not found' })
   @UseGuards(AuthGuard)
   async findOne(@Param('id') id: string, @CurrentUser() user: USER) {
     const result = await this.candidatesService.findOne(id, user);

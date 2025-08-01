@@ -54,18 +54,17 @@ export class CandidatesService {
 
   async findOne(id: string, user: USER) {
     const {organization_id} = user;
-
-    try{
-      const candidate = await this.prisma.candidate.findUnique({
-        where: {
-          id: id,
-          organization_id: organization_id
-        }
-      });
-      return candidate;
-    }catch(error){
-      throw new BadGatewayException('Failed to fetch candidate');
-    }
+    if (!id) throw new BadRequestException('Candidate ID is required');
+  
+    const candidate = await this.prisma.candidate.findUnique({
+      where: {
+        id: id,
+        organization_id: organization_id
+      }
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+    return candidate;
+    
   }
 
   async processData(id: string){
