@@ -40,9 +40,11 @@ export class GoogledriveService {
       if (!code) {
         throw new BadRequestException('Authorization code is required.');
       }
+      
       const { tokens } = await this.oauth2Client.getToken(code);
+      
       this.oauth2Client.setCredentials(tokens);
-      console.log('tokens:', tokens);
+      
       if (!tokens){
           throw new BadRequestException('Failed to retrieve tokens from Google.');
       }
@@ -133,13 +135,12 @@ export class GoogledriveService {
           }
       }
     
-    async downloadFile(fileId: string, filename: string) {
-      console.log('entrou...', fileId, filename);
+    async downloadFile(fileId: string, filename: string, downloadDir: string) {
+      //console.log('entrou...', fileId, filename);
       const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
       if (!tokens) {
         throw new BadRequestException('Google tokens not found. Please authenticate first.');
       }
-  
       const response = await axios.get(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
         headers: {
           Authorization: `Bearer ${tokens}`,
@@ -149,9 +150,15 @@ export class GoogledriveService {
         },
         responseType: 'stream',
       });
+      
+      
+      
 
-      const destinationPath = path.resolve(__dirname, 'downloads', filename);
-      //const destinationPath = `/tmp/${filename}`; //save in the /tmp directory because we're working on the aws lambda
+      if (!fs.existsSync(downloadDir)) {
+        fs.mkdirSync(downloadDir, { recursive: true });
+      }
+
+      const destinationPath = path.resolve(downloadDir, filename);
   
       return new Promise((resolve, reject) => {
         const dest = fs.createWriteStream(destinationPath);

@@ -12,6 +12,9 @@ import { HubspotModule } from './hubspot/hubspot.module';
 import { GoogledriveModule } from './googledrive/googledrive.module';
 import { OrganizationModule } from './organization/organization.module';
 import { CandidatesModule } from './candidate/candidates.module';
+import { TextractModule } from './textract/textract.module';
+import { S3Module } from './s3/s3.module';
+import { OpenaiModule } from './openai/openai.module';
 
 @Module({
   imports: [
@@ -26,7 +29,10 @@ import { CandidatesModule } from './candidate/candidates.module';
     HubspotModule,
     GoogledriveModule,
     OrganizationModule,
-    CandidatesModule
+    CandidatesModule,
+    TextractModule,
+    S3Module,
+    OpenaiModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

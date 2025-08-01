@@ -13,7 +13,7 @@
     "build:esbuild": "node esbuild.config.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "dev": "npm run prisma:clean && npm install && npm run prisma:generate && npx nodemon",
+    "dev": "npm test && npm run prisma:clean && npm install && npm run prisma:generate && npx nodemon",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
@@ -25,6 +25,9 @@
     "madge": "madge --ts-config tsconfig.json src"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.858.0",
+    "@aws-sdk/client-textract": "^3.857.0",
+    "@aws-sdk/s3-request-presigner": "^3.858.0",
     "@codegenie/serverless-express": "^4.16.0",
     "@hubspot/api-client": "^13.0.0",
     "@nestjs/common": "^11.0.1",
@@ -45,6 +48,8 @@
     "class-validator": "^0.14.2",
     "google-auth-library": "^10.1.0",
     "jsonwebtoken": "^9.0.2",
+    "mime-types": "^3.0.1",
+    "openai": "^5.11.0",
     "reflect-metadata": "^0.2.2",
     "resend": "^4.6.0",
     "rxjs": "^7.8.1",

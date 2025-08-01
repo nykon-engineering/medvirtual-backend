@@ -2,12 +2,14 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
+import * as path from 'path';
 
 import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { GoogledriveService } from '../googledrive/googledrive.service';
 
 
 @Injectable()
@@ -15,7 +17,8 @@ export class HubspotService {
 
     private hubspotClient: Client;
     constructor(
-      private readonly prisma: PrismaService
+      private readonly prisma: PrismaService,
+      private readonly google: GoogledriveService
     ) {
         this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
     }
@@ -43,7 +46,7 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
-        //console.log('Received data:', data);
+        console.log('Received data:', data);
         const orderedData = data.sort((a,b)=>{
             if (a.subscriptionType < b.subscriptionType) return -1;
             if (a.subscriptionType > b.subscriptionType) return 1;
@@ -175,7 +178,7 @@ export class HubspotService {
             const urlFile = response.results[i].properties.resume_link || '';
             
             
-            // => function to populate db with the datas from hubspot
+            /* => function to populate db with the datas from hubspot
             const candidateData = mapHubspotToDb(response.results[i].properties);
             const userReady = await this.prisma.candidate.findUnique({
                 where: {
@@ -192,13 +195,15 @@ export class HubspotService {
             }else{
                 console.log('===> Candidate already exists:', response.results[i].properties.name);
             }
+                */
             
             
-            /*
+            // Function to dowload the file
             const idFile = extractDriveFileId(urlFile);
             console.log('idFile:', idFile);
-            if (idFile) await this.google.downloadFile(idFile, pdfName);
-            */
+            const downloadDir = path.resolve(__dirname, '/tmp/downloads');
+            if (idFile) await this.google.downloadFile(idFile, pdfName, downloadDir);
+            
 
           }
           return response;

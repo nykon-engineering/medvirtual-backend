@@ -1,20 +1,44 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadGatewayException } from '@nestjs/common';
+
 import { CandidatesService } from './candidates.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BadGatewayException } from '@nestjs/common';
-import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { TextractService } from '../textract/textract.service';
+import { S3Service } from '../s3/s3.service';
+import { GoogledriveService } from '../googledrive/googledrive.service';
+import { OpenaiService } from '../openai/openai.service';
+
+const mockPrisma = {
+  candidate: {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+  },
+};
+
+const textractMock = {
+  startTextractJob: jest.fn(),
+  getTextractResult: jest.fn(),
+}
+
+const s3Mock = {
+  uploadFile: jest.fn(),
+  getFile: jest.fn(),
+  deleteFile: jest.fn(),
+}
+
+const googleMock = {
+  downloadFile: jest.fn(),
+}
+
+const openAIMock = {
+  organizeText: jest.fn(),
+}
 
 describe('CandidatesService', () => {
   let service: CandidatesService;
   let prisma: PrismaService;
 
-  const mockPrisma = {
-    candidate: {
-      findMany: jest.fn(),
-      findUnique: jest.fn(),
-    },
-  };
-
+  
   const mockUser = {
     id: 'user-1',
     organization_id: 'org-1',
@@ -24,10 +48,11 @@ describe('CandidatesService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CandidatesService,
-        {
-          provide: PrismaService,
-          useValue: mockPrisma,
-        },
+        { provide: PrismaService, useValue: mockPrisma,},
+        { provide: TextractService, useValue: textractMock},
+        { provide: S3Service, useValue: s3Mock },
+        { provide: GoogledriveService, useValue: googleMock },
+        { provide: OpenaiService, useValue: openAIMock },
       ],
     }).compile();
 
