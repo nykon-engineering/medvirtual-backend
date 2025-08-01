@@ -1,13 +1,282 @@
-
 generator client {
-  provider = "prisma-client-js"
-  //binaryTargets = ["rhel-openssl-1.0.x"] //For run in AWS lambda
-  binaryTargets = ["native"] 
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model USER {
+  id                    String              @id @default(uuid())
+  email                 String              @unique
+  organization_id       String?
+  organization_name     String
+  first_name            String
+  last_name             String
+  phone                 String
+  avatar                String
+  job_title             String
+  role                  String
+  workos_id             String
+  password              String              @db.VarChar(255)
+  authentication_method String
+  status                String
+  verified              Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  email_invitations     EmailInvitation[]
+  email_verifications   EmailVerification[]
+  sessions              Session[]
+  tickets               Ticket[]
+  organization          Organization?       @relation(fields: [organization_id], references: [id])
+
+  @@index([email], map: "idx_users_email")
+  @@index([role], map: "idx_users_role")
+  @@index([organization_id], map: "idx_users_organization_id")
+  @@index([status], map: "idx_users_status")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  user      USER     @relation(fields: [userId], references: [id])
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  verified  Boolean  @default(false)
+  user      USER     @relation(fields: [userId], references: [id])
+}
+
+model EmailInvitation {
+  id         String   @id @default(uuid())
+  userId     String
+  code       String
+  email_from String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  verified   Boolean  @default(false)
+  user       USER     @relation(fields: [userId], references: [id])
+}
+
+model Organization {
+  id                      String                  @id @default(uuid())
+  name                    String
+  email                   String                  @unique
+  type                    String?
+  hubspot_id              String?                 @unique
+  status                  UserStatus              @default(active)
+  address                 String?
+  contact_info            String?
+  specialties             String?
+  createdAt               DateTime                @default(now())
+  hire_requests           HireRequest[]
+  organization_candidates OrganizationCandidate[]
+  users                   USER[]
+
+  @@index([hubspot_id], map: "idx_organizations_hubspot_id")
+  @@index([status], map: "idx_organizations_status")
+  @@index([name], map: "idx_organizations_name")
+}
+
+model Candidate {
+  id                     String                  @id @default(uuid())
+  hubspot_id             String                  @unique
+  email                  String
+  first_name             String
+  last_name              String
+  resume_url             String?
+  about_me               String?
+  processed_resume_data  Json?
+  processing_status      ProcessingStatus        @default(pending)
+  processing_error       String?
+  processed_at           DateTime?
+  createdAt              DateTime                @default(now())
+  hourly_pay_rate        Decimal?
+  organization_id        String?
+  pipeline_status        String                  @default("available")
+  years_of_experience    Int?
+  educations             CandidateEducation[]
+  experiences            CandidateExperience[]
+  skills                 CandidateSkill[]
+  selectedInInterviews   Interview[]             @relation("SelectedCandidate")
+  organizationCandidates OrganizationCandidate[]
+  panelCandidates        PanelCandidate[]
+}
+
+model OrganizationCandidate {
+  id              String       @id @default(uuid())
+  organization_id String
+  candidate_id    String
+  pipeline_status String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  candidate       Candidate    @relation(fields: [candidate_id], references: [id])
+  organization    Organization @relation(fields: [organization_id], references: [id])
+}
+
+model CandidateSkill {
+  id                String            @id @default(uuid())
+  candidate_id      String
+  skill_name        String
+  proficiency_level ProficiencyLevel?
+  skill_type        SkillType         @default(technical)
+  createdAt         DateTime          @default(now())
+  candidate         Candidate         @relation(fields: [candidate_id], references: [id])
+
+  @@unique([candidate_id, skill_name, skill_type], name: "idx_candidate_skills_unique")
+  @@index([candidate_id], map: "idx_candidate_skills_candidate_id")
+  @@index([skill_name], map: "idx_candidate_skills_skill_name")
+  @@index([skill_type], map: "idx_candidate_skills_skill_type")
+}
+
+model CandidateExperience {
+  id               String    @id @default(uuid())
+  candidate_id     String
+  company          String
+  position         String
+  duration         String?
+  responsibilities String?
+  createdAt        DateTime  @default(now())
+  candidate        Candidate @relation(fields: [candidate_id], references: [id])
+
+  @@index([candidate_id], map: "idx_candidate_experience_candidate_id")
+  @@index([company], map: "idx_candidate_experience_company")
+  @@index([position], map: "idx_candidate_experience_position")
+}
+
+model CandidateEducation {
+  id           String    @id @default(uuid())
+  candidate_id String
+  degree       String
+  institution  String
+  year         String?
+  createdAt    DateTime  @default(now())
+  candidate    Candidate @relation(fields: [candidate_id], references: [id])
+
+  @@index([candidate_id], map: "idx_candidate_education_candidate_id")
+  @@index([institution], map: "idx_candidate_education_institution")
+  @@index([year], map: "idx_candidate_education_year")
+}
+
+model HireRequest {
+  id           String             @id @default(uuid())
+  org_id       String
+  title        String
+  description  String?
+  requirements String?
+  status       HireRequestStatus  @default(new_request)
+  priority     Priority           @default(medium)
+  createdAt    DateTime           @default(now())
+  panels       CandidatePanel[]
+  organization Organization       @relation(fields: [org_id], references: [id])
+  skills       HireRequestSkill[]
+
+  @@index([org_id], map: "idx_hire_requests_org_id")
+  @@index([status], map: "idx_hire_requests_status")
+  @@index([priority], map: "idx_hire_requests_priority")
+  @@index([createdAt], map: "idx_hire_requests_createdAt")
+}
+
+model HireRequestSkill {
+  id              String           @id @default(uuid())
+  hire_request_id String
+  skill_name      String
+  required_level  ProficiencyLevel @default(intermediate)
+  createdAt       DateTime         @default(now())
+  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id])
+
+  @@unique([hire_request_id, skill_name], name: "idx_hire_request_skills_unique")
+  @@index([hire_request_id], map: "idx_hire_request_skills_hire_request_id")
+  @@index([skill_name], map: "idx_hire_request_skills_skill_name")
+}
+
+model CandidatePanel {
+  id              String           @id @default(uuid())
+  hire_request_id String
+  status          PanelStatus      @default(created)
+  scheduled_date  DateTime?
+  createdAt       DateTime         @default(now())
+  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id])
+  interviews      Interview[]
+  panelCandidates PanelCandidate[]
+
+  @@index([hire_request_id], map: "idx_candidate_panels_hire_request_id")
+  @@index([status], map: "idx_candidate_panels_status")
+  @@index([scheduled_date], map: "idx_candidate_panels_scheduled_date")
+}
+
+model PanelCandidate {
+  id           String               @id @default(uuid())
+  panel_id     String
+  candidate_id String
+  status       PanelCandidateStatus @default(selected)
+  createdAt    DateTime             @default(now())
+  candidate    Candidate            @relation(fields: [candidate_id], references: [id])
+  panel        CandidatePanel       @relation(fields: [panel_id], references: [id])
+
+  @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
+  @@index([panel_id], map: "idx_panel_candidates_panel_id")
+  @@index([candidate_id], map: "idx_panel_candidates_candidate_id")
+  @@index([status], map: "idx_panel_candidates_status")
+}
+
+model Interview {
+  id                    String          @id @default(uuid())
+  panel_id              String
+  scheduled_date        DateTime
+  duration              Int
+  status                InterviewStatus @default(scheduled)
+  notes                 String?
+  selected_candidate_id String?
+  decision_date         DateTime?
+  expires_at            DateTime?
+  createdAt             DateTime        @default(now())
+  panel                 CandidatePanel  @relation(fields: [panel_id], references: [id])
+  selectedCandidate     Candidate?      @relation("SelectedCandidate", fields: [selected_candidate_id], references: [id])
+
+  @@index([panel_id], map: "idx_interviews_panel_id")
+  @@index([scheduled_date], map: "idx_interviews_scheduled_date")
+  @@index([status], map: "idx_interviews_status")
+  @@index([selected_candidate_id], map: "idx_interviews_selected_candidate_id")
+  @@index([expires_at], map: "idx_interviews_expires_at")
+}
+
+model Ticket {
+  id          String       @id @default(uuid())
+  user_id     String
+  type        TicketType
+  title       String
+  description String
+  status      TicketStatus @default(open)
+  createdAt   DateTime     @default(now())
+  user        USER         @relation(fields: [user_id], references: [id])
+
+  @@index([user_id], map: "idx_tickets_user_id")
+  @@index([type], map: "idx_tickets_type")
+  @@index([status], map: "idx_tickets_status")
+  @@index([createdAt], map: "idx_tickets_createdAt")
+}
+
+model GoogleToken {
+  id           String   @id @default(uuid())
+  accessToken  String
+  refreshToken String
+  scope        String?
+  tokenType    String?
+  expiryDate   BigInt?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 enum Role {
@@ -106,279 +375,3 @@ enum TicketStatus {
   resolved
   closed
 }
-
-model USER {
-  id                String   @id @default(uuid())
-  email             String   @unique
-  organization_id   String?
-  organization_name String
-  organization      Organization? @relation(fields: [organization_id], references: [id])
-  first_name        String
-  last_name         String
-  phone             String
-  avatar            String
-  job_title         String
-  role              String
-  workos_id         String  
-  password          String @db.VarChar(255)
-  authentication_method String
-  status            String
-  sessions Session[]
-  email_verifications EmailVerification[]
-  email_invitations EmailInvitation[]
-  verified          Boolean  @default(false)
-  tickets           Ticket[]
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([email], name: "idx_users_email")
-  @@index([role], name: "idx_users_role")
-  @@index([organization_id], name: "idx_users_organization_id")
-  @@index([status], name: "idx_users_status")
-}
-
-model Session {
-  id         String   @id @default(uuid())
-  userId     String
-  user       USER     @relation(fields: [userId], references: [id])
-  token      String
-  createdAt  DateTime @default(now())
-  expiresAt  DateTime
-  isRevoked  Boolean  @default(false)
-}
-
-model EmailVerification {
-  id         String   @id @default(uuid())
-  userId     String
-  user       USER     @relation(fields: [userId], references: [id])
-  code       String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  verified   Boolean  @default(false)
-}
-
-model EmailInvitation {
-  id         String   @id @default(uuid())
-  userId     String
-  user       USER     @relation(fields: [userId], references: [id])
-  code       String
-  email_from String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  verified   Boolean  @default(false)
-}
-
-model Organization {
-  id            String      @id @default(uuid())
-  name          String
-  email         String      @unique
-  type          String?
-  hubspot_id    String?     @unique
-  status        UserStatus  @default(active)
-  address       String?
-  contact_info  String?
-  specialties   String?
-  users         USER[]
-  hire_requests  HireRequest[]
-  createdAt    DateTime    @default(now())
-  organization_candidates OrganizationCandidate[]
-
-  @@index([hubspot_id], name: "idx_organizations_hubspot_id")
-  @@index([status], name: "idx_organizations_status")
-  @@index([name], name: "idx_organizations_name")
-}
-
-model Candidate {
-  id                    String               @id @default(uuid())
-  hubspot_id            String               @unique
-  email                 String
-  first_name            String
-  last_name             String
-  pipeline_status       String               @default("available")
-  hourly_pay_rate       Decimal?
-  resume_url            String?
-  years_of_experience   Int?
-  about_me              String?
-  organization_id       String?
-  processed_resume_data Json?
-  processing_status     ProcessingStatus     @default(pending)
-  processing_error      String?
-  processed_at          DateTime?
-  createdAt            DateTime             @default(now())
-  skills                CandidateSkill[]
-  experiences           CandidateExperience[]
-  educations            CandidateEducation[]
-  panelCandidates       PanelCandidate[]
-  selectedInInterviews  Interview[]          @relation("SelectedCandidate")
-  organizationCandidates OrganizationCandidate[]
-}
-
-model OrganizationCandidate {
-  id               String      @id @default(uuid())
-  organization     Organization @relation(fields: [organization_id], references: [id])
-  organization_id  String
-
-  candidate        Candidate    @relation(fields: [candidate_id], references: [id])
-  candidate_id     String
-
-  pipeline_status   String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-}
-
-
-model CandidateSkill {
-  id               String         @id @default(uuid())
-  candidate_id     String
-  skill_name       String
-  proficiency_level ProficiencyLevel?
-  skill_type       SkillType      @default(technical)
-  createdAt       DateTime       @default(now())
-  candidate        Candidate      @relation(fields: [candidate_id], references: [id])
-
-  @@index([candidate_id], name: "idx_candidate_skills_candidate_id")
-  @@index([skill_name], name: "idx_candidate_skills_skill_name")
-  @@index([skill_type], name: "idx_candidate_skills_skill_type")
-  @@unique([candidate_id, skill_name, skill_type], name: "idx_candidate_skills_unique")
-}
-
-model CandidateExperience {
-  id              String     @id @default(uuid())
-  candidate_id    String
-  company         String
-  position        String
-  duration        String?
-  responsibilities String?
-  createdAt      DateTime   @default(now())
-  candidate       Candidate  @relation(fields: [candidate_id], references: [id])
-
-  @@index([candidate_id], name: "idx_candidate_experience_candidate_id")
-  @@index([company], name: "idx_candidate_experience_company")
-  @@index([position], name: "idx_candidate_experience_position")
-}
-
-model CandidateEducation {
-  id            String     @id @default(uuid())
-  candidate_id  String
-  degree        String
-  institution   String
-  year          String?
-  createdAt    DateTime   @default(now())
-  candidate     Candidate  @relation(fields: [candidate_id], references: [id])
-
-  @@index([candidate_id], name: "idx_candidate_education_candidate_id")
-  @@index([institution], name: "idx_candidate_education_institution")
-  @@index([year], name: "idx_candidate_education_year")
-}
-
-model HireRequest {
-  id          String         @id @default(uuid())
-  org_id      String
-  title       String
-  description String?
-  requirements String?
-  status      HireRequestStatus @default(new_request)
-  priority    Priority       @default(medium)
-  createdAt  DateTime       @default(now())
-  organization Organization @relation(fields: [org_id], references: [id])
-  skills      HireRequestSkill[]
-  panels      CandidatePanel[]
-
-  @@index([org_id], name: "idx_hire_requests_org_id")
-  @@index([status], name: "idx_hire_requests_status")
-  @@index([priority], name: "idx_hire_requests_priority")
-  @@index([createdAt], name: "idx_hire_requests_createdAt")
-}
-
-model HireRequestSkill {
-  id              String     @id @default(uuid())
-  hire_request_id String
-  skill_name      String
-  required_level  ProficiencyLevel @default(intermediate)
-  createdAt      DateTime   @default(now())
-  hireRequest     HireRequest @relation(fields: [hire_request_id], references: [id])
-
-  @@index([hire_request_id], name: "idx_hire_request_skills_hire_request_id")
-  @@index([skill_name], name: "idx_hire_request_skills_skill_name")
-  @@unique([hire_request_id, skill_name], name: "idx_hire_request_skills_unique")
-}
-
-model CandidatePanel {
-  id              String        @id @default(uuid())
-  hire_request_id String
-  status          PanelStatus   @default(created)
-  scheduled_date  DateTime?
-  createdAt      DateTime      @default(now())
-  hireRequest     HireRequest   @relation(fields: [hire_request_id], references: [id])
-  panelCandidates PanelCandidate[]
-  interviews      Interview[]
-
-  @@index([hire_request_id], name: "idx_candidate_panels_hire_request_id")
-  @@index([status], name: "idx_candidate_panels_status")
-  @@index([scheduled_date], name: "idx_candidate_panels_scheduled_date")
-}
-
-model PanelCandidate {
-  id           String               @id @default(uuid())
-  panel_id     String
-  candidate_id String
-  status       PanelCandidateStatus @default(selected)
-  createdAt   DateTime             @default(now())
-  panel        CandidatePanel       @relation(fields: [panel_id], references: [id])
-  candidate    Candidate            @relation(fields: [candidate_id], references: [id])
-
-  @@index([panel_id], name: "idx_panel_candidates_panel_id")
-  @@index([candidate_id], name: "idx_panel_candidates_candidate_id")
-  @@index([status], name: "idx_panel_candidates_status")
-  @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
-}
-
-model Interview {
-  id                    String          @id @default(uuid())
-  panel_id              String
-  scheduled_date        DateTime
-  duration              Int
-  status                InterviewStatus @default(scheduled)
-  notes                 String?
-  selected_candidate_id String?
-  decision_date         DateTime?
-  expires_at            DateTime?
-  createdAt            DateTime        @default(now())
-  panel                 CandidatePanel  @relation(fields: [panel_id], references: [id])
-  selectedCandidate     Candidate?      @relation("SelectedCandidate", fields: [selected_candidate_id], references: [id])
-
-  @@index([panel_id], name: "idx_interviews_panel_id")
-  @@index([scheduled_date], name: "idx_interviews_scheduled_date")
-  @@index([status], name: "idx_interviews_status")
-  @@index([selected_candidate_id], name: "idx_interviews_selected_candidate_id")
-  @@index([expires_at], name: "idx_interviews_expires_at")
-}
-
-model Ticket {
-  id          String       @id @default(uuid())
-  user_id     String
-  type        TicketType
-  title       String
-  description String
-  status      TicketStatus @default(open)
-  createdAt  DateTime     @default(now())
-  user        USER         @relation(fields: [user_id], references: [id])
-
-  @@index([user_id], name: "idx_tickets_user_id")
-  @@index([type], name: "idx_tickets_type")
-  @@index([status], name: "idx_tickets_status")
-  @@index([createdAt], name: "idx_tickets_createdAt")
-}
-
-
-model GoogleToken {
-  id            String   @id @default(uuid())
-  accessToken   String
-  refreshToken  String
-  scope         String?
-  tokenType     String?
-  expiryDate    BigInt?   // timestamp em milissegundos
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-

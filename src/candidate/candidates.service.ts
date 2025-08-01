@@ -81,8 +81,7 @@ export class CandidatesService {
   }
 
   async updateFromJson(id: string, jsonData: any) {
-
-
+    //create function to get datas and populate different tables
   }
 
   async processData(id: string){
