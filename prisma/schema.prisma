@@ -30,6 +30,12 @@ enum CandidateStatus {
 enum ProcessingStatus {
   pending
   processing
+  processing_downloadFile
+  processing_uploadFile
+  processing_extractData
+  processing_extractText
+  processing_organizeData
+  processing_updateCandidate
   completed
   failed
 }

@@ -41,6 +41,13 @@ export class CandidatesService {
           
         }
       })
+      //change pipeline_status to name
+      candidates.forEach(candidate => {
+        if (candidate.pipeline_status) {
+          const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
+          candidate.pipeline_status = stageName || 'Unknown Stage';
+        }
+      });
 
       return candidates;
     }catch(error){
@@ -63,8 +70,19 @@ export class CandidatesService {
       }
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
+
+    //change pipeline_status to name
+    if (candidate.pipeline_status) {
+      const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
+      candidate.pipeline_status = stageName || 'Unknown Stage';
+    }
     return candidate;
     
+  }
+
+  async updateFromJson(id: string, jsonData: any) {
+
+
   }
 
   async processData(id: string){
@@ -92,22 +110,74 @@ export class CandidatesService {
 
     const pdfName = `${candidate.first_name}_${candidate.last_name}_resume.pdf`;
     const downloadDir = path.resolve(__dirname, '/tmp/downloads');
+
+
+    //processing_downloadFile
+    await this.prisma.candidate.update({
+      where: { id: id },
+      data: { processing_status: 'processing_downloadFile' }
+    })
     if (idFile) await this.google.downloadFile(idFile, pdfName, downloadDir);
     console.log('File downloaded by google oAuth:', pdfName);
-    
+
+
+    //processing_uploadFile
+    await this.prisma.candidate.update({
+      where: { id: id },
+      data: { processing_status: 'processing_uploadFile' }
+    })
     const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
     console.log('File uploaded to S3:', bucketFile);
 
+    //processing_extractData
+    await this.prisma.candidate.update({
+      where: { id: id },
+      data: { processing_status: 'processing_extractData' }
+    })
     const jobId = await this.textract.startTextracktJob(bucketFile);
     console.log('Textract job started with ID:', jobId);
 
+    //processing_extractText
+    await this.prisma.candidate.update({
+      where: { id: id },
+      data: { processing_status: 'processing_extractText' }
+    })
     const extract = await this.textract.getTextractResult(jobId);
     console.log('Textract extraction result:', extract);
-    
 
+    //processing_organizeData
+    await this.prisma.candidate.update({
+      where: { id: id },
+      data: { processing_status: 'processing_organizeData' }
+    })
     if (!extract) throw new BadGatewayException('Failed to extract text from resume');
     const organizedData = await this.openai.organizeText(extract);
     console.log('Organized data from OpenAI:', organizedData);
+
+    console.log('Bio: ', organizedData['bio']);
+
+
+    //processing_updateCandidate
+    /*
+    await this.prisma.candidate.update({
+      where: { id: id },
+      data: { 
+        processing_status: 'processing_organizeData',
+        processed_resume_data: organizedData,
+        processed_at: new Date(),
+        about_me: organizedData['bio']
+       }
+    })
+
+    */
+    //call function to populate skills, education, experience....
+
+    //completed
+    await this.prisma.candidate.update({
+      where: { id: id },
+      data: { processing_status: 'completed' }
+    })
+    return organizedData;
 
   }
  
