@@ -14,7 +14,12 @@ async function bootstrapServer(): Promise<any> {
   const expressApp = express();
   expressApp.use(express.json());
   const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
-  await app.enableCors();
+  
+  await app.enableCors({
+    origin: 'https://medvirtual.ai', 
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', 
+    credentials: true
+  });
 
   await app.useGlobalPipes(
     new ValidationPipe({
