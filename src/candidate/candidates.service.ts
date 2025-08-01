@@ -80,22 +80,37 @@ export class CandidatesService {
     
   }
 
-  async updateFromJson(id: string, jsonData: any) {
+  async updateFromJson(id: string, jsonData: any): Promise<boolean> {
     //create function to get datas and populate different tables
+    if (!id) throw new BadRequestException('Candidate ID is required');
+    if (!jsonData) throw new BadRequestException('JSON data is required');
+
+    if (jsonData.education !== '' && jsonData.education !== undefined) {
+      console.log('Processing education data:', jsonData.education);
+      const educationData = jsonData.education;
+      if (Array.isArray(educationData)) {
+        await this.prisma.candidateEducation.createMany({
+          data: educationData.map(item => ({
+            candidate_id: id,
+            institution: item.institution || '',
+            degree: item.degree || '',
+            year: item.end_date || '',
+          }))
+        });
+      }
+    }
+
+    /*
+    education ->  CandidateEducation
+    experience -> CandidateExperience
+    skills -> CandidateSkill
+    */
+
+    return true;
   }
 
   async processData(id: string){
-
     if (!id) throw new BadRequestException('Candidate ID is required');
-
-    //update candidate status_processing => processing
-    //get url resume from db
-    //download resume to temp files
-    //send to textract service
-    //call openAi
-    //fill database with datas from openAI
-    //update candidate status_processing => processed
-
 
     const candidate = await this.prisma.candidate.findUnique({
       where: {
@@ -117,8 +132,7 @@ export class CandidatesService {
       data: { processing_status: 'processing_downloadFile' }
     })
     if (idFile) await this.google.downloadFile(idFile, pdfName, downloadDir);
-    console.log('File downloaded by google oAuth:', pdfName);
-
+    else throw new BadRequestException('Error downloading file from Google Drive. Invalid file ID.');
 
     //processing_uploadFile
     await this.prisma.candidate.update({
@@ -126,7 +140,7 @@ export class CandidatesService {
       data: { processing_status: 'processing_uploadFile' }
     })
     const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
-    console.log('File uploaded to S3:', bucketFile);
+    if (!bucketFile) throw new BadGatewayException('Failed to upload file to S3 bucket');
 
     //processing_extractData
     await this.prisma.candidate.update({
@@ -134,7 +148,7 @@ export class CandidatesService {
       data: { processing_status: 'processing_extractData' }
     })
     const jobId = await this.textract.startTextracktJob(bucketFile);
-    console.log('Textract job started with ID:', jobId);
+    if (!jobId) throw new BadGatewayException('Failed to start Textract job');
 
     //processing_extractText
     await this.prisma.candidate.update({
@@ -142,34 +156,34 @@ export class CandidatesService {
       data: { processing_status: 'processing_extractText' }
     })
     const extract = await this.textract.getTextractResult(jobId);
-    console.log('Textract extraction result:', extract);
+    if(!extract) throw new BadGatewayException('Failed to extract text from resume');
 
     //processing_organizeData
     await this.prisma.candidate.update({
       where: { id: id },
       data: { processing_status: 'processing_organizeData' }
     })
-    if (!extract) throw new BadGatewayException('Failed to extract text from resume');
     const organizedData = await this.openai.organizeText(extract);
+    if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
+
+
     console.log('Organized data from OpenAI:', organizedData);
-
-    console.log('Bio: ', organizedData['bio']);
-
+    console.log('Name: ', JSON.parse(organizedData).name);
+    console.log('Bio: ', JSON.parse(organizedData).bio);
 
     //processing_updateCandidate
-    /*
     await this.prisma.candidate.update({
       where: { id: id },
       data: { 
         processing_status: 'processing_organizeData',
-        processed_resume_data: organizedData,
+        processed_resume_data: JSON.parse(organizedData),
         processed_at: new Date(),
-        about_me: organizedData['bio']
+        about_me: JSON.parse(organizedData).bio
        }
     })
-
-    */
     //call function to populate skills, education, experience....
+    const populateDatas = await this.updateFromJson(id, JSON.parse(organizedData));
+    if (!populateDatas) throw new BadGatewayException('Failed to populate candidate data from JSON');
 
     //completed
     await this.prisma.candidate.update({

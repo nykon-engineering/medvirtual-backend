@@ -5,7 +5,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL") //LOCAL_DATABASE_URL | DATABASE_URL
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model USER {
@@ -298,7 +299,6 @@ enum CandidateStatus {
 
 enum ProcessingStatus {
   pending
-  processing
   processing_downloadFile
   processing_uploadFile
   processing_extractData

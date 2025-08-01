@@ -17,14 +17,15 @@ export class OpenaiService {
 
         const prompt = `The text below is the content of a professional resume. Extract and organize the information in JSON format, with the following fields:
 
-        - name: nome completo
-        - email
-        - phone
-        - bio: uma breve descrição sobre o profissional
-        - education: array com { institution, degree, start_date, end_date }
-        - experience: array com { company, role, start_date, end_date, description }
-        - skills: array de habilidades
-        - languages: array de idiomas
+        - name: complet name
+        - email: candidate email
+        - phone: candidate phone number
+        - bio: a brief description about the professional
+        - education: array with { institution, degree, start_date, end_date }
+        - experience: array with { company, role, start_date, end_date, description (organizated by bullet point and finalized with ;) } 
+        - skills: array of the skills
+        - languages: array of the languages spoken
+        - specializations: array of the specializations
 
         Texto:
         """ 
