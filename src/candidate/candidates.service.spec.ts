@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadGatewayException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { CandidatesService } from './candidates.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -104,10 +104,15 @@ describe('CandidatesService', () => {
       expect(result).toEqual(mockCandidate);
     });
 
-    it('should throw BadGatewayException if findUnique fails', async () => {
-      mockPrisma.candidate.findUnique.mockRejectedValue(new Error('DB error'));
-
-      await expect(service.findOne('1', mockUser)).rejects.toThrow(BadGatewayException);
+    it('should return 400 if the candidate Id is empty', async () => {
+      await expect(service.findOne('', mockUser)).rejects.toThrow(BadRequestException);
     });
+
+    it('shoud return 401 if the candidate is not found', async () => {
+
+      mockPrisma.candidate.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOne('1', mockUser)).rejects.toThrow(NotFoundException);
+    })
   });
 });

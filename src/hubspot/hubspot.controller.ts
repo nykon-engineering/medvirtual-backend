@@ -14,7 +14,7 @@ export class HubspotController {
 
     @Post('candidates')
     @UseGuards(AuthGuard, RolesGuard)
-    @Roles('user', 'admin', 'SuperAdmin')
+    @Roles('user', 'admin', 'system_super_admin')
     @HttpCode(200)
     @ApiOperation({ summary: 'Get candidates from HubSpot with dynamic filters' })
     @ApiBody({type: GetCandidatesDto, description: 'Data to get candidates from HubSpot', required: true})
@@ -39,7 +39,7 @@ export class HubspotController {
     //=> this route is just a example to read candidates and download resume
     @Post('candidates-download')
     //@UseGuards(AuthGuard, RolesGuard)
-    //@Roles('user', 'admin', 'SuperAdmin')
+    //@Roles('user', 'admin', 'system_super_admin')
     @HttpCode(200)
     @ApiOperation({ summary: 'Get candidates from HubSpot with dynamic filters' })
     @ApiBody({type: GetCandidatesDto, description: 'Data to get candidates from HubSpot', required: true})
