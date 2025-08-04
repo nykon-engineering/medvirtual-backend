@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, USER } from '@prisma/client';
+import { Prisma, ProficiencyLevel, USER } from '@prisma/client';
 import * as path from 'path';
 
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
@@ -10,6 +10,7 @@ import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
+import { start } from 'repl';
 
 @Injectable()
 export class CandidatesService {
@@ -107,7 +108,6 @@ export class CandidatesService {
     if (!jsonData) throw new BadRequestException('JSON data is required');
 
     if (jsonData.education !== '' && jsonData.education !== undefined) {
-      console.log('Processing education data:', jsonData.education);
       const educationData = jsonData.education;
       if (Array.isArray(educationData)) {
         await this.prisma.candidateEducation.createMany({
@@ -116,6 +116,38 @@ export class CandidatesService {
             institution: item.institution || '',
             degree: item.degree || '',
             year: item.end_date || '',
+          }))
+        });
+      }
+    }
+
+    if(jsonData.experience !== '' && jsonData.experience !== undefined){
+      const experienceData = jsonData.experience;
+      if (Array.isArray(experienceData)) {
+        await this.prisma.candidateExperience.createMany({
+          data: experienceData.map(item => ({
+            candidate_id: id,
+            company: item.company || '',
+            position: item.role || '',
+            start_date: new Date(item.start_date) || '',
+            end_date: new Date(item.end_date) || '',
+            duration: '', //===============> change to startDate and endDate
+            responsibilities: item.description || '',
+            
+          }))
+        });
+      }
+    }
+
+    if(jsonData.skills !== '' && jsonData.skills !== undefined){
+      const skillsData = jsonData.skills;
+      if (Array.isArray(skillsData)) {
+        await this.prisma.candidateSkill.createMany({
+          data: skillsData.map(item => ({
+            candidate_id: id,
+            skill_name: item || '',
+            proficiency_level: undefined,
+            skill_type: undefined,
           }))
         });
       }
@@ -196,7 +228,7 @@ export class CandidatesService {
     await this.prisma.candidate.update({
       where: { id: id },
       data: { 
-        processing_status: 'processing_organizeData',
+        processing_status: 'processing_updateCandidate',
         processed_resume_data: JSON.parse(organizedData),
         processed_at: new Date(),
         about_me: JSON.parse(organizedData).bio

@@ -22,7 +22,7 @@ export class OpenaiService {
         - phone: candidate phone number
         - bio: a brief description about the professional
         - education: array with { institution, degree, start_date, end_date }
-        - experience: array with { company, role, start_date, end_date, description (organizated by bullet point and finalized with ;) } 
+        - experience: array with { company, role, start_date, end_date, description (organizated text with each phrase finalized with ;) } 
         - skills: array of the skills
         - languages: array of the languages spoken
         - specializations: array of the specializations
