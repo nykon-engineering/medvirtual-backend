@@ -97,6 +97,8 @@ model Candidate {
   first_name             String
   last_name              String
   resume_url             String?
+  specialization         String?
+  country                String?
   about_me               String?
   processed_resume_data  Json?
   processing_status      ProcessingStatus        @default(pending)
@@ -110,9 +112,18 @@ model Candidate {
   educations             CandidateEducation[]
   experiences            CandidateExperience[]
   skills                 CandidateSkill[]
+  languages              CandidateLanguage[]
   selectedInInterviews   Interview[]             @relation("SelectedCandidate")
   organizationCandidates OrganizationCandidate[]
   panelCandidates        PanelCandidate[]
+}
+
+model CandidateLanguage {
+  id                String            @id @default(uuid())
+  candidate_id      String
+  name              String
+  createdAt         DateTime          @default(now())
+  candidate         Candidate         @relation(fields: [candidate_id], references: [id])
 }
 
 model OrganizationCandidate {

@@ -46,13 +46,19 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
+        let orderedData: any[] = [];
         console.log('Received data:', data);
-        const orderedData = data.sort((a,b)=>{
-            if (a.subscriptionType < b.subscriptionType) return -1;
-            if (a.subscriptionType > b.subscriptionType) return 1;
-            return 0;
-        })
 
+        if (!data || data.length >= 2) {
+            orderedData = data.sort((a,b)=>{
+                if (a.subscriptionType < b.subscriptionType) return -1;
+                if (a.subscriptionType > b.subscriptionType) return 1;
+                return 0;
+            })
+        }else{
+            orderedData = data;
+        }
+    
         //console.log('Ordered Data:', orderedData);
 
         for (const event of orderedData){
@@ -67,26 +73,47 @@ export class HubspotService {
     
                     if(!candidate) return; // here, I need to refactor to allow create a new candidate if its not exists
 
-                    const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
-                    if(!fieldExists) return;
-    
-                    const fieldUpdated = candidadeToDbDictionary[event.propertyName];
-                    
-                    await this.prisma.candidate.update({
-                        where: {
-                            id: candidate.id
-                        },
-                        data: {
-                            [fieldUpdated]: event.propertyValue
+                    if(event.propertyName === 'language_spoken'){
+                        await this.prisma.candidateLanguage.deleteMany({
+                            where: {
+                                candidate_id: candidate.id
+                            }
+                        });
+
+                        const languages = event.propertyValue.split('&').map((lang: string) => lang.trim());
+                        for (const language of languages) {
+                            await this.prisma.candidateLanguage.create({
+                                data: {
+                                    candidate_id: candidate.id,
+                                    name: language
+                                }
+                            });
                         }
-                    })
-    
-                    return true;
+
+                        return true;
+                    }else{
+
+                        const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
+                        if(!fieldExists) return;
+        
+                        const fieldUpdated = candidadeToDbDictionary[event.propertyName];
+                        
+                        await this.prisma.candidate.update({
+                            where: {
+                                id: candidate.id
+                            },
+                            data: {
+                                [fieldUpdated]: event.propertyValue
+                            }
+                        })
+        
+                        return true;
+                    }
     
                 case 'object.creation':
                     const properties = Object.keys(candidadeToDbDictionary).join(',');
                     try{
-                        const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${event.objectId}?properties=${properties}`, 
+                        const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${event.objectId}?properties=language_spoken,${properties}`, 
                             {
                                 headers: {
                                     Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -94,20 +121,39 @@ export class HubspotService {
                                 }
                             }
                         )
-    
                         if (!getObject) {
                             throw new BadRequestException('No object data found');
                         }
-                        const candidateData = mapHubspotToDb(getObject.data.properties);
-    
+
+                        const candidateData = mapHubspotToDb(getObject.data.properties);//this variable doenst have the language,because languages went setup on dictionary
+                        
+                        const candidateExists = await this.prisma.candidate.findUnique({
+                            where: {
+                                hubspot_id: String(event.objectId)
+                            }
+                        })
+                        if(candidateExists) throw new BadRequestException('Candidate already exists on the database');
+
                         const createCandidate = await this.prisma.candidate.create({
                             data: candidateData,
                         })
-    
                         if (!createCandidate) {
                             throw new BadRequestException('Error creating candidate in the database');
                         }
-    
+
+                        //here I start to work with the language
+                        if (getObject.data.properties.language_spoken) {
+                           const languageCandidateSpoken = getObject.data.properties.language_spoken.split('&').map((lang: string) => lang.trim());
+
+                            for (const language of languageCandidateSpoken) {
+                                await this.prisma.candidateLanguage.create({
+                                    data: {
+                                        candidate_id: createCandidate.id,
+                                        name: language
+                                    }
+                                })
+                            }
+                        }
     
                         return true;
     

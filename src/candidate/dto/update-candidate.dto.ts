@@ -31,4 +31,16 @@ export class UpdateCandidateDto  {
     @IsOptional()
     @IsString()
     pipeline_status?: string; 
+
+    @ApiProperty({ description: 'Specialization of the candidate', required: false })
+    @IsOptional()
+    @IsString()
+    specialization?: string;
+
+    @ApiProperty({ description: 'Country of residence of the candidate', required: false })
+    @IsOptional()
+    @IsString()
+    country?: string;
+
+
 }
