@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { USER } from '@prisma/client';
+import { Prisma, USER } from '@prisma/client';
 import * as path from 'path';
 
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
@@ -9,6 +9,7 @@ import { GoogledriveService } from '../googledrive/googledrive.service';
 import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
+import { UpdateCandidateDto } from './dto/update-candidate.dto';
 
 @Injectable()
 export class CandidatesService {
@@ -78,6 +79,26 @@ export class CandidatesService {
     }
     return candidate;
     
+  }
+
+  async update(id: string, data: UpdateCandidateDto): Promise<any> {
+    if (!id) throw new BadRequestException('Candidate ID is required');
+    if (!data) throw new BadRequestException('Update data is required');
+
+    if (data.pipeline_status) {
+      const stageName = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === data.pipeline_status?.toLowerCase())?.[0];
+      data.pipeline_status = stageName || 'Unknown Stage';
+    }
+
+    const updatedCandidate = await this.prisma.candidate.update({
+      where: { id: id },
+      data: {
+        ...data
+      }
+    });
+    if(!updatedCandidate) throw new BadGatewayException('Failed to update candidate');
+    return updatedCandidate;
+
   }
 
   async updateFromJson(id: string, jsonData: any): Promise<boolean> {
@@ -193,5 +214,12 @@ export class CandidatesService {
     return organizedData;
 
   }
- 
+
+  async getPipelines() {
+    const pipelines = Object.entries(dbToStageDictionary).map(([key, value]) => ({
+      name: value
+    }));
+    if (!pipelines || pipelines.length === 0) throw new NotFoundException('No pipelines found');
+    return pipelines;
+  }
 }

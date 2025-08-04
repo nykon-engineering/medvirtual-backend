@@ -1,11 +1,11 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { CandidatesService } from './candidates.service';
 
-import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ApiBody, ApiParam, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiParam, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { UpdateCandidateDto } from './dto/update-candidate.dto';
 
 @Controller('candidates')
 export class CandidatesController {
@@ -43,6 +43,21 @@ export class CandidatesController {
     }
   }
 
+  @Patch(':id')
+  @ApiProperty({ description: 'Update a specific candidate by ID' })
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'Candidate updated successfully' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @UseGuards(AuthGuard)
+  async update(@Param('id') id: string, @Body() data: UpdateCandidateDto) {
+    const result = await this.candidatesService.update(id, data);
+    return {
+      status: 200,
+      message: 'Candidate updated successfully',
+      data: result
+    }
+  }
+
   @Get('/process-data/:id')
   @ApiProperty({ description: 'Process data for a specific candidate by ID' })
   @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
@@ -54,6 +69,19 @@ export class CandidatesController {
     return {
       status: 200,
       message: 'Candidate data processed successfully',
+      data: result
+    }
+  }
+
+  @Get('/pipelines/all')
+  @ApiProperty({ description: 'Get all pipelines' })
+  @ApiResponse({ status: 200, description: 'Pipelines retrieved successfully' })
+  @UseGuards(AuthGuard)
+  async getPipelines() {
+    const result = await this.candidatesService.getPipelines();
+    return {
+      status: 200,
+      message: 'Pipelines retrieved successfully',
       data: result
     }
   }
