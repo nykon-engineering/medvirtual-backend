@@ -151,17 +151,10 @@ export class CandidatesService {
         });
       }
     }
-
-    /*
-    education ->  CandidateEducation
-    experience -> CandidateExperience
-    skills -> CandidateSkill
-    */
-
     return true;
   }
 
-  async processData(id: string){
+  async processData(id: string): Promise<boolean>{
     if (!id) throw new BadRequestException('Candidate ID is required');
 
     const candidate = await this.prisma.candidate.findUnique({
@@ -242,8 +235,7 @@ export class CandidatesService {
       where: { id: id },
       data: { processing_status: 'completed' }
     })
-    return organizedData;
-
+    return true;
   }
 
   async getPipelines() {

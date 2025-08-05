@@ -69,7 +69,6 @@ export class CandidatesController {
     return {
       status: 200,
       message: 'Candidate data processed successfully',
-      data: result
     }
   }
 
