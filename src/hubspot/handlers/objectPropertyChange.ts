@@ -1,13 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dictionary";
+import { HandlerObjectCreation } from "./objectCreation";
 
 @Injectable()
 
 export class HandlerObjectPropertyChange {
 
     constructor(
-        private readonly prisma: PrismaService
+        private readonly prisma: PrismaService,
+        private readonly objectCreation: HandlerObjectCreation,
     ){
 
     }
@@ -19,7 +21,7 @@ export class HandlerObjectPropertyChange {
             }
         })
 
-        if(!candidate) return; // here, I need to refactor to allow create a new candidate if its not exists
+        if(!candidate) return await this.objectCreation.execute(event); // here, I need to refactor to allow create a new candidate if its not exists
 
         if(event.propertyName === 'language_spoken'){
             await this.prisma.candidateLanguage.deleteMany({
