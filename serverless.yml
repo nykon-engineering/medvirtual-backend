@@ -11,12 +11,12 @@ provider:
   region: us-east-1
   stage: dev
   memorySize: 512
-  timeout: 120
+  timeout: 240
 
 functions:
   api:
     handler: dist/index.handler
-    timeout: 120
+    timeout: 240
     events:
       - http:
           path: /{proxy+}

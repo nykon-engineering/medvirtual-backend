@@ -129,9 +129,8 @@ export class CandidatesService {
             candidate_id: id,
             company: item.company || '',
             position: item.role || '',
-            start_date: new Date(item.start_date) || '',
-            end_date: new Date(item.end_date) || '',
-            duration: '', //===============> change to startDate and endDate
+            start_date: item.start_date || '',
+            end_date: item.end_date || '',
             responsibilities: item.description || '',
             
           }))

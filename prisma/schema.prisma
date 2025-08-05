@@ -157,8 +157,8 @@ model CandidateExperience {
   candidate_id     String
   company          String
   position         String
-  start_date       DateTime?
-  end_date         DateTime?
+  start_date       String?
+  end_date         String?
   responsibilities String?
   createdAt        DateTime  @default(now())
   candidate        Candidate @relation(fields: [candidate_id], references: [id])
