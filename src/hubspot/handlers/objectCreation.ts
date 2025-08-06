@@ -4,12 +4,14 @@ import axios from "axios";
 import { mapHubspotToDb } from "../../common/utils/hubspot.util";
 import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dictionary";
 import { PrismaService } from "../../prisma/prisma.service";
+import { CandidatesService } from "../../candidate/candidates.service";
 
 
 @Injectable()
 export class HandlerObjectCreation {
     constructor(
-        private readonly prisma: PrismaService
+        private readonly prisma: PrismaService,
+        private readonly candidateService: CandidatesService
     ){}
 
 
@@ -59,10 +61,15 @@ export class HandlerObjectCreation {
                 }
             }
 
+            // Run the resume pipeline when the candidate is created
+             await this.candidateService.processData(createCandidate.id);
+
             return true;
 
         }catch (error) {
             throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
         }
+
+
     }
 }

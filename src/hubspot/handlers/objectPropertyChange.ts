@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dictionary";
 import { HandlerObjectCreation } from "./objectCreation";
+import { CandidatesService } from "../../candidate/candidates.service";
 
 @Injectable()
 
@@ -10,9 +11,8 @@ export class HandlerObjectPropertyChange {
     constructor(
         private readonly prisma: PrismaService,
         private readonly objectCreation: HandlerObjectCreation,
-    ){
-
-    }
+        private readonly candidateService: CandidatesService
+    ){}
 
     async execute(event){
         const candidate = await this.prisma.candidate.findUnique({
@@ -42,6 +42,7 @@ export class HandlerObjectPropertyChange {
 
             return true;
         }else{
+            
 
             const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
             if(!fieldExists) return;
@@ -57,6 +58,9 @@ export class HandlerObjectPropertyChange {
                 }
             })
 
+            // Re-run the resume pipeline if this chnge is related to the resume
+            if(event.propertyName === 'resume_link') await this.candidateService.processData(candidate.id);
+            
             return true;
         }
 

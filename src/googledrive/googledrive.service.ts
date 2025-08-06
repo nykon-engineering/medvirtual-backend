@@ -136,8 +136,9 @@ export class GoogledriveService {
       }
     
     async downloadFile(fileId: string, filename: string, downloadDir: string) {
-      //console.log('entrou...', fileId, filename);
+      console.log('entrou...', fileId, filename);
       const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
+      console.log('tokens:', tokens);
       if (!tokens) {
         throw new BadRequestException('Google tokens not found. Please authenticate first.');
       }
@@ -151,6 +152,7 @@ export class GoogledriveService {
         responseType: 'stream',
       });
       
+      console.log('testeeee')
       
       
 

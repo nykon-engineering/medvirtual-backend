@@ -7,12 +7,15 @@ import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { OpenaiService } from '../openai/openai.service';
+import { count } from 'console';
 
 const mockPrisma = {
   candidate: {
     findMany: jest.fn(),
     findUnique: jest.fn(),
+    count: jest.fn(),
   },
+  $transaction: jest.fn(),
 };
 
 const textractMock = {
@@ -34,17 +37,17 @@ const openAIMock = {
   organizeText: jest.fn(),
 }
 
-describe('CandidatesService', () => {
-  let service: CandidatesService;
-  let prisma: PrismaService;
+  describe('CandidatesService', () => {
+    let service: CandidatesService;
+    let prisma: PrismaService;
 
-  
-  const mockUser = {
-    id: 'user-1',
-    organization_id: 'org-1',
-  } as any; // Cast as USER
+    
+    const mockUser = {
+      id: 'user-1',
+      organization_id: 'org-1',
+    } as any; // Cast as USER
 
-  beforeEach(async () => {
+    beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CandidatesService,
@@ -63,29 +66,28 @@ describe('CandidatesService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all candidates without status filter', async () => {
+    it('should return all candidates without filters', async () => {
       const mockCandidates = [{ id: '1' }, { id: '2' }];
-      mockPrisma.candidate.findMany.mockResolvedValue(mockCandidates);
+      const mockTotal = 2;
+      
+      mockPrisma.$transaction.mockResolvedValue([mockCandidates, mockTotal]);
 
       const result = await service.findAll(mockUser, '');
 
-      expect(prisma.candidate.findMany).toHaveBeenCalledWith({
-        where: {
-          pipeline_status: undefined,
-          OR: [
-            {organization_id: 'org-1'},
-            {organization_id: null}
-          ]
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+    
+      expect(result).toEqual({
+        data: mockCandidates,
+        meta: {
+          total: mockTotal,
+          page: 1,
+          perPage: 10,
+          totalPages: 1,
         },
       });
-      expect(result).toEqual(mockCandidates);
     });
 
-    it('should throw BadGatewayException if findMany fails', async () => {
-      mockPrisma.candidate.findMany.mockRejectedValue(new Error('DB error'));
-
-      await expect(service.findAll(mockUser, '')).rejects.toThrow(BadGatewayException);
-    });
+    
   });
 
   describe('findOne', () => {

@@ -13,17 +13,35 @@ export class CandidatesController {
 
   @Get()
   @ApiProperty({ description: 'Get all candidates for the current user\'s organization filtered by status' })
-  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter candidates by status', example: "New Candidates, Available, Hired" })
+  @ApiQuery({ name: 'country', required: false, type: String, description: 'Filter candidates by conuntry of residence', example: "USA, France, Brazil" })
+  @ApiQuery({ name: 'avaliability', required: false, type: String, description: 'Filter candidates by avaliability', example: "Full-time, Part-time" })
+  @ApiQuery({ name: 'monthly_compensation_from', required: false, type: String, description: 'Filter candidates by monthly compensations start', example: "1000" })
+  @ApiQuery({ name: 'monthly_compensation_to', required: false, type: String, description: 'Filter candidates by monthly compensations end', example: "5000" })
+  @ApiQuery({ name: 'years_of_experience', required: false, type: Number, description: 'Filter candidates by years of experience', example: "5" })
   @ApiResponse({ status: 200, description: 'Candidates retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Failed to fetch candidates' })
   @UseGuards(AuthGuard)
-  async findAll(@CurrentUser() user: USER, @Query('status') status: string) {
-    const result = await this.candidatesService.findAll(user, status);
-    return {
-      status: 200,
-      message: 'Candidates retrieved successfully',
-      data: result
-    }
+  async findAll(
+    @CurrentUser() user: USER, 
+    @Query('country') country: string, 
+    @Query('avaliability') avaliability: string, 
+    @Query('monthly_compensation_from') monthly_compensation_from: string, 
+    @Query('monthly_compensation_to') monthly_compensation_to: string, 
+    @Query('years_of_experience') years_of_experience: string,
+    @Query('page') page,
+    @Query('perPage') perPage
+  ) {
+    const result = await this.candidatesService.findAll(
+      user, 
+      country, 
+      avaliability, 
+      monthly_compensation_from, 
+      monthly_compensation_to, 
+      years_of_experience,
+      page,
+      perPage
+    );
+    return result
   }
 
 
