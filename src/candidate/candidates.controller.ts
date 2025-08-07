@@ -83,6 +83,7 @@ export class CandidatesController {
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
   @UseGuards(AuthGuard)
   async processData(@Param('id') id: string) {
+    console.log('Processing data for candidate ID -  controller:', id);
     const result = await this.candidatesService.processData(id);
     return {
       status: 200,
