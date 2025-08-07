@@ -212,7 +212,7 @@ export class CandidatesService {
     console.log('Extracted file ID from URL:', idFile);
 
     const pdfName = `${candidate.first_name}_${candidate.last_name}_resume.pdf`;
-    const downloadDir = path.resolve(__dirname, '/tmp/downloads');
+    const downloadDir = path.resolve(__dirname, '/tmp');
 
     //processing_downloadFile
     await this.prisma.candidate.update({
@@ -221,7 +221,7 @@ export class CandidatesService {
     })
     
     if (idFile) {
-      await this.google.downloadFile(idFile, pdfName, downloadDir);
+      await this.google.downloadFile2(idFile, pdfName, downloadDir);
     }else{
       throw new BadRequestException('Error downloading file from Google Drive. Invalid file ID.');
     } 
