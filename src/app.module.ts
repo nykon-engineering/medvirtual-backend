@@ -16,6 +16,7 @@ import { TextractModule } from './textract/textract.module';
 import { S3Module } from './s3/s3.module';
 import { OpenaiModule } from './openai/openai.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { CronModule } from './cron/cron.module';
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     TextractModule,
     S3Module,
     OpenaiModule,
-    DashboardModule
+    DashboardModule,
+    CronModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

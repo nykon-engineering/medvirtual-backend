@@ -197,7 +197,6 @@ export class CandidatesService {
   }
 
   async processData(id: string): Promise<boolean>{
-    console.log('Starting processData for candidate ID:', id);
     if (!id) throw new BadRequestException('Candidate ID is required');
 
     const candidate = await this.prisma.candidate.findUnique({
@@ -208,7 +207,6 @@ export class CandidatesService {
     if(!candidate) throw new NotFoundException('Candidate not found');
     if(!candidate.resume_url) throw new BadRequestException('Candidate resume URL is empty');
 
-    console.log('Processing candidate data for resume: ',candidate.resume_url);
     const idFile = extractDriveFileId(candidate.resume_url);
     console.log('Extracted file ID from URL:', idFile);
 
