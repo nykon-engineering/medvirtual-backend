@@ -170,7 +170,7 @@ export class GoogledriveService {
       const tokens = await this.getValidAccessToken();
       console.log('fileId:======>', fileId);
       
-      const metadataUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType`;
+      const metadataUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&alt=media`;
 
       const headers = {
         Authorization: `Bearer ${tokens}`,
@@ -179,6 +179,7 @@ export class GoogledriveService {
       // 🔍 Passo 1: Buscar metadata do arquivo
       const metadataResponse = await axios.get(metadataUrl, { headers })
       const { name, mimeType } = metadataResponse.data;
+      console.log('mimeType:', mimeType);
   
       let downloadUrl: string;
 
@@ -197,6 +198,8 @@ export class GoogledriveService {
         // Arquivo normal - usar alt=media
         downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
       }
+
+      console.log('Download URL:', downloadUrl);
       // 📥 Passo 3: Baixar o arquivo
       const response: AxiosResponse<Buffer> = await axios.get(downloadUrl, {
           headers,

@@ -259,10 +259,7 @@ export class CandidatesService {
     const organizedData = await this.openai.organizeText(extract);
     if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
 
-
     console.log('Organized data from OpenAI:', organizedData);
-    console.log('Name: ', JSON.parse(organizedData).name);
-    console.log('Bio: ', JSON.parse(organizedData).bio);
 
     //processing_updateCandidate
     await this.prisma.candidate.update({
