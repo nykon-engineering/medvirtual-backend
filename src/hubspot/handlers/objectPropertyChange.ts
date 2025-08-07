@@ -59,7 +59,7 @@ export class HandlerObjectPropertyChange {
             })
 
             // Re-run the resume pipeline if this chnge is related to the resume
-            //if(event.propertyName === 'resume_link') await this.candidateService.processData(candidate.id);
+            if(event.propertyName === 'resume_link') await this.candidateService.processData(candidate.id);
             
             return true;
         }
