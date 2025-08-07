@@ -62,7 +62,7 @@ export class HandlerObjectCreation {
             }
 
             // Run the resume pipeline when the candidate is created
-             await this.candidateService.processData(createCandidate.id);
+            //await this.candidateService.processData(createCandidate.id);
 
             return true;
 
