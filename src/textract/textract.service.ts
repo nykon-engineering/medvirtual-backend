@@ -35,7 +35,7 @@ export class TextractService {
 
         const result = await this.textract.getDocumentTextDetection({ JobId: jobId });
         const lines = result.Blocks?.filter(b => b.BlockType === 'LINE').map(b => b.Text) ?? [];
-
+        console.log(`Textract job completed with status: ${status}, attempts: ${attempts}`);
         return lines.join('\n');
     }
 }

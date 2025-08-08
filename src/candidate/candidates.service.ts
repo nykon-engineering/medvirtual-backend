@@ -147,6 +147,17 @@ export class CandidatesService {
     if (!id) throw new BadRequestException('Candidate ID is required');
     if (!jsonData) throw new BadRequestException('JSON data is required');
 
+    //Clear database to avoid duplicates
+    await this.prisma.candidateEducation.deleteMany({
+      where: { candidate_id: id }
+    })
+    await this.prisma.candidateExperience.deleteMany({
+      where: { candidate_id: id }
+    })
+    await this.prisma.candidateSkill.deleteMany({
+      where: { candidate_id: id }
+    })
+
     if (jsonData.education !== '' && jsonData.education !== undefined) {
       const educationData = jsonData.education;
       if (Array.isArray(educationData)) {
@@ -206,6 +217,7 @@ export class CandidatesService {
     });
     if(!candidate) throw new NotFoundException('Candidate not found');
     if(!candidate.resume_url) throw new BadRequestException('Candidate resume URL is empty');
+    if(!candidate.resume_url.includes('http')) throw new BadRequestException('Candidate resume URL is invalid');
 
     const idFile = extractDriveFileId(candidate.resume_url);
     console.log('Extracted file ID from URL:', idFile);
@@ -257,7 +269,7 @@ export class CandidatesService {
     const organizedData = await this.openai.organizeText(extract);
     if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
 
-    console.log('Organized data from OpenAI:', organizedData);
+    console.log('The datas were organized successfully by openAi');
 
     //processing_updateCandidate
     await this.prisma.candidate.update({

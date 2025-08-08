@@ -36,7 +36,7 @@ export class S3Service {
 
     const command = new PutObjectCommand(params);
     await this.s3.send(command);
-
+    console.log(`File uploaded successfully. ${fileName}`);
     return fileName;
   }
 }
