@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ProficiencyLevel, USER } from '@prisma/client';
+import { Prisma, ProcessingStatus, ProficiencyLevel, USER } from '@prisma/client';
 import * as path from 'path';
 
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
@@ -22,7 +22,6 @@ export class CandidatesService {
     private readonly s3: S3Service,
     private readonly openai: OpenaiService
   ){}
-
 
   async findAll(
     user: USER, 
@@ -142,6 +141,13 @@ export class CandidatesService {
 
   }
 
+  private async updateStatus(id: string, status: ProcessingStatus): Promise<void> {
+    await this.prisma.candidate.update({
+      where: { id },
+      data: { processing_status: status }
+    });
+  }
+
   async updateFromJson(id: string, jsonData: any): Promise<boolean> {
     //create function to get datas and populate different tables
     if (!id) throw new BadRequestException('Candidate ID is required');
@@ -227,11 +233,7 @@ export class CandidatesService {
     const downloadDir = path.resolve(__dirname, '/tmp');
 
     //processing_downloadFile
-    await this.prisma.candidate.update({
-      where: { id: id },
-      data: { processing_status: 'processing_downloadFile' }
-    })
-    
+    await this.updateStatus(id, 'processing_downloadFile');
     if (idFile) {
       await this.google.downloadFile2(idFile, pdfName, downloadDir);
     }else{
@@ -239,34 +241,22 @@ export class CandidatesService {
     } 
 
     //processing_uploadFile
-    await this.prisma.candidate.update({
-      where: { id: id },
-      data: { processing_status: 'processing_uploadFile' }
-    })
+    await this.updateStatus(id, 'processing_uploadFile');
     const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
     if (!bucketFile) throw new BadGatewayException('Failed to upload file to S3 bucket');
 
     //processing_extractData
-    await this.prisma.candidate.update({
-      where: { id: id },
-      data: { processing_status: 'processing_extractData' }
-    })
+    await this.updateStatus(id, 'processing_extractData');
     const jobId = await this.textract.startTextracktJob(bucketFile);
     if (!jobId) throw new BadGatewayException('Failed to start Textract job');
 
     //processing_extractText
-    await this.prisma.candidate.update({
-      where: { id: id },
-      data: { processing_status: 'processing_extractText' }
-    })
+    await this.updateStatus(id, 'processing_extractText');
     const extract = await this.textract.getTextractResult(jobId);
     if(!extract) throw new BadGatewayException('Failed to extract text from resume');
 
     //processing_organizeData
-    await this.prisma.candidate.update({
-      where: { id: id },
-      data: { processing_status: 'processing_organizeData' }
-    })
+    await this.updateStatus(id, 'processing_organizeData');
     const organizedData = await this.openai.organizeText(extract);
     if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
 
@@ -288,10 +278,8 @@ export class CandidatesService {
     if (!populateDatas) throw new BadGatewayException('Failed to populate candidate data from JSON');
 
     //completed
-    await this.prisma.candidate.update({
-      where: { id: id },
-      data: { processing_status: 'completed' }
-    })
+    await this.updateStatus(id, 'completed');
+    
     return true;
   }
 
