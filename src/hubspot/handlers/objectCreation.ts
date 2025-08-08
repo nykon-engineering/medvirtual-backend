@@ -32,7 +32,8 @@ export class HandlerObjectCreation {
             }
 
             const candidateData = mapHubspotToDb(getObject.data.properties);//this variable doenst have the language,because languages went setup on dictionary
-            
+            candidateData.processing_status='pending';
+
             const candidateExists = await this.prisma.candidate.findUnique({
                 where: {
                     hubspot_id: String(event.objectId)
@@ -60,7 +61,7 @@ export class HandlerObjectCreation {
                     })
                 }
             }
-
+            console.log(`Candidate created with ID: ${createCandidate.id}, Name: ${createCandidate.first_name} ${createCandidate.last_name}`);
             // Run the resume pipeline when the candidate is created
             await this.candidateService.processData(createCandidate.id);
 
