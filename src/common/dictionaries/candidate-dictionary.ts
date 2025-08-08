@@ -9,6 +9,7 @@ export const candidadeToDbDictionary : Record<string, string> = {
     resume_link: 'resume_url',
     practice_area_experience: 'specialization',
     country_residence: 'country',
+    employment_type: 'employment_type',
 
 }
 

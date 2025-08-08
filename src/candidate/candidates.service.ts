@@ -11,6 +11,8 @@ import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { start } from 'repl';
+import { pipe } from 'rxjs';
+import { pipeline } from 'stream';
 
 @Injectable()
 export class CandidatesService {
@@ -55,18 +57,55 @@ export class CandidatesService {
     const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (176 * 1.55) : undefined; 
 
     const where = {
-      country: country ? country : undefined,
-      pipeline_status: avaliabilityOnDb ? String(avaliabilityOnDb) : undefined,
-      hourly_pay_rate: {
-        gte: hourly_from ? hourly_from : undefined,
-        lte: hourly_to ? hourly_to : undefined
-      },
-      years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
-      OR: [
-        { organization_id: organization_id },
-        { organization_id: null } // This allows candidates without an organization_id to be included
+      OR:[
+        {
+          country: country ? country : undefined,
+          employment_type: avaliability ? avaliability : undefined,
+          hourly_pay_rate: {
+            gte: hourly_from ? hourly_from : undefined,
+            lte: hourly_to ? hourly_to : undefined
+          },
+          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          organization_id: organization_id,
+          pipeline_status: '261075105'
+        },
+        {
+          country: country ? country : undefined,
+          employment_type: avaliability ? avaliability : undefined,
+          hourly_pay_rate: {
+            gte: hourly_from ? hourly_from : undefined,
+            lte: hourly_to ? hourly_to : undefined
+          },
+          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          organization_id: null, // This allows candidates without an organization_id to be included
+          pipeline_status: '261075105'
+        },
+        {
+          country: country ? country : undefined,
+          employment_type: avaliability ? avaliability : undefined,
+          hourly_pay_rate: {
+            gte: hourly_from ? hourly_from : undefined,
+            lte: hourly_to ? hourly_to : undefined
+          },
+          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          organization_id: organization_id,
+          pipeline_status: '1087596819'
+        },
+        {
+          country: country ? country : undefined,
+          employment_type: avaliability ? avaliability : undefined,
+          hourly_pay_rate: {
+            gte: hourly_from ? hourly_from : undefined,
+            lte: hourly_to ? hourly_to : undefined
+          },
+          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          organization_id: null, // This allows candidates without an organization_id to be included
+          pipeline_status: '1087596819'
+        }
       ]
     }
+
+    
 
     try{
       const [candidates, total] = await this.prisma.$transaction([
