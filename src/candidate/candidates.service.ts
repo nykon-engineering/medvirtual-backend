@@ -259,7 +259,7 @@ export class CandidatesService {
     await this.updateStatus(id, 'processing_organizeData');
     const organizedData = await this.openai.organizeText(extract);
     if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
-
+    const parsedData = JSON.parse(organizedData);
     console.log('The datas were organized successfully by openAi');
 
     //processing_updateCandidate
@@ -267,14 +267,14 @@ export class CandidatesService {
       where: { id: id },
       data: { 
         processing_status: 'processing_updateCandidate',
-        processed_resume_data: JSON.parse(organizedData),
+        processed_resume_data: parsedData,
         processed_at: new Date(),
-        about_me: JSON.parse(organizedData).bio,
-        years_of_experience: JSON.parse(organizedData).years_of_experience || 0,
+        about_me: parsedData.bio,
+        years_of_experience: parsedData.years_of_experience || 0,
        }
     })
     //call function to populate skills, education, experience....
-    const populateDatas = await this.updateFromJson(id, JSON.parse(organizedData));
+    const populateDatas = await this.updateFromJson(id, parsedData);
     if (!populateDatas) throw new BadGatewayException('Failed to populate candidate data from JSON');
 
     //completed

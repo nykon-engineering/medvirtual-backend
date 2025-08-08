@@ -4,7 +4,7 @@ import {Textract } from "@aws-sdk/client-textract";
 @Injectable()
 export class TextractService {
     private textract = new Textract();
-
+    /* istanbul ignore next */
     async startTextracktJob(file: string): Promise<string> {
         const response = await this.textract.startDocumentTextDetection({
             DocumentLocation:{
@@ -19,7 +19,7 @@ export class TextractService {
         }
         return response.JobId;
     }
-
+    /* istanbul ignore next */
     async getTextractResult(jobId: string): Promise<any> {
         let status = 'IN_PROGRESS';
         let attempts = 0;

@@ -105,9 +105,6 @@ export class HubspotService {
         }
     }
 
-
-
-
     
     ////=> this service is just a example to read candidates and download resume OR populate our database
     async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {

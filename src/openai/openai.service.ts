@@ -4,6 +4,7 @@ import { OpenAI } from 'openai';
 @Injectable()
 export class OpenaiService {
 
+    /* istanbul ignore next */
     async organizeText(text: string): Promise<string> {
         
         const apiKey = process.env.OPENAI_API_KEY;
