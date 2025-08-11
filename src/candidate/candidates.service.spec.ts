@@ -102,6 +102,8 @@ const openAIMock = {
         name: 'John Doe',
         pipeline_status: '1',
         about_me: 'About me',
+        tools: 'JavaScript, TypeScript',
+        medical_tools: 'None',
         country: 'USA',
         specialization: 'Software Development',
         years_of_experience: 5,
@@ -141,6 +143,8 @@ const openAIMock = {
           employment_type: true,
           pipeline_status: true,
           about_me: true,
+          tools: true,
+          medical_tools: true,
           country: true,
           educations: {
             select: {
