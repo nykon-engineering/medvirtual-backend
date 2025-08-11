@@ -52,7 +52,9 @@ export class CandidatesService {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
           },
-          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          years_of_experience: {
+            gt: years_of_experience ? Number(years_of_experience) : undefined
+          },
           organization_id: organization_id,
           pipeline_status: '261075105'
         },
@@ -63,7 +65,9 @@ export class CandidatesService {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
           },
-          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          years_of_experience: {
+            gt: years_of_experience ? Number(years_of_experience) : undefined
+          },
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105'
         },
@@ -74,7 +78,9 @@ export class CandidatesService {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
           },
-          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          years_of_experience: {
+            gt: years_of_experience ? Number(years_of_experience) : undefined
+          },
           organization_id: organization_id,
           pipeline_status: '1087596819'
         },
@@ -85,7 +91,9 @@ export class CandidatesService {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
           },
-          years_of_experience: years_of_experience ? Number(years_of_experience) : undefined,
+          years_of_experience: {
+            gt: years_of_experience ? Number(years_of_experience) : undefined
+          },
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819'
         }
