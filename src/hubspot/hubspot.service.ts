@@ -107,9 +107,6 @@ export class HubspotService {
         }
     }
 
-
-
-
     ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
     async createCandidates(pipeline_stage: string): Promise<string> {
         const virtualAssistant ='p20630393_Virtual_Assistant';
@@ -184,10 +181,6 @@ export class HubspotService {
         }
         return 'Candidates created successfully';
     }
-
-
-
-
     
     ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
     async updateCandidates(pipeline_stage: string): Promise<any> {
@@ -285,6 +278,25 @@ export class HubspotService {
         }
     }
 
+    async getCountries(): Promise<any> {
+        try {
+            const response = await axios.get(`https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}/country__residence_`, {
+                headers: {
+                    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            const options = response.data.options || [];
+
+            const countries = options.map((option: any) => ({
+                value: option.value,
+            }));
+
+            return countries;
+        } catch (error) {
+            throw new BadRequestException(`Error fetching countries: ${error.message}`);
+        }
+    }
 
 
 

@@ -93,14 +93,7 @@ export class DashboardService {
         //other talents in our pool
         const otherTalents = await this.prisma.candidate.findMany({
             where: {
-                OR:[
-                    {organization_id: null},
-                    {
-                        organization_id: {
-                            not: user.organization_id,
-                        }
-                    }
-                ]
+                organization_id: null
             },
             orderBy:{
                 createdAt: 'desc',
