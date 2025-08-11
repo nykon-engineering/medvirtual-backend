@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Post, Query } from '@nestjs/common';
 import { CronService } from './cron.service';
 import { ApiProperty, ApiQuery } from '@nestjs/swagger';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
@@ -21,4 +21,5 @@ export class CronController {
             data: result
         }
     }
+
 }

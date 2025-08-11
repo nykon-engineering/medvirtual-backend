@@ -107,14 +107,15 @@ export class HubspotService {
     }
 
     
-    ////=> this service is just a example to read candidates and download resume OR populate our database
-    async updateDatabasefromHubspot(data: GetCandidatesDto): Promise<any> {
+    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    async updateCandidates(pipeline_stage: string): Promise<any> {
+        const virtualAssistant ='p20630393_Virtual_Assistant';
+        const properties = Object.keys(candidadeToDbDictionary).join(',');
+        console.log('Pipeline stage:', pipeline_stage);
+
         const candidates = await this.prisma.candidate.findMany({
             where: {
-                pipeline_status: '261075105', //261075105=> Available candidates | 1087596819=>Available Candidates Part-Time
-                NOT: {
-                    processing_status: 'completed'
-                }
+                pipeline_status: pipeline_stage ? pipeline_stage : undefined,
             },
             orderBy:{
                 createdAt: 'desc'
@@ -123,52 +124,41 @@ export class HubspotService {
                 id: true,
                 first_name: true,
                 resume_url: true,
+                hubspot_id: true,
             }
         })
-
         console.log('Candidates to process:', candidates);
 
         for (const candidate of candidates){
 
-                /*
-                const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant,{
-                filterGroups: [
-                    {
-                        filters: [
-                            {
-                                propertyName: 'hs_object_id',
-                                operator: FilterOperatorEnum.Eq,
-                                value: candidate.hubspot_id
-                            }
-                        ]
-                    }
-                ],
-                properties: data.properties,
-                limit: 100
-                })
-                if (!response || !response.results || response.results.length === 0) {
-                    throw new BadRequestException('No candidates found');
+            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant,{
+            filterGroups: [
+                {
+                    filters: [
+                        {
+                            propertyName: 'hs_object_id',
+                            operator: FilterOperatorEnum.Eq,
+                            value: candidate.hubspot_id
+                        }
+                    ]
                 }
-
-                console.log('Candidate found in Hubspot:', response.results[0].properties.name);
-                */
-                //const candidateData = mapHubspotToDb(response.results[0].properties);
-            if ( candidate.resume_url?.includes('http')){
-                
-                /*
-                await this.prisma.candidate.update({
-                    where: {
-                        id: candidate.id
-                    },
-                    data: candidateData
-                })
-                console.log('Candidate updated:', candidate.first_name);
-                */
-
-                await this.candidate.processData(candidate.id)
-                console.log('Candidate processed:', candidate.first_name);
-
+            ],
+            properties: properties.split(','),
+            limit: 100
+            })
+            if (!response || !response.results || response.results.length === 0) {
+                throw new BadRequestException('No candidates data found');
             }
+            console.log('Candidate found in Hubspot:', response.results[0].properties.name);
+            const candidateData = mapHubspotToDb(response.results[0].properties);
+            
+            await this.prisma.candidate.update({
+                where: {
+                    id: candidate.id
+                },
+                data: candidateData
+            })
+            console.log('Candidate updated:', candidate.first_name);
   
         }
     }

@@ -1,5 +1,5 @@
 import { Controller, Post, UseGuards, HttpCode, Body, Get, Query, Param } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiProperty, ApiResponse } from '@nestjs/swagger';
 
 import { HubspotService } from './hubspot.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -32,11 +32,13 @@ export class HubspotController {
         return this.hubspotService.changeDataFromHubspot(data);
     }
 
-    
+
 
     @Post('update-candidates')
-    async updateDatabasefromHubspot(@Body() data: GetCandidatesDto){
-        return this.hubspotService.updateDatabasefromHubspot(data);
+    @ApiProperty({ description: 'Update candidates with data from HubSpot' })
+    @UseGuards(AuthGuard)
+    async updateCandidates(@Query('pipeline_stage') pipeline_stage: string){
+        return this.hubspotService.updateCandidates(pipeline_stage);
     }
 
 
