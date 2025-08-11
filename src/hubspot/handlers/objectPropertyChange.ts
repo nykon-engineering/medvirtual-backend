@@ -41,6 +41,24 @@ export class HandlerObjectPropertyChange {
             }
 
             return true;
+        }else if(event.propertyName === 'career_highlights_relevant_job_experiences'){
+            await this.prisma.candidateSkill.deleteMany({
+                where: {
+                    candidate_id: candidate.id
+                }
+            });
+
+            const candidadeSkills = event.propertyValue.split(';').map((skill: string) => skill.trim());
+            for (const skill of candidadeSkills) {
+                await this.prisma.candidateSkill.create({
+                    data: {
+                        candidate_id: candidate.id,
+                        skill_name: skill,
+                        skill_type: undefined, // This field is not used in the current implementation
+                    }
+                });
+
+        }
         }else{
             
 
