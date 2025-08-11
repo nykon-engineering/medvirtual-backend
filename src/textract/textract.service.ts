@@ -23,19 +23,27 @@ export class TextractService {
     async getTextractResult(jobId: string): Promise<any> {
         let status = 'IN_PROGRESS';
         let attempts = 0;
-        const maxAttempts = 30; 
+        const maxAttempts = 30;
+        let delay= 2000; //2 seconds
 
-        while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
-           const { JobStatus} = await this.textract.getDocumentTextDetection({ JobId: jobId });
-           if ( JobStatus === 'SUCCEEDED') break;
+        while (attempts < maxAttempts) {
+            const { JobStatus, Blocks} = await this.textract.getDocumentTextDetection({ JobId: jobId });
 
-           await new Promise(resolve => setTimeout(resolve, 5000)); 
-           attempts++;
+            if (JobStatus === 'SUCCEEDED'){
+                const lines = Blocks?.filter(b => b.BlockType === 'LINE').map(b => b.Text) ?? [];
+                return lines.join('\n');
+            }
+
+            if (JobStatus === 'FAILED') {
+                throw new Error(`Textract job failed with status: ${JobStatus}`);
+            }
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay = Math.min(delay * 1.5, 10000); // Exponential backoff, max 10 seconds
+            attempts++;
         }
 
-        const result = await this.textract.getDocumentTextDetection({ JobId: jobId });
-        const lines = result.Blocks?.filter(b => b.BlockType === 'LINE').map(b => b.Text) ?? [];
-        console.log(`Textract job completed with status: ${status}, attempts: ${attempts}`);
-        return lines.join('\n');
+        throw new Error(`Textract job did not complete in time. Status: ${status}, attempts: ${attempts}`);
+       
+
     }
 }

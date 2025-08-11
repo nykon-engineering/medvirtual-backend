@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
+import { CandidatesService } from '../candidate/candidates.service';
 
 
 @Injectable()
@@ -20,9 +21,9 @@ export class HubspotService {
     private hubspotClient: Client;
     constructor(
       private readonly prisma: PrismaService,
-      private readonly google: GoogledriveService,
       private readonly objectCreation: HandlerObjectCreation,
-      private readonly objectPropertyChange: HandlerObjectPropertyChange
+      private readonly objectPropertyChange: HandlerObjectPropertyChange,
+      private readonly candidate: CandidatesService
     ) {
         this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
     }
@@ -107,6 +108,76 @@ export class HubspotService {
 
     
     ////=> this service is just a example to read candidates and download resume OR populate our database
+    async updateDatabasefromHubspot(data: GetCandidatesDto): Promise<any> {
+        const candidates = await this.prisma.candidate.findMany({
+            where: {
+                pipeline_status: '261075105', //261075105=> Available candidates | 1087596819=>Available Candidates Part-Time
+                NOT: {
+                    processing_status: 'completed'
+                }
+            },
+            orderBy:{
+                createdAt: 'desc'
+            },
+            select:{
+                id: true,
+                first_name: true,
+                resume_url: true,
+            }
+        })
+
+        console.log('Candidates to process:', candidates);
+
+        for (const candidate of candidates){
+
+                /*
+                const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant,{
+                filterGroups: [
+                    {
+                        filters: [
+                            {
+                                propertyName: 'hs_object_id',
+                                operator: FilterOperatorEnum.Eq,
+                                value: candidate.hubspot_id
+                            }
+                        ]
+                    }
+                ],
+                properties: data.properties,
+                limit: 100
+                })
+                if (!response || !response.results || response.results.length === 0) {
+                    throw new BadRequestException('No candidates found');
+                }
+
+                console.log('Candidate found in Hubspot:', response.results[0].properties.name);
+                */
+                //const candidateData = mapHubspotToDb(response.results[0].properties);
+            if ( candidate.resume_url?.includes('http')){
+                
+                /*
+                await this.prisma.candidate.update({
+                    where: {
+                        id: candidate.id
+                    },
+                    data: candidateData
+                })
+                console.log('Candidate updated:', candidate.first_name);
+                */
+
+                await this.candidate.processData(candidate.id)
+                console.log('Candidate processed:', candidate.first_name);
+
+            }
+  
+        }
+    }
+
+
+
+
+
+    ////=> this service is just a example to populate our database
     async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {
       if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');
       try{
@@ -122,44 +193,53 @@ export class HubspotService {
               ],
               properties: data.properties,
               limit: 100
-          })
-          if (!response || !response.results || response.results.length === 0) {
+            })
+            if (!response || !response.results || response.results.length === 0) {
               throw new BadRequestException('No candidates found');
-          }
+            }
+
 
           for (let i=0; i< response.results.length ; i++){
-            const pdfName = `${response.results[i].properties.name}.pdf`;
-            const urlFile = response.results[i].properties.resume_link || '';
-            
-            
-            /* => function to populate db with the datas from hubspot
             const candidateData = mapHubspotToDb(response.results[i].properties);
-            const userReady = await this.prisma.candidate.findUnique({
+            
+            //=> function to populate db with the datas from hubspot
+            const candidate = await this.prisma.candidate.findUnique({
                 where: {
-                    hubspot_id: String(response.results[i].properties.hs_object_id)
-                }
+                    hubspot_id: String(response.results[i].properties.hs_object_id),
+                    NOT: {
+                        processing_status: 'completed'
+                    }
+                },
+                select: {
+                    id: true,
+                    processing_status: true,
+                    first_name: true,
+                    resume_url: true,
+                }   
             })
-            if(!userReady){
-                console.log('Name:', candidateData);
+            console.log('Candidate found:', candidate?.first_name , 'on the stage:', candidate?.processing_status);
+
+            if (candidate && candidate.processing_status !== 'completed' && candidate.resume_url?.includes('http')){
                 
-                const createCandidate = await this.prisma.candidate.create({
-                    data: candidateData,
+                await this.prisma.candidate.update({
+                    where: {
+                        id: candidate.id
+                    },
+                    data: candidateData
                 })
-                console.log('=> Candidate created:', createCandidate.first_name);
-            }else{
-                console.log('===> Candidate already exists:', response.results[i].properties.name);
+                console.log('Candidate updated:', candidate.first_name);
+
+                await this.candidate.processData(candidate.id)
+                console.log('Candidate processed:', candidate.first_name);
+
             }
-                */
             
+                
             
-            // Function to dowload the file
-            const idFile = extractDriveFileId(urlFile);
-            console.log('idFile:', idFile);
-            const downloadDir = path.resolve(__dirname, '/tmp/downloads');
-            if (idFile) await this.google.downloadFile(idFile, pdfName, downloadDir);
             
 
           }
+          
           return response;
       }catch (error) {
           throw new BadRequestException(`Error fetching candidates: ${error.message}`);

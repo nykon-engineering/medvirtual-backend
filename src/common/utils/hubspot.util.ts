@@ -14,9 +14,11 @@ export function mapHubspotToDb(hubspotData: candidateData): Prisma.CandidateCrea
     const result: Partial<Prisma.CandidateCreateInput> = {};
 
     for (const [hubspotKey, dbKey] of Object.entries(candidadeToDbDictionary)) {
+        
         if (hubspotData[hubspotKey] !== undefined) {
           result[dbKey] = hubspotData[hubspotKey];
         }
+        
       }
     return result as Prisma.CandidateCreateInput;
 }

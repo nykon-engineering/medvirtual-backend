@@ -4,6 +4,7 @@ export const candidadeToDbDictionary : Record<string, string> = {
     email: 'email',
     first_name: 'first_name',
     last_name: 'last_name',
+    name: 'name',
     hs_pipeline_stage: 'pipeline_status',
     agreed_hourly_pay_rate: 'hourly_pay_rate',
     resume_link: 'resume_url',

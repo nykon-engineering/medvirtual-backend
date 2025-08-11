@@ -5,6 +5,7 @@ import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
+import { CandidatesService } from '../candidate/candidates.service';
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -41,6 +42,10 @@ const prismaMock = {
   },
 };
 
+const candidateMock = {
+  processData: jest.fn(),
+}
+
 const handlerObjectCreationMock = {
   execute: jest.fn(),
 };
@@ -73,7 +78,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: GoogledriveService, useValue: googleMock},
         {provide: PrismaService, useValue: prismaMock},
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
-        {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock}
+        {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
+        {provide: CandidatesService, useValue: candidateMock}
       ],
     }).compile();
 
@@ -119,7 +125,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: GoogledriveService, useValue: googleMock},
         {provide: PrismaService, useValue: prismaMock},
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
-        {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock}
+        {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
+        {provide: CandidatesService, useValue: candidateMock}
       ]
     }).compile();
 

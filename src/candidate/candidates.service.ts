@@ -10,9 +10,6 @@ import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
-import { start } from 'repl';
-import { pipe } from 'rxjs';
-import { pipeline } from 'stream';
 
 @Injectable()
 export class CandidatesService {
@@ -36,22 +33,12 @@ export class CandidatesService {
     perPage?: number
   ): Promise <any> {
 
-    let avaliabilityOnDb;
-
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
 
     const skip =(page - 1) * perPage;
     const take = perPage;
-    const {organization_id} = user;
-    
-    if(avaliability){
-      if (avaliability.toLowerCase() === 'full-time'){
-        avaliabilityOnDb = '261075105' //direct Id from hubspot => Available Candidates stage
-      }else if (avaliability.toLowerCase() === 'part-time'){
-        avaliabilityOnDb = '1087596819' //direct Id from hubspot => Available Candidates - Part Time stage
-      }
-    }
+    const {organization_id} = user;    
 
     const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (176 * 1.55) : undefined; 
     const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (176 * 1.55) : undefined; 
@@ -268,7 +255,7 @@ export class CandidatesService {
     const idFile = extractDriveFileId(candidate.resume_url);
     console.log('Extracted file ID from URL:', idFile);
 
-    const pdfName = `${candidate.first_name}_${candidate.last_name}_resume.pdf`;
+    const pdfName = `${candidate.id}_resume.pdf`;
     const downloadDir = path.resolve(__dirname, '/tmp');
 
     //processing_downloadFile

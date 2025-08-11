@@ -34,6 +34,10 @@ export class HubspotController {
 
     
 
+    @Post('update-candidates')
+    async updateDatabasefromHubspot(@Body() data: GetCandidatesDto){
+        return this.hubspotService.updateDatabasefromHubspot(data);
+    }
 
 
     //=> this route is just a example to read candidates and download resume
