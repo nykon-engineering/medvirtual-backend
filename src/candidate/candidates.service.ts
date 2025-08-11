@@ -104,6 +104,8 @@ export class CandidatesService {
       pipeline_status: true, // This will be converted to name later
       about_me: true,
       specialization: true,
+      tools: true,
+      medical_tools: true,
       languages: {
         select: {
           name: true,
@@ -182,6 +184,8 @@ export class CandidatesService {
       pipeline_status: true, // This will be converted to name later
       about_me: true,
       specialization: true,
+      tools: true,
+      medical_tools: true,
       languages: {
         select: {
           name: true,

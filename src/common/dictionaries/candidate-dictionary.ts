@@ -9,8 +9,10 @@ export const candidadeToDbDictionary : Record<string, string> = {
     agreed_hourly_pay_rate: 'hourly_pay_rate',
     resume_link: 'resume_url',
     practice_area_experience: 'specialization',
-    country_residence: 'country',
+    country__residence_: 'country',
     employment_type: 'employment_type',
+    tools: 'tools',
+    medical_tools: 'medical_tools',
 
 }
 

@@ -111,6 +111,8 @@ model Candidate {
   pipeline_status        String                  @default("available")
   years_of_experience    Int?
   employment_type        String?
+  tools                  String?
+  medical_tools          String?
   educations             CandidateEducation[]
   experiences            CandidateExperience[]
   skills                 CandidateSkill[]
