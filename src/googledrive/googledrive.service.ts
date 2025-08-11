@@ -1,12 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as fs from 'fs';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import * as path from 'path';
 import { OAuth2Client } from 'google-auth-library';
 
 import { PrismaService } from '../prisma/prisma.service';
-
-
+import { lastValueFrom } from 'rxjs';
 
 @Injectable()
 export class GoogledriveService {
@@ -107,8 +106,6 @@ export class GoogledriveService {
       return newTokens.access_token;
     }
 
-
-
     // => functions to help me in others internal functions
     async listFilesInFolder(folderId: string) {
         const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
@@ -116,7 +113,7 @@ export class GoogledriveService {
           throw new BadRequestException('Google tokens not found. Please authenticate first.');
         }
         //console.log('tokens:', tokens);
-
+        
         try {
           const res = await axios.get('https://www.googleapis.com/drive/v3/files', {
             headers: {
@@ -131,12 +128,12 @@ export class GoogledriveService {
           });
           return res.data.files;
           }catch(error){
-            throw new BadRequestException(`Failed to list files in folder: ${error}`);
+            throw new BadRequestException(`Failed to list files in folder: ${error.message}`);
           }
       }
     
     async downloadFile(fileId: string, filename: string, downloadDir: string) {
-      //console.log('entrou...', fileId, filename);
+      //this function was changed by downloadFile2
       const tokens = await this.getValidAccessToken(); // Ensure we have a valid access token. if no, generate new accesToken with our refreshToken
       if (!tokens) {
         throw new BadRequestException('Google tokens not found. Please authenticate first.');
@@ -147,13 +144,13 @@ export class GoogledriveService {
         },
         params: {
           alt: 'media',
+          fields: 'id,mimeType,name',
         },
         responseType: 'stream',
       });
+      const { mimeType } = response.data;
+      console.log('MIME TYPE:', mimeType);
       
-      
-      
-
       if (!fs.existsSync(downloadDir)) {
         fs.mkdirSync(downloadDir, { recursive: true });
       }
@@ -164,9 +161,51 @@ export class GoogledriveService {
         const dest = fs.createWriteStream(destinationPath);
         response.data
           .on('end', () => resolve(`File downloaded to ${destinationPath}`))
-          .on('error', (err) => reject(`Error downloading file: ${err}`))
+          .on('error', (err) => reject(`Error downloading file: ${err.message}`))
           .pipe(dest);
       });
     }
 
+    async downloadFile2(fileId: string, filename: string, downloadDir: string) {
+      const tokens = await this.getValidAccessToken();
+      
+      const metadataUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&alt=media`;
+
+      const headers = {
+        Authorization: `Bearer ${tokens}`,
+      };
+      
+      // 🔍 Passo 1: Buscar metadata do arquivo
+      const metadataResponse = await axios.get(metadataUrl, { headers })
+      const { name, mimeType } = metadataResponse.data;
+  
+      let downloadUrl: string;
+
+      // 🧠 Passo 2: Verifica se é um tipo exportável do Google
+      const exportableTypes = {
+        'application/vnd.google-apps.document': 'application/pdf',
+        'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.google-apps.presentation': 'application/pdf',
+      };
+      
+      if (exportableTypes[mimeType]) {
+        // Arquivo do Google Docs - usar export
+        const exportMimeType = exportableTypes[mimeType];
+        downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMimeType)}`;
+      } else {
+        // Arquivo normal - usar alt=media
+        downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+      }
+
+      // 📥 Passo 3: Baixar o arquivo
+      const response: AxiosResponse<Buffer> = await axios.get(downloadUrl, {
+          headers,
+          responseType: 'arraybuffer',
+      })
+  
+      const destinationPath = path.resolve(downloadDir, filename);
+      fs.writeFileSync(destinationPath, response.data);
+
+      console.log(`Arquivo salvo em ${destinationPath}`);
+    }
 }

@@ -4,6 +4,7 @@ import { OpenAI } from 'openai';
 @Injectable()
 export class OpenaiService {
 
+    /* istanbul ignore next */
     async organizeText(text: string): Promise<string> {
         
         const apiKey = process.env.OPENAI_API_KEY;
@@ -15,19 +16,30 @@ export class OpenaiService {
             apiKey: apiKey
         });
 
-        const prompt = `The text below is the content of a professional resume. Extract and organize the information in JSON format, with the following fields:
+        const prompt = `You are a backend system assistant. Your task is to extract structured candidate data from resumes.
+        Below is the plain text extracted from a candidate's resume using Amazon Textract.
+        You must return a JSON object that follows EXACTLY the schema described below. DO NOT guess or infer any information that is not explicitly stated in the input text.
+        If a field is not found in the text, return it as null, an empty array, or an empty string, as appropriate based on the data type.  
 
         - name: complet name
         - email: candidate email
         - phone: candidate phone number
         - bio: a brief description about the professional
         - education: array with { institution, degree, start_date, end_date }
-        - experience: array with { company, role, start_date, end_date, description (organizated by bullet point and finalized with ;) } 
+        - experience: array with { company, role, start_date, end_date, description (organizated text with each phrase finalized with ;) } 
+        - years_of_experience: number of years of experience calculating the difference between the earliest start date and the current year
         - skills: array of the skills
         - languages: array of the languages spoken
         - specializations: array of the specializations
 
-        Texto:
+        Rules:
+        - Do not change the structure of the JSON.
+        - Do not invent or infer values. Only extract what is explicitly present in the input.
+        - If a field is not found, leave it as null, empty string "", or [] depending on the field type.
+        - The outer structure and keys must always be the same.
+        - Return only the JSON. No explanations or preamble.
+
+        Text:
         """ 
         ${text}
         """

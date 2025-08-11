@@ -10,6 +10,10 @@ import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
+import { HandlerObjectCreation } from './handlers/objectCreation';
+import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
+import { CandidatesService } from '../candidate/candidates.service';
+import { map } from '@hubspot/api-client/lib/codegen/automation/actions/rxjsStub';
 
 
 @Injectable()
@@ -18,7 +22,9 @@ export class HubspotService {
     private hubspotClient: Client;
     constructor(
       private readonly prisma: PrismaService,
-      private readonly google: GoogledriveService
+      private readonly objectCreation: HandlerObjectCreation,
+      private readonly objectPropertyChange: HandlerObjectPropertyChange,
+      private readonly candidate: CandidatesService
     ) {
         this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
     }
@@ -46,74 +52,27 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
+        let orderedData: any[] = [];
         console.log('Received data:', data);
-        const orderedData = data.sort((a,b)=>{
-            if (a.subscriptionType < b.subscriptionType) return -1;
-            if (a.subscriptionType > b.subscriptionType) return 1;
-            return 0;
-        })
 
+        if (!data || data.length >= 2) {
+            orderedData = data.sort((a,b)=>{
+                if (a.subscriptionType < b.subscriptionType) return -1;
+                if (a.subscriptionType > b.subscriptionType) return 1;
+                return 0;
+            })
+        }else{
+            orderedData = data;
+        }
+    
         //console.log('Ordered Data:', orderedData);
 
         for (const event of orderedData){
             switch (event.subscriptionType) {
                 case 'object.propertyChange':
-                    
-                    const candidate = await this.prisma.candidate.findUnique({
-                        where: {
-                            hubspot_id: String(event.objectId)
-                        }
-                    })
-    
-                    if(!candidate) return; // here, I need to refactor to allow create a new candidate if its not exists
-
-                    const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
-                    if(!fieldExists) return;
-    
-                    const fieldUpdated = candidadeToDbDictionary[event.propertyName];
-                    
-                    await this.prisma.candidate.update({
-                        where: {
-                            id: candidate.id
-                        },
-                        data: {
-                            [fieldUpdated]: event.propertyValue
-                        }
-                    })
-    
-                    return true;
-    
+                    return await this.objectPropertyChange.execute(event);
                 case 'object.creation':
-                    const properties = Object.keys(candidadeToDbDictionary).join(',');
-                    try{
-                        const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${event.objectId}?properties=${properties}`, 
-                            {
-                                headers: {
-                                    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                                    'Content-Type': 'application/json'
-                                }
-                            }
-                        )
-    
-                        if (!getObject) {
-                            throw new BadRequestException('No object data found');
-                        }
-                        const candidateData = mapHubspotToDb(getObject.data.properties);
-    
-                        const createCandidate = await this.prisma.candidate.create({
-                            data: candidateData,
-                        })
-    
-                        if (!createCandidate) {
-                            throw new BadRequestException('Error creating candidate in the database');
-                        }
-    
-    
-                        return true;
-    
-                    }catch (error) {
-                        throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
-                    }
+                    return await this.objectCreation.execute(event);
                 case 'object.deletion':
     
     
@@ -151,8 +110,115 @@ export class HubspotService {
 
 
 
+    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    async createCandidates(pipeline_stage: string): Promise<string> {
+        const virtualAssistant ='p20630393_Virtual_Assistant';
+        const properties = Object.keys(candidadeToDbDictionary).join(',');
+
+        const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant,{
+            filterGroups: [
+                {
+                    filters: [
+                        {
+                            propertyName: 'hs_pipeline_stage',
+                            operator: FilterOperatorEnum.Eq,
+                            value: pipeline_stage ? pipeline_stage : '99999999' // Default value if not provided
+                        }
+                    ]
+                }
+            ],
+            properties: properties.split(','),
+            limit: 100
+            })
+        if (!response || !response.results || response.results.length === 0) {
+            throw new BadRequestException('No candidates data found');
+        }
+
+        //console.log('Candidates found in Hubspot:', response.results);
+
+        for (const result of response.results) {
+
+            const user = await this.prisma.candidate.findUnique({
+                where: {
+                    hubspot_id: String(result.properties.hs_object_id)
+                }
+            })
+
+            if (!user){
+                const candidateData = mapHubspotToDb(result.properties);
+                await this.prisma.candidate.create({
+                    data: candidateData,
+                })
+                console.log('Candidate created:', result.properties.name);
+            }
+        }
+        return 'Candidates created successfully';
+    }
+
+
+
+
     
-    ////=> this service is just a example to read candidates and download resume OR populate our database
+    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    async updateCandidates(pipeline_stage: string): Promise<any> {
+        const virtualAssistant ='p20630393_Virtual_Assistant';
+        const properties = Object.keys(candidadeToDbDictionary).join(',');
+
+        const candidates = await this.prisma.candidate.findMany({
+            where: {
+                pipeline_status: pipeline_stage ? pipeline_stage : undefined,
+            },
+            orderBy:{
+                createdAt: 'desc'
+            },
+            select:{
+                id: true,
+                first_name: true,
+                resume_url: true,
+                hubspot_id: true,
+            }
+        })
+       // console.log('Candidates to process:', candidates);
+
+        for (const candidate of candidates){
+
+            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant,{
+            filterGroups: [
+                {
+                    filters: [
+                        {
+                            propertyName: 'hs_object_id',
+                            operator: FilterOperatorEnum.Eq,
+                            value: candidate.hubspot_id
+                        }
+                    ]
+                }
+            ],
+            properties: properties.split(','),
+            limit: 100
+            })
+            if (!response || !response.results || response.results.length === 0) {
+                throw new BadRequestException('No candidates data found');
+            }
+            console.log('Candidate found in Hubspot:', response.results[0].properties.name);
+            const candidateData = mapHubspotToDb(response.results[0].properties);
+            
+            await this.prisma.candidate.update({
+                where: {
+                    id: candidate.id
+                },
+                data: candidateData
+            })
+            console.log('Candidate updated:', candidate.first_name);
+  
+        }
+    }
+
+
+
+
+
+    ////=> this service is just a example to populate our database
     async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {
       if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');
       try{
@@ -168,44 +234,53 @@ export class HubspotService {
               ],
               properties: data.properties,
               limit: 100
-          })
-          if (!response || !response.results || response.results.length === 0) {
+            })
+            if (!response || !response.results || response.results.length === 0) {
               throw new BadRequestException('No candidates found');
-          }
+            }
+
 
           for (let i=0; i< response.results.length ; i++){
-            const pdfName = `${response.results[i].properties.name}.pdf`;
-            const urlFile = response.results[i].properties.resume_link || '';
-            
-            
-            /* => function to populate db with the datas from hubspot
             const candidateData = mapHubspotToDb(response.results[i].properties);
-            const userReady = await this.prisma.candidate.findUnique({
+            
+            //=> function to populate db with the datas from hubspot
+            const candidate = await this.prisma.candidate.findUnique({
                 where: {
-                    hubspot_id: String(response.results[i].properties.hs_object_id)
-                }
+                    hubspot_id: String(response.results[i].properties.hs_object_id),
+                    NOT: {
+                        processing_status: 'completed'
+                    }
+                },
+                select: {
+                    id: true,
+                    processing_status: true,
+                    first_name: true,
+                    resume_url: true,
+                }   
             })
-            if(!userReady){
-                console.log('Name:', candidateData);
+            console.log('Candidate found:', candidate?.first_name , 'on the stage:', candidate?.processing_status);
+
+            if (candidate && candidate.processing_status !== 'completed' && candidate.resume_url?.includes('http')){
                 
-                const createCandidate = await this.prisma.candidate.create({
-                    data: candidateData,
+                await this.prisma.candidate.update({
+                    where: {
+                        id: candidate.id
+                    },
+                    data: candidateData
                 })
-                console.log('=> Candidate created:', createCandidate.first_name);
-            }else{
-                console.log('===> Candidate already exists:', response.results[i].properties.name);
+                console.log('Candidate updated:', candidate.first_name);
+
+                await this.candidate.processData(candidate.id)
+                console.log('Candidate processed:', candidate.first_name);
+
             }
-                */
             
+                
             
-            // Function to dowload the file
-            const idFile = extractDriveFileId(urlFile);
-            console.log('idFile:', idFile);
-            const downloadDir = path.resolve(__dirname, '/tmp/downloads');
-            if (idFile) await this.google.downloadFile(idFile, pdfName, downloadDir);
             
 
           }
+          
           return response;
       }catch (error) {
           throw new BadRequestException(`Error fetching candidates: ${error.message}`);

@@ -29,6 +29,12 @@ jobs:
       - name: 📦 remove binaries from macOs
         run: rm -rf node_modules/.prisma
 
+      - name: 🚀 Run Prisma Migrate Deploy (prod DB)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+        run: |
+          npx prisma migrate deploy
+
       - name: Update binaryTargets for production (Linux)
         run: sed -i 's/binaryTargets = \["native"\]/binaryTargets = \["rhel-openssl-1.0.x"\]/' prisma/schema.prisma
 

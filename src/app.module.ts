@@ -15,6 +15,8 @@ import { CandidatesModule } from './candidate/candidates.module';
 import { TextractModule } from './textract/textract.module';
 import { S3Module } from './s3/s3.module';
 import { OpenaiModule } from './openai/openai.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { CronModule } from './cron/cron.module';
 
 @Module({
   imports: [
@@ -32,7 +34,9 @@ import { OpenaiModule } from './openai/openai.module';
     CandidatesModule,
     TextractModule,
     S3Module,
-    OpenaiModule
+    OpenaiModule,
+    DashboardModule,
+    CronModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

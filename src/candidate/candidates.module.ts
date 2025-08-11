@@ -10,6 +10,7 @@ import { OpenaiModule } from '../openai/openai.module';
 @Module({
   controllers: [CandidatesController],
   providers: [CandidatesService],
-  imports: [PrismaModule, GoogledriveModule, TextractModule, S3Module, OpenaiModule]
+  imports: [PrismaModule, GoogledriveModule, TextractModule, S3Module, OpenaiModule],
+  exports: [CandidatesService],
 })
 export class CandidatesModule {}

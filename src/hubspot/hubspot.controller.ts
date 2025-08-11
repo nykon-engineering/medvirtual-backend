@@ -1,5 +1,5 @@
 import { Controller, Post, UseGuards, HttpCode, Body, Get, Query, Param } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
 import { HubspotService } from './hubspot.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -32,8 +32,21 @@ export class HubspotController {
         return this.hubspotService.changeDataFromHubspot(data);
     }
 
-    
+    @Post('create-candidates')
+    @ApiProperty({ description: 'Create candidates with data from HubSpot by specific pipeline stage' })
+    @ApiQuery({ name: 'pipeline_stage', required: true, description: 'Pipeline stage to filter candidates' })
+    @UseGuards(AuthGuard)
+    async createCandidates(@Query('pipeline_stage') pipeline_stage: string){
+        return this.hubspotService.createCandidates(pipeline_stage);
+    }
 
+    @Post('update-candidates')
+    @ApiProperty({ description: 'Update candidates with data from HubSpot by specific pipeline stage' })
+    @ApiQuery({ name: 'pipeline_stage', required: true, description: 'Pipeline stage to filter candidates' })
+    @UseGuards(AuthGuard)
+    async updateCandidates(@Query('pipeline_stage') pipeline_stage: string){
+        return this.hubspotService.updateCandidates(pipeline_stage);
+    }
 
 
     //=> this route is just a example to read candidates and download resume

@@ -94,9 +94,12 @@ model Candidate {
   id                     String                  @id @default(uuid())
   hubspot_id             String                  @unique
   email                  String
-  first_name             String
-  last_name              String
+  first_name             String?
+  last_name              String?
+  name                   String?
   resume_url             String?
+  specialization         String?
+  country                String?
   about_me               String?
   processed_resume_data  Json?
   processing_status      ProcessingStatus        @default(pending)
@@ -107,12 +110,22 @@ model Candidate {
   organization_id        String?
   pipeline_status        String                  @default("available")
   years_of_experience    Int?
+  employment_type        String?
   educations             CandidateEducation[]
   experiences            CandidateExperience[]
   skills                 CandidateSkill[]
+  languages              CandidateLanguage[]
   selectedInInterviews   Interview[]             @relation("SelectedCandidate")
   organizationCandidates OrganizationCandidate[]
   panelCandidates        PanelCandidate[]
+}
+
+model CandidateLanguage {
+  id                String            @id @default(uuid())
+  candidate_id      String
+  name              String
+  createdAt         DateTime          @default(now())
+  candidate         Candidate         @relation(fields: [candidate_id], references: [id])
 }
 
 model OrganizationCandidate {
@@ -146,7 +159,8 @@ model CandidateExperience {
   candidate_id     String
   company          String
   position         String
-  duration         String?
+  start_date       String?
+  end_date         String?
   responsibilities String?
   createdAt        DateTime  @default(now())
   candidate        Candidate @relation(fields: [candidate_id], references: [id])
