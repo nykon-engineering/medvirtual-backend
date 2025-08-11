@@ -111,8 +111,7 @@ export class CandidatesService {
       },
       skills: {
         select: {
-          skill_name: true,
-          skill_type: true
+          skill_name: true
         }
       },
       educations: {
@@ -132,9 +131,6 @@ export class CandidatesService {
         }
       },
     }
-    
-
-    
 
     try{
       const [candidates, total] = await this.prisma.$transaction([
@@ -147,16 +143,13 @@ export class CandidatesService {
         this.prisma.candidate.count({where})
       ])
       
-      console.log('Candidates found:', candidates, 'Total:', total);
       //change pipeline_status to name
       candidates.forEach(candidate => {
         if (candidate.pipeline_status) {
           const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
           candidate.pipeline_status = stageName || 'Unknown Stage';
         }
-
       });
-
 
       return {
         data: candidates,
