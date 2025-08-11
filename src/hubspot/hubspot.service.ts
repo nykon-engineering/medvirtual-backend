@@ -13,6 +13,7 @@ import { GoogledriveService } from '../googledrive/googledrive.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { CandidatesService } from '../candidate/candidates.service';
+import { map } from '@hubspot/api-client/lib/codegen/automation/actions/rxjsStub';
 
 
 @Injectable()
@@ -106,12 +107,62 @@ export class HubspotService {
         }
     }
 
+
+
+
+    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    async createCandidates(pipeline_stage: string): Promise<string> {
+        const virtualAssistant ='p20630393_Virtual_Assistant';
+        const properties = Object.keys(candidadeToDbDictionary).join(',');
+
+        const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant,{
+            filterGroups: [
+                {
+                    filters: [
+                        {
+                            propertyName: 'hs_pipeline_stage',
+                            operator: FilterOperatorEnum.Eq,
+                            value: pipeline_stage ? pipeline_stage : '99999999' // Default value if not provided
+                        }
+                    ]
+                }
+            ],
+            properties: properties.split(','),
+            limit: 100
+            })
+        if (!response || !response.results || response.results.length === 0) {
+            throw new BadRequestException('No candidates data found');
+        }
+
+        //console.log('Candidates found in Hubspot:', response.results);
+
+        for (const result of response.results) {
+
+            const user = await this.prisma.candidate.findUnique({
+                where: {
+                    hubspot_id: String(result.properties.hs_object_id)
+                }
+            })
+
+            if (!user){
+                const candidateData = mapHubspotToDb(result.properties);
+                await this.prisma.candidate.create({
+                    data: candidateData,
+                })
+                console.log('Candidate created:', result.properties.name);
+            }
+        }
+        return 'Candidates created successfully';
+    }
+
+
+
+
     
     ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
     async updateCandidates(pipeline_stage: string): Promise<any> {
         const virtualAssistant ='p20630393_Virtual_Assistant';
         const properties = Object.keys(candidadeToDbDictionary).join(',');
-        console.log('Pipeline stage:', pipeline_stage);
 
         const candidates = await this.prisma.candidate.findMany({
             where: {
@@ -127,7 +178,7 @@ export class HubspotService {
                 hubspot_id: true,
             }
         })
-        console.log('Candidates to process:', candidates);
+       // console.log('Candidates to process:', candidates);
 
         for (const candidate of candidates){
 
