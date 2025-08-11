@@ -222,19 +222,7 @@ export class CandidatesService {
       }
     }
 
-    if(jsonData.skills !== '' && jsonData.skills !== undefined){
-      const skillsData = jsonData.skills;
-      if (Array.isArray(skillsData)) {
-        await this.prisma.candidateSkill.createMany({
-          data: skillsData.map(item => ({
-            candidate_id: id,
-            skill_name: item || '',
-            proficiency_level: undefined,
-            skill_type: undefined,
-          }))
-        });
-      }
-    }
+   
 
     return true
   }

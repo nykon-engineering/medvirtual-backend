@@ -28,8 +28,6 @@ export class OpenaiService {
         - education: array with { institution, degree, start_date, end_date }
         - experience: array with { company, role, start_date, end_date, description (organizated text with each phrase finalized with ;) } 
         - years_of_experience: number of years of experience calculating the difference between the earliest start date and the current year
-        - skills: array of the skills
-        - languages: array of the languages spoken
         - specializations: array of the specializations
 
         Rules:

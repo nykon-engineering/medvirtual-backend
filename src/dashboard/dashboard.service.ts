@@ -8,10 +8,9 @@ export class DashboardService {
     constructor(
         private readonly prisma: PrismaService,
     ) {}
-
+              
 
     async getDashboardData(user: USER): Promise<any> {
-
         let result: any = {};
 
         if (!user || !user.organization_id) throw new BadRequestException('User or organization not found');
@@ -22,7 +21,6 @@ export class DashboardService {
             }
         })
         result.hiredStaff = hiredStaff;
-
 
         //awaiting decision panels
         const hireRequest = await this.prisma.hireRequest.findMany({
@@ -48,8 +46,6 @@ export class DashboardService {
             }
         })
         result.hireRequest = hireRequest;
-
-
 
 
 

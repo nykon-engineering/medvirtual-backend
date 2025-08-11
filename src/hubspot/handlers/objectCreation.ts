@@ -47,6 +47,8 @@ export class HandlerObjectCreation {
             if (!createCandidate) {
                 throw new BadRequestException('Error creating candidate in the database');
             }
+            //Here, I start to work with the skills
+
 
             //here I start to work with the language
             if (getObject.data.properties.language_spoken) {
