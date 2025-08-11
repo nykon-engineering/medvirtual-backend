@@ -8,6 +8,7 @@ import { S3Service } from '../s3/s3.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { OpenaiService } from '../openai/openai.service';
 import { count } from 'console';
+import { first } from 'rxjs';
 
 const mockPrisma = {
   candidate: {
@@ -92,7 +93,33 @@ const openAIMock = {
 
   describe('findOne', () => {
     it('should return candidate by id and organization_id', async () => {
-      const mockCandidate = { id: '1', organization_id: 'org-1' };
+      const mockCandidate = {
+        id: '1',
+        organization_id: 'org-1',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'a@a.com',
+        name: 'John Doe',
+        pipeline_status: '1',
+        about_me: 'About me',
+        country: 'USA',
+        specialization: 'Software Development',
+        years_of_experience: 5,
+        hourly_pay_rate: 5,
+        employment_type: 'Full-time',
+        educations: [{ degree: 'BSc', institution: 'University', year: '2020' }],
+        experiences: [
+          {
+            company: 'Company A',
+            position: 'Developer',
+            start_date: '2021-01-01',
+            end_date: '2022-01-01',
+            responsibilities: 'Developing software',
+          },
+        ],
+        skills: [{ skill_name: 'JavaScript', skill_type: 'technical' }],
+        languages: [{ name: 'English' }],
+      };
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
 
       const result = await service.findOne('1', mockUser);
@@ -102,6 +129,47 @@ const openAIMock = {
           id: '1',
           organization_id: 'org-1',
         },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          name: true,
+          specialization: true,
+          years_of_experience: true,
+          hourly_pay_rate: true,
+          employment_type: true,
+          pipeline_status: true,
+          about_me: true,
+          country: true,
+          educations: {
+            select: {
+              degree: true,
+              institution: true,
+              year: true,
+            },
+          },
+          experiences: {
+            select: {
+              company: true,
+              position: true,
+              start_date: true,
+              end_date: true,
+              responsibilities: true,
+            },
+          },
+          skills: {
+            select: {
+              skill_name: true,
+              skill_type: true,
+            },
+          },
+          languages: {
+            select: {
+              name: true,
+            },
+          },
+        }
       });
       expect(result).toEqual(mockCandidate);
     });

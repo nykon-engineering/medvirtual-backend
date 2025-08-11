@@ -91,6 +91,48 @@ export class CandidatesService {
         }
       ]
     }
+    const select ={
+      id: true,
+      first_name: true,
+      last_name: true,
+      name: true,
+      email: true,
+      country: true,
+      employment_type: true,
+      hourly_pay_rate: true,
+      years_of_experience: true,
+      pipeline_status: true, // This will be converted to name later
+      about_me: true,
+      specialization: true,
+      languages: {
+        select: {
+          name: true,
+        }
+      },
+      skills: {
+        select: {
+          skill_name: true,
+          skill_type: true
+        }
+      },
+      educations: {
+        select: {
+          institution: true,
+          degree: true,
+          year: true
+        }
+      },
+      experiences: {
+        select: {
+          company: true,
+          position: true,
+          start_date: true,
+          end_date: true,
+          responsibilities: true
+        }
+      },
+    }
+    
 
     
 
@@ -99,18 +141,22 @@ export class CandidatesService {
         this.prisma.candidate.findMany({
           where,
           skip,
-          take
+          take,
+          select,
         }),
         this.prisma.candidate.count({where})
       ])
-     
+      
+      console.log('Candidates found:', candidates, 'Total:', total);
       //change pipeline_status to name
       candidates.forEach(candidate => {
         if (candidate.pipeline_status) {
           const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
           candidate.pipeline_status = stageName || 'Unknown Stage';
         }
+
       });
+
 
       return {
         data: candidates,
@@ -122,19 +168,63 @@ export class CandidatesService {
         }
       };
     }catch(error){
-      throw new BadGatewayException('Failed to fetch candidates');
+      throw new BadGatewayException('Failed to fetch candidates', error.message);
     }
   }
 
   async findOne(id: string, user: USER) {
     const {organization_id} = user;
     if (!id) throw new BadRequestException('Candidate ID is required');
+
+    const select ={
+      id: true,
+      first_name: true,
+      last_name: true,
+      name: true,
+      email: true,
+      country: true,
+      employment_type: true,
+      hourly_pay_rate: true,
+      years_of_experience: true,
+      pipeline_status: true, // This will be converted to name later
+      about_me: true,
+      specialization: true,
+      languages: {
+        select: {
+          name: true,
+        }
+      },
+      skills: {
+        select: {
+          skill_name: true,
+          skill_type: true
+        }
+      },
+      educations: {
+        select: {
+          institution: true,
+          degree: true,
+          year: true
+        }
+      },
+      experiences: {
+        select: {
+          company: true,
+          position: true,
+          start_date: true,
+          end_date: true,
+          responsibilities: true
+        }
+      },
+      
+    }
   
     const candidate = await this.prisma.candidate.findUnique({
       where: {
         id: id,
         organization_id: organization_id
-      }
+      },
+      select,
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
 
