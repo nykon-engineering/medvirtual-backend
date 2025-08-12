@@ -33,7 +33,7 @@ describe('DashboardService', () => {
     jest.clearAllMocks();
   });
 
-  it('deve chamar organization.execute para organization_super_admin', async () => {
+  it('should call organization.execute for organization_super_admin', async () => {
     const user = { role: 'organization_super_admin' } as any;
     mockHandlerOrganization.execute.mockResolvedValue('org data');
 
@@ -44,7 +44,7 @@ describe('DashboardService', () => {
     expect(result).toBe('org data');
   });
 
-  it('deve chamar organization.execute para organization_admin', async () => {
+  it('should call organization.execute for organization_admin', async () => {
     const user = { role: 'organization_admin' } as any;
     mockHandlerOrganization.execute.mockResolvedValue('org admin data');
 
@@ -54,7 +54,7 @@ describe('DashboardService', () => {
     expect(result).toBe('org admin data');
   });
 
-  it('deve chamar client.execute para system_super_admin', async () => {
+  it('should call client.execute for system_super_admin', async () => {
     const user = { role: 'system_super_admin' } as any;
     mockHandlerClient.execute.mockResolvedValue('client data');
 
@@ -64,7 +64,7 @@ describe('DashboardService', () => {
     expect(result).toBe('client data');
   });
 
-  it('deve chamar client.execute para system_admin', async () => {
+  it('should call client.execute for system_admin', async () => {
     const user = { role: 'system_admin' } as any;
     mockHandlerClient.execute.mockResolvedValue('client admin data');
 
@@ -74,7 +74,7 @@ describe('DashboardService', () => {
     expect(result).toBe('client admin data');
   });
 
-  it('deve lançar exceção para role inválido', async () => {
+  it('should set exception when the userrole is invalid', async () => {
     const user = { role: 'invalid_role' } as any;
 
     await expect(service.getDashboardData(user)).rejects.toThrow(BadRequestException);
