@@ -190,8 +190,14 @@ model HireRequest {
   id           String             @id @default(uuid())
   org_id       String
   title        String
+  specialization String
+  availability  String
   description  String?
-  requirements String?
+  expected_start_date DateTime?
+  contract_length String?
+  salary_range_from Decimal?
+  salary_range_to Decimal?
+  Location     String?
   status       HireRequestStatus  @default(new_request)
   priority     Priority           @default(medium)
   createdAt    DateTime           @default(now())
