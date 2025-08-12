@@ -67,7 +67,7 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
-    const hireRequest = this.prisma.hireRequest.findUnique({
+    const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
         organization: { id : user.organization_id,}
