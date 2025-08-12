@@ -9,7 +9,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { ApiBody, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from 'src/auth/roles.decorator';
+import { Roles } from '../auth/roles.decorator';
 
 
 @Controller('hire-request')
@@ -22,7 +22,6 @@ export class HireRequestController {
   @ApiBody({ type: CreateHireRequestDto })
   @ApiResponse({ status: 200, description: 'Hire request created successfully' })
   async create(@Body() createHireRequestDto: CreateHireRequestDto, @CurrentUser() user: USER): Promise<object> {
-    console.log('Creating hire request:', createHireRequestDto);
     const result = await this.hireRequestService.create(createHireRequestDto, user);
     return {
       status: 201,
