@@ -18,6 +18,7 @@ async function bootstrapServer(): Promise<any> {
   await app.enableCors({
     origin: ['https://app.medvirtual.ai','https://staging.medvirtual.ai','http://localhost:3001','http://localhost:3000'], 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', 
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true
   });
 
