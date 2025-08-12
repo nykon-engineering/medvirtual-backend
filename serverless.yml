@@ -21,7 +21,28 @@ functions:
       - http:
           path: /{proxy+}
           method: any
-          cors: true
+          cors:
+            origin:
+              - https://app.medvirtual.ai
+              - https://staging.medvirtual.ai
+              - http://localhost:3000
+              - http://localhost:3001
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Amz-Date
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Requested-With
+            allowCredentials: true
+            methods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - HEAD
+              - OPTIONS
 
 plugins:
   - serverless-offline
