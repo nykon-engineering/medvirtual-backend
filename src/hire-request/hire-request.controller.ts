@@ -8,6 +8,8 @@ import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { ApiBody, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from 'src/auth/roles.decorator';
 
 
 @Controller('hire-request')
@@ -61,12 +63,38 @@ export class HireRequestController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateHireRequestDto: UpdateHireRequestDto) {
-    return this.hireRequestService.update(+id, updateHireRequestDto);
+  @UseGuards(AuthGuard)
+  @ApiProperty({ description: 'Update specific requests regarding rules for the current user' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: UpdateHireRequestDto })
+  @ApiResponse({ status: 200, description: 'Hire request updated successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 400, description: 'Hire request not updated' })
+  @ApiResponse({ status: 400, description: 'Hire request skills not updated' })
+  async update(@Param('id') id: string, @Body() updateHireRequestDto: UpdateHireRequestDto, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.update(id, updateHireRequestDto, user);
+    return {
+      status: 200,
+      message: 'Hire request updated successfully',
+      data: result,
+    }
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.hireRequestService.remove(+id);
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Delete specific requests regarding rules for the current user' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiResponse({ status: 200, description: 'Hire request deleted successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 400, description: 'Hire request not deleted' })
+  async remove(@Param('id') id: string, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.remove(id, user);
+    return {
+      status: 200,
+      message: 'Hire request deleted successfully',
+      data: result,
+    }
   }
 }
