@@ -59,7 +59,6 @@ export class HandlerOrganization  {
                 id: true,
                 title: true,
                 description: true,
-                requirements: true,
                 status: true,
                 priority: true,
                 createdAt: true,

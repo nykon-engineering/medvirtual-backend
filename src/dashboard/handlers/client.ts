@@ -31,7 +31,6 @@ export class HandlerClient {
                 id: true,
                 title: true,
                 description: true,
-                requirements: true,
                 status: true,
                 priority: true,
                 createdAt: true,
