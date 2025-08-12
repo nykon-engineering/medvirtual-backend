@@ -49,6 +49,18 @@ async function bootstrapServer(): Promise<any> {
 
 
 export const handler: Handler = async (event, context) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': event.headers.origin || 'https://staging.medvirtual.ai',
+        'Access-Control-Allow-Methods': 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With',
+        'Access-Control-Allow-Credentials': 'true',
+      },
+      body: '',
+    };
+  }
 
   if (!cachedServer) {
     console.log('Creating new server instance...');
