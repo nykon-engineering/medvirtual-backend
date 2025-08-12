@@ -197,7 +197,7 @@ model HireRequest {
   contract_length String?
   salary_range_from Decimal?
   salary_range_to Decimal?
-  Location     String?
+  location     String?
   status       HireRequestStatus  @default(new_request)
   priority     Priority           @default(medium)
   createdAt    DateTime           @default(now())

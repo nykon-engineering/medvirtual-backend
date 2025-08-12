@@ -9,7 +9,7 @@ export class HireRequestSkillDTO {
 
     @ApiProperty({ example: 'Expert', description: 'The level of the skill', required: true, type: String, enum: ['beginner', 'intermediate', 'advanced', 'expert'] })
     @IsString()
-    level: string;
+    level: 'beginner' | 'intermediate' | 'advanced' | 'expert';
 }
 
 export class CreateHireRequestDto {
@@ -54,11 +54,11 @@ export class CreateHireRequestDto {
 
     @ApiProperty({ example: 'new_request, in_progress, interview_scheduled', description: 'The status of the hire request', required: true,  type: String, enum: ['pending_signature', 'new_request', 'in_progress', "panel_ready", "interview_scheduled", "awaiting_decision", "placement_complete", "cancelled"] })
     @IsString()
-    status: string;
+    status: 'pending_signature' | 'new_request' | 'in_progress' | 'panel_ready' | 'interview_scheduled' | 'awaiting_decision' | 'placement_complete' | 'cancelled';
 
     @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: true,  type: String, enum: ['high', 'medium', 'low'] })
     @IsString()
-    priority: string;
+    priority: 'high' | 'medium' | 'low';
 
     @ApiProperty({ type: [HireRequestSkillDTO], description: 'The skills required for the hire request', required: true })
     @IsArray()
