@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, HttpCode } from '@nestjs/common';
 import { CandidatesService } from './candidates.service';
 
 import { AuthGuard } from '../auth/auth.guard';
@@ -102,6 +102,17 @@ export class CandidatesController {
       message: 'Pipelines retrieved successfully',
       data: result
     }
+  }
+
+  @Get('country/all')
+  @ApiProperty({ description: 'Get all countries from HubSpot' })
+  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @ApiResponse({ status: 200, description: 'Returns all countries from HubSpot' })
+  async getCountries() {
+      console.log('Fetching countries from HubSpot');
+      const result = await this.candidatesService.getCountries();
+      return result;
   }
 
 }

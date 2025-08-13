@@ -94,6 +94,7 @@ model Candidate {
   id                     String                  @id @default(uuid())
   hubspot_id             String                  @unique
   email                  String
+  gender                 String?
   first_name             String?
   last_name              String?
   name                   String?
@@ -161,9 +162,9 @@ model CandidateExperience {
   candidate_id     String
   company          String
   position         String
-  start_date       String?
-  end_date         String?
-  responsibilities String?
+  start_date       DateTime?
+  end_date         DateTime?
+  responsabilities String?
   createdAt        DateTime  @default(now())
   candidate        Candidate @relation(fields: [candidate_id], references: [id])
 
@@ -198,7 +199,7 @@ model HireRequest {
   salary_range_from Decimal?
   salary_range_to Decimal?
   location     String?
-  status       HireRequestStatus  @default(new_request)
+  status       HireRequestStatus  @default(new)
   priority     Priority           @default(medium)
   createdAt    DateTime           @default(now())
   panels       CandidatePanel[]
@@ -227,6 +228,7 @@ model HireRequestSkill {
 model CandidatePanel {
   id              String           @id @default(uuid())
   hire_request_id String
+  readable        Boolean         @default(false)           
   status          PanelStatus      @default(created)
   scheduled_date  DateTime?
   createdAt       DateTime         @default(now())
@@ -346,13 +348,13 @@ enum SkillType {
 }
 
 enum HireRequestStatus {
+  new
   pending_signature
-  new_request
-  in_progress
+  sourcing
   panel_ready
   interview_scheduled
   awaiting_decision
-  placement_complete
+  placement_completed
   cancelled
 }
 

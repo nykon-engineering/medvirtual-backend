@@ -48,17 +48,6 @@ export class HubspotController {
         return this.hubspotService.updateCandidates(pipeline_stage);
     }
 
-    @Get('country')
-    @ApiProperty({ description: 'Get all countries from HubSpot' })
-    @UseGuards(AuthGuard)
-    @HttpCode(200)
-    @ApiOperation({ summary: 'Get all countries from HubSpot' })
-    @ApiResponse({ status: 200, description: 'Returns all countries from HubSpot' })
-    async getCountries() {
-        console.log('Fetching countries from HubSpot');
-        const result = await this.hubspotService.getCountries();
-        return result;
-    }
 
 
     //=> this route is just a example to read candidates and download resume

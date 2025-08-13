@@ -13,6 +13,7 @@ export const candidadeToDbDictionary : Record<string, string> = {
     employment_type: 'employment_type',
     tools: 'tools',
     medical_tools: 'medical_tools',
+    gender: 'gender',
 
 }
 

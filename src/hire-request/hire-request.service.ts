@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { CreateHireRequestDto } from './dto/create-hire-request.dto';
 import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { USER } from '@prisma/client';
+import { HireRequestStatus, USER } from '@prisma/client';
+import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 
 @Injectable()
 export class HireRequestService {
@@ -16,7 +17,7 @@ export class HireRequestService {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const {skills, ...hireRequestData} = data;
-    if(user.role === 'prospect') hireRequestData.status = 'pending_signature';
+    
     const hireRequest = {
       ...hireRequestData,
       organization: {connect: {id: user.organization_id}},
@@ -145,6 +146,46 @@ export class HireRequestService {
       },
     });
     if (!requestdeleted) throw new BadRequestException(`Hire request not deleted`);
+
+    return true;
+  }
+
+  async updateStatus(id: string, data: changeStatusHireRequesDTO, user: USER): Promise<boolean> {
+    if (!user || !user.organization_id) {
+      throw new NotFoundException('User not found or not part of an organization');
+    }
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        organization: { id : user.organization_id,}
+      },
+      select:{
+        status: true,
+      }
+    });
+
+    if (!hireRequest) {
+      throw new NotFoundException(`Hire request not found`);
+    }
+
+    //verify rules for changes
+    const keyDictionary = Object.keys(changeStatusHireRequesDTO[hireRequest.status]);
+    console.log('keyDictionary', keyDictionary);
+    return false;
+
+    if (!data || !data.status) throw new BadRequestException('Data for status change is required');
+
+    const updatedRequest = await this.prisma.hireRequest.update({
+      where: {
+        id: id,
+      },
+      data: {
+        status: data.status as HireRequestStatus,
+      },
+    });
+
+    if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
     return true;
   }

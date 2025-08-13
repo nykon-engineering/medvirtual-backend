@@ -4,12 +4,14 @@ import { USER } from '@prisma/client';
 import { HireRequestService } from './hire-request.service';
 import { CreateHireRequestDto } from './dto/create-hire-request.dto';
 import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
+import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
 import { ApiBody, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+
 
 
 @Controller('hire-request')
@@ -93,6 +95,25 @@ export class HireRequestController {
     return {
       status: 200,
       message: 'Hire request deleted successfully',
+      data: result,
+    }
+  }
+
+  @Patch('change-status/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Update status of specific hire request' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: changeStatusHireRequesDTO })
+  @ApiResponse({ status: 200, description: 'Hire request status updated successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 400, description: 'Hire request status not updated' })
+  async updateStatus(@Param('id') id: string, @Body() data: changeStatusHireRequesDTO, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.updateStatus(id, data, user);
+    return {
+      status: 200,
+      message: 'Hire request status updated successfully',
       data: result,
     }
   }

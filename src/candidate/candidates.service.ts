@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ProcessingStatus, ProficiencyLevel, USER } from '@prisma/client';
+import { Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
@@ -132,14 +132,15 @@ export class CandidatesService {
         }
       },
       experiences: {
+        orderBy: { start_date: Prisma.SortOrder.asc },
         select: {
           company: true,
           position: true,
           start_date: true,
           end_date: true,
-          responsibilities: true
-        }
-      },
+          responsabilities: true
+        } 
+      }
     }
 
     try{
@@ -213,14 +214,15 @@ export class CandidatesService {
         }
       },
       experiences: {
+        orderBy: { start_date: Prisma.SortOrder.asc },
         select: {
           company: true,
           position: true,
           start_date: true,
           end_date: true,
-          responsibilities: true
+          responsabilities: true
         }
-      },
+      }
       
     }
   
@@ -308,9 +310,9 @@ export class CandidatesService {
             candidate_id: id,
             company: item.company || '',
             position: item.role || '',
-            start_date: item.start_date || '',
-            end_date: item.end_date || '',
-            responsibilities: item.description || '',
+            start_date: new Date(item.start_date) || '',
+            end_date: new Date(item.end_date) || '',
+            responsabilities: item.description || '',
             
           }))
         });
@@ -399,4 +401,23 @@ export class CandidatesService {
     if (!pipelines || pipelines.length === 0) throw new NotFoundException('No pipelines found');
     return pipelines;
   }
+
+  async getCountries(): Promise<any> {
+    try {
+        const countries = await this.prisma.candidate.findMany({
+            select: {
+                country: true
+            },
+            distinct: ['country'],
+            orderBy: {
+                country: 'asc'
+            }
+        })
+
+        return countries;
+    } catch (error) {
+        throw new BadRequestException(`Error fetching countries: ${error.message}`);
+    }
+}
+
 }

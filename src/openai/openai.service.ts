@@ -36,6 +36,7 @@ export class OpenaiService {
         - If a field is not found, leave it as null, empty string "", or [] depending on the field type.
         - The outer structure and keys must always be the same.
         - Return only the JSON. No explanations or preamble.
+        - On the start_date and end_date fields, return the date in the format YYYY-MM-DD.
 
         Text:
         """ 

@@ -278,27 +278,6 @@ export class HubspotService {
         }
     }
 
-    async getCountries(): Promise<any> {
-        try {
-            const response = await axios.get(`https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}/country__residence_`, {
-                headers: {
-                    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            })
-            const options = response.data.options || [];
-
-            const countries = options.map((option: any) => ({
-                value: option.value,
-            }));
-
-            return countries;
-        } catch (error) {
-            throw new BadRequestException(`Error fetching countries: ${error.message}`);
-        }
-    }
-
-
 
 
     ////=> this service is just a example to populate our database

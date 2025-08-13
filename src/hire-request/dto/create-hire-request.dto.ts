@@ -50,11 +50,6 @@ export class CreateHireRequestDto {
     @ApiProperty({ example: 'New York, Remote', description: 'The work location for the hire request', required: true,  type: String })
     @IsString()
     location: string;
-    
-
-    @ApiProperty({ example: 'new_request, in_progress, interview_scheduled', description: 'The status of the hire request', required: true,  type: String, enum: ['pending_signature', 'new_request', 'in_progress', "panel_ready", "interview_scheduled", "awaiting_decision", "placement_complete", "cancelled"] })
-    @IsString()
-    status: 'pending_signature' | 'new_request' | 'in_progress' | 'panel_ready' | 'interview_scheduled' | 'awaiting_decision' | 'placement_complete' | 'cancelled';
 
     @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: true,  type: String, enum: ['high', 'medium', 'low'] })
     @IsString()
