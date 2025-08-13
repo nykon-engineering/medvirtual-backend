@@ -402,19 +402,62 @@ export class CandidatesService {
     return pipelines;
   }
 
-  async getCountries(): Promise<any> {
+  async getProperties(data): Promise<any> {
     try {
-        const countries = await this.prisma.candidate.findMany({
+      const fields = data.fields ? data.fields.split(',').map((field) => field.trim()) : [];
+      let result: Record<string, any> = {};
+      let returned
+
+      for (const field of fields) {
+        if (field === 'languages'){
+          returned = await this.prisma.candidateLanguage.findMany({
+            where: {
+              candidate: {
+                pipeline_status: {
+                  in: ['1087596819', '261075105'],
+                },
+              },
+            },
             select: {
-                country: true
+              name: true,
+            },
+            distinct: ['name'],
+          });
+        }else if (field === 'skills'){
+          returned = await this.prisma.candidateSkill.findMany({
+            where: {
+              candidate: {
+                pipeline_status: {
+                  in: ['1087596819', '261075105'],
+                },
+              },
+            },
+            select: {
+              skill_name: true,
+            },
+            distinct: ['skill_name'],
+          });
+
+          
+        }else{
+          returned = await this.prisma.candidate.findMany({
+            where: {
+              OR:[
+                {pipeline_status: '261075105'},
+                {pipeline_status: '1087596819'}
+              ]
             },
             distinct: ['country'],
-            orderBy: {
-                country: 'asc'
-            }
-        })
+            select: {
+              [field]: true
+            },
+          })
+        }
 
-        return countries;
+        result[field]=returned;
+      }
+      return result;
+        
     } catch (error) {
         throw new BadRequestException(`Error fetching countries: ${error.message}`);
     }

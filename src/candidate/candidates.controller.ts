@@ -104,14 +104,14 @@ export class CandidatesController {
     }
   }
 
-  @Get('country/all')
+  @Get('properties/all')
   @ApiProperty({ description: 'Get all countries from HubSpot' })
   @UseGuards(AuthGuard)
   @HttpCode(200)
-  @ApiResponse({ status: 200, description: 'Returns all countries from HubSpot' })
-  async getCountries() {
-      console.log('Fetching countries from HubSpot');
-      const result = await this.candidatesService.getCountries();
+  @ApiQuery({ name: 'fields', required: false, type: String, description: 'fields properties ', example: "country,specialization, languages, skillss", })
+  @ApiResponse({ status: 200, description: 'Returns properties from Candidates' })
+  async getCountries(@Query() fields: string) {
+      const result = await this.candidatesService.getProperties(fields);
       return result;
   }
 
