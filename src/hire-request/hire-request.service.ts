@@ -4,6 +4,7 @@ import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { HireRequestStatus, USER } from '@prisma/client';
 import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
+import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 
 @Injectable()
 export class HireRequestService {
@@ -154,7 +155,7 @@ export class HireRequestService {
     if (!user || !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
-
+    if (!data || !data.status) throw new BadRequestException('Data for status change is required');
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
@@ -170,23 +171,27 @@ export class HireRequestService {
     }
 
     //verify rules for changes
-    const keyDictionary = Object.keys(changeStatusHireRequesDTO[hireRequest.status]);
-    console.log('keyDictionary', keyDictionary);
-    return false;
+    const currentKey = Object.keys(hireRequestDictionary).find(key => {
+      return hireRequestDictionary[key] === hireRequest.status;
+    })
+    const newKey = Object.keys(hireRequestDictionary).find(key => {
+      return hireRequestDictionary[key] === data.status;
+    })
 
-    if (!data || !data.status) throw new BadRequestException('Data for status change is required');
-
-    const updatedRequest = await this.prisma.hireRequest.update({
-      where: {
-        id: id,
-      },
-      data: {
-        status: data.status as HireRequestStatus,
-      },
-    });
-
-    if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-
-    return true;
+    if ( Number(newKey)+1 === Number(currentKey) || Number(newKey)-1 === Number(currentKey)){ // allow just neighbor statuses
+      const updatedRequest = await this.prisma.hireRequest.update({
+        where: {
+          id: id,
+        },
+        data: {
+          status: data.status as HireRequestStatus,
+        },
+      });
+  
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return true;
+    }else{
+      throw new BadRequestException(`Status change from ${hireRequest.status} to ${data.status} is not allowed`);
+    }
   }
 }

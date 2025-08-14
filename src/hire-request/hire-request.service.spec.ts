@@ -194,4 +194,51 @@ describe('HireRequestService', () => {
         .rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('updateStatus', () => {
+    const hireRequestDictionary = {
+      '0': 'pending',
+      '1': 'in_progress',
+      '2': 'completed',
+    };
+  
+    it('should throw NotFoundException if user has no organization', async () => {
+      await expect(
+        service.updateStatus('hr1', { status: 'new' }, { ...user, organization_id: null })
+      ).rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw BadRequestException if data or status is missing', async () => {
+      await expect(service.updateStatus('hr1', null as any, user)).rejects.toThrow(BadRequestException);
+      await expect(service.updateStatus('hr1', {} as any, user)).rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw NotFoundException if hire request not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateStatus('hr1', { status: 'new' }, user)
+      ).rejects.toThrow(NotFoundException);
+    });
+  
+    it('should update status if change is allowed (neighbor statuses)', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ status: 'new' });
+      prismaMock.hireRequest.update.mockResolvedValue({ status: 'sourcing' });
+  
+      const result = await service.updateStatus('hr1', { status: 'sourcing' }, user);
+      expect(result).toBe(true);
+      expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
+        where: { id: 'hr1' },
+        data: { status: 'sourcing' },
+      });
+    });
+  
+    it('should throw BadRequestException if status change is not allowed', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ status: 'pending' });
+  
+      await expect(
+        service.updateStatus('hr1', { status: 'placement_completed' }, user)
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+  
 });

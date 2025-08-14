@@ -107,8 +107,10 @@ export class HireRequestController {
   @ApiBody({ type: changeStatusHireRequesDTO })
   @ApiResponse({ status: 200, description: 'Hire request status updated successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 400, description: 'Data for status change is required' })
   @ApiResponse({ status: 404, description: 'Hire request not found' })
   @ApiResponse({ status: 400, description: 'Hire request status not updated' })
+  @ApiResponse({ status: 400, description: 'Status change from XXXX to XXXXX is not allowed' })
   async updateStatus(@Param('id') id: string, @Body() data: changeStatusHireRequesDTO, @CurrentUser() user: USER) {
     const result = await this.hireRequestService.updateStatus(id, data, user);
     return {
