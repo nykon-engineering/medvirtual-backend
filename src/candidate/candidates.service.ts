@@ -29,6 +29,9 @@ export class CandidatesService {
     monthly_compensation_from?: string, 
     monthly_compensation_to?: string, 
     years_of_experience?: string,
+    specialization?: string,
+    skills?: string,
+    languages?: string,
     page?: number,
     perPage?: number
   ): Promise <any> {
@@ -43,11 +46,38 @@ export class CandidatesService {
     const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (176 * 1.55) : undefined; 
     const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (176 * 1.55) : undefined; 
 
+    const languagesArray = languages ?
+    languages.split(',').map(l => l.trim()).filter(Boolean)
+    : [];
+    const languageFilter = languagesArray?.length
+    ? {
+        languages: {
+          some: {
+            name: { in: languagesArray }
+          }
+        }
+      }
+    : {};
+
+    const skillsArray = skills ? 
+    skills.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+    const skillFilter = skillsArray?.length
+    ? {
+        skills: {
+          some: {
+            skill_name: { in: skillsArray }
+          }
+        }
+      }
+    : {};
+
     const where = {
       OR:[
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
+          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -56,11 +86,14 @@ export class CandidatesService {
             gt: years_of_experience ? Number(years_of_experience) : undefined
           },
           organization_id: organization_id,
-          pipeline_status: '261075105'
+          pipeline_status: '261075105',
+          ...skillFilter,
+          ...languageFilter
         },
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
+          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -69,11 +102,14 @@ export class CandidatesService {
             gt: years_of_experience ? Number(years_of_experience) : undefined
           },
           organization_id: null, // This allows candidates without an organization_id to be included
-          pipeline_status: '261075105'
+          pipeline_status: '261075105',
+          ...skillFilter,
+          ...languageFilter
         },
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
+          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -82,11 +118,14 @@ export class CandidatesService {
             gt: years_of_experience ? Number(years_of_experience) : undefined
           },
           organization_id: organization_id,
-          pipeline_status: '1087596819'
+          pipeline_status: '1087596819',
+          ...skillFilter,
+          ...languageFilter
         },
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
+          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -95,7 +134,9 @@ export class CandidatesService {
             gt: years_of_experience ? Number(years_of_experience) : undefined
           },
           organization_id: null, // This allows candidates without an organization_id to be included
-          pipeline_status: '1087596819'
+          pipeline_status: '1087596819',
+          ...skillFilter,
+          ...languageFilter
         }
       ]
     }
@@ -318,9 +359,6 @@ export class CandidatesService {
         });
       }
     }
-
-   
-
     return true
   }
 
@@ -462,6 +500,6 @@ export class CandidatesService {
     } catch (error) {
         throw new BadRequestException(`Error fetching countries: ${error.message}`);
     }
-}
+  }
 
 }
