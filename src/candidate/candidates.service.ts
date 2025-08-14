@@ -72,6 +72,22 @@ export class CandidatesService {
       }
     : {};
 
+    // Calculate limit date
+    let experienceFilter = {};
+    if (years_of_experience) {
+      const years = Number(years_of_experience);
+      const today = new Date();
+      const cutoffDate = new Date(today.setFullYear(today.getFullYear() - years));
+
+      experienceFilter = {
+        experiences: {
+          some: {
+            start_date: { lte: cutoffDate }
+          }
+        }
+      };
+    }
+
     const where = {
       OR:[
         {
@@ -82,13 +98,11 @@ export class CandidatesService {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
           },
-          years_of_experience: {
-            gt: years_of_experience ? Number(years_of_experience) : undefined
-          },
           organization_id: organization_id,
           pipeline_status: '261075105',
           ...skillFilter,
-          ...languageFilter
+          ...languageFilter,
+          ...experienceFilter,
         },
         {
           country: country ? country : undefined,
@@ -97,14 +111,12 @@ export class CandidatesService {
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
-          },
-          years_of_experience: {
-            gt: years_of_experience ? Number(years_of_experience) : undefined
           },
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
           ...skillFilter,
-          ...languageFilter
+          ...languageFilter,
+          ...experienceFilter
         },
         {
           country: country ? country : undefined,
@@ -113,14 +125,12 @@ export class CandidatesService {
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
-          },
-          years_of_experience: {
-            gt: years_of_experience ? Number(years_of_experience) : undefined
           },
           organization_id: organization_id,
           pipeline_status: '1087596819',
           ...skillFilter,
-          ...languageFilter
+          ...languageFilter,
+          ...experienceFilter
         },
         {
           country: country ? country : undefined,
@@ -130,13 +140,11 @@ export class CandidatesService {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
           },
-          years_of_experience: {
-            gt: years_of_experience ? Number(years_of_experience) : undefined
-          },
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
           ...skillFilter,
-          ...languageFilter
+          ...languageFilter,
+          ...experienceFilter
         }
       ]
     }
