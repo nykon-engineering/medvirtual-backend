@@ -37,6 +37,10 @@ export class OpenaiService {
         - The outer structure and keys must always be the same.
         - Return only the JSON. No explanations or preamble.
         - On the start_date and end_date fields, return the date in the format YYYY-MM-DD.
+        - if the date is not found, return null.
+        - If the end_date is not found, return null.
+        - if the start_date is not found, return null.
+        - if is impossible get start_date and end_date, return null. never return 'Invalid Date'
 
         Text:
         """ 

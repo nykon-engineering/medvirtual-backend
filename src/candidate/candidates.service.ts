@@ -333,64 +333,65 @@ export class CandidatesService {
         id: id
       }
     });
-    if(!candidate) throw new NotFoundException('Candidate not found');
-    if(!candidate.resume_url) throw new BadRequestException('Candidate resume URL is empty');
-    if(!candidate.resume_url.includes('http')) throw new BadRequestException('Candidate resume URL is invalid');
+    if( candidate && candidate.resume_url && candidate.resume_url.includes('http')) {
 
-    const idFile = extractDriveFileId(candidate.resume_url);
-    console.log('Extracted file ID from URL:', idFile);
+      const idFile = extractDriveFileId(candidate.resume_url);
+      console.log('Extracted file ID from URL:', idFile);
 
-    const pdfName = `${candidate.id}_resume.pdf`;
-    const downloadDir = path.resolve(__dirname, '/tmp');
+      const pdfName = `${candidate.id}_resume.pdf`;
+      const downloadDir = path.resolve(__dirname, '/tmp');
 
-    //processing_downloadFile
-    await this.updateStatus(id, 'processing_downloadFile');
-    if (idFile) {
-      await this.google.downloadFile2(idFile, pdfName, downloadDir);
-    }else{
-      throw new BadRequestException('Error downloading file from Google Drive. Invalid file ID.');
-    } 
+      //processing_downloadFile
+      await this.updateStatus(id, 'processing_downloadFile');
+      if (idFile) {
+        await this.google.downloadFile(idFile, pdfName, downloadDir, id);
+      }else{
+        throw new BadRequestException('Error downloading file from Google Drive. Invalid file ID.');
+      } 
 
-    //processing_uploadFile
-    await this.updateStatus(id, 'processing_uploadFile');
-    const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
-    if (!bucketFile) throw new BadGatewayException('Failed to upload file to S3 bucket');
+      //processing_uploadFile
+      await this.updateStatus(id, 'processing_uploadFile');
+      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
+      if (!bucketFile) throw new BadGatewayException('Failed to upload file to S3 bucket');
 
-    //processing_extractData
-    await this.updateStatus(id, 'processing_extractData');
-    const jobId = await this.textract.startTextracktJob(bucketFile);
-    if (!jobId) throw new BadGatewayException('Failed to start Textract job');
+      //processing_extractData
+      await this.updateStatus(id, 'processing_extractData');
+      const jobId = await this.textract.startTextracktJob(bucketFile);
+      if (!jobId) throw new BadGatewayException('Failed to start Textract job');
 
-    //processing_extractText
-    await this.updateStatus(id, 'processing_extractText');
-    const extract = await this.textract.getTextractResult(jobId);
-    if(!extract) throw new BadGatewayException('Failed to extract text from resume');
+      //processing_extractText
+      await this.updateStatus(id, 'processing_extractText');
+      const extract = await this.textract.getTextractResult(jobId);
+      if(!extract) throw new BadGatewayException('Failed to extract text from resume');
 
-    //processing_organizeData
-    await this.updateStatus(id, 'processing_organizeData');
-    const organizedData = await this.openai.organizeText(extract);
-    if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
-    const parsedData = JSON.parse(organizedData);
-    console.log('The datas were organized successfully by openAi');
+      //processing_organizeData
+      await this.updateStatus(id, 'processing_organizeData');
+      const organizedData = await this.openai.organizeText(extract);
+      if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
+      const parsedData = JSON.parse(organizedData);
+      console.log('The datas were organized successfully by openAi');
 
-    //processing_updateCandidate
-    await this.prisma.candidate.update({
-      where: { id: id },
-      data: { 
-        processing_status: 'processing_updateCandidate',
-        processed_resume_data: parsedData,
-        processed_at: new Date(),
-        about_me: parsedData.bio,
-        years_of_experience: parsedData.years_of_experience || 0,
-       }
-    })
-    //call function to populate skills, education, experience....
-    const populateDatas = await this.updateFromJson(id, parsedData);
-    if (!populateDatas) throw new BadGatewayException('Failed to populate candidate data from JSON');
+      //processing_updateCandidate
+      await this.prisma.candidate.update({
+        where: { id: id },
+        data: { 
+          processing_status: 'processing_updateCandidate',
+          processed_resume_data: parsedData,
+          processed_at: new Date(),
+          about_me: parsedData.bio,
+          years_of_experience: parsedData.years_of_experience || 0,
+        }
+      })
+      //call function to populate skills, education, experience....
+      const populateDatas = await this.updateFromJson(id, parsedData);
+      if (!populateDatas) throw new BadGatewayException('Failed to populate candidate data from JSON');
 
-    //completed
-    await this.updateStatus(id, 'completed');
-    
+      //completed
+      await this.updateStatus(id, 'completed');
+      
+      
+    }
+
     return true;
   }
 

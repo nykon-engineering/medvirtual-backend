@@ -15,7 +15,7 @@ export class CronService {
         const {status} = statusDto
         const candidates= await this.prisma.candidate.findMany({
             where: {
-                processing_status: status
+                processing_status: status,
             },
             select: {
                 id: true,
