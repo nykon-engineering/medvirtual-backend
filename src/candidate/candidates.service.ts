@@ -324,9 +324,6 @@ export class CandidatesService {
     await this.prisma.candidateExperience.deleteMany({
       where: { candidate_id: id }
     })
-    await this.prisma.candidateSkill.deleteMany({
-      where: { candidate_id: id }
-    })
 
     if (jsonData.education !== '' && jsonData.education !== undefined) {
       const educationData = jsonData.education;
@@ -404,7 +401,8 @@ export class CandidatesService {
 
       //processing_organizeData
       await this.updateStatus(id, 'processing_organizeData');
-      const organizedData = await this.openai.organizeText(extract);
+      
+      const organizedData = await this.openai.organizeText(extract, candidate);
       if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
       const parsedData = JSON.parse(organizedData);
       console.log('The datas were organized successfully by openAi');
