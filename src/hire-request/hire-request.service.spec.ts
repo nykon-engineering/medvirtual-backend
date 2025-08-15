@@ -22,6 +22,9 @@ const prismaMock = {
     create: jest.fn(),
     findFirst: jest.fn(),
     updateMany: jest.fn(),
+  },
+  candidate: {
+    findMany: jest.fn(),
   }
 };
 
@@ -360,5 +363,92 @@ describe('HireRequestService', () => {
         .rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('showMatchCandidates', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should return scored candidates sorted by score', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({
+        id: 'hr1',
+        specialization: 'Frontend',
+        location: 'Brazil',
+        availability: 'full-time',
+        salary_range_from: 4000,
+        salary_range_to: 8000,
+        skills: [
+          { skill_name: 'React', required_level: 'advanced' },
+          { skill_name: 'JavaScript', required_level: 'advanced' },
+        ],
+      });
+  
+      prismaMock.candidate.findMany.mockResolvedValue([
+        {
+          id: 'cand1',
+          specialization: 'Frontend',
+          country: 'Brazil',
+          employment_type: 'full-time',
+          hourly_pay_rate: 30,
+          skills: [
+            { skill_name: 'React' },
+            { skill_name: 'JavaScript' },
+            { skill_name: 'CSS' },
+          ],
+          experiences: [],
+          educations: [],
+        },
+        {
+          id: 'cand2',
+          specialization: 'Frontend',
+          country: 'Brazil',
+          employment_type: 'full-time',
+          hourly_pay_rate: 35,
+          skills: [
+            { skill_name: 'React' },
+          ],
+          experiences: [],
+          educations: [],
+        },
+      ]);
+  
+      const result = await service.showMatchCandidates('hr1', user);
+  
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('cand1'); // mais skills combinadas
+      expect(result[0]).toHaveProperty('matchedSkills', ['React', 'JavaScript']);
+      expect(result[0].score).toBe(2);
+      expect(result[1].score).toBe(1);
+  
+      expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: 'hr1',
+          organization: { id: user.organization_id },
+        },
+        select: expect.any(Object),
+      });
+  
+      expect(prismaMock.candidate.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          specialization: { contains: 'Frontend', mode: 'insensitive' },
+          country: 'Brazil',
+          employment_type: 'full-time',
+        }),
+      }));
+    });
+  
+    it('should throw NotFoundException if user has no organization', async () => {
+      await expect(service.showMatchCandidates('hr1', { ...user, organization_id: null }))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw NotFoundException if hireRequest is not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(null);
+  
+      await expect(service.showMatchCandidates('hr1', user))
+        .rejects.toThrow(NotFoundException);
+    });
+  });
+  
   
 });

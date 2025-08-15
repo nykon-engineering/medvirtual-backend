@@ -296,7 +296,12 @@ export class HireRequestService {
     //at least 1 skill match
     const candidates = await this.prisma.candidate.findMany({
       where: {
-        specialization: hireRequest.specialization,
+        specialization: hireRequest.specialization ? 
+          { 
+            contains: hireRequest.specialization, 
+            mode: 'insensitive' 
+          }
+        : undefined,
         country: hireRequest.location ?  hireRequest.location  : undefined,
         employment_type: hireRequest.availability ? hireRequest.availability : undefined,
         hourly_pay_rate:{

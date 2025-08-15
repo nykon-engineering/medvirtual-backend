@@ -62,11 +62,14 @@ export class CandidatesService {
     const skillsArray = skills ? 
     skills.split(',').map(s => s.trim()).filter(Boolean)
     : [];
+    console.log(skillsArray)
     const skillFilter = skillsArray?.length
     ? {
         skills: {
           some: {
-            skill_name: { in: skillsArray }
+            skill_name: { 
+              in: skillsArray
+            }
           }
         }
       }
@@ -191,6 +194,7 @@ export class CandidatesService {
         } 
       }
     }
+
 
     try{
       const [candidates, total] = await this.prisma.$transaction([
