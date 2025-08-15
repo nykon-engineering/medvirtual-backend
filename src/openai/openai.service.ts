@@ -6,6 +6,8 @@ export class OpenaiService {
 
     /* istanbul ignore next */
     async organizeText(text: string, candidate: any): Promise<string> {
+
+        const candidateJSON = JSON.stringify(candidate);
         
         const apiKey = process.env.OPENAI_API_KEY;
 
@@ -100,7 +102,7 @@ export class OpenaiService {
 
         HubSpot Candidate JSON:
         ----------------
-        ${candidate}
+        ${candidateJSON}
         ----------------`
 
         const response = await openai.chat.completions.create({

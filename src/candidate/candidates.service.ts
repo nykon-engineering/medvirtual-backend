@@ -412,8 +412,7 @@ export class CandidatesService {
       if(!extract) throw new BadGatewayException('Failed to extract text from resume');
 
       //processing_organizeData
-      await this.updateStatus(id, 'processing_organizeData');
-      
+      await this.updateStatus(id, 'processing_organizeData');   
       const organizedData = await this.openai.organizeText(extract, candidate);
       if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
       const parsedData = JSON.parse(organizedData);
