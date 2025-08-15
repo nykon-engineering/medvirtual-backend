@@ -227,8 +227,9 @@ model HireRequestSkill {
 
 model CandidatePanel {
   id              String           @id @default(uuid())
+  user_id         String?
   hire_request_id String
-  readable        Boolean         @default(false)           
+  readable        Boolean          @default(false)           
   status          PanelStatus      @default(created)
   scheduled_date  DateTime?
   createdAt       DateTime         @default(now())

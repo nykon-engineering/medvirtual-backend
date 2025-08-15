@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HireRequestStatus, USER } from '@prisma/client';
 import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
+import { reassignDTO } from './dto/reassign-hire-request.dto';
 
 @Injectable()
 export class HireRequestService {
@@ -18,18 +19,18 @@ export class HireRequestService {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const {skills, ...hireRequestData} = data;
-    
+
     const hireRequest = {
       ...hireRequestData,
       organization: {connect: {id: user.organization_id}},
+      status: user.status==='prospect' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
       data: hireRequest,
     })
-
+    if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
     if (skills && skills.length > 0) {
-
       await this.prisma.hireRequestSkill.createMany({
         data: skills.map(skill => ({
           skill_name: skill.name,
@@ -37,8 +38,19 @@ export class HireRequestService {
           hire_request_id: newHireRequest.id,
         })),
       });
-      
     }
+
+    //create Panel with default user_id
+    const panel = await this.prisma.candidatePanel.create({
+      data: {
+        user_id: undefined, // default user because all panel start as unassigned
+        hire_request_id: newHireRequest.id,
+        readable: false,
+        
+      }
+    })
+
+
     return 'Hire request created successfully';
   }
 
@@ -178,7 +190,21 @@ export class HireRequestService {
       return hireRequestDictionary[key] === data.status;
     })
 
-    if ( Number(newKey)+1 === Number(currentKey) || Number(newKey)-1 === Number(currentKey)){ // allow just neighbor statuses
+
+    /*
+    next or previus stages;
+
+    */
+    if ( 
+      Number(newKey)+1 === Number(currentKey) ||
+      Number(newKey)-1 === Number(currentKey) || 
+      hireRequest.status == 'cancelled' && data.status === 'new' ||
+      hireRequest.status == 'placement_completed' && data.status === 'new' ||
+      hireRequest.status == 'cancelled' && data.status === 'sourcing' ||
+      hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ||
+      hireRequest.status == 'panel_ready' && data.status === 'placement_completed' ||
+      hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed'
+    ) { 
       const updatedRequest = await this.prisma.hireRequest.update({
         where: {
           id: id,
@@ -193,5 +219,45 @@ export class HireRequestService {
     }else{
       throw new BadRequestException(`Status change from ${hireRequest.status} to ${data.status} is not allowed`);
     }
+  }
+
+
+  async reassign(id: string, user: USER, data: reassignDTO): Promise<boolean> {
+    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!data || !data.user_id) throw new BadRequestException('User ID is required for reassignment');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        organization: { id : user.organization_id,}
+      },
+      select:{
+        id: true,
+      }
+    });
+    if (!hireRequest) {
+      throw new NotFoundException(`Hire request not found`);
+    }
+
+    const panelExists = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: hireRequest.id,
+      },select:{
+        id: true,
+      }
+    });
+    if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
+    const panelUpdated = await this.prisma.candidatePanel.updateMany({
+      where: {
+        id: panelExists.id,
+      },
+      data: {
+        user_id: data.user_id,
+      },
+    });
+    if (!panelUpdated) throw new BadRequestException(`Hire request not reassigned`);
+
+    return true;
   }
 }

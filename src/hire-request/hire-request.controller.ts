@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, HttpCode } from '@nestjs/common';
 import { USER } from '@prisma/client';
 
 import { HireRequestService } from './hire-request.service';
@@ -11,6 +11,7 @@ import { ApiBody, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { reassignDTO } from './dto/reassign-hire-request.dto';
 
 
 
@@ -103,7 +104,7 @@ export class HireRequestController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'organization_super_admin')
   @ApiProperty({ description: 'Update status of specific hire request' })
-  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiQuery({ name: 'id', required: true, description: 'Hire request ID' })
   @ApiBody({ type: changeStatusHireRequesDTO })
   @ApiResponse({ status: 200, description: 'Hire request status updated successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
@@ -119,4 +120,28 @@ export class HireRequestController {
       data: result,
     }
   }
+
+  @Post('reassign/:id')
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Reassign specific hire request/Panel to another user' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: reassignDTO } )
+  @ApiResponse({ status: 200, description: 'Hire request reassigned successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 400, description: 'User ID is required for reassignment' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  @ApiResponse({ status: 400, description: 'Hire request not reassigned' })
+  async reassign(@Param('id') id: string, @CurrentUser() user: USER, @Body() data: reassignDTO) {
+    const result = await this.hireRequestService.reassign(id, user, data);
+    return {
+      status: 200,
+      message: 'Hire request reassigned successfully',
+      data: result,
+    }
+  }
+
+
 }
