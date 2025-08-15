@@ -117,7 +117,7 @@ export class CandidatesController {
   @ApiProperty({ description: 'Get all countries from HubSpot' })
   @UseGuards(AuthGuard)
   @HttpCode(200)
-  @ApiQuery({ name: 'fields', required: false, type: String, description: 'fields properties ', example: "country,specialization, languages, skillss", })
+  @ApiQuery({ name: 'fields', required: false, type: String, description: 'fields properties ', example: "country,specialization, languages, skills, salary_range", })
   @ApiResponse({ status: 200, description: 'Returns properties from Candidates' })
   async getCountries(@Query() fields: string) {
       const result = await this.candidatesService.getProperties(fields);

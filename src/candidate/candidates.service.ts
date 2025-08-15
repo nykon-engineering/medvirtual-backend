@@ -473,6 +473,7 @@ export class CandidatesService {
             distinct: ['name'],
           });
         }else if (field === 'skills'){
+
           returned = await this.prisma.candidateSkill.findMany({
             where: {
               candidate: {
@@ -486,8 +487,36 @@ export class CandidatesService {
             },
             distinct: ['skill_name'],
           });
+        
+        }else if (field === 'salary_range'){
+          const max = await this.prisma.candidate.aggregate({
+            _max: {
+              hourly_pay_rate: true,
+            },
+            where: {
+              pipeline_status: {
+                in: ['1087596819', '261075105'],
+              },
+            },
+          });
 
+          const min = await this.prisma.candidate.aggregate({
+            _min: {
+              hourly_pay_rate: true,
+            },
+            where: {
+              pipeline_status: {
+                in: ['1087596819', '261075105'],
+              },
+            },
+          });
+          returned = {
+            min: min._min.hourly_pay_rate || 0,
+            max: max._max.hourly_pay_rate || 0,
+          };
           
+          result[field]=returned;
+
         }else{
           returned = await this.prisma.candidate.findMany({
             where: {
