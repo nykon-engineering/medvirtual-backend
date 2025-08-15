@@ -6,6 +6,7 @@ import { HireRequestStatus, USER } from '@prisma/client';
 import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { reassignDTO } from './dto/reassign-hire-request.dto';
+import { connect } from 'net';
 
 @Injectable()
 export class HireRequestService {
@@ -16,14 +17,14 @@ export class HireRequestService {
 
   async create(data: CreateHireRequestDto, user: USER):Promise<string> {
 
-    try{
+    
       if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
       const {skills, ...hireRequestData} = data;
 
       const hireRequest = {
         ...hireRequestData,
-        organization: {connect: {id: user.organization_id}},
+        organization: user.role.includes('organization') ?  {connect: {id: user.organization_id}} : { connect : { id: data.client_id } },
         status: user.status==='prospect' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       };
 
@@ -32,13 +33,14 @@ export class HireRequestService {
       })
       if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
       if (skills && skills.length > 0) {
-        await this.prisma.hireRequestSkill.createMany({
+        const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
           data: skills.map(skill => ({
             skill_name: skill.name,
             required_level: skill.level,
             hire_request_id: newHireRequest.id,
           })),
         });
+        if (!newHireRequestSkills) throw new BadRequestException(`Hire request skills not created`);
       }
 
       //create Panel with default user_id
@@ -50,11 +52,9 @@ export class HireRequestService {
           
         }
       })
+      if (!panel) throw new BadRequestException(`Hire request panel not created`);
 
       return 'Hire request created successfully';
-    }catch (error) {
-      throw new BadRequestException(`Error creating hire request: ${error.message}`);
-    }
     
   }
 

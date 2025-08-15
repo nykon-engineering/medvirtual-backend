@@ -18,6 +18,10 @@ export class CreateHireRequestDto {
     @IsString()
     title: string;
 
+    @ApiProperty({ example: '1234567890', description: 'The client ID for the hire request', required: false,  type: String })
+    @IsString()
+    client_id: string;
+
     @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: true,  type: String })
     @IsString()
     specialization: string;
