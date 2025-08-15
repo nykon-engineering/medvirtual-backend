@@ -168,8 +168,9 @@ export class HireRequestController {
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel confirmed successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
-  
-  @ApiResponse({ status: 404, description: 'Hire request not found' })  
+  @ApiResponse({ status: 400, description: 'Data is required to confirm panel' })
+  @ApiResponse({ status: 400, description: 'Exactly 5 candidates must be selected to confirm panel' })
+  @ApiResponse({ status: 400, description: 'Panel candidates not added' })
   @ApiResponse({ status: 400, description: 'Panel not confirmed' })
   async confirmPanel(@Body() data: ConfirmPanelHireRequestDto, @CurrentUser() user: USER) {
     const result = await this.hireRequestService.confirmPanel(data, user);
@@ -179,10 +180,6 @@ export class HireRequestController {
       data: result,
     }
   }
-
-
-
-  
 
 
 

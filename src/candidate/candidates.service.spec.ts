@@ -206,7 +206,7 @@ const openAIMock = {
             },
           },
           experiences: {
-            orderBy: { start_date: 'asc' },
+            orderBy: { start_date: 'desc' },
             select: {
               company: true,
               position: true,

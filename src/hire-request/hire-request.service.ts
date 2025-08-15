@@ -58,7 +58,6 @@ export class HireRequestService {
     
   }
 
-
   async findAll(user: USER): Promise<object[]> {
     
     if (!user || !user.organization_id) {
@@ -340,12 +339,32 @@ export class HireRequestService {
     return scoredCandidates;
   }
   
-  async confirmPanel(data, user){
+  async confirmPanel(data, user) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data) throw new BadRequestException('Data is required to confirm panel');
     if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
 
+    //add each candidate to the panel
+    const addCandidates = await this.prisma.panelCandidate.createMany({
+      data: data.candidates_id.map(candidateId => ({
+        candidate_id: candidateId,
+        panel_id: data.panel_id,
+      })),
+    })
+    if (!addCandidates) throw new BadRequestException(`Panel candidates not added`);
 
+    //update panel with status = 'sourcing'
+    const panelUpdated = await this.prisma.hireRequest.update({
+      where: {
+        id: data.hireRequest_id,
+      },
+      data: {
+        status: 'sourcing',
+      },
+    });
+    if (!panelUpdated) throw new BadRequestException(`Panel not confirmed`);
+
+    return true;
   }
 
 }
