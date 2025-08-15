@@ -16,47 +16,51 @@ export class HireRequestService {
 
   async create(data: CreateHireRequestDto, user: USER):Promise<string> {
 
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    try{
+      if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const {skills, ...hireRequestData} = data;
+      const {skills, ...hireRequestData} = data;
 
-    const hireRequest = {
-      ...hireRequestData,
-      organization: {connect: {id: user.organization_id}},
-      status: user.status==='prospect' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
-    };
+      const hireRequest = {
+        ...hireRequestData,
+        organization: {connect: {id: user.organization_id}},
+        status: user.status==='prospect' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+      };
 
-    const newHireRequest = await this.prisma.hireRequest.create({
-      data: hireRequest,
-    })
-    if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
-    if (skills && skills.length > 0) {
-      await this.prisma.hireRequestSkill.createMany({
-        data: skills.map(skill => ({
-          skill_name: skill.name,
-          required_level: skill.level,
-          hire_request_id: newHireRequest.id,
-        })),
-      });
-    }
-
-    //create Panel with default user_id
-    const panel = await this.prisma.candidatePanel.create({
-      data: {
-        user_id: undefined, // default user because all panel start as unassigned
-        hire_request_id: newHireRequest.id,
-        readable: false,
-        
+      const newHireRequest = await this.prisma.hireRequest.create({
+        data: hireRequest,
+      })
+      if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
+      if (skills && skills.length > 0) {
+        await this.prisma.hireRequestSkill.createMany({
+          data: skills.map(skill => ({
+            skill_name: skill.name,
+            required_level: skill.level,
+            hire_request_id: newHireRequest.id,
+          })),
+        });
       }
-    })
 
+      //create Panel with default user_id
+      const panel = await this.prisma.candidatePanel.create({
+        data: {
+          user_id: undefined, // default user because all panel start as unassigned
+          hire_request_id: newHireRequest.id,
+          readable: false,
+          
+        }
+      })
 
-    return 'Hire request created successfully';
+      return 'Hire request created successfully';
+    }catch (error) {
+      throw new BadRequestException(`Error creating hire request: ${error.message}`);
+    }
+    
   }
 
 
   async findAll(user: USER): Promise<object[]> {
-
+    
     if (!user || !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
@@ -221,7 +225,6 @@ export class HireRequestService {
     }
   }
 
-
   async reassign(id: string, user: USER, data: reassignDTO): Promise<boolean> {
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.user_id) throw new BadRequestException('User ID is required for reassignment');
@@ -260,4 +263,77 @@ export class HireRequestService {
 
     return true;
   }
+
+  async showMatchCandidates(id: string, user: USER): Promise <object>{
+    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        organization: { id : user.organization_id,}
+      },
+      select:{
+        id: true,
+        specialization: true,
+        location: true,
+        availability: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        skills: {
+          select: {
+            skill_name: true,
+            required_level: true,
+          },
+        }
+      }
+    });
+    if (!hireRequest)  throw new NotFoundException(`Hire request not found`);
+    const requiredSkills = hireRequest.skills.map(s => s.skill_name);
+
+    const hourly_from = hireRequest.salary_range_from ? Number(hireRequest.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined;
+    const hourly_to = hireRequest.salary_range_to ? Number(hireRequest.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined;
+
+    //at least 1 skill match
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        specialization: hireRequest.specialization,
+        country: hireRequest.location ?  hireRequest.location  : undefined,
+        employment_type: hireRequest.availability ? hireRequest.availability : undefined,
+        hourly_pay_rate:{
+          gte: hourly_from,
+          lte: hourly_to,
+        },
+        skills: {
+          some: {
+            skill_name: { in: requiredSkills },
+          },
+        },
+      },
+      include: {
+        skills: true,
+        experiences: true,
+        educations: true,
+      },
+    });
+
+    //score candidates based on skill matches
+    const scoredCandidates = candidates.map(candidate => {
+      const candidateSkills = candidate.skills.map(s => s.skill_name);
+      const matchedSkills = candidateSkills.filter(skill => requiredSkills.includes(skill));
+      const score = matchedSkills.length;
+  
+      return {
+        ...candidate,
+        matchedSkills,
+        score,
+      };
+    });
+
+    //sort for score
+    scoredCandidates.sort((a, b) => b.score - a.score);
+
+    return scoredCandidates;
+  }
+    
+
 }

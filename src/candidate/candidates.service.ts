@@ -43,8 +43,8 @@ export class CandidatesService {
     const take = perPage;
     const {organization_id} = user;    
 
-    const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (176 * 1.55) : undefined; 
-    const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (176 * 1.55) : undefined; 
+    const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
+    const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
 
     const languagesArray = languages ?
     languages.split(',').map(l => l.trim()).filter(Boolean)

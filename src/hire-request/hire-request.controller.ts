@@ -143,5 +143,25 @@ export class HireRequestController {
     }
   }
 
+  @Get('start-sourcing/show-match-candidates/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Show possibles candidates for a specific hire request' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiResponse({ status: 200, description: 'Candidates returned successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  async showMatchCandidates(@Param('id') id: string, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.showMatchCandidates(id, user);
+    return {
+      status: 200,
+      message: 'Candidates returned successfully',
+      data: result,
+    }
+  }
+
+  
+
+
 
 }
