@@ -184,7 +184,7 @@ export class CandidatesService {
         }
       },
       experiences: {
-        orderBy: { start_date: Prisma.SortOrder.asc },
+        orderBy: { start_date: Prisma.SortOrder.desc },
         select: {
           company: true,
           position: true,
@@ -267,7 +267,7 @@ export class CandidatesService {
         }
       },
       experiences: {
-        orderBy: { start_date: Prisma.SortOrder.asc },
+        orderBy: { start_date: Prisma.SortOrder.desc },
         select: {
           company: true,
           position: true,

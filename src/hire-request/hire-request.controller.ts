@@ -168,6 +168,7 @@ export class HireRequestController {
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel confirmed successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  
   @ApiResponse({ status: 404, description: 'Hire request not found' })  
   @ApiResponse({ status: 400, description: 'Panel not confirmed' })
   async confirmPanel(@Body() data: ConfirmPanelHireRequestDto, @CurrentUser() user: USER) {

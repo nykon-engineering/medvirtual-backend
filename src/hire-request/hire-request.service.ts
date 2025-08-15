@@ -341,6 +341,10 @@ export class HireRequestService {
   }
   
   async confirmPanel(data, user){
+    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!data) throw new BadRequestException('Data is required to confirm panel');
+    if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
+
 
   }
 
