@@ -532,14 +532,26 @@ export class CandidatesService {
                 }
               ] 
             },
-            distinct: ['country'],
+            distinct: [field],
             select: {
               [field]: true
             },
           })
         }
 
-        result[field]=returned;
+        if (field === 'specialization') {
+          result[field] = [
+            ...new Set(
+              returned.flatMap(item =>
+                item.specialization.split(';').map(s => s.trim())
+              )
+            )
+          ];
+        }else{
+          result[field]=returned;
+        }
+
+        
       }
       return result;
         
