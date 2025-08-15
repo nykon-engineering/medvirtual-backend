@@ -339,6 +339,9 @@ export class HireRequestService {
 
     return scoredCandidates;
   }
-    
+  
+  async confirmPanel(data, user){
+
+  }
 
 }

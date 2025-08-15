@@ -12,6 +12,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { reassignDTO } from './dto/reassign-hire-request.dto';
+import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 
 
 
@@ -159,6 +160,26 @@ export class HireRequestController {
       data: result,
     }
   }
+
+  @Post('start-sourcing/confirm-panel')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Confirm panel for a specific hire request' })
+  @ApiBody({ type: ConfirmPanelHireRequestDto })
+  @ApiResponse({ status: 200, description: 'Panel confirmed successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })  
+  @ApiResponse({ status: 400, description: 'Panel not confirmed' })
+  async confirmPanel(@Body() data: ConfirmPanelHireRequestDto, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.confirmPanel(data, user);
+    return {
+      status: 200,
+      message: 'Panel confirmed successfully',
+      data: result,
+    }
+  }
+
+
 
   
 

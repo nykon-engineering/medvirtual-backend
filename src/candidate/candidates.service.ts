@@ -494,7 +494,14 @@ export class CandidatesService {
               OR:[
                 {pipeline_status: '261075105'},
                 {pipeline_status: '1087596819'}
-              ]
+              ],
+              AND: [
+                {
+                  [field]: {
+                    not: null
+                  }
+                }
+              ] 
             },
             distinct: ['country'],
             select: {

@@ -297,6 +297,13 @@ const openAIMock = {
             { pipeline_status: '261075105' },
             { pipeline_status: '1087596819' },
           ],
+          AND: [
+            {
+              country: {
+                not: null
+              }
+            }
+          ] 
         },
         distinct: ['country'],
         select: { country: true },
