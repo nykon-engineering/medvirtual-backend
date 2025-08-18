@@ -46,6 +46,9 @@ export class CandidatesService {
     const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
     const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
 
+    //Create exception for availability
+
+
     const languagesArray = languages ?
     languages.split(',').map(l => l.trim()).filter(Boolean)
     : [];
@@ -314,7 +317,6 @@ export class CandidatesService {
     });
     if(!updatedCandidate) throw new BadGatewayException('Failed to update candidate');
     return updatedCandidate;
-
   }
 
   private async updateStatus(id: string, status: ProcessingStatus): Promise<void> {

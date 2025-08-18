@@ -181,6 +181,27 @@ export class HireRequestController {
     }
   }
 
+  @Post('sourcing/edit-panel')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Edit panel for a specific hire request' })
+  @ApiBody({ type: ConfirmPanelHireRequestDto })
+  @ApiResponse({ status: 200, description: 'Panel updated successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 400, description: 'Data is required to confirm panel' })
+  @ApiResponse({ status: 400, description: 'Exactly 5 candidates must be selected to confirm panel' })
+  @ApiResponse({ status: 400, description: 'Panel candidates not removed' })
+  @ApiResponse({ status: 400, description: 'Panel candidates not added' })
+  @ApiResponse({ status: 400, description: 'Panel not confirmed' })
+  async editPanel(@Body() data: ConfirmPanelHireRequestDto, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.editPanel(data, user);
+    return {
+      status: 200,
+      message: 'Panel updated successfully',
+      data: result,
+    }
+  }
+
 
 
 }
