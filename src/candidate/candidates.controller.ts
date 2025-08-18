@@ -4,8 +4,10 @@ import { CandidatesService } from './candidates.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ApiParam, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiParam, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
+import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
+import { identity } from 'rxjs';
 
 @Controller('candidates')
 export class CandidatesController {
@@ -122,6 +124,28 @@ export class CandidatesController {
   async getCountries(@Query() fields: string) {
       const result = await this.candidatesService.getProperties(fields);
       return result;
+  }
+
+  @Post('update-status/:id')
+  @HttpCode(200)
+  @ApiProperty({ description: 'Update status of candidates and reflect it on Hubspot' })
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
+  @ApiBody({ type: updateStatusHubspotDTO})
+  @ApiResponse({ status: 200, description: 'Status updated successfully' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @ApiResponse({ status: 400, description: 'Status data is required' })
+  @ApiResponse({ status: 400, description: 'Invalid status provided' })
+  @ApiResponse({ status: 404, description: 'Candidate not found' })
+  @ApiResponse({ status: 400, description: 'Failed to update candidate status in HubSpot' })
+  @ApiResponse({ status: 400, description: 'Failed to update candidate status' })
+  @UseGuards(AuthGuard)
+  async updateStatus(@Param('id') id: string, @Body() data: updateStatusHubspotDTO) {
+    const result = await this.candidatesService.updateStatusHubspot(id,data);
+    return {
+      status: 200,
+      message: 'Status updated successfully',
+      data: result
+    }
   }
 
 }

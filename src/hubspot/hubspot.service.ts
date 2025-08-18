@@ -106,6 +106,7 @@ export class HubspotService {
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
     }
+    
 
     ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
     async createCandidates(pipeline_stage: string): Promise<string> {

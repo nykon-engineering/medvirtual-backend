@@ -10,6 +10,8 @@ import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
+import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
+import axios from 'axios';
 
 @Injectable()
 export class CandidatesService {
@@ -559,6 +561,50 @@ export class CandidatesService {
     } catch (error) {
         throw new BadRequestException(`Error fetching countries: ${error.message}`);
     }
+  }
+
+  async updateStatusHubspot(id: string, data: updateStatusHubspotDTO): Promise<any> {
+    if (!id) throw new BadRequestException('Candidate ID is required');
+    if (!data || !data.status) throw new BadRequestException('Status data is required');
+
+    const stageName = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === data.status?.toLowerCase())?.[0];
+    if (!stageName) throw new BadRequestException('Invalid status provided');
+
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: id },
+      select: { hubspot_id: true }
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+
+    const body = {
+      properties: {
+        hs_pipeline_stage: stageName
+      }
+    };
+
+    //communication with hubspot to update status can be added here
+    const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+      body,
+      {
+          headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json'
+          }
+      }
+  )
+
+  if(response.status !== 200) {
+    throw new BadGatewayException('Failed to update candidate status in HubSpot');
+  }
+    const updatedCandidate = await this.prisma.candidate.update({
+      where: { id: id },
+      data: {
+        pipeline_status: stageName
+      }
+    });
+    if(!updatedCandidate) throw new BadGatewayException('Failed to update candidate status');
+    
+    return updatedCandidate;
   }
 
 }

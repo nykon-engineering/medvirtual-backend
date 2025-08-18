@@ -7,14 +7,17 @@ import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { OpenaiService } from '../openai/openai.service';
-import { count } from 'console';
-import { first } from 'rxjs';
+import axios from 'axios';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 const mockPrisma = {
   candidate: {
     findMany: jest.fn(),
     findUnique: jest.fn(),
     count: jest.fn(),
+    update: jest.fn(),
   },
   candidateLanguage: {
     findMany: jest.fn(),
@@ -71,8 +74,6 @@ const openAIMock = {
 
     jest.clearAllMocks();
   });
-
-
 
   describe('findAll', () => {
     it('should return all candidates without filters and transform pipeline_status', async () => {
@@ -140,8 +141,6 @@ const openAIMock = {
       await expect(service.findAll(mockUser)).rejects.toThrow(BadGatewayException);
     });
   });
-  
-  
 
   describe('findOne', () => {
     it('should return candidate by id and organization_id', async () => {
@@ -243,7 +242,6 @@ const openAIMock = {
     })
   });
 
-
   describe('getProperties', () => {
     it('should return distinct languages when field is "languages"', async () => {
       const mockLanguages = [{ name: 'English' }, { name: 'Spanish' }];
@@ -336,5 +334,84 @@ const openAIMock = {
     });
   });
   
+  describe('updateStatusHubspot', () => {
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    const mockCandidate = {
+      id: '1',
+      hubspot_id: 'hub-123',
+    };
+  
+    it('should throw BadRequestException if candidate id is missing', async () => {
+      await expect(service.updateStatusHubspot('', { status: 'Available Candidates' }))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if status is missing', async () => {
+      await expect(service.updateStatusHubspot('1', { status: '' }))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if status is invalid', async () => {
+      await expect(service.updateStatusHubspot('1', { status: 'invalid-status' }))
+        .rejects
+        .toThrow(BadRequestException);
+    });
+  
+    it('should throw NotFoundException if candidate does not exist', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(null);
+  
+      await expect(service.updateStatusHubspot('1', { status: 'Available Candidates' }))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+  
+    it('should throw BadGatewayException if HubSpot API fails', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
+      mockedAxios.patch.mockResolvedValue({ status: 500 } as any);
+  
+      await expect(service.updateStatusHubspot('1', { status: 'Available Candidates' }))
+        .rejects
+        .toThrow(BadGatewayException);
+    });
+  
+    it('should throw BadGatewayException if prisma update fails', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
+      mockedAxios.patch.mockResolvedValue({ status: 200 } as any);
+      mockPrisma.candidate.update.mockResolvedValue(null);
+  
+      await expect(service.updateStatusHubspot('1', { status: 'Available Candidates' }))
+        .rejects
+        .toThrow(BadGatewayException);
+    });
+  
+    it('should update candidate status successfully', async () => {
+      const updatedCandidate = { id: '1', pipeline_status: '261075105' };
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
+      mockedAxios.patch.mockResolvedValue({ status: 200 } as any);
+      mockPrisma.candidate.update.mockResolvedValue(updatedCandidate);
+  
+      const result = await service.updateStatusHubspot('1', { status: 'Available Candidates' });
+  
+      expect(mockPrisma.candidate.findUnique).toHaveBeenCalledWith({
+        where: { id: '1' },
+        select: { hubspot_id: true },
+      });
+      expect(mockedAxios.patch).toHaveBeenCalled();
+      expect(mockPrisma.candidate.update).toHaveBeenCalledWith({
+        where: { id: '1' },
+        data: { pipeline_status: '261075105' }, // stageName do dicionário
+      });
+      expect(result).toEqual(updatedCandidate);
+    });
+  });
+
+
+
 
 });
