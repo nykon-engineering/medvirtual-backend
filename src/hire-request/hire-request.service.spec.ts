@@ -5,6 +5,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { USER } from '@prisma/client';
 import { create } from 'domain';
 import { find } from 'rxjs';
+import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
+import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 
 const prismaMock = {
   hireRequest: {
@@ -472,7 +474,7 @@ describe('HireRequestService', () => {
     });
   
     it('should throw BadRequestException if data is missing', async () => {
-      await expect(service.confirmPanel(null, user)).rejects.toThrow(BadRequestException);
+      await expect(service.confirmPanel({} as ConfirmPanelHireRequestDto, user)).rejects.toThrow(BadRequestException);
     });
   
     it('should throw BadRequestException if candidates_id length is not 5', async () => {
@@ -542,7 +544,7 @@ describe('HireRequestService', () => {
     });
   
     it('should throw BadRequestException if data is missing', async () => {
-      await expect(service.editPanel(null, user)).rejects.toThrow(BadRequestException);
+      await expect(service.editPanel({} as ConfirmPanelHireRequestDto, user)).rejects.toThrow(BadRequestException);
     });
   
     it('should throw BadRequestException if candidates_id length is not 5', async () => {
@@ -597,6 +599,60 @@ describe('HireRequestService', () => {
       prismaMock.hireRequest.update.mockResolvedValue(null);
   
       await expect(service.editPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  });
+  
+  describe('panelReady', () => {
+    const panelData = {
+      hireRequest_id: 'hr1',
+      readable: true,
+    };
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should throw NotFoundException if user has no organization', async () => {
+      await expect(
+        service.panelReady(panelData, { ...user, organization_id: null })
+      ).rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw BadRequestException if data is missing', async () => {
+      await expect(service.panelReady({} as panelReadyDTO, user)).rejects.toThrow(BadRequestException);
+      await expect(service.panelReady({} as any, user)).rejects.toThrow(BadRequestException);
+    });
+  
+    it('should update hire request and panel successfully', async () => {
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'panel_ready' });
+      prismaMock.candidatePanel.updateMany.mockResolvedValue({ count: 1 });
+  
+      const result = await service.panelReady(panelData, user);
+      expect(result).toBe(true);
+  
+      expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
+        where: { id: panelData.hireRequest_id },
+        data: { status: 'panel_ready' },
+      });
+  
+      expect(prismaMock.candidatePanel.updateMany).toHaveBeenCalledWith({
+        where: { hire_request_id: panelData.hireRequest_id },
+        data: { readable: panelData.readable },
+      });
+    });
+  
+    it('should throw BadRequestException if hireRequest update fails', async () => {
+      prismaMock.hireRequest.update.mockResolvedValue(null);
+      await expect(service.panelReady(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if panel update fails', async () => {
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'panel_ready' });
+      prismaMock.candidatePanel.updateMany.mockResolvedValue(null);
+  
+      await expect(service.panelReady(panelData, user))
         .rejects.toThrow(BadRequestException);
     });
   });

@@ -7,6 +7,8 @@ import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { reassignDTO } from './dto/reassign-hire-request.dto';
 import { connect } from 'net';
+import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
+import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 
 @Injectable()
 export class HireRequestService {
@@ -65,16 +67,21 @@ export class HireRequestService {
     }
     if(!user.role) throw new NotFoundException('User role not found');
 
+    const whereFilter: any = {};
+    if (user.role.includes('organization')) {
+      whereFilter.organization = { id: user.organization_id };
+      whereFilter.panels = { some: { readable: true } };
+    }
+
     const hireRequests = await this.prisma.hireRequest.findMany({
-      where: {
-        organization: user.role.includes('organization') ? { id: user.organization_id } : undefined,
-      },
+      where: whereFilter,
       include: {
         skills: true,
         organization: true,
+        panels: true,
       },
     })
-    if(!hireRequests) throw new NotFoundException('No hire requests found for this organization');
+    if(!hireRequests) throw new NotFoundException('No hire requests found');
 
     return hireRequests;
   }
@@ -339,16 +346,27 @@ export class HireRequestService {
     return scoredCandidates;
   }
   
-  async confirmPanel(data, user) : Promise<boolean> {
+  async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
-    if (!data) throw new BadRequestException('Data is required to confirm panel');
+    if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
     if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
+
+    //check if panel exists
+    const panelExists = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: data.hireRequest_id,
+      },
+      select: {
+        id: true,
+      },
+    });
+    if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
     //add each candidate to the panel
     const addCandidates = await this.prisma.panelCandidate.createMany({
       data: data.candidates_id.map(candidateId => ({
         candidate_id: candidateId,
-        panel_id: data.panel_id,
+        panel_id: panelExists.id,
       })),
     })
     if (!addCandidates) throw new BadRequestException(`Panel candidates not added`);
@@ -367,15 +385,26 @@ export class HireRequestService {
     return true;
   }
 
-  async editPanel(data, user) : Promise<boolean> {
+  async editPanel(data: ConfirmPanelHireRequestDto, user: USER) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
-    if (!data) throw new BadRequestException('Data is required to confirm panel');
+    if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
     if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
 
-    //remove ond panel
+    //check if panel exists
+    const panelExists = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: data.hireRequest_id,
+      },
+      select: {
+        id: true,
+      },
+    });
+    if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
+    //remove old panel
     const removeCandidates = await this.prisma.panelCandidate.deleteMany({
       where: {
-        panel_id: data.panel_id,
+        panel_id: panelExists.id,
       },
     });
     if (!removeCandidates) throw new BadRequestException(`Panel candidates not removed`);
@@ -384,7 +413,7 @@ export class HireRequestService {
     const addCandidates = await this.prisma.panelCandidate.createMany({
       data: data.candidates_id.map(candidateId => ({
         candidate_id: candidateId,
-        panel_id: data.panel_id,
+        panel_id: panelExists.id,
       })),
     })
     if (!addCandidates) throw new BadRequestException(`Panel candidates not added`);
@@ -403,4 +432,32 @@ export class HireRequestService {
     return true;
   }
 
+
+  async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
+    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
+    //update hire request with status = 'panel_ready'
+    const hireRequest = await this.prisma.hireRequest.update({
+      where: {
+        id: data.hireRequest_id,
+      },
+      data: {
+        status: 'panel_ready',
+      },
+    });
+    if (!hireRequest) throw new BadRequestException(`Hire request not updated to panel ready`);
+
+    //update panel with readable = true
+    const panelUpdated = await this.prisma.candidatePanel.updateMany({
+      where: {
+        hire_request_id: data.hireRequest_id,
+      },
+      data: {
+        readable: data.readable,
+      },
+    });
+    if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
+
+    return true;
+  }
 }

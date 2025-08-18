@@ -13,6 +13,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { reassignDTO } from './dto/reassign-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
+import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 
 
 
@@ -170,6 +171,7 @@ export class HireRequestController {
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
   @ApiResponse({ status: 400, description: 'Data is required to confirm panel' })
   @ApiResponse({ status: 400, description: 'Exactly 5 candidates must be selected to confirm panel' })
+  @ApiResponse({ status: 400, description: 'Panel for this hire request not found' })
   @ApiResponse({ status: 400, description: 'Panel candidates not added' })
   @ApiResponse({ status: 400, description: 'Panel not confirmed' })
   async confirmPanel(@Body() data: ConfirmPanelHireRequestDto, @CurrentUser() user: USER) {
@@ -190,6 +192,7 @@ export class HireRequestController {
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
   @ApiResponse({ status: 400, description: 'Data is required to confirm panel' })
   @ApiResponse({ status: 400, description: 'Exactly 5 candidates must be selected to confirm panel' })
+  @ApiResponse({ status: 400, description: 'Panel for this hire request not found' })
   @ApiResponse({ status: 400, description: 'Panel candidates not removed' })
   @ApiResponse({ status: 400, description: 'Panel candidates not added' })
   @ApiResponse({ status: 400, description: 'Panel not confirmed' })
@@ -198,6 +201,25 @@ export class HireRequestController {
     return {
       status: 200,
       message: 'Panel updated successfully',
+      data: result,
+    }
+  }
+
+  @Post('sourcing/panel-ready')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Mark Panel Ready for a specific hire request' })
+  @ApiBody({ type: panelReadyDTO })
+  @ApiResponse({ status: 200, description: 'Panel marked ready successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 400, description: 'Data is required to confirm panel' })
+  @ApiResponse({ status: 400, description: 'Hire request not updated to panel ready' })
+  @ApiResponse({ status: 400, description: 'Panel not updated to readable' })
+  async panelReady(@Body() data: panelReadyDTO, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.panelReady(data, user);
+    return {
+      status: 200,
+      message: 'Panel marked ready successfully',
       data: result,
     }
   }
