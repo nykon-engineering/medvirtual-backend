@@ -146,7 +146,7 @@ export class GoogledriveService {
           await this.prisma.candidate.update({
             where: { id },
             data: {
-              pipeline_status: 'failed'
+              processing_status: 'failed'
             },
           })
           return; 
@@ -176,7 +176,7 @@ export class GoogledriveService {
           await this.prisma.candidate.update({
             where: { id },
             data: {
-              pipeline_status: 'failed'
+              processing_status: 'failed'
             },
           })
           return; 
@@ -186,15 +186,10 @@ export class GoogledriveService {
         fs.writeFileSync(destinationPath, response.data);
 
         console.log(`Arquivo salvo em ${destinationPath}`);
+        return true;
       }catch(error: any) {
-        console.error(`Erro ao baixar o arquivo: ${error.message}`);
-        await this.prisma.candidate.update({
-          where: { id },
-          data: {
-            pipeline_status: 'failed'
-          },
-        })
-
+        console.log(`Erro ao baixar o arquivo: ${error.message}`);
+        return false;
       }
     }
 }

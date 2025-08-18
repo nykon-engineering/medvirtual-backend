@@ -6,9 +6,9 @@ import { HireRequestStatus, USER } from '@prisma/client';
 import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { reassignDTO } from './dto/reassign-hire-request.dto';
-import { connect } from 'net';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
+import { returnGetPanelDto } from './dto/return-getPanel.dto';
 
 @Injectable()
 export class HireRequestService {
@@ -459,5 +459,77 @@ export class HireRequestService {
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
 
     return true;
+  }
+
+  async getPanel(id: string, user: USER): Promise<returnGetPanelDto> {
+    let result: any = {};
+    if(!id) throw new BadRequestException('Hire request ID is required');
+    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        org_id: user.role.includes('organization') ?  user.organization_id : undefined,
+      },
+      select: {
+        id: true,
+      }
+    });
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    const panel = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: hireRequest.id,
+      },
+      select:{
+        id : true,
+      }
+    });
+    if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
+    result.hireRequestId = id;
+    result.panelId = panel.id;
+
+    const panelCandidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        panel_id: panel.id,
+      },
+      include: {
+        candidate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            country: true,
+            skills: {
+              select: {
+                skill_name: true,
+              },
+            },
+            educations: {
+              select: {
+                institution: true,
+                degree: true,
+                year: true,
+              },
+            },
+            experiences: {
+              select: {
+                company: true,
+                position: true,
+                responsabilities: true,
+                end_date: true,
+                start_date: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!panelCandidates) throw new NotFoundException(`Panel candidates not found`);
+    result.panelCandidates = panelCandidates;
+
+    return result;
+
   }
 }

@@ -392,33 +392,62 @@ export class CandidatesService {
       const pdfName = `${candidate.id}_resume.pdf`;
       const downloadDir = path.resolve(__dirname, '/tmp');
 
+     
+      if (!idFile) {
+        await this.updateStatus(id, 'failed');
+        return false;
+      }
+
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
-      if (idFile) {
-        await this.google.downloadFile(idFile, pdfName, downloadDir, id);
-      }else{
-        throw new BadRequestException('Error downloading file from Google Drive. Invalid file ID.');
-      } 
+      const fileDownloaded = await this.google.downloadFile(idFile, pdfName, downloadDir, id);
+      if (!fileDownloaded) {
+        await this.updateStatus(id, 'failed');
+        console.log('Failed to download file from Google Drive');
+        return false;
+      }
+      console.log('step googleDrive = OK');
 
       //processing_uploadFile
       await this.updateStatus(id, 'processing_uploadFile');
       const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
-      if (!bucketFile) throw new BadGatewayException('Failed to upload file to S3 bucket');
+      if (!bucketFile) {
+        await this.updateStatus(id, 'failed');
+        console.log('Failed to upload file to S3');
+        return false;
+      }
+      console.log('step S3 = OK');
 
       //processing_extractData
       await this.updateStatus(id, 'processing_extractData');
       const jobId = await this.textract.startTextracktJob(bucketFile);
-      if (!jobId) throw new BadGatewayException('Failed to start Textract job');
+      if (!jobId) {
+        await this.updateStatus(id, 'failed');
+        console.log('Failed to start Textract job');
+        return false;
+      }
+      console.log('step Textract 1 = OK');
 
       //processing_extractText
       await this.updateStatus(id, 'processing_extractText');
       const extract = await this.textract.getTextractResult(jobId);
-      if(!extract) throw new BadGatewayException('Failed to extract text from resume');
+      if(!extract) {
+        await this.updateStatus(id, 'failed');
+        console.log('Failed to extract text from Textract');
+        return false;
+      }
+      console.log('step Textract 2 = OK');
 
       //processing_organizeData
       await this.updateStatus(id, 'processing_organizeData');   
       const organizedData = await this.openai.organizeText(extract, candidate);
-      if (!organizedData) throw new BadGatewayException('Failed to organize data from OpenAI');
+      if (!organizedData) {
+        await this.updateStatus(id, 'failed');
+        console.log('Failed to organize data from OpenAI');
+        return false;
+      }
+      console.log('step OpenAi = OK');
+
       const parsedData = JSON.parse(organizedData);
       console.log('The datas were organized successfully by openAi');
 
@@ -435,7 +464,11 @@ export class CandidatesService {
       })
       //call function to populate skills, education, experience....
       const populateDatas = await this.updateFromJson(id, parsedData);
-      if (!populateDatas) throw new BadGatewayException('Failed to populate candidate data from JSON');
+      if (!populateDatas){
+        await this.updateStatus(id, 'failed');
+        console.log('Failed to populate candidate data from JSON');
+        return false;
+      }
 
       //completed
       await this.updateStatus(id, 'completed');

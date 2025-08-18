@@ -31,6 +31,7 @@ const prismaMock = {
   panelCandidate: {
     createMany: jest.fn(),
     deleteMany: jest.fn(),
+    findMany: jest.fn(),
   }
 };
 
@@ -487,6 +488,7 @@ describe('HireRequestService', () => {
       prismaMock.panelCandidate = {
         createMany: jest.fn().mockResolvedValue({ count: 5 }),
         deleteMany: jest.fn().mockResolvedValue({ count: 5 }),
+        findMany: jest.fn().mockResolvedValue([]),
       };
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
   
@@ -510,6 +512,7 @@ describe('HireRequestService', () => {
       prismaMock.panelCandidate = {
         createMany: jest.fn().mockResolvedValue(null),
         deleteMany: jest.fn().mockResolvedValue({ count: 5 }),
+        findMany: jest.fn().mockResolvedValue([]),
       };
   
       await expect(service.confirmPanel(panelData, user)).rejects.toThrow(BadRequestException);
@@ -519,6 +522,7 @@ describe('HireRequestService', () => {
       prismaMock.panelCandidate = {
         createMany: jest.fn().mockResolvedValue({ count: 5 }),
         deleteMany: jest.fn().mockResolvedValue({ count: 5 }),
+        findMany: jest.fn().mockResolvedValue([]),
       };
       prismaMock.hireRequest.update.mockResolvedValue(null);
   
@@ -657,5 +661,96 @@ describe('HireRequestService', () => {
     });
   });
   
-  
+  describe('getPanel', () => {
+
+    const baseId = 'hr1';
+    const basePanel = { id: 'panel1' };
+    const baseHireRequest = { id: 'hr1' };
+    const basePanelCandidates = [
+      {
+        id: 'pc1',
+        candidate: {
+          id: 'cand1',
+          first_name: 'John',
+          last_name: 'Doe',
+          email: 'john@example.com',
+          country: 'Brazil',
+          skills: [{ skill_name: 'React' }],
+          educations: [{ institution: 'Uni', degree: 'CS', year: '2020' }],
+          experiences: [
+            {
+              company: 'Company',
+              position: 'Dev',
+              responsabilities: 'Coding',
+              start_date: new Date('2020-01-01'),
+              end_date: new Date('2021-01-01'),
+            },
+          ],
+        },
+      },
+    ];
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should throw BadRequestException if id is missing', async () => {
+      await expect(service.getPanel(null as any, user)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException if user is missing or has no org', async () => {
+      await expect(service.getPanel(baseId, null as any)).rejects.toThrow(NotFoundException);
+      await expect(service.getPanel(baseId, { ...user, organization_id: null })).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if hireRequest not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(null);
+      await expect(service.getPanel(baseId, user)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if panel not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(baseHireRequest);
+      prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
+      await expect(service.getPanel(baseId, user)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if panelCandidates not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(baseHireRequest);
+      prismaMock.candidatePanel.findFirst.mockResolvedValue(basePanel);
+      prismaMock.panelCandidate.findMany.mockResolvedValue(null);
+      await expect(service.getPanel(baseId, user)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return panel data with candidates', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(baseHireRequest);
+      prismaMock.candidatePanel.findFirst.mockResolvedValue(basePanel);
+      prismaMock.panelCandidate.findMany.mockResolvedValue(basePanelCandidates);
+
+      const result = await service.getPanel(baseId, user);
+
+      expect(result).toHaveProperty('hireRequestId', baseId);
+      expect(result).toHaveProperty('panelId', basePanel.id);
+      expect(result.panelCandidates).toEqual(basePanelCandidates);
+
+      expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: baseId,
+          org_id: user.role.includes('organization') ? user.organization_id : undefined,
+        },
+        select: { id: true },
+      });
+      expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
+        where: { hire_request_id: baseHireRequest.id },
+        select: { id: true },
+      });
+      expect(prismaMock.panelCandidate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { panel_id: basePanel.id },
+          include: expect.any(Object),
+        }),
+      );
+    });
+  });
+
+
 });

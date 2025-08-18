@@ -163,8 +163,7 @@ export class HireRequestController {
   }
 
   @Post('start-sourcing/confirm-panel')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @UseGuards(AuthGuard)
   @ApiProperty({ description: 'Confirm panel for a specific hire request' })
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel confirmed successfully' })
@@ -184,8 +183,7 @@ export class HireRequestController {
   }
 
   @Post('sourcing/edit-panel')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @UseGuards(AuthGuard)
   @ApiProperty({ description: 'Edit panel for a specific hire request' })
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel updated successfully' })
@@ -206,8 +204,7 @@ export class HireRequestController {
   }
 
   @Post('sourcing/panel-ready')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @UseGuards(AuthGuard)
   @ApiProperty({ description: 'Mark Panel Ready for a specific hire request' })
   @ApiBody({ type: panelReadyDTO })
   @ApiResponse({ status: 200, description: 'Panel marked ready successfully' })
@@ -220,6 +217,25 @@ export class HireRequestController {
     return {
       status: 200,
       message: 'Panel marked ready successfully',
+      data: result,
+    }
+  }
+
+
+  @Get('get-panel/:id')
+  @UseGuards(AuthGuard)
+  @ApiProperty({ description: 'Get specific Panel' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiResponse({ status: 200, description: 'Panel returned successfully' })
+  @ApiResponse({ status: 400, description: 'Hire request ID is requiredn' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel candidates not found' })
+  async getPanel(@Param('id') id: string, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.getPanel(id, user);
+    return {
+      status: 200,
+      message: 'Panel returned successfully',
       data: result,
     }
   }
