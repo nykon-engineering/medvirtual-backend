@@ -283,6 +283,25 @@ export class HireRequestController {
     }
   }
 
+  @Post('allow-more-time/:id')
+  @UseGuards(AuthGuard)
+  @ApiProperty({ description: 'Allow more time for the user make their decision' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: awaitingDecisionDTO })
+  @ApiResponse({ status: 200, description: 'time Allowed successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  @ApiResponse({ status: 400, description: 'Panel not updated to allow more time' })
+  async allowMoreTime(@Param('id') id: string, @Body() data: awaitingDecisionDTO, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.allowMoreTime(id, data, user);
+    return {
+      status: 200,
+      message: 'time Allowed successfully',
+      data: result,
+    }
+  }
+
 
 
 }

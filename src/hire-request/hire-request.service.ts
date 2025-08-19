@@ -593,7 +593,6 @@ export class HireRequestService {
 
   }
 
-
   async awaitingDecision(id: string, data: awaitingDecisionDTO, user: USER): Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
@@ -642,6 +641,47 @@ export class HireRequestService {
       },
     });
     if (!hireRequestStatusUpdated) throw new BadRequestException(`Hire request status not updated to awaiting decision`);
+
+    return true;
+  }
+
+  async allowMoreTime(id: string, data: awaitingDecisionDTO, user: USER): Promise<boolean>{
+
+    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        organization: user.role.includes('organization') ? { id : user.organization_id,} : undefined
+      },
+      select:{
+        id: true,
+      }
+    });
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    //check if panel exists
+    const panelExists = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: hireRequest.id,
+      },
+      select:{
+        id: true,
+      }
+    });
+    if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
+    const updatedDate = new Date(`${data.date}T${data.time}:00.000Z`);
+
+    const panelUpdated = await this.prisma.candidatePanel.update({
+      where: {
+        id: panelExists.id,
+      },
+      data: {
+        scheduled_date: updatedDate,
+      },
+    });
+    if (!panelUpdated) throw new BadRequestException(`Panel not updated to allow more time`);
 
     return true;
   }

@@ -896,5 +896,71 @@ describe('HireRequestService', () => {
     });
   });
   
+  describe('allowMoreTime', () => {
+    const baseId = 'hr1';
+    const baseData = {
+      date: '2025-08-25',
+      time: '16:00',
+    };
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should throw NotFoundException if user has no organization', async () => {
+      await expect(
+        service.allowMoreTime(baseId, baseData as any, { ...user, organization_id: null })
+      ).rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw NotFoundException if hireRequest not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(null);
+  
+      await expect(service.allowMoreTime(baseId, baseData as any, user))
+        .rejects.toThrow(NotFoundException);
+  
+      expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: baseId,
+          organization: { id: user.organization_id },
+        },
+        select: { id: true },
+      });
+    });
+  
+    it('should throw NotFoundException if panel does not exist', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
+  
+      await expect(service.allowMoreTime(baseId, baseData as any, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw BadRequestException if panel update fails', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.candidatePanel.update.mockResolvedValue(null);
+  
+      await expect(service.allowMoreTime(baseId, baseData as any, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should update panel scheduled_date successfully', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+  
+      const result = await service.allowMoreTime(baseId, baseData as any, user);
+  
+      expect(result).toBe(true);
+      expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
+        where: { id: 'panel1' },
+        data: {
+          scheduled_date: new Date('2025-08-25T16:00:00.000Z'),
+        },
+      });
+    });
+  });
+  
 
 });
