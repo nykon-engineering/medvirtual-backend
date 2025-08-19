@@ -321,10 +321,15 @@ export class CandidatesService {
     return updatedCandidate;
   }
 
-  private async updateStatus(id: string, status: ProcessingStatus): Promise<void> {
+  private async updateStatus(id: string, status: ProcessingStatus, error?: string): Promise<void> {
     await this.prisma.candidate.update({
       where: { id },
-      data: { processing_status: status }
+      data: { 
+        processing_status: status,
+        processing_error: error || null,
+        processed_at: new Date()
+
+       }
     });
   }
 
@@ -394,7 +399,7 @@ export class CandidatesService {
 
      
       if (!idFile) {
-        await this.updateStatus(id, 'failed');
+        await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
         return false;
       }
 
@@ -402,7 +407,7 @@ export class CandidatesService {
       await this.updateStatus(id, 'processing_downloadFile');
       const fileDownloaded = await this.google.downloadFile(idFile, pdfName, downloadDir, id);
       if (!fileDownloaded) {
-        await this.updateStatus(id, 'failed');
+        await this.updateStatus(id, 'failed', 'Failed to download file from Google Drive');
         console.log('Failed to download file from Google Drive');
         return false;
       }
@@ -412,7 +417,7 @@ export class CandidatesService {
       await this.updateStatus(id, 'processing_uploadFile');
       const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
       if (!bucketFile) {
-        await this.updateStatus(id, 'failed');
+        await this.updateStatus(id, 'failed', 'Failed to upload file to S3');
         console.log('Failed to upload file to S3');
         return false;
       }
@@ -422,7 +427,7 @@ export class CandidatesService {
       await this.updateStatus(id, 'processing_extractData');
       const jobId = await this.textract.startTextracktJob(bucketFile);
       if (!jobId) {
-        await this.updateStatus(id, 'failed');
+        await this.updateStatus(id, 'failed', 'Failed to start Textract job');
         console.log('Failed to start Textract job');
         return false;
       }
@@ -432,7 +437,7 @@ export class CandidatesService {
       await this.updateStatus(id, 'processing_extractText');
       const extract = await this.textract.getTextractResult(jobId);
       if(!extract) {
-        await this.updateStatus(id, 'failed');
+        await this.updateStatus(id, 'failed', 'Failed to extract text from Textract');
         console.log('Failed to extract text from Textract');
         return false;
       }
@@ -442,7 +447,7 @@ export class CandidatesService {
       await this.updateStatus(id, 'processing_organizeData');   
       const organizedData = await this.openai.organizeText(extract, candidate);
       if (!organizedData) {
-        await this.updateStatus(id, 'failed');
+        await this.updateStatus(id, 'failed', 'Failed to organize data from OpenAI');
         console.log('Failed to organize data from OpenAI');
         return false;
       }

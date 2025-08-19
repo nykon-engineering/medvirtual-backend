@@ -5,7 +5,29 @@ import { OrganizationService } from './organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { create } from 'domain';
+import { PhoneField } from '@hubspot/api-client/lib/codegen/marketing/forms';
 
+
+const userfake = { 
+  id: '1',
+  createdAt: new Date(),
+  updatedAt: new Date(), 
+  first_name: 'John',
+  last_name: 'Doe',
+  phone: '123456789', 
+  avatar: '',
+  job_title: 'Developer',
+  organization_name: 'Org 1',
+  organization_id: 'org1',
+  email: 'john.doe@example.com',
+  status: 'active',
+  workos_id: '',
+  authentication_method: 'OwnSign',
+  verified: false, 
+  role: 'admin',
+  password: 'hashed_password',
+}
 
 describe('OrganizationService', () => {
   let service: OrganizationService;
@@ -54,7 +76,7 @@ describe('OrganizationService', () => {
 
       mockPrismaService.organization.findMany.mockResolvedValue(organizations);
 
-      const result = await service.getAll();
+      const result = await service.getAll(userfake);
       expect(result).toEqual(organizations);
       expect(prisma.organization.findMany).toHaveBeenCalled();
     });
@@ -62,7 +84,7 @@ describe('OrganizationService', () => {
     it('should throw NotFoundException if an error occurs', async () => {
       mockPrismaService.organization.findMany.mockRejectedValue(new Error());
 
-      await expect(service.getAll()).rejects.toThrow(NotFoundException);
+      await expect(service.getAll(userfake)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -91,7 +113,7 @@ describe('OrganizationService', () => {
 
   describe('create', () => {
     it('should create and return a new organization', async () => {
-      const dto = { name: 'Org 1', cellphone: '123', email: 'org1@example.com', super_admin_email: 'admin@admin' };
+      const dto = { name: 'Org 1', cellphone: '123', email: 'org1@example.com', super_admin_email: 'admin@admin' , admin_id: '1' };
       const created = { id: '1', name: dto.name, contact_info: dto.cellphone, email: dto.email };
 
       mockPrismaService.organization.findUnique.mockResolvedValue(null);
@@ -99,7 +121,7 @@ describe('OrganizationService', () => {
 
       mockAuthService.inviteUser.mockResolvedValue(true);
 
-      const result = await service.create(dto);
+      const result = await service.create(dto, userfake);
       expect(result).toEqual(created);
     });
 
@@ -107,7 +129,7 @@ describe('OrganizationService', () => {
     it('should throw BadRequestException if creation fails', async () => {
       mockPrismaService.organization.create.mockRejectedValue(new Error());
 
-      await expect(service.create({ name: '', cellphone: '', email: '', super_admin_email: '' })).rejects.toThrow(BadRequestException);
+      await expect(service.create({ name: '', cellphone: '', email: '', super_admin_email: '' }, userfake)).rejects.toThrow(BadRequestException);
     });
   });
 

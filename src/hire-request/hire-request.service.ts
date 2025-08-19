@@ -202,8 +202,7 @@ export class HireRequestService {
 
 
     /*
-    next or previus stages;
-
+      next or previus stages;
     */
     if ( 
       Number(newKey)+1 === Number(currentKey) ||

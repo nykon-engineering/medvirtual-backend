@@ -32,6 +32,7 @@ model USER {
   sessions              Session[]
   tickets               Ticket[]
   organization          Organization?       @relation(fields: [organization_id], references: [id])
+  adminOrganizations    Organization[]      @relation("OrganizationAdmin")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -84,6 +85,8 @@ model Organization {
   hire_requests           HireRequest[]
   organization_candidates OrganizationCandidate[]
   users                   USER[]
+  admin_id                String                  @default("")
+  admin                   USER                    @relation("OrganizationAdmin", fields: [admin_id], references: [id]) 
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -236,7 +239,7 @@ model CandidatePanel {
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id])
   interviews      Interview[]
   panelCandidates PanelCandidate[]
-
+ 
   @@index([hire_request_id], map: "idx_candidate_panels_hire_request_id")
   @@index([status], map: "idx_candidate_panels_status")
   @@index([scheduled_date], map: "idx_candidate_panels_scheduled_date")

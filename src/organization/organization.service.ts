@@ -7,7 +7,7 @@ import {
 import axios from 'axios';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { Organization } from '@prisma/client';
+import { Organization, USER } from '@prisma/client';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { AuthService } from '../auth/auth.service';
@@ -124,10 +124,13 @@ export class OrganizationService {
   //These functions above is for get organizations from Hubspot
   //======== // ===========
 
-  async getAll(): Promise<Organization[]> {
+  async getAll(user: USER): Promise<Organization[]> {
 
     try {
       return await this.prisma.organization.findMany({
+        where:{
+          admin_id: user.role.includes('organization') ? user.id : undefined,
+        },
         orderBy: {
           name: 'asc',
         },
@@ -153,7 +156,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto): Promise<Organization> {
+  async create(data: CreateOrganizationDto, user: USER): Promise<Organization> {
     try {
       // Check if the organization already exists
       const existingOrganization = await this.prisma.organization.findUnique({
@@ -163,11 +166,13 @@ export class OrganizationService {
       if (existingOrganization) {
         throw new BadRequestException('Organization already exists');
       }
+
       const organization= await this.prisma.organization.create({
         data: {
           name: data.name,
           contact_info: data.cellphone,
           email: data.email,
+          admin_id: user.id, //Here I assume that the admin is the user that is creating the organization
         },
       });
       const dataInvitedUser = {

@@ -17,6 +17,8 @@ import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CurrentUser } from 'dist/auth/current-user.decorator';
+import { USER } from '@prisma/client';
 
 @ApiTags('Organization')
 @Controller('organization')
@@ -36,12 +38,9 @@ export class OrganizationController {
   @Roles('system_super_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get all organizations' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of organizations retrieved successfully',
-  })
-  async getAll() {
-    return await this.organizationService.getAll();
+  @ApiResponse({status: 200, description: 'List of organizations retrieved successfully'})
+  async getAll(@CurrentUser() user: USER) {
+    return await this.organizationService.getAll(user);
   }
 
   @Get('/:id')
@@ -68,8 +67,8 @@ export class OrganizationController {
     status: 201,
     description: 'Organization created successfully',
   })
-  async create(@Body() data: CreateOrganizationDto) {
-    const org = await this.organizationService.create(data);
+  async create(@Body() data: CreateOrganizationDto, @CurrentUser() user: any) {
+    const org = await this.organizationService.create(data, user);
     return {
       statusCode: 201,
       message: 'Organization created successfully',
