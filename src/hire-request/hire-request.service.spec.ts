@@ -820,6 +820,81 @@ describe('HireRequestService', () => {
     });
   });
   
-
+  describe('awaitingDecision', () => {
+    const baseId = 'hr1';
+    const baseData = {
+      date: '2025-08-21',
+      time: '14:00',
+    };
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should throw NotFoundException if user has no organization', async () => {
+      await expect(
+        service.awaitingDecision(baseId, baseData as any, { ...user, organization_id: null })
+      ).rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw NotFoundException if hireRequest is not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(null);
+  
+      await expect(service.awaitingDecision(baseId, baseData as any, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw NotFoundException if no panel exists for hire request', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
+  
+      await expect(service.awaitingDecision(baseId, baseData as any, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw BadRequestException if panel update fails', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.candidatePanel.update.mockResolvedValue(null);
+  
+      await expect(service.awaitingDecision(baseId, baseData as any, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if hireRequest update fails', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue(null);
+  
+      await expect(service.awaitingDecision(baseId, baseData as any, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should update panel and hireRequest status successfully', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
+  
+      const result = await service.awaitingDecision(baseId, baseData as any, user);
+  
+      expect(result).toBe(true);
+  
+      expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
+        where: { id: 'panel1' },
+        data: {
+          status: 'decision_pending',
+          scheduled_date: new Date('2025-08-21T14:00:00.000Z'),
+        },
+      });
+  
+      expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
+        where: { id: baseId },
+        data: { status: 'awaiting_decision' },
+      });
+    });
+  });
+  
 
 });

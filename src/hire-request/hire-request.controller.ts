@@ -15,6 +15,7 @@ import { reassignDTO } from './dto/reassign-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
+import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 
 
 
@@ -258,6 +259,26 @@ export class HireRequestController {
     return {
       status: 200,
       message: 'Interview scheduled successfully',
+      data: result,
+    }
+  }
+
+  @Post('awaiting-decision/:id')
+  @UseGuards(AuthGuard)
+  @ApiProperty({ description: 'Mark hire request as awaiting decision' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: awaitingDecisionDTO })
+  @ApiResponse({ status: 200, description: 'Hire request marked as awaiting decision successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  @ApiResponse({ status: 400, description: 'Panel not updated to decision_pending' })
+  @ApiResponse({ status: 400, description: 'Hire request status not updated to awaiting decision' })
+  async awaitingDecision(@Param('id') id: string, @Body() data: awaitingDecisionDTO, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.awaitingDecision(id, data, user);
+    return {
+      status: 200,
+      message: 'Hire request marked as awaiting decision successfully',
       data: result,
     }
   }
