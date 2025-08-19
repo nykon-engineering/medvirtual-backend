@@ -20,7 +20,7 @@ export class CandidatesController {
   @ApiQuery({ name: 'monthly_compensation_from', required: false, type: String, description: 'Filter candidates by monthly compensations start', example: "1000" })
   @ApiQuery({ name: 'monthly_compensation_to', required: false, type: String, description: 'Filter candidates by monthly compensations end', example: "5000" })
   @ApiQuery({ name: 'years_of_experience', required: false, type: Number, description: 'Filter candidates by years of experience', example: "5" })
-  @ApiQuery({ name: 'specialization', required: false, type: Number, description: 'Filter candidates by specialization', example: "pediatric" })
+  @ApiQuery({ name: 'specializations', required: false, type: Number, description: 'Filter candidates by specializations', example: "pediatric" })
   @ApiQuery({ name: 'skills', required: false, type: Number, description: 'Filter candidates by skills', example: "office, communication" })
   @ApiQuery({ name: 'languages', required: false, type: Number, description: 'Filter candidates by languages spoken', example: "English, Spanish" })
   @ApiResponse({ status: 200, description: 'Candidates retrieved successfully' })
@@ -33,7 +33,7 @@ export class CandidatesController {
     @Query('monthly_compensation_from') monthly_compensation_from: string, 
     @Query('monthly_compensation_to') monthly_compensation_to: string, 
     @Query('years_of_experience') years_of_experience: string,
-    @Query('specialization') specialization: string,
+    @Query('specializations') specializations: string,
     @Query('skills') skills: string,
     @Query('languages') languages: string,
     @Query('page') page,
@@ -46,7 +46,7 @@ export class CandidatesController {
       monthly_compensation_from, 
       monthly_compensation_to, 
       years_of_experience,
-      specialization,
+      specializations,
       skills,
       languages,
       page,

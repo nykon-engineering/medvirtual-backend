@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, NotFoundException, Query } from '@nestjs/common';
 import { Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 
@@ -31,7 +31,7 @@ export class CandidatesService {
     monthly_compensation_from?: string, 
     monthly_compensation_to?: string, 
     years_of_experience?: string,
-    specialization?: string,
+    specializations?: string,
     skills?: string,
     languages?: string,
     page?: number,
@@ -67,7 +67,6 @@ export class CandidatesService {
     const skillsArray = skills ? 
     skills.split(',').map(s => s.trim()).filter(Boolean)
     : [];
-    console.log(skillsArray)
     const skillFilter = skillsArray?.length
     ? {
         skills: {
@@ -96,12 +95,27 @@ export class CandidatesService {
       };
     }
 
+    const specializationArray = specializations 
+  ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
+  : [];
+
+  const specializationFilter = specializationArray.length
+    ? {
+        OR: specializationArray.map(spec => ({
+          specialization: {
+            contains: spec, 
+            mode: 'insensitive' as Prisma.QueryMode,
+          }
+        }))
+      }
+    : {};
+
+
     const where = {
       OR:[
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
-          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -111,11 +125,11 @@ export class CandidatesService {
           ...skillFilter,
           ...languageFilter,
           ...experienceFilter,
+          ...specializationFilter,
         },
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
-          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -124,12 +138,12 @@ export class CandidatesService {
           pipeline_status: '261075105',
           ...skillFilter,
           ...languageFilter,
-          ...experienceFilter
+          ...experienceFilter,
+          ...specializationFilter,
         },
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
-          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -138,12 +152,12 @@ export class CandidatesService {
           pipeline_status: '1087596819',
           ...skillFilter,
           ...languageFilter,
-          ...experienceFilter
+          ...experienceFilter,
+          ...specializationFilter,
         },
         {
           country: country ? country : undefined,
           employment_type: avaliability ? avaliability : undefined,
-          specialization: specialization ? specialization : undefined,
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -152,7 +166,8 @@ export class CandidatesService {
           pipeline_status: '1087596819',
           ...skillFilter,
           ...languageFilter,
-          ...experienceFilter
+          ...experienceFilter,
+          ...specializationFilter,
         }
       ]
     }
