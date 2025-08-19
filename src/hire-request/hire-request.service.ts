@@ -9,6 +9,7 @@ import { reassignDTO } from './dto/reassign-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { returnGetPanelDto } from './dto/return-getPanel.dto';
+import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 
 @Injectable()
 export class HireRequestService {
@@ -529,6 +530,65 @@ export class HireRequestService {
     result.panelCandidates = panelCandidates;
 
     return result;
+
+  }
+
+  async scheduleInterview(id: string, data: scheduleInterviewDTO, user: USER){
+    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        organization: { id : user.organization_id,}
+      },
+      select:{
+        id: true,
+      }
+    });
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    const panel = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: hireRequest.id,
+      },
+      select:{
+        id: true,
+      }
+    });
+    if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
+    const updatedDate = new Date(`${data.date}T${data.time}:00.000Z`);
+
+    const interviewScheduled = await this.prisma.interview.create({
+      data: {
+        panel_id: panel.id,
+        scheduled_date: updatedDate,
+        duration: 30, // default duration of 30 minutes
+        
+      },
+    });
+    if (!interviewScheduled) throw new BadRequestException(`Interview not scheduled`);
+
+    const candidatePanelupdated = await this.prisma.candidatePanel.update({
+      where:{
+        id: panel.id,
+      },
+      data:{
+        status: 'interview_scheduled',
+      }
+    })
+    if (!candidatePanelupdated) throw new BadRequestException(`Candidate panel not updated to interview scheduled`);
+
+    //update hire request status to 'interview_scheduled'
+    const hireRequestUpdated = await this.prisma.hireRequest.update({
+      where: {
+        id: hireRequest.id,
+      },
+      data: {
+        status: 'interview_scheduled',
+      },
+    });
+    if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
+    return true;
 
   }
 }

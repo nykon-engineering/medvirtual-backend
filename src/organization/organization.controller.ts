@@ -17,7 +17,7 @@ import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { CurrentUser } from 'dist/auth/current-user.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 
 @ApiTags('Organization')

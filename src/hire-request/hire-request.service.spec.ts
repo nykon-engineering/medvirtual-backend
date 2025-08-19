@@ -24,6 +24,7 @@ const prismaMock = {
     create: jest.fn(),
     findFirst: jest.fn(),
     updateMany: jest.fn(),
+    update: jest.fn(),
   },
   candidate: {
     findMany: jest.fn(),
@@ -31,6 +32,10 @@ const prismaMock = {
   panelCandidate: {
     createMany: jest.fn(),
     deleteMany: jest.fn(),
+    findMany: jest.fn(),
+  },
+  interview: {
+    create: jest.fn(),
     findMany: jest.fn(),
   }
 };
@@ -751,6 +756,70 @@ describe('HireRequestService', () => {
       );
     });
   });
+
+  describe('scheduleInterview', () => {
+    const baseId = 'hr1';
+    const baseData = {
+      date: '2025-08-20',
+      time: '10:30',
+    };
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should throw NotFoundException if user has no organization', async () => {
+      await expect(
+        service.scheduleInterview(baseId, baseData as any, { ...user, organization_id: null })
+      ).rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw NotFoundException if hireRequest not found', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue(null);
+  
+      await expect(service.scheduleInterview(baseId, baseData as any, user))
+        .rejects.toThrow(NotFoundException);
+  
+      expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: baseId,
+          organization: { id: user.organization_id },
+        },
+        select: { id: true },
+      });
+    });
+  
+    it('should return true when interview scheduled successfully', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ count: 1 });
+      prismaMock.interview.create.mockResolvedValue({ id: 'interview1' }); 
+  
+      const result = await service.scheduleInterview(baseId, baseData as any, user);
+  
+      expect(result).toBe(true);
+      expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
+        where: { hire_request_id: baseId },
+        select: { id: true },
+      });
+      expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
+        where: { id: 'panel1' },
+        data: {
+          status: 'interview_scheduled',
+        },
+      });
+    });
+  
+    it('should throw BadRequestException if update fails', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.candidatePanel.update.mockResolvedValue(null);
+  
+      await expect(service.scheduleInterview(baseId, baseData as any, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  });
+  
 
 
 });

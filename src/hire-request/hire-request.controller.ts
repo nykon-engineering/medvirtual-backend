@@ -14,6 +14,7 @@ import { Roles } from '../auth/roles.decorator';
 import { reassignDTO } from './dto/reassign-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
+import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 
 
 
@@ -236,6 +237,27 @@ export class HireRequestController {
     return {
       status: 200,
       message: 'Panel returned successfully',
+      data: result,
+    }
+  }
+
+  @Post('schedule-interview/:id')
+  @UseGuards(AuthGuard)
+  @ApiProperty({ description: 'Schedule interview for a specific hire request' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: scheduleInterviewDTO })
+  @ApiResponse({ status: 200, description: 'Interview scheduled successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  @ApiResponse({ status: 400, description: 'Interview not scheduled' })
+  @ApiResponse({ status: 400, description: 'Candidate panel not updated to interview scheduled' })
+  @ApiResponse({ status: 400, description: 'Hire request status not updated to interview scheduled' })
+  async scheduleInterview(@Param('id') id: string, @Body() data: scheduleInterviewDTO, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.scheduleInterview(id, data, user);
+    return {
+      status: 200,
+      message: 'Interview scheduled successfully',
       data: result,
     }
   }
