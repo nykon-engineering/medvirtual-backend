@@ -73,7 +73,7 @@ export class HireRequestService {
     const whereFilter: any = {};
     if (user.role.includes('organization')) {
       whereFilter.organization = { id: user.organization_id };
-      whereFilter.panels = { some: { readable: true } };
+      //whereFilter.panels = { some: { readable: true } };
     }
 
     const hireRequests = await this.prisma.hireRequest.findMany({
