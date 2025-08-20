@@ -1,6 +1,6 @@
-import { ApiProperty, ApiResponse } from "@nestjs/swagger";
+import { ApiProperty } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsDate, IsDateString, IsOptional, IsString } from "class-validator";
+import { IsArray, IsDate, IsOptional, IsString } from "class-validator";
 
 export class HireRequestSkillDTO {
     @ApiProperty({ example: 'JavaScript', description: 'The name of the skill', required: true, type: String })
