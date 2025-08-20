@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL") //LOCAL_DATABASE_URL | DATABASE_URL
+  provider          = "postgresql"
+  url               = env("DATABASE_URL") //LOCAL_DATABASE_URL | DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -29,10 +29,10 @@ model USER {
   updatedAt             DateTime            @updatedAt
   email_invitations     EmailInvitation[]
   email_verifications   EmailVerification[]
+  adminOrganizations    Organization[]      @relation("OrganizationAdmin")
   sessions              Session[]
   tickets               Ticket[]
   organization          Organization?       @relation(fields: [organization_id], references: [id])
-  adminOrganizations    Organization[]      @relation("OrganizationAdmin")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -82,11 +82,11 @@ model Organization {
   contact_info            String?
   specialties             String?
   createdAt               DateTime                @default(now())
+  admin_id                String?                 @default("")
   hire_requests           HireRequest[]
+  admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
   organization_candidates OrganizationCandidate[]
   users                   USER[]
-  admin_id                String                  @default("")
-  admin                   USER                    @relation("OrganizationAdmin", fields: [admin_id], references: [id]) 
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -97,13 +97,9 @@ model Candidate {
   id                     String                  @id @default(uuid())
   hubspot_id             String                  @unique
   email                  String
-  gender                 String?
   first_name             String?
   last_name              String?
-  name                   String?
   resume_url             String?
-  specialization         String?
-  country                String?
   about_me               String?
   processed_resume_data  Json?
   processing_status      ProcessingStatus        @default(pending)
@@ -114,24 +110,28 @@ model Candidate {
   organization_id        String?
   pipeline_status        String                  @default("available")
   years_of_experience    Int?
+  country                String?
+  specialization         String?
   employment_type        String?
-  tools                  String?
+  name                   String?
   medical_tools          String?
+  tools                  String?
+  gender                 String?
   educations             CandidateEducation[]
   experiences            CandidateExperience[]
-  skills                 CandidateSkill[]
   languages              CandidateLanguage[]
+  skills                 CandidateSkill[]
   selectedInInterviews   Interview[]             @relation("SelectedCandidate")
   organizationCandidates OrganizationCandidate[]
   panelCandidates        PanelCandidate[]
 }
 
 model CandidateLanguage {
-  id                String            @id @default(uuid())
-  candidate_id      String
-  name              String
-  createdAt         DateTime          @default(now())
-  candidate         Candidate         @relation(fields: [candidate_id], references: [id])
+  id           String    @id @default(uuid())
+  candidate_id String
+  name         String
+  createdAt    DateTime  @default(now())
+  candidate    Candidate @relation(fields: [candidate_id], references: [id])
 }
 
 model OrganizationCandidate {
@@ -165,10 +165,10 @@ model CandidateExperience {
   candidate_id     String
   company          String
   position         String
-  start_date       DateTime?
-  end_date         DateTime?
-  responsabilities String?
   createdAt        DateTime  @default(now())
+  responsabilities String?
+  end_date         DateTime?
+  start_date       DateTime?
   candidate        Candidate @relation(fields: [candidate_id], references: [id])
 
   @@index([candidate_id], map: "idx_candidate_experience_candidate_id")
@@ -191,23 +191,23 @@ model CandidateEducation {
 }
 
 model HireRequest {
-  id           String             @id @default(uuid())
-  org_id       String
-  title        String
-  specialization String
-  availability  String
-  description  String?
+  id                  String             @id @default(uuid())
+  org_id              String
+  title               String
+  description         String?
+  status              HireRequestStatus  @default(new)
+  priority            Priority           @default(medium)
+  createdAt           DateTime           @default(now())
+  availability        String
+  contract_length     String?
   expected_start_date DateTime?
-  contract_length String?
-  salary_range_from Decimal?
-  salary_range_to Decimal?
-  location     String?
-  status       HireRequestStatus  @default(new)
-  priority     Priority           @default(medium)
-  createdAt    DateTime           @default(now())
-  panels       CandidatePanel[]
-  organization Organization       @relation(fields: [org_id], references: [id])
-  skills       HireRequestSkill[]
+  salary_range_from   Decimal?
+  salary_range_to     Decimal?
+  specialization      String
+  location            String?
+  panels              CandidatePanel[]
+  organization        Organization       @relation(fields: [org_id], references: [id])
+  skills              HireRequestSkill[]
 
   @@index([org_id], map: "idx_hire_requests_org_id")
   @@index([status], map: "idx_hire_requests_status")
@@ -221,7 +221,7 @@ model HireRequestSkill {
   skill_name      String
   required_level  ProficiencyLevel @default(intermediate)
   createdAt       DateTime         @default(now())
-  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id])
+  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
 
   @@unique([hire_request_id, skill_name], name: "idx_hire_request_skills_unique")
   @@index([hire_request_id], map: "idx_hire_request_skills_hire_request_id")
@@ -230,16 +230,16 @@ model HireRequestSkill {
 
 model CandidatePanel {
   id              String           @id @default(uuid())
-  user_id         String?
   hire_request_id String
-  readable        Boolean          @default(false)           
   status          PanelStatus      @default(created)
   scheduled_date  DateTime?
   createdAt       DateTime         @default(now())
-  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id])
+  readable        Boolean          @default(false)
+  user_id         String?
+  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
   panelCandidates PanelCandidate[]
- 
+
   @@index([hire_request_id], map: "idx_candidate_panels_hire_request_id")
   @@index([status], map: "idx_candidate_panels_status")
   @@index([scheduled_date], map: "idx_candidate_panels_scheduled_date")

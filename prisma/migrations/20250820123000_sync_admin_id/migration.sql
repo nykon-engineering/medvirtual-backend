@@ -1,0 +1,1 @@
+-- Migration placeholder: admin_id already exists in database

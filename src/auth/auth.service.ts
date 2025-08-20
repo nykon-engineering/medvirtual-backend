@@ -168,6 +168,9 @@ export class AuthService {
         name: data.companyName || 'Default Organization',
         email: data.email,
         status: 'incomplete',
+        admin: {
+          connect: { id: data.organizationId }, // Connect to the user who is signing up
+        },
         
       },
     })

@@ -128,9 +128,6 @@ export class HireRequestService {
     }
 
     const {skills, ...hireRequestData} = data;
-    console.log(skills);
-
-    console.log('Datas: ',hireRequestData);
     const requestUpdated = await this.prisma.hireRequest.update({
       where: {
         id: id
@@ -179,8 +176,8 @@ export class HireRequestService {
 
     const requestdeleted = await this.prisma.hireRequest.delete({
       where: {
-        id: id,
-      },
+        id: hireRequest.id,
+      }
     });
     if (!requestdeleted) throw new BadRequestException(`Hire request not deleted`);
 
@@ -246,20 +243,16 @@ export class HireRequestService {
 
   async reassign(id: string, user: USER, data: reassignDTO): Promise<boolean> {
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
-    if (!data || !data.user_id) throw new BadRequestException('User ID is required for reassignment');
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
-        id: id,
-        organization: { id : user.organization_id,}
+        id: id
       },
       select:{
         id: true,
       }
     });
-    if (!hireRequest) {
-      throw new NotFoundException(`Hire request not found`);
-    }
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
     const panelExists = await this.prisma.candidatePanel.findFirst({
       where: {
