@@ -19,46 +19,46 @@ export class HireRequestService {
     private readonly prisma: PrismaService
   ) {}
 
-  async create(data: CreateHireRequestDto, user: USER):Promise<string> {
+  async create(data: CreateHireRequestDto, user: USER):Promise<string> {  
+    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    
-      if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    const {skills, client_id, ...hireRequestData} = data;
 
-      const {skills, ...hireRequestData} = data;
+    if( user.role.includes('system') && !client_id) throw new BadRequestException('Client ID is required for system users');
 
-      const hireRequest = {
-        ...hireRequestData,
-        organization: user.role.includes('organization') ?  {connect: {id: user.organization_id}} : { connect : { id: data.client_id } },
-        status: user.status==='prospect' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
-      };
+    const hireRequest = {
+      ...hireRequestData,
+      organization: user.role.includes('organization') ?  {connect: {id: user.organization_id}} : { connect : { id: client_id } },
+      status: user.status==='prospect' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+    };
 
-      const newHireRequest = await this.prisma.hireRequest.create({
-        data: hireRequest,
-      })
-      if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
-      if (skills && skills.length > 0) {
-        const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
-          data: skills.map(skill => ({
-            skill_name: skill.name,
-            required_level: skill.level,
-            hire_request_id: newHireRequest.id,
-          })),
-        });
-        if (!newHireRequestSkills) throw new BadRequestException(`Hire request skills not created`);
-      }
-
-      //create Panel with default user_id
-      const panel = await this.prisma.candidatePanel.create({
-        data: {
-          user_id: undefined, // default user because all panel start as unassigned
+    const newHireRequest = await this.prisma.hireRequest.create({
+      data: hireRequest,
+    })
+    if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
+    if (skills && skills.length > 0) {
+      const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
+        data: skills.map(skill => ({
+          skill_name: skill.name,
+          required_level: skill.level,
           hire_request_id: newHireRequest.id,
-          readable: false,
-          
-        }
-      })
-      if (!panel) throw new BadRequestException(`Hire request panel not created`);
+        })),
+      });
+      if (!newHireRequestSkills) throw new BadRequestException(`Hire request skills not created`);
+    }
 
-      return 'Hire request created successfully';
+    //create Panel with default user_id
+    const panel = await this.prisma.candidatePanel.create({
+      data: {
+        user_id: undefined, // default user because all panel start as unassigned
+        hire_request_id: newHireRequest.id,
+        readable: false,
+        
+      }
+    })
+    if (!panel) throw new BadRequestException(`Hire request panel not created`);
+
+    return 'Hire request created successfully';
     
   }
 
@@ -432,7 +432,6 @@ export class HireRequestService {
 
     return true;
   }
-
 
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');

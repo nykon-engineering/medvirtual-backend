@@ -1,6 +1,6 @@
 import { ApiProperty, ApiResponse } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsDate, IsString } from "class-validator";
+import { IsArray, IsDate, IsOptional, IsString } from "class-validator";
 
 export class HireRequestSkillDTO {
     @ApiProperty({ example: 'JavaScript', description: 'The name of the skill', required: true, type: String })
@@ -20,6 +20,7 @@ export class CreateHireRequestDto {
 
     @ApiProperty({ example: '1234567890', description: 'The client ID for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     client_id: string;
 
     @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: true,  type: String })
