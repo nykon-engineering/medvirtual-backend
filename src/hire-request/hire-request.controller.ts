@@ -129,7 +129,7 @@ export class HireRequestController {
   @Post('reassign/:id')
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Reassign specific hire request/Panel to another user' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: reassignDTO } )

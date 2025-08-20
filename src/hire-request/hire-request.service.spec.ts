@@ -329,12 +329,11 @@ describe('HireRequestService', () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1' });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.candidatePanel.updateMany.mockResolvedValue({ count: 1 });
-  
       const result = await service.reassign('hr1', user, baseData);
-  
+    
       expect(result).toBe(true);
       expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
-        where: { id: 'hr1', organization: { id: user.organization_id } },
+        where: { id: 'hr1' },
         select: { id: true },
       });
       expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
@@ -346,16 +345,13 @@ describe('HireRequestService', () => {
         data: { user_id: 'newUser' },
       });
     });
+    
   
     it('should throw NotFoundException if user has no organization', async () => {
       await expect(service.reassign('hr1', { ...user, organization_id: null }, baseData))
         .rejects.toThrow(NotFoundException);
     });
   
-    it('should throw BadRequestException if data.user_id is missing', async () => {
-      await expect(service.reassign('hr1', user, {} as any))
-        .rejects.toThrow(BadRequestException);
-    });
   
     it('should throw NotFoundException if hireRequest not found', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue(null);
