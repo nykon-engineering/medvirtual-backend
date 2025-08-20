@@ -173,6 +173,7 @@ export class OrganizationService {
           contact_info: data.cellphone,
           email: data.email,
           admin_id: user.id, //Here I assume that the admin is the user that is creating the organization
+          status: 'incomplete',
         },
       });
       const dataInvitedUser = {

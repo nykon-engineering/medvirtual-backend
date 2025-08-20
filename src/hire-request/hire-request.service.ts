@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { HireRequestStatus, USER } from '@prisma/client';
+
+import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
+import { PrismaService } from '../prisma/prisma.service';
+
 import { CreateHireRequestDto } from './dto/create-hire-request.dto';
 import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
-import { PrismaService } from '../prisma/prisma.service';
-import { HireRequestStatus, USER } from '@prisma/client';
 import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
-import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { reassignDTO } from './dto/reassign-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
@@ -27,10 +29,32 @@ export class HireRequestService {
 
     if( user.role.includes('system') && !client_id) throw new BadRequestException('Client ID is required for system users');
 
+
+    let organization;
+    if (user.role.includes('organization')) {
+      //get organization_id from user
+      organization = await this.prisma.organization.findUnique({
+        where: { id: user.organization_id },
+        select:{
+          status: true,
+        }
+      });
+      if (!organization) throw new NotFoundException(`Organization from user not found`);
+    }else if (user.role.includes('system') && !client_id) {
+      //the frontend send me the client_id
+      organization = await this.prisma.organization.findUnique({
+        where: { id: client_id },
+        select:{
+          status: true,
+        }
+      });
+      if (!organization) throw new NotFoundException(`Organization from client not found`);
+    }
+
     const hireRequest = {
       ...hireRequestData,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id}} : { connect : { id: client_id } },
-      status: user.status==='prospect' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+      status: organization.status !== 'active' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
@@ -62,7 +86,6 @@ export class HireRequestService {
     return 'Hire request created successfully';
   }
 
-  
   async findAll(user: USER): Promise<object[]> {
     
     if (!user || !user.organization_id) {
@@ -76,7 +99,7 @@ export class HireRequestService {
         skills: true,
         organization: true,
         panels: true,
-      },
+      }
     })
     if(!hireRequests) throw new NotFoundException('No hire requests found');
 
@@ -98,10 +121,7 @@ export class HireRequestService {
         organization: true,
       },
     });
-
-    if (!hireRequest) {
-      throw new NotFoundException(`Hire request not found`);
-    }
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
     return hireRequest;
   }

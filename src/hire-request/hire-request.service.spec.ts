@@ -38,6 +38,9 @@ const prismaMock = {
   interview: {
     create: jest.fn(),
     findMany: jest.fn(),
+  },
+  organization: {
+    findUnique: jest.fn(),
   }
 };
 
@@ -96,6 +99,7 @@ describe('HireRequestService', () => {
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.hireRequestSkill.createMany.mockResolvedValue({ count: 2 });
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
+      prismaMock.organization.findUnique.mockResolvedValue({ id: 'org1' });
 
       const dto = {
         title: 'Dev',
@@ -127,6 +131,7 @@ describe('HireRequestService', () => {
     it('should set status as pending_signature if user is prospect', async () => {
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
+      prismaMock.organization.findUnique.mockResolvedValue({ id: 'org1' });
   
       const user2 = { ...user, status: 'prospect' };
       const dto = { ...baseDto };

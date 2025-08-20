@@ -167,6 +167,7 @@ export class AuthService {
       data: {
         name: data.companyName || 'Default Organization',
         email: data.email,
+        status: 'incomplete',
         
       },
     })
@@ -504,7 +505,6 @@ export class AuthService {
       companyName: user.organization_name,
     };
   }
-
 
   async invitedUserSignup(data: AuthinvitedUserSignupDto): Promise<string>{
     let decodedToken; 
