@@ -29,32 +29,27 @@ export class HireRequestService {
 
     if( user.role.includes('system') && !client_id) throw new BadRequestException('Client ID is required for system users');
 
-
-    let organization;
+    let whereCondition;
     if (user.role.includes('organization')) {
       //get organization_id from user
-      organization = await this.prisma.organization.findUnique({
-        where: { id: user.organization_id },
-        select:{
-          status: true,
-        }
-      });
-      if (!organization) throw new NotFoundException(`Organization from user not found`);
-    }else if (user.role.includes('system') && !client_id) {
+      whereCondition = { id: user.organization_id };
+    }else if (user.role.includes('system')) {
       //the frontend send me the client_id
-      organization = await this.prisma.organization.findUnique({
-        where: { id: client_id },
-        select:{
-          status: true,
-        }
-      });
-      if (!organization) throw new NotFoundException(`Organization from client not found`);
+      whereCondition = { id: data.client_id };
     }
+
+    const organizationSQL = await this.prisma.organization.findUnique({
+      where: whereCondition,
+      select:{
+        status: true,
+      }
+    });
+    if (!organizationSQL) throw new NotFoundException(`Organization from client not found`);
 
     const hireRequest = {
       ...hireRequestData,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id}} : { connect : { id: client_id } },
-      status: organization.status !== 'active' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+      status: organizationSQL.status !== 'active' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
