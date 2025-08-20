@@ -60,9 +60,9 @@ export class HireRequestService {
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
 
     return 'Hire request created successfully';
-    
   }
 
+  
   async findAll(user: USER): Promise<object[]> {
     
     if (!user || !user.organization_id) {
@@ -70,14 +70,8 @@ export class HireRequestService {
     }
     if(!user.role) throw new NotFoundException('User role not found');
 
-    const whereFilter: any = {};
-    if (user.role.includes('organization')) {
-      whereFilter.organization = { id: user.organization_id };
-      //whereFilter.panels = { some: { readable: true } };
-    }
-
     const hireRequests = await this.prisma.hireRequest.findMany({
-      where: whereFilter,
+      where: user.role.includes('organization') ?  { organization: { id: user.organization_id } }: undefined,
       include: {
         skills: true,
         organization: true,

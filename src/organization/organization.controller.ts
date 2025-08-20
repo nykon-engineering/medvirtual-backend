@@ -70,7 +70,7 @@ export class OrganizationController {
   async create(@Body() data: CreateOrganizationDto, @CurrentUser() user: any) {
     const org = await this.organizationService.create(data, user);
     return {
-      statusCode: 201,
+      status: 201,
       message: 'Organization created successfully',
       organization: org,
     };
@@ -89,7 +89,7 @@ export class OrganizationController {
   async update(@Param('id') id: string, @Body() data: UpdateOrganizationDto) {
     const org = await this.organizationService.update(id, data);
     return {
-      statusCode: 200,
+      status: 200,
       message: 'Organization updated successfully',
       organization: org,
     };
@@ -107,7 +107,7 @@ export class OrganizationController {
   async delete(@Param('id') id: string) {
     await this.organizationService.delete(id);
     return {
-      statusCode: 200,
+      status: 200,
       message: 'Organization deleted successfully',
     };
   }
