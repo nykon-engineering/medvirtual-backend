@@ -128,10 +128,12 @@ export class HireRequestService {
     }
 
     const {skills, ...hireRequestData} = data;
+    console.log(skills);
+
+    console.log('Datas: ',hireRequestData);
     const requestUpdated = await this.prisma.hireRequest.update({
       where: {
-        id: id,
-        organization: { id : user.organization_id,}
+        id: id
       },
       data: hireRequestData,
     })
