@@ -16,6 +16,7 @@ import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
+import { changeWinnerDTO } from './dto/change-winner.dto';
 
 
 
@@ -302,6 +303,28 @@ export class HireRequestController {
     }
   }
 
+  @Post('change-winner/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'organization_super_admin')
+  @ApiProperty({ description: 'Change winner of a specific hire request' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: changeWinnerDTO })
+  @ApiResponse({ status: 200, description: 'Winner changed successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  @ApiResponse({ status: 400, description: 'Panel not updated to decision made' })
+  @ApiResponse({ status: 400, description: 'Hire request not updated to placement completed' })
+  @ApiResponse({ status: 400, description: 'Panel not updated to reset winners' })
+  @ApiResponse({ status: 400, description: 'Panel not updated to set other candidates as not selected' })
+  async changeWinner(@Param('id') id: string, @Body() data: changeWinnerDTO, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.changeWinner(id, data, user);
+    return {
+      status: 200,
+      message: 'Winner changed successfully',
+      data: result,
+    }
+  }
 
 
 }

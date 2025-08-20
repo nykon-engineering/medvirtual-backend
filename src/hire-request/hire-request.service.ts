@@ -11,6 +11,7 @@ import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { returnGetPanelDto } from './dto/return-getPanel.dto';
 import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
+import { changeWinnerDTO } from './dto/change-winner.dto';
 
 @Injectable()
 export class HireRequestService {
@@ -681,6 +682,84 @@ export class HireRequestService {
       },
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to allow more time`);
+
+    return true;
+  }
+
+  async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<boolean> {
+    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        organization: user.role.includes('organization') ? { id : user.organization_id,} : undefined
+      },
+      select:{
+        id: true,
+      }
+    });
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    //check if panel exists
+    const panelExists = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: hireRequest.id,
+      },
+      select:{
+        id: true,
+      }
+    });
+    if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
+
+    //change Panel status
+    const panelUpdated = await this.prisma.candidatePanel.update({
+      where: {
+        id: panelExists.id,
+      },
+      data: {
+        status: 'decision_made',
+      },
+    });
+    if( !panelUpdated) throw new BadRequestException(`Panel not updated to decision made`);
+
+    //change status of hire request to 'placement_completed'
+    const hireRequestUpdated = await this.prisma.hireRequest.update({
+      where: {
+        id: hireRequest.id,
+      },
+      data: {
+        status: 'placement_completed',
+      },
+    });
+    if( !hireRequestUpdated) throw new BadRequestException(`Hire request not updated to placement completed`);
+
+    //update the winner candidate as selected_by_client
+    const winner = await this.prisma.panelCandidate.updateMany({
+      where: {
+        panel_id: panelExists.id,
+        id: data.winner_id
+      },
+      data: {
+        status: 'selected_by_client',
+      },
+    });
+    if (!winner) throw new BadRequestException(`Panel not updated to reset winners`);
+
+
+    //update all other candidates as not_selected
+    const others = await this.prisma.panelCandidate.updateMany({
+      where: {
+        panel_id: panelExists.id,
+        NOT: {
+          id: data.winner_id
+        }
+      },
+      data: {
+        status: 'returned_to_pool',
+      },
+    });
+    if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
 
     return true;
   }
