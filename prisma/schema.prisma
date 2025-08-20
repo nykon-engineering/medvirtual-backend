@@ -205,6 +205,7 @@ model HireRequest {
   salary_range_to     Decimal?
   specialization      String
   location            String?
+  assign_user_id      String?
   panels              CandidatePanel[]
   organization        Organization       @relation(fields: [org_id], references: [id])
   skills              HireRequestSkill[]
@@ -235,7 +236,6 @@ model CandidatePanel {
   scheduled_date  DateTime?
   createdAt       DateTime         @default(now())
   readable        Boolean          @default(false)
-  user_id         String?
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
   panelCandidates PanelCandidate[]

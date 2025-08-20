@@ -70,7 +70,6 @@ export class HireRequestService {
     //create Panel with default user_id
     const panel = await this.prisma.candidatePanel.create({
       data: {
-        user_id: undefined, // default user because all panel start as unassigned
         hire_request_id: newHireRequest.id,
         readable: false,
         
@@ -244,34 +243,16 @@ export class HireRequestService {
   async reassign(id: string, user: USER, data: reassignDTO): Promise<boolean> {
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const hireRequest = await this.prisma.hireRequest.findUnique({
+    const hireRequest = await this.prisma.hireRequest.updateMany({
       where: {
         id: id
       },
-      select:{
-        id: true,
+      data:{
+        assign_user_id: data.user_id,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
-    const panelExists = await this.prisma.candidatePanel.findFirst({
-      where: {
-        hire_request_id: hireRequest.id,
-      },select:{
-        id: true,
-      }
-    });
-    if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
-
-    const panelUpdated = await this.prisma.candidatePanel.updateMany({
-      where: {
-        id: panelExists.id,
-      },
-      data: {
-        user_id: data.user_id,
-      },
-    });
-    if (!panelUpdated) throw new BadRequestException(`Hire request not reassigned`);
 
     return true;
   }

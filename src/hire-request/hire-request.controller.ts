@@ -135,10 +135,7 @@ export class HireRequestController {
   @ApiBody({ type: reassignDTO } )
   @ApiResponse({ status: 200, description: 'Hire request reassigned successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
-  @ApiResponse({ status: 400, description: 'User ID is required for reassignment' })
   @ApiResponse({ status: 404, description: 'Hire request not found' })
-  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
-  @ApiResponse({ status: 400, description: 'Hire request not reassigned' })
   async reassign(@Param('id') id: string, @CurrentUser() user: USER, @Body() data: reassignDTO) {
     const result = await this.hireRequestService.reassign(id, user, data);
     return {
