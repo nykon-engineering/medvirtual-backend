@@ -449,9 +449,10 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatus
       }
     };
-    await Promise.all(
-      candidates.map((candidate) =>
-        axios.patch(
+
+    for (const candidate of candidates) {
+      try {
+        await axios.patch(
           `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
           body,
           {
@@ -459,10 +460,15 @@ export class HireRequestService {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
+            timeout: 120000,
           }
-        )
-      )
-    );
+        );
+      } catch (error) {
+        console.error('Error updating loser candidate in HubSpot:', error.code);
+      }
+    }
+
+
 
     return true;
   }
@@ -1041,30 +1047,6 @@ export class HireRequestService {
         console.error('Error updating loser candidate in HubSpot:', loser.candidate.id, error.code);
       }
     }
-    
-    /*
-      try{
-        await Promise.all(
-          loserExists.map((loser) =>
-            axios.patch(
-              `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
-              bodyLosser,
-              {
-                headers: {
-                  Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: 120000, // Set a timeout of 120 seconds
-              }
-            )
-          )
-        );
-      } catch (error) {
-        console.error('Error updating candidates in HubSpot:', error);
-        throw new BadRequestException(`Error updating candidates in HubSpot`);
-      }
-    */
-    
 
     
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
