@@ -192,8 +192,7 @@ export class HireRequestService {
     if (!data || !data.status) throw new BadRequestException('Data for status change is required');
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
-        id: id,
-        organization: { id : user.organization_id,}
+        id: id
       },
       select:{
         status: true,
