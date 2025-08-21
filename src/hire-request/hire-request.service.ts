@@ -1023,21 +1023,25 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatusLosers
       }
     };
-    await Promise.all(
-      loserExists.map((loser) =>
-        axios.patch(
-          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
-          bodyLosser,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-          }
+    try{
+      await Promise.all(
+        loserExists.map((loser) =>
+          axios.patch(
+            `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
+            bodyLosser,
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          )
         )
-      )
-    );
-    
+      );
+    } catch (error) {
+      console.error('Error updating candidates in HubSpot:', error);
+      throw new BadRequestException(`Error updating candidates in HubSpot`);
+    }
     
 
     
