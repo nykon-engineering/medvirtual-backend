@@ -1023,6 +1023,24 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatusLosers
       }
     };
+
+    for (const loser of loserExists) {
+      try {
+        await axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
+          bodyLosser,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 120000,
+          }
+        );
+      } catch (error) {
+        console.error('Error updating loser candidate in HubSpot:', loser.candidate.id, error.code);
+      }
+    }
     
     /*
       try{
