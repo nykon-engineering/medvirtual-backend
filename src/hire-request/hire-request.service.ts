@@ -428,14 +428,28 @@ export class HireRequestService {
     });
     if (!candidatesUpdated) throw new BadRequestException(`Candidates not updated to endorsed`);
 
+    //select candidates
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        id: {
+          in: data.candidates_id,
+        },
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+      },
+    });
+    if( !candidates) throw new NotFoundException(`Candidates not found`);
+
     //communication with hubspot to update status can be added here
     const body = {
       properties: {
         hs_pipeline_stage: pipelineStatus
       }
     };
-    data.candidates_id.forEach(async (candidateId) => {
-      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateId}`,
+    candidates.forEach(async (candidate) => {
+      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
         body,
         {
             headers: {
@@ -451,7 +465,7 @@ export class HireRequestService {
   async editPanel(data: ConfirmPanelHireRequestDto, user: USER) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
-    if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
+    if (data.candidates_id.length < 3) throw new BadRequestException('You need to chosse at least 3 candidates');
 
     //check if panel exists
     const panelExists = await this.prisma.candidatePanel.findFirst({
@@ -491,6 +505,55 @@ export class HireRequestService {
       },
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not confirmed`);
+
+    const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+      return dbToStageDictionary[key] === 'Endorsed to Client';
+    })
+    //update candidates with pipelinestatus = 'Endorsed to Client'
+    const candidatesUpdated = await this.prisma.candidate.updateMany({
+      where: {
+        id: {
+          in: data.candidates_id,
+        },
+      },
+      data: {
+        pipeline_status: pipelineStatus,
+      },
+    });
+    if (!candidatesUpdated) throw new BadRequestException(`Candidates not updated to endorsed`);
+    
+    //select candidates
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        id: {
+          in: data.candidates_id,
+        },
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+      },
+    });
+    if( !candidates) throw new NotFoundException(`Candidates not found`);
+
+    //communication with hubspot to update status can be added here
+    const body = {
+      properties: {
+        hs_pipeline_stage: pipelineStatus
+      }
+    };
+    candidates.forEach(async (candidate) => {
+      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+        body,
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+            }
+        })
+    })
+
+
 
     return true;
   }

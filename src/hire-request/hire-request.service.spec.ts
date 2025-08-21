@@ -535,6 +535,22 @@ describe('HireRequestService', () => {
         .rejects.toThrow(NotFoundException);
     });
   
+    it('should skip addCandidates if candidates_id is empty', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.candidate.findMany.mockResolvedValue([{ id: 'cand1', hubspot_id: 'hub1' }]);
+      jest.spyOn(axios, 'patch').mockResolvedValue({ data: {} });
+  
+      const result = await service.confirmPanel(
+        { ...panelData, candidates_id: [] },
+        user
+      );
+  
+      expect(result).toBe(true);
+      expect(prismaMock.panelCandidate.createMany).not.toHaveBeenCalled();
+    });
+  
     it('should throw BadRequestException if addCandidates fails', async () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.createMany.mockResolvedValue(null);
@@ -562,57 +578,49 @@ describe('HireRequestService', () => {
         .rejects.toThrow(BadRequestException);
     });
   
+    it('should throw NotFoundException if candidates not found', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.updateMany.mockResolvedValue({ count: 5 });
+      prismaMock.candidate.findMany.mockResolvedValue(null);
+  
+      await expect(service.confirmPanel(panelData, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
     it('should confirm panel, update candidates and return true', async () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
       prismaMock.candidate.updateMany.mockResolvedValue({ count: 5 });
+      prismaMock.candidate.findMany.mockResolvedValue([
+        { id: 'cand1', hubspot_id: 'hub1' },
+        { id: 'cand2', hubspot_id: 'hub2' },
+      ]);
   
-      // mock axios.patch para não chamar HubSpot de verdade
       const axiosPatchMock = jest.spyOn(axios, 'patch').mockResolvedValue({ data: {} });
   
       const result = await service.confirmPanel(panelData, user);
   
       expect(result).toBe(true);
   
-      expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
-        where: { hire_request_id: panelData.hireRequest_id },
-        select: { id: true },
-      });
+      expect(prismaMock.panelCandidate.createMany).toHaveBeenCalled();
+      expect(prismaMock.hireRequest.update).toHaveBeenCalled();
+      expect(prismaMock.candidate.updateMany).toHaveBeenCalled();
   
-      expect(prismaMock.panelCandidate.createMany).toHaveBeenCalledWith({
-        data: panelData.candidates_id.map(candidateId => ({
-          candidate_id: candidateId,
-          panel_id: 'panel1',
-        })),
-      });
-  
-      expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
-        where: { id: panelData.hireRequest_id },
-        data: { status: 'sourcing' },
-      });
-  
-      expect(prismaMock.candidate.updateMany).toHaveBeenCalledWith({
-        where: { id: { in: panelData.candidates_id } },
-        data: { pipeline_status: expect.any(String) }, // Endorsed to Client
-      });
-  
-      // verifica se chamou o HubSpot para cada candidato
-      expect(axiosPatchMock).toHaveBeenCalledTimes(panelData.candidates_id.length);
-      panelData.candidates_id.forEach(candidateId => {
-        expect(axiosPatchMock).toHaveBeenCalledWith(
-          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateId}`,
-          {
-            properties: { hs_pipeline_stage: expect.any(String) },
+      // valida que chamou HubSpot com hubspot_id real
+      expect(axiosPatchMock).toHaveBeenCalledTimes(2);
+      expect(axiosPatchMock).toHaveBeenCalledWith(
+        `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/hub1`,
+        { properties: { hs_pipeline_stage: expect.any(String) } },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
           },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-      });
+        }
+      );
     });
   });
   
@@ -633,23 +641,88 @@ describe('HireRequestService', () => {
     });
   
     it('should throw BadRequestException if data is missing', async () => {
-      await expect(service.editPanel({} as ConfirmPanelHireRequestDto, user)).rejects.toThrow(BadRequestException);
+      await expect(service.editPanel({} as ConfirmPanelHireRequestDto, user))
+        .rejects.toThrow(BadRequestException);
     });
   
-    it('should throw BadRequestException if candidates_id length is not 5', async () => {
+    it('should throw BadRequestException if candidates_id length is less than 3', async () => {
       await expect(
-        service.editPanel({ ...panelData, candidates_id: ['cand1'] }, user)
+        service.editPanel({ ...panelData, candidates_id: ['cand1', 'cand2'] }, user)
       ).rejects.toThrow(BadRequestException);
     });
   
-    it('should remove old candidates, add new ones and update panel successfully', async () => {
-      // Mock do findFirst para retornar panelExists
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+    it('should throw NotFoundException if panel does not exist', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
   
-      // Mock das operações de delete, create e update
+      await expect(service.editPanel(panelData, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw BadRequestException if removeCandidates fails', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.deleteMany.mockResolvedValue(null);
+  
+      await expect(service.editPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if addCandidates fails', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
+      prismaMock.panelCandidate.createMany.mockResolvedValue(null);
+  
+      await expect(service.editPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if panelUpdated fails', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
+      prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
+      prismaMock.hireRequest.update.mockResolvedValue(null);
+  
+      await expect(service.editPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if candidates update fails', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
       prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.updateMany.mockResolvedValue(null);
+  
+      await expect(service.editPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw NotFoundException if candidates not found', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
+      prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.updateMany.mockResolvedValue({ count: 5 });
+      prismaMock.candidate.findMany.mockResolvedValue(null);
+  
+      await expect(service.editPanel(panelData, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should edit panel, update candidates and call HubSpot for each candidate', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
+      prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.updateMany.mockResolvedValue({ count: 5 });
+      prismaMock.candidate.findMany.mockResolvedValue([
+        { id: 'cand1', hubspot_id: 'hub1' },
+        { id: 'cand2', hubspot_id: 'hub2' },
+        { id: 'cand3', hubspot_id: 'hub3' },
+        { id: 'cand4', hubspot_id: 'hub4' },
+        { id: 'cand5', hubspot_id: 'hub5' },
+      ]);
+  
+      const axiosPatchMock = jest.spyOn(axios, 'patch').mockResolvedValue({ data: {} });
   
       const result = await service.editPanel(panelData, user);
       expect(result).toBe(true);
@@ -674,36 +747,30 @@ describe('HireRequestService', () => {
         where: { id: panelData.hireRequest_id },
         data: { status: 'sourcing' },
       });
-    });
   
-    it('should throw NotFoundException if panel does not exist', async () => {
-      prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
+      expect(prismaMock.candidate.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: panelData.candidates_id } },
+        data: { pipeline_status: expect.any(String) },
+      });
   
-      await expect(service.editPanel(panelData, user)).rejects.toThrow(NotFoundException);
-    });
+      expect(prismaMock.candidate.findMany).toHaveBeenCalledWith({
+        where: { id: { in: panelData.candidates_id } },
+        select: { id: true, hubspot_id: true },
+      });
   
-    it('should throw BadRequestException if removeCandidates fails', async () => {
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.deleteMany.mockResolvedValue(null);
-  
-      await expect(service.editPanel(panelData, user)).rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if addCandidates fails', async () => {
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
-      prismaMock.panelCandidate.createMany.mockResolvedValue(null);
-  
-      await expect(service.editPanel(panelData, user)).rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if panelUpdated fails', async () => {
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
-      prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
-      prismaMock.hireRequest.update.mockResolvedValue(null);
-  
-      await expect(service.editPanel(panelData, user)).rejects.toThrow(BadRequestException);
+      expect(axiosPatchMock).toHaveBeenCalledTimes(5);
+      panelData.candidates_id.forEach((candidateId, index) => {
+        expect(axiosPatchMock).toHaveBeenCalledWith(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/hub${index + 1}`,
+          { properties: { hs_pipeline_stage: expect.any(String) } },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      });
     });
   });
   
