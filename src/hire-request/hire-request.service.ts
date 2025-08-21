@@ -899,6 +899,10 @@ export class HireRequestService {
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Hired';
     })
+    const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
+      return dbToStageDictionary[key] === 'Available Candidates';
+    })
+    if (!pipelineStatusLosers) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
     if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
@@ -934,6 +938,25 @@ export class HireRequestService {
       },
     });
     if(!winnerExists) throw new NotFoundException(`Winner candidate not found in the panel`);
+
+    const loserExists = await this.prisma.panelCandidate.findMany({
+      where: {
+        panel_id: panelExists.id,
+        NOT: {
+          candidate_id: data.winner_id,
+        },
+      },
+      select: {
+        id: true,
+        candidate:{
+          select: {
+            id: true,
+            hubspot_id: true,
+          },
+        },
+      },
+    });
+    if(!loserExists || loserExists.length === 0) throw new NotFoundException(`No other candidates found in the panel`);
 
     //change Panel status
     const panelUpdated = await this.prisma.candidatePanel.update({
@@ -983,9 +1006,29 @@ export class HireRequestService {
       },
     });
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
+    //comunicate with hubspot to update status
+    const bodyLosser = {
+      properties: {
+        hs_pipeline_stage: pipelineStatusLosers
+      }
+    };
+    loserExists.forEach(async (loser) => {
+      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
+        bodyLosser,
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+            }
+        })
+    }
+    );
+
+
+
 
     
-    //change the Candidate pipeline status to 'endorsed' and send it for the hubspot
+    //change the Candidate pipeline status to 'Hired' and send it for the hubspot
     const candidateUpdated = await this.prisma.candidate.update({
       where: {
         id: data.winner_id,
@@ -996,14 +1039,14 @@ export class HireRequestService {
     });
     if (!candidateUpdated) throw new BadRequestException(`Candidate not updated to endorsed`);
 
-    //communication with hubspot to update status can be added here
-    const body = {
+    //communication with hubspot to update status ired can be added here
+    const bodyWinner = {
       properties: {
         hs_pipeline_stage: pipelineStatus
       }
     };
     const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateUpdated.hubspot_id}`,
-      body,
+      bodyWinner,
       {
           headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
