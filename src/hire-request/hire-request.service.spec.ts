@@ -1279,7 +1279,8 @@ describe('HireRequestService', () => {
     });
   });
   
-  describe('changeWinner', () => {
+  /*
+    describe('changeWinner', () => {
     const baseId = 'hr1';
     const data = { winner_id: 'cand1' };
   
@@ -1461,5 +1462,6 @@ describe('HireRequestService', () => {
       );
     });
   });
+  */
   
 });

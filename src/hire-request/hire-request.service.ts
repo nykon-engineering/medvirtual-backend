@@ -1016,6 +1016,7 @@ export class HireRequestService {
     });
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
     //comunicate with hubspot to update status
+    
     /*
     const bodyLosser = {
       properties: {
@@ -1037,6 +1038,7 @@ export class HireRequestService {
       )
     );
     */
+    
 
     
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
