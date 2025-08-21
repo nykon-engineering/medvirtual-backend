@@ -89,7 +89,7 @@ export class HireRequestController {
 
   @Delete(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Delete specific requests regarding rules for the current user' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiResponse({ status: 200, description: 'Hire request deleted successfully' })

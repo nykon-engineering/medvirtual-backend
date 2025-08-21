@@ -251,8 +251,8 @@ model PanelCandidate {
   candidate_id String
   status       PanelCandidateStatus @default(selected)
   createdAt    DateTime             @default(now())
-  candidate    Candidate            @relation(fields: [candidate_id], references: [id])
-  panel        CandidatePanel       @relation(fields: [panel_id], references: [id])
+  candidate    Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
+  panel        CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
 
   @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
   @@index([panel_id], map: "idx_panel_candidates_panel_id")
@@ -271,7 +271,7 @@ model Interview {
   decision_date         DateTime?
   expires_at            DateTime?
   createdAt             DateTime        @default(now())
-  panel                 CandidatePanel  @relation(fields: [panel_id], references: [id])
+  panel                 CandidatePanel  @relation(fields: [panel_id], references: [id], onDelete: Cascade)
   selectedCandidate     Candidate?      @relation("SelectedCandidate", fields: [selected_candidate_id], references: [id])
 
   @@index([panel_id], map: "idx_interviews_panel_id")

@@ -1,5 +1,6 @@
 export const hireRequestDictionary : Record<number, string> = {
 
+    0: 'pending_signature',
     1: 'new',
     2: 'sourcing',
     3: 'panel_ready',

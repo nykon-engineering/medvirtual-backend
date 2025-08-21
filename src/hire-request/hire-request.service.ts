@@ -171,8 +171,13 @@ export class HireRequestService {
       },
     });
 
-    if (!hireRequest) {
-      throw new NotFoundException(`Hire request not found`);
+    if (!hireRequest)  throw new NotFoundException(`Hire request not found`);
+    const statusKey = Object.keys(hireRequestDictionary).find(key => {
+      return hireRequestDictionary[key] === hireRequest.status;
+    })
+    if( !statusKey) throw new NotFoundException(`Status not found for hire request`);
+    if(Number(statusKey) > 2) {
+      throw new BadRequestException(`Hire request with status ${hireRequest.status.replace("_"," ").toUpperCase()} cannot be deleted`);
     }
 
     const requestdeleted = await this.prisma.hireRequest.delete({
@@ -237,7 +242,7 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     }else{
-      throw new BadRequestException(`Status change from ${hireRequest.status} to ${data.status} is not allowed`);
+      throw new BadRequestException(`Status change from ${hireRequest.status.replace("_"," ").toUpperCase()} to ${data.status.replace("_"," ").toUpperCase()} is not allowed`);
     }
   }
 
