@@ -902,7 +902,7 @@ export class HireRequestService {
     return true;
   }
 
-  async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<boolean> {
+  async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<any> {
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
@@ -1017,7 +1017,7 @@ export class HireRequestService {
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
     //comunicate with hubspot to update status
     
-    /*
+    
     const bodyLosser = {
       properties: {
         hs_pipeline_stage: pipelineStatusLosers
@@ -1037,7 +1037,7 @@ export class HireRequestService {
         )
       )
     );
-    */
+    
     
 
     
@@ -1073,6 +1073,82 @@ export class HireRequestService {
     }
     
 
-    return true;
+
+    // =========== return object requested by Lucas
+
+    const panels = await this.prisma.candidatePanel.findMany({
+      where: {
+        readable: true,
+        hireRequest: {
+          organization: {
+            id: user.organization_id,
+          },
+        },
+      },
+      select:{
+        id: true,
+        scheduled_date: true,
+        status: true,
+        panelCandidates: {
+          select: {
+            status: true,
+            candidate: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                name: true,
+                hourly_pay_rate: true,
+                country: true,
+                experiences: {
+                  orderBy: { start_date: 'asc' },
+                  take: 1, 
+                  select: { start_date: true },
+                },
+              },
+            },
+          },
+        },
+        hireRequest: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            createdAt: true,
+            availability: true,
+            contract_length: true,
+            expected_start_date: true,
+            salary_range_from: true,
+            salary_range_to: true,
+            specialization: true,
+            location: true,
+            assign_user_id: true,
+          },
+        },
+      },
+    })
+    
+    if (!panels || panels.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
+
+    const result = panels.map(panel => ({
+      ...panel,
+      panelCandidates: panel.panelCandidates.map(pc => {
+        const startDate = pc.candidate.experiences[0]?.start_date;
+        const years_of_experience = startDate
+          ? new Date().getFullYear() - new Date(startDate).getFullYear()
+          : 0;
+        return {
+          ...pc,
+          candidate: {
+            ...pc.candidate,
+            years_of_experience,
+          },
+        };
+      }),
+    }));
+
+    return result;
   }
 }

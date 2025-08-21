@@ -1013,13 +1013,11 @@ describe('HireRequestService', () => {
   
       const result = await service.getPanelsByOrganization(user);
   
-      // checa se years_of_experience foi calculado corretamente
       const currentYear = new Date().getFullYear();
       const expectedYears = currentYear - 2015;
   
       expect(result[0].panelCandidates[0].candidate.years_of_experience).toBe(expectedYears);
   
-      // checa se o Prisma foi chamado com os selects corretos
       expect(prismaMock.candidatePanel.findMany).toHaveBeenCalledWith({
         where: {
           readable: true,
