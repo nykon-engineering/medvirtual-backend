@@ -1058,15 +1058,20 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatus
       }
     };
-    const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateUpdated.hubspot_id}`,
-      bodyWinner,
-      {
-          headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json'
-          }
-      }
-  )
+    try{
+      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateUpdated.hubspot_id}`,
+        bodyWinner,
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+            }
+        })
+    }catch (error) {
+      console.error('Error updating candidate in HubSpot:', error);
+      throw new BadRequestException(`Error updating candidate in HubSpot`);
+    }
+    
 
     return true;
   }
