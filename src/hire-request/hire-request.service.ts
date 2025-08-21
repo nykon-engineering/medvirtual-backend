@@ -80,7 +80,14 @@ export class HireRequestService {
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
 
-    return newHireRequest;
+    const hireRequestWithSkills = await this.prisma.hireRequest.findUnique({
+      where: { id: newHireRequest.id },
+      include: {
+        skills: true,
+      },
+    });
+
+    return hireRequestWithSkills;
   }
 
   async findAll(user: USER): Promise<object[]> {
@@ -264,58 +271,61 @@ export class HireRequestService {
         },
       })
       
-
-      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-        return dbToStageDictionary[key] === 'Available Candidates';
-      })
-      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
-      //update candidates pipeline status to 'Available Candidates'
-      const candidatesPipelineUpdated = await this.prisma.candidate.updateMany({
-        where: {
-          id: {
-            in: candidates.map(c => c.candidate.id),
+      if (candidates.length > 0) {
+        const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+          return dbToStageDictionary[key] === 'Available Candidates';
+        })
+        if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
+        //update candidates pipeline status to 'Available Candidates'
+        const candidatesPipelineUpdated = await this.prisma.candidate.updateMany({
+          where: {
+            id: {
+              in: candidates.map(c => c.candidate.id),
+            },
           },
-        },
-        data: {
-          pipeline_status: pipelineStatus,
-        },
-      });
-      //comunicate with hubspot to update status
-      const body = {
-        properties: {
-          hs_pipeline_stage: pipelineStatus
-        }
-      };
-  
-      for (const candidate of candidates) {
-        try {
-          await axios.patch(
-            `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.candidate.hubspot_id}`,
-            body,
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
+          data: {
+            pipeline_status: pipelineStatus,
+          },
+        });
+        //comunicate with hubspot to update status
+        const body = {
+          properties: {
+            hs_pipeline_stage: pipelineStatus
+          }
+        };
+    
+        for (const candidate of candidates) {
+          try {
+            await axios.patch(
+              `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.candidate.hubspot_id}`,
+              body,
+              {
+                headers: {
+                  Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                }
               }
-            }
-          );
-        } catch (error) {
-          console.error('Error updating loser candidate in HubSpot:', error.code);
+            );
+          } catch (error) {
+            console.error('Error updating loser candidate in HubSpot:', error.code);
+          }
         }
-      }
-      
-
-      //update all candidates for the hire request to 'returned_to_pool'
-      const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
-        where: {
-          panel: {
-            hire_request_id: id,
+        
+  
+        //update all candidates for the hire request to 'returned_to_pool'
+        const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
+          where: {
+            panel: {
+              hire_request_id: id,
+            },
           },
-        },
-        data: {
-          status: 'returned_to_pool',
-        },
-      });
+          data: {
+            status: 'returned_to_pool',
+          },
+        });
+      }
+
+      
     }
 
     

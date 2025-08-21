@@ -33,7 +33,8 @@ export class HireRequestController {
     const result = await this.hireRequestService.create(createHireRequestDto, user);
     return {
       status: 201,
-      message: result,
+      message: 'Hire request created successfully',
+      data: result,
     }
   }
 
