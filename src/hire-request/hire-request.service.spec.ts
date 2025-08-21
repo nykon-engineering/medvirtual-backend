@@ -8,6 +8,7 @@ import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { find } from 'rxjs';
+import { count } from 'console';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -36,6 +37,7 @@ const prismaMock = {
   candidate: {
     findMany: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
   },
   panelCandidate: {
     createMany: jest.fn(),
@@ -526,25 +528,19 @@ describe('HireRequestService', () => {
       ).rejects.toThrow(BadRequestException);
     });
   
-    it('should throw BadRequestException if candidates_id length is not 5', async () => {
-      await expect(
-        service.confirmPanel({ ...panelData, candidates_id: ['cand1', 'cand2'] }, user)
-      ).rejects.toThrow(BadRequestException);
-    });
-  
     it('should throw NotFoundException if panel does not exist', async () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
   
-      await expect(service.confirmPanel(panelData, user)).rejects.toThrow(NotFoundException);
+      await expect(service.confirmPanel(panelData, user))
+        .rejects.toThrow(NotFoundException);
     });
-  
-    
   
     it('should throw BadRequestException if addCandidates fails', async () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.createMany.mockResolvedValue(null);
   
-      await expect(service.confirmPanel(panelData, user)).rejects.toThrow(BadRequestException);
+      await expect(service.confirmPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
     });
   
     it('should throw BadRequestException if panelUpdated fails', async () => {
@@ -552,7 +548,71 @@ describe('HireRequestService', () => {
       prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
       prismaMock.hireRequest.update.mockResolvedValue(null);
   
-      await expect(service.confirmPanel(panelData, user)).rejects.toThrow(BadRequestException);
+      await expect(service.confirmPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if candidates update fails', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.updateMany.mockResolvedValue(null);
+  
+      await expect(service.confirmPanel(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should confirm panel, update candidates and return true', async () => {
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.updateMany.mockResolvedValue({ count: 5 });
+  
+      // mock axios.patch para não chamar HubSpot de verdade
+      const axiosPatchMock = jest.spyOn(axios, 'patch').mockResolvedValue({ data: {} });
+  
+      const result = await service.confirmPanel(panelData, user);
+  
+      expect(result).toBe(true);
+  
+      expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
+        where: { hire_request_id: panelData.hireRequest_id },
+        select: { id: true },
+      });
+  
+      expect(prismaMock.panelCandidate.createMany).toHaveBeenCalledWith({
+        data: panelData.candidates_id.map(candidateId => ({
+          candidate_id: candidateId,
+          panel_id: 'panel1',
+        })),
+      });
+  
+      expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
+        where: { id: panelData.hireRequest_id },
+        data: { status: 'sourcing' },
+      });
+  
+      expect(prismaMock.candidate.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: panelData.candidates_id } },
+        data: { pipeline_status: expect.any(String) }, // Endorsed to Client
+      });
+  
+      // verifica se chamou o HubSpot para cada candidato
+      expect(axiosPatchMock).toHaveBeenCalledTimes(panelData.candidates_id.length);
+      panelData.candidates_id.forEach(candidateId => {
+        expect(axiosPatchMock).toHaveBeenCalledWith(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateId}`,
+          {
+            properties: { hs_pipeline_stage: expect.any(String) },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      });
     });
   });
   
@@ -664,13 +724,47 @@ describe('HireRequestService', () => {
     });
   
     it('should throw BadRequestException if data is missing', async () => {
-      await expect(service.panelReady({} as panelReadyDTO, user)).rejects.toThrow(BadRequestException);
-      await expect(service.panelReady({} as any, user)).rejects.toThrow(BadRequestException);
+      await expect(service.panelReady({} as panelReadyDTO, user))
+        .rejects.toThrow(BadRequestException);
+      await expect(service.panelReady({} as any, user))
+        .rejects.toThrow(BadRequestException);
     });
   
-    it('should update hire request and panel successfully', async () => {
+    it('should throw BadRequestException if hireRequest update fails', async () => {
+      prismaMock.hireRequest.update.mockResolvedValue(null);
+  
+      await expect(service.panelReady(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if panel update fails', async () => {
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'panel_ready' });
+      prismaMock.candidatePanel.updateMany.mockResolvedValue(null);
+  
+      await expect(service.panelReady(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if panel has less than 3 candidates', async () => {
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'panel_ready' });
       prismaMock.candidatePanel.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.panelCandidate.findMany.mockResolvedValue([
+        { id: 'pc1' },
+        { id: 'pc2' }, // apenas 2 candidatos
+      ]);
+  
+      await expect(service.panelReady(panelData, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should update hireRequest, update panel, validate candidates and return true', async () => {
+      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'panel_ready' });
+      prismaMock.candidatePanel.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.panelCandidate.findMany.mockResolvedValue([
+        { id: 'pc1' },
+        { id: 'pc2' },
+        { id: 'pc3' },
+      ]); // pelo menos 3 candidatos
   
       const result = await service.panelReady(panelData, user);
       expect(result).toBe(true);
@@ -684,20 +778,10 @@ describe('HireRequestService', () => {
         where: { hire_request_id: panelData.hireRequest_id },
         data: { readable: panelData.readable },
       });
-    });
   
-    it('should throw BadRequestException if hireRequest update fails', async () => {
-      prismaMock.hireRequest.update.mockResolvedValue(null);
-      await expect(service.panelReady(panelData, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if panel update fails', async () => {
-      prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'panel_ready' });
-      prismaMock.candidatePanel.updateMany.mockResolvedValue(null);
-  
-      await expect(service.panelReady(panelData, user))
-        .rejects.toThrow(BadRequestException);
+      expect(prismaMock.panelCandidate.findMany).toHaveBeenCalledWith({
+        where: { panel_id: panelData.hireRequest_id },
+      });
     });
   });
   
@@ -832,6 +916,7 @@ describe('HireRequestService', () => {
                 last_name: 'Doe',
                 name: 'John Doe',
                 hourly_pay_rate: 100,
+                country: 'Brazil',
                 experiences: [
                   { start_date: new Date('2016-01-01') },
                 ],
@@ -889,6 +974,7 @@ describe('HireRequestService', () => {
                   last_name: true,
                   name: true,
                   hourly_pay_rate: true,
+                  country: true,
                   experiences: {
                     orderBy: { start_date: 'asc' },
                     take: 1,

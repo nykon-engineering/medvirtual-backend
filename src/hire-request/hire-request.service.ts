@@ -520,6 +520,16 @@ export class HireRequestService {
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
 
+    //check if panelCandidate there are ate least 3 
+    const panelCandidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        panel_id: data.hireRequest_id,
+      },
+    });
+    if (!panelCandidates || panelCandidates.length < 3) {
+      throw new BadRequestException(`Panel must have at least 3 candidates`);
+    }
+
     return true;
   }
 
@@ -616,6 +626,7 @@ export class HireRequestService {
                 last_name: true,
                 name: true,
                 hourly_pay_rate: true,
+                country: true,
                 experiences: {
                   orderBy: { start_date: 'asc' },
                   take: 1, 
