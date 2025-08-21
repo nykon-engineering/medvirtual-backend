@@ -147,7 +147,7 @@ export class HireRequestController {
 
   @Get('start-sourcing/show-match-candidates/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Show possibles candidates for a specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiResponse({ status: 200, description: 'Candidates returned successfully' })
@@ -163,7 +163,9 @@ export class HireRequestController {
   }
 
   @Post('start-sourcing/confirm-panel')
-  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Confirm panel for a specific hire request' })
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel confirmed successfully' })
@@ -183,7 +185,9 @@ export class HireRequestController {
   }
 
   @Post('sourcing/edit-panel')
-  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Edit panel for a specific hire request' })
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel updated successfully' })
@@ -204,7 +208,9 @@ export class HireRequestController {
   }
 
   @Post('sourcing/panel-ready')
-  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Mark Panel Ready for a specific hire request' })
   @ApiBody({ type: panelReadyDTO })
   @ApiResponse({ status: 200, description: 'Panel marked ready successfully' })
@@ -241,7 +247,9 @@ export class HireRequestController {
   }
 
   @Post('schedule-interview/:id')
-  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Schedule interview for a specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: scheduleInterviewDTO })
@@ -262,7 +270,9 @@ export class HireRequestController {
   }
 
   @Post('awaiting-decision/:id')
-  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Mark hire request as awaiting decision' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: awaitingDecisionDTO })
@@ -282,7 +292,9 @@ export class HireRequestController {
   }
 
   @Post('allow-more-time/:id')
-  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
   @ApiProperty({ description: 'Allow more time for the user make their decision' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: awaitingDecisionDTO })
@@ -301,24 +313,27 @@ export class HireRequestController {
   }
 
   @Post('change-winner/:id')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @HttpCode(200)
+  @UseGuards(AuthGuard)
   @ApiProperty({ description: 'Change winner of a specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: changeWinnerDTO })
-  @ApiResponse({ status: 200, description: 'Winner changed successfully' })
+  @ApiResponse({ status: 200, description: 'Winner changed successfully and the candidate was moved to endorsed stage on the hubspot' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Pipeline status not found for Endorsed to Clien' })
   @ApiResponse({ status: 404, description: 'Hire request not found' })
   @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  @ApiResponse({ status: 400, description: 'Winner candidate not found in the panel' })
   @ApiResponse({ status: 400, description: 'Panel not updated to decision made' })
   @ApiResponse({ status: 400, description: 'Hire request not updated to placement completed' })
   @ApiResponse({ status: 400, description: 'Panel not updated to reset winners' })
   @ApiResponse({ status: 400, description: 'Panel not updated to set other candidates as not selected' })
+  @ApiResponse({ status: 400, description: 'Candidate not updated to endorsed' })
   async changeWinner(@Param('id') id: string, @Body() data: changeWinnerDTO, @CurrentUser() user: USER) {
     const result = await this.hireRequestService.changeWinner(id, data, user);
     return {
       status: 200,
-      message: 'Winner changed successfully',
+      message: 'Winner changed successfully and the candidate was moved to endorsed stage on the hubspot',
       data: result,
     }
   }

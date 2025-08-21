@@ -14,6 +14,8 @@ import { returnGetPanelDto } from './dto/return-getPanel.dto';
 import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
+import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import axios from 'axios';
 
 @Injectable()
 export class HireRequestService {
@@ -262,8 +264,7 @@ export class HireRequestService {
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
-        id: id,
-        organization: { id : user.organization_id,}
+        id: id
       },
       select:{
         id: true,
@@ -334,6 +335,9 @@ export class HireRequestService {
   }
   
   async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
+    console.log('confirmPanel: ', data);
+console.log('Is instance of DTO:', data instanceof ConfirmPanelHireRequestDto);
+console.log('Candidates:', data.candidates_id);
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
     if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
@@ -674,6 +678,11 @@ export class HireRequestService {
   async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<boolean> {
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
+    const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+      return dbToStageDictionary[key] === 'Endorsed to Client';
+    })
+    if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed to Client`);
+
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
@@ -696,6 +705,17 @@ export class HireRequestService {
     });
     if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
+    //check if winner exists inside the panel
+    const winnerExists = await this.prisma.panelCandidate.findFirst({
+      where: {
+        panel_id: panelExists.id,
+        candidate_id: data.winner_id,
+      },
+      select: {
+        id: true,
+      },
+    });
+    if(!winnerExists) throw new NotFoundException(`Winner candidate not found in the panel`);
 
     //change Panel status
     const panelUpdated = await this.prisma.candidatePanel.update({
@@ -723,7 +743,7 @@ export class HireRequestService {
     const winner = await this.prisma.panelCandidate.updateMany({
       where: {
         panel_id: panelExists.id,
-        id: data.winner_id
+        candidate_id: data.winner_id
       },
       data: {
         status: 'selected_by_client',
@@ -737,7 +757,7 @@ export class HireRequestService {
       where: {
         panel_id: panelExists.id,
         NOT: {
-          id: data.winner_id
+          candidate_id: data.winner_id
         }
       },
       data: {
@@ -745,6 +765,34 @@ export class HireRequestService {
       },
     });
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
+
+    
+    //change the Candidate pipeline status to 'endorsed' and send it for the hubspot
+    const candidateUpdated = await this.prisma.candidate.update({
+      where: {
+        id: data.winner_id,
+      },
+      data: {
+        pipeline_status: pipelineStatus,
+      },
+    });
+    if (!candidateUpdated) throw new BadRequestException(`Candidate not updated to endorsed`);
+
+    //communication with hubspot to update status can be added here
+    const body = {
+      properties: {
+        hs_pipeline_stage: pipelineStatus
+      }
+    };
+    const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateUpdated.hubspot_id}`,
+      body,
+      {
+          headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json'
+          }
+      }
+  )
 
     return true;
   }

@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsString } from "class-validator";
+import { IsArray, IsString } from "class-validator";
 
 export class ConfirmPanelHireRequestDto {
     @ApiProperty({ description: ' Hire Request ID', type: String,})
@@ -7,5 +7,6 @@ export class ConfirmPanelHireRequestDto {
     hireRequest_id: string;
 
     @ApiProperty({ description: 'Candidates IDs', type: [String] })
+    @IsArray()
     candidates_id: string[];
 }

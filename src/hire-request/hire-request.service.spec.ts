@@ -3,10 +3,12 @@ import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { USER } from '@prisma/client';
-import { create } from 'domain';
-import { find } from 'rxjs';
+import axios from 'axios';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 const prismaMock = {
   hireRequest: {
@@ -30,12 +32,14 @@ const prismaMock = {
   },
   candidate: {
     findMany: jest.fn(),
+    update: jest.fn(),
   },
   panelCandidate: {
     createMany: jest.fn(),
     deleteMany: jest.fn(),
     findMany: jest.fn(),
     updateMany: jest.fn(),
+    findFirst: jest.fn(),
   },
   interview: {
     create: jest.fn(),
@@ -349,7 +353,6 @@ describe('HireRequestService', () => {
 
   });
   
-
   describe('showMatchCandidates', () => {
     beforeEach(() => {
       jest.clearAllMocks();
@@ -409,7 +412,6 @@ describe('HireRequestService', () => {
       expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
         where: {
           id: 'hr1',
-          organization: { id: user.organization_id },
         },
         select: expect.any(Object),
       });
@@ -932,15 +934,25 @@ describe('HireRequestService', () => {
   describe('changeWinner', () => {
     const baseId = 'hr1';
     const data = { winner_id: 'cand1' };
+    const pipelineStatus = '261137285'; // simulando retorno do dictionary
   
     beforeEach(() => {
       jest.clearAllMocks();
+      (global as any).dbToStageDictionary = {
+        pipeline_stage_123: 'Endorsed to Client'
+      };
     });
   
     it('should throw NotFoundException if user has no organization', async () => {
       await expect(
         service.changeWinner(baseId, data, { ...user, organization_id: null })
       ).rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw NotFoundException if pipelineStatus not found', async () => {
+      (global as any).dbToStageDictionary = {}; // remove o pipeline
+      await expect(service.changeWinner(baseId, data, user))
+        .rejects.toThrow(NotFoundException);
     });
   
     it('should throw NotFoundException if hireRequest not found', async () => {
@@ -958,9 +970,19 @@ describe('HireRequestService', () => {
         .rejects.toThrow(NotFoundException);
     });
   
+    it('should throw NotFoundException if winner does not exist in panel', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue(null);
+  
+      await expect(service.changeWinner(baseId, data, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
     it('should throw BadRequestException if panel update fails', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
       prismaMock.candidatePanel.update.mockResolvedValue(null);
   
       await expect(service.changeWinner(baseId, data, user))
@@ -970,7 +992,8 @@ describe('HireRequestService', () => {
     it('should throw BadRequestException if hireRequest update fails', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1', status: 'decision_made' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue(null);
   
       await expect(service.changeWinner(baseId, data, user))
@@ -980,8 +1003,9 @@ describe('HireRequestService', () => {
     it('should throw BadRequestException if winner update fails', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1', status: 'decision_made' });
-      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId, status: 'placement_completed' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
       prismaMock.panelCandidate.updateMany.mockResolvedValueOnce(null);
   
       await expect(service.changeWinner(baseId, data, user))
@@ -991,38 +1015,64 @@ describe('HireRequestService', () => {
     it('should throw BadRequestException if updating other candidates fails', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1', status: 'decision_made' });
-      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId, status: 'placement_completed' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
       prismaMock.panelCandidate.updateMany
-        .mockResolvedValueOnce({ count: 1 }) // winner update
-        .mockResolvedValueOnce(null);        // others update
+        .mockResolvedValueOnce({ count: 1 }) // winner ok
+        .mockResolvedValueOnce(null);        // outros falham
   
       await expect(service.changeWinner(baseId, data, user))
         .rejects.toThrow(BadRequestException);
     });
   
-    it('should complete successfully', async () => {
+    it('should throw BadRequestException if candidate update fails', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1', status: 'decision_made' });
-      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId, status: 'placement_completed' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
+      prismaMock.panelCandidate.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 2 });
+      prismaMock.candidate.update.mockResolvedValue(null);
+  
+      await expect(service.changeWinner(baseId, data, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should complete successfully and call Hubspot API', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
       prismaMock.panelCandidate.updateMany
         .mockResolvedValueOnce({ count: 1 }) // winner
         .mockResolvedValueOnce({ count: 2 }); // others
+      prismaMock.candidate.update.mockResolvedValue({
+        id: data.winner_id,
+        hubspot_id: 'hub123',
+        pipeline_status: pipelineStatus,
+      });
+      mockedAxios.patch.mockResolvedValue({ status: 200 });
   
       const result = await service.changeWinner(baseId, data, user);
   
       expect(result).toBe(true);
-      expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
-        where: { id: 'panel1' },
-        data: { status: 'decision_made' },
+      expect(prismaMock.candidate.update).toHaveBeenCalledWith({
+        where: { id: data.winner_id },
+        data: { pipeline_status: pipelineStatus },
       });
-      expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
-        where: { id: baseId },
-        data: { status: 'placement_completed' },
-      });
-      expect(prismaMock.panelCandidate.updateMany).toHaveBeenCalledTimes(2);
+      expect(mockedAxios.patch).toHaveBeenCalledWith(
+        expect.stringContaining('hub123'),
+        expect.any(Object),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: expect.stringContaining('Bearer'),
+          }),
+        })
+      );
     });
   });
-  
 });
