@@ -216,7 +216,42 @@ export class HireRequestService {
       return hireRequestDictionary[key] === data.status;
     })
 
+    if (data.status === 'cancelled'){
 
+      //update all candidates for the hire request to 'returned_to_pool'
+      const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
+        where: {
+          panel: {
+            hire_request_id: id,
+          },
+        },
+        data: {
+          status: 'returned_to_pool',
+        },
+      });
+
+      //update candidates pipeline status to '261075105'
+      /*
+      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Available Candidates';
+      })
+      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
+      const candidatesPipelineUpdated = await this.prisma.candidate.updateMany({
+        where: {
+          id: {
+            in: candidatesUpdated.map(c => c.candidate_id),
+          },
+        },
+        data: {
+          pipeline_status: pipelineStatus,
+        },
+      });
+      
+      comunicar com o hubspot
+      */
+
+
+    }
     /*
       next or previus stages;
     */
@@ -228,7 +263,8 @@ export class HireRequestService {
       hireRequest.status == 'cancelled' && data.status === 'sourcing' ||
       hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ||
       hireRequest.status == 'panel_ready' && data.status === 'placement_completed' ||
-      hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed'
+      hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ||
+      data.status === 'cancelled'
     ) { 
       const updatedRequest = await this.prisma.hireRequest.update({
         where: {
@@ -339,9 +375,6 @@ export class HireRequestService {
   }
   
   async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
-    console.log('confirmPanel: ', data);
-console.log('Is instance of DTO:', data instanceof ConfirmPanelHireRequestDto);
-console.log('Candidates:', data.candidates_id);
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
     if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
@@ -376,6 +409,39 @@ console.log('Candidates:', data.candidates_id);
       },
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not confirmed`);
+
+    const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+      return dbToStageDictionary[key] === 'Endorsed to Client';
+    })
+    //update candidates with pipelinestatus = 'Endorsed to Client'
+    const candidatesUpdated = await this.prisma.candidate.updateMany({
+      where: {
+        id: {
+          in: data.candidates_id,
+        },
+      },
+      data: {
+        pipeline_status: pipelineStatus,
+      },
+    });
+    if (!candidatesUpdated) throw new BadRequestException(`Candidates not updated to endorsed`);
+
+    //communication with hubspot to update status can be added here
+    const body = {
+      properties: {
+        hs_pipeline_stage: pipelineStatus
+      }
+    };
+    data.candidates_id.forEach(async (candidateId) => {
+      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateId}`,
+        body,
+        {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+            }
+        })
+    })
 
     return true;
   }
@@ -707,9 +773,9 @@ console.log('Candidates:', data.candidates_id);
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-      return dbToStageDictionary[key] === 'Endorsed to Client';
+      return dbToStageDictionary[key] === 'Hired';
     })
-    if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed to Client`);
+    if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {

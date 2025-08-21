@@ -6,6 +6,7 @@ import { USER } from '@prisma/client';
 import axios from 'axios';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
+import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -250,33 +251,97 @@ describe('HireRequestService', () => {
   });
 
   describe('remove', () => {
-    it('should delete hire request', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1' });
-      prismaMock.hireRequest.delete.mockResolvedValue({ id: 'hr1' });
-
-      const result = await service.remove('hr1', user);
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should throw NotFoundException if user has no organization', async () => {
+      const invalidUser: USER = {
+        id: 'u1',
+        email: '',
+        organization_id: null,
+        organization_name: '',
+        first_name: '',
+        last_name: '',
+        password: '',
+        phone: '',
+        avatar: '',
+        job_title: '',
+        role: '',
+        workos_id: '',
+        authentication_method: 'OwnSign',
+        status: 'inactive',
+        verified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+  
+      await expect(service.remove('hire1', invalidUser)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  
+    it('should throw NotFoundException if hire request not found', async () => {
+      prismaMock.hireRequest.findUnique = jest.fn().mockResolvedValue(null);
+  
+      await expect(service.remove('hire1', user)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  
+    it('should throw NotFoundException if statusKey not found', async () => {
+      prismaMock.hireRequest.findUnique = jest.fn().mockResolvedValue({
+        id: 'hire1',
+        status: 'UNKNOWN_STATUS',
+      });
+  
+      await expect(service.remove('hire1', user)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  
+    it('should throw BadRequestException if statusKey > 2', async () => {
+      prismaMock.hireRequest.findUnique = jest.fn().mockResolvedValue({
+        id: 'hire1',
+        status: hireRequestDictionary[3], // supondo que status 3 já exista
+      });
+  
+      await expect(service.remove('hire1', user)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  
+    it('should throw BadRequestException if hire request not deleted', async () => {
+      prismaMock.hireRequest.findUnique = jest.fn().mockResolvedValue({
+        id: 'hire1',
+        status: hireRequestDictionary[1],
+      });
+      prismaMock.hireRequest.delete = jest.fn().mockResolvedValue(null);
+  
+      await expect(service.remove('hire1', user)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  
+    it('should delete hire request successfully', async () => {
+      prismaMock.hireRequest.findUnique = jest.fn().mockResolvedValue({
+        id: 'hire1',
+        status: hireRequestDictionary[1], // status válido (<= 2)
+      });
+      prismaMock.hireRequest.delete = jest.fn().mockResolvedValue({
+        id: 'hire1',
+      });
+  
+      const result = await service.remove('hire1', user);
+  
       expect(result).toBe(true);
-      expect(prismaMock.hireRequest.delete).toHaveBeenCalled();
-    });
-
-    it('should throw NotFoundException if no org', async () => {
-      await expect(service.remove('hr1', { ...user, organization_id: null }))
-        .rejects.toThrow(NotFoundException);
-    });
-
-    it('should throw NotFoundException if not found', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue(null);
-      await expect(service.remove('hr1', user))
-        .rejects.toThrow(NotFoundException);
-    });
-
-    it('should throw BadRequestException if delete fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1' });
-      prismaMock.hireRequest.delete.mockResolvedValue(null);
-      await expect(service.remove('hr1', user))
-        .rejects.toThrow(BadRequestException);
+      expect(prismaMock.hireRequest.delete).toHaveBeenCalledWith({
+        where: { id: 'hire1' },
+      });
     });
   });
+  
 
   describe('updateStatus', () => {
     const hireRequestDictionary = {
@@ -1000,7 +1065,7 @@ describe('HireRequestService', () => {
   describe('changeWinner', () => {
     const baseId = 'hr1';
     const data = { winner_id: 'cand1' };
-    const pipelineStatus = '261137285'; // simulando retorno do dictionary
+    const pipelineStatus = '261214844'; // simulando retorno do dictionary
   
     beforeEach(() => {
       jest.clearAllMocks();
