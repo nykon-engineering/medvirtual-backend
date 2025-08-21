@@ -1034,7 +1034,7 @@ export class HireRequestService {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
                 'Content-Type': 'application/json',
               },
-              timeout: 50000, // Set a timeout of 50 seconds
+              timeout: 120000, // Set a timeout of 120 seconds
             }
           )
         )
@@ -1071,7 +1071,7 @@ export class HireRequestService {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 50000, // Set a timeout of 50 seconds
+            timeout: 120000, // Set a timeout of 120 seconds
         })
     }catch (error) {
       console.error('Error updating candidate in HubSpot:', error);
