@@ -590,31 +590,79 @@ export class HireRequestService {
   async getPanelsByOrganization(user: USER){
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const hireRequests = await this.prisma.hireRequest.findMany({
+    
+    const panels = await this.prisma.candidatePanel.findMany({
       where: {
-        organization: {
-          id: user.organization_id,
-        },
-        panels:{
-          some: {
-            readable: true,
+        readable: true,
+        hireRequest: {
+          organization: {
+            id: user.organization_id,
           },
-        }
+        },
       },
-      include: {
-        panels: {
-          include: {
-            panelCandidates: {
-              include: {
-                candidate: true,
+      select:{
+        id: true,
+        scheduled_date: true,
+        status: true,
+        panelCandidates: {
+          select: {
+            status: true,
+            candidate: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                name: true,
+                hourly_pay_rate: true,
+                experiences: {
+                  orderBy: { start_date: 'asc' },
+                  take: 1, 
+                  select: { start_date: true },
+                },
               },
             },
           },
         },
+        hireRequest: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            createdAt: true,
+            availability: true,
+            contract_length: true,
+            expected_start_date: true,
+            salary_range_from: true,
+            salary_range_to: true,
+            specialization: true,
+            location: true,
+            assign_user_id: true,
+          },
+        },
       },
-    });
-    if (!hireRequests || hireRequests.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
-    return hireRequests;
+    })
+    
+    if (!panels || panels.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
+
+    const result = panels.map(panel => ({
+      ...panel,
+      panelCandidates: panel.panelCandidates.map(pc => {
+        const startDate = pc.candidate.experiences[0]?.start_date;
+        const years_of_experience = startDate
+          ? new Date().getFullYear() - new Date(startDate).getFullYear()
+          : 0;
+        return {
+          ...pc,
+          candidate: {
+            ...pc.candidate,
+            years_of_experience,
+          },
+        };
+      }),
+    }));
+    return result;
   }
 
   async scheduleInterview(id: string, data: scheduleInterviewDTO, user: USER){

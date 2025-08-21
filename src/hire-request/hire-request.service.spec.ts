@@ -7,6 +7,7 @@ import axios from 'axios';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
+import { find } from 'rxjs';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -30,6 +31,7 @@ const prismaMock = {
     updateMany: jest.fn(),
     update: jest.fn(),
     createMany: jest.fn(),
+    findMany: jest.fn(),
   },
   candidate: {
     findMany: jest.fn(),
@@ -341,7 +343,6 @@ describe('HireRequestService', () => {
       });
     });
   });
-  
 
   describe('updateStatus', () => {
     const hireRequestDictionary = {
@@ -789,73 +790,136 @@ describe('HireRequestService', () => {
     });
   });
 
-
   describe('getPanelsByOrganization', () => {
     const organizationId = 'org1';
-
+  
     beforeEach(() => {
       jest.clearAllMocks();
     });
-
+  
     it('should throw NotFoundException if user has no organization', async () => {
       await expect(
         service.getPanelsByOrganization({ ...user, organization_id: null })
       ).rejects.toThrow(NotFoundException);
     });
-
-    it('should throw NotFoundException if no hireRequests found', async () => {
-      prismaMock.hireRequest.findMany.mockResolvedValue(null);
-
+  
+    it('should throw NotFoundException if no panels found', async () => {
+      prismaMock.candidatePanel.findMany.mockResolvedValue(null);
+  
       await expect(service.getPanelsByOrganization(user))
         .rejects.toThrow(NotFoundException);
     });
-
-    it('should throw NotFoundException if hireRequests is empty array', async () => {
-      prismaMock.hireRequest.findMany.mockResolvedValue([]);
-
+  
+    it('should throw NotFoundException if panels is empty array', async () => {
+      prismaMock.candidatePanel.findMany.mockResolvedValue([]);
+  
       await expect(service.getPanelsByOrganization(user))
         .rejects.toThrow(NotFoundException);
     });
-
-    it('should return hireRequests with panels and candidates', async () => {
+  
+    it('should return panels with candidates and computed years_of_experience', async () => {
       const mockResult = [
         {
-          id: 'hr1',
-          panels: [
+          id: 'panel1',
+          scheduled_date: new Date(),
+          status: 'scheduled',
+          panelCandidates: [
             {
-              id: 'panel1',
-              readable: true,
-              panelCandidates: [
-                { id: 'pc1', candidate: { id: 'cand1', name: 'John Doe' } },
-              ],
+              status: 'invited',
+              candidate: {
+                id: 'cand1',
+                first_name: 'John',
+                last_name: 'Doe',
+                name: 'John Doe',
+                hourly_pay_rate: 100,
+                experiences: [
+                  { start_date: new Date('2016-01-01') },
+                ],
+              },
             },
           ],
+          hireRequest: {
+            id: 'hr1',
+            title: 'Frontend Dev',
+            description: 'React project',
+            status: 'open',
+            priority: 'high',
+            createdAt: new Date(),
+            availability: 'full-time',
+            contract_length: '6 months',
+            expected_start_date: new Date(),
+            salary_range_from: 1000,
+            salary_range_to: 2000,
+            specialization: 'Frontend',
+            location: 'Remote',
+            assign_user_id: 'user123',
+          },
         },
       ];
-
-      prismaMock.hireRequest.findMany.mockResolvedValue(mockResult);
-
+  
+      prismaMock.candidatePanel.findMany.mockResolvedValue(mockResult);
+  
       const result = await service.getPanelsByOrganization(user);
-
-      expect(result).toEqual(mockResult);
-      expect(prismaMock.hireRequest.findMany).toHaveBeenCalledWith({
+  
+      // checa se years_of_experience foi calculado corretamente
+      const currentYear = new Date().getFullYear();
+      const expectedYears = currentYear - 2015;
+  
+      expect(result[0].panelCandidates[0].candidate.years_of_experience).toBe(expectedYears);
+  
+      // checa se o Prisma foi chamado com os selects corretos
+      expect(prismaMock.candidatePanel.findMany).toHaveBeenCalledWith({
         where: {
-          organization: { id: organizationId },
-          panels: { some: { readable: true } },
+          readable: true,
+          hireRequest: {
+            organization: { id: organizationId },
+          },
         },
-        include: {
-          panels: {
-            include: {
-              panelCandidates: {
-                include: { candidate: true },
+        select: {
+          id: true,
+          scheduled_date: true,
+          status: true,
+          panelCandidates: {
+            select: {
+              status: true,
+              candidate: {
+                select: {
+                  id: true,
+                  first_name: true,
+                  last_name: true,
+                  name: true,
+                  hourly_pay_rate: true,
+                  experiences: {
+                    orderBy: { start_date: 'asc' },
+                    take: 1,
+                    select: { start_date: true },
+                  },
+                },
               },
+            },
+          },
+          hireRequest: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              status: true,
+              priority: true,
+              createdAt: true,
+              availability: true,
+              contract_length: true,
+              expected_start_date: true,
+              salary_range_from: true,
+              salary_range_to: true,
+              specialization: true,
+              location: true,
+              assign_user_id: true,
             },
           },
         },
       });
     });
   });
-  
 
   describe('scheduleInterview', () => {
     const baseId = 'hr1';
