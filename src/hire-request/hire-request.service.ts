@@ -517,6 +517,36 @@ console.log('Candidates:', data.candidates_id);
 
   }
 
+  async getPanelsByOrganization(user: USER){
+    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: {
+        organization: {
+          id: user.organization_id,
+        },
+        panels:{
+          some: {
+            readable: true,
+          },
+        }
+      },
+      include: {
+        panels: {
+          include: {
+            panelCandidates: {
+              include: {
+                candidate: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!hireRequests || hireRequests.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
+    return hireRequests;
+  }
+
   async scheduleInterview(id: string, data: scheduleInterviewDTO, user: USER){
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 

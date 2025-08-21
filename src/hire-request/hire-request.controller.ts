@@ -233,7 +233,7 @@ export class HireRequestController {
   @ApiProperty({ description: 'Get specific Panel' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiResponse({ status: 200, description: 'Panel returned successfully' })
-  @ApiResponse({ status: 400, description: 'Hire request ID is requiredn' })
+  @ApiResponse({ status: 400, description: 'Hire request ID is required' })
   @ApiResponse({ status: 404, description: 'Hire request not found' })
   @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
   @ApiResponse({ status: 404, description: 'Panel candidates not found' })
@@ -242,6 +242,22 @@ export class HireRequestController {
     return {
       status: 200,
       message: 'Panel returned successfully',
+      data: result,
+    }
+  }
+
+  @Get('get-panels-readable/all')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('organization_super_admin', 'organization_admin')
+  @ApiProperty({ description: 'Get all readable Panels of the specific/current logged organization' })
+  @ApiResponse({ status: 200, description: 'Panels returned successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Panels not found for this current organization' })
+  async getPanelsByOrganization(@CurrentUser() user: USER) {
+    const result = await this.hireRequestService.getPanelsByOrganization(user);
+    return {
+      status: 200,
+      message: 'Panels returned successfully',
       data: result,
     }
   }

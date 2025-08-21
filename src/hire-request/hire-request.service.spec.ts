@@ -724,6 +724,74 @@ describe('HireRequestService', () => {
     });
   });
 
+
+  describe('getPanelsByOrganization', () => {
+    const organizationId = 'org1';
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should throw NotFoundException if user has no organization', async () => {
+      await expect(
+        service.getPanelsByOrganization({ ...user, organization_id: null })
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if no hireRequests found', async () => {
+      prismaMock.hireRequest.findMany.mockResolvedValue(null);
+
+      await expect(service.getPanelsByOrganization(user))
+        .rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if hireRequests is empty array', async () => {
+      prismaMock.hireRequest.findMany.mockResolvedValue([]);
+
+      await expect(service.getPanelsByOrganization(user))
+        .rejects.toThrow(NotFoundException);
+    });
+
+    it('should return hireRequests with panels and candidates', async () => {
+      const mockResult = [
+        {
+          id: 'hr1',
+          panels: [
+            {
+              id: 'panel1',
+              readable: true,
+              panelCandidates: [
+                { id: 'pc1', candidate: { id: 'cand1', name: 'John Doe' } },
+              ],
+            },
+          ],
+        },
+      ];
+
+      prismaMock.hireRequest.findMany.mockResolvedValue(mockResult);
+
+      const result = await service.getPanelsByOrganization(user);
+
+      expect(result).toEqual(mockResult);
+      expect(prismaMock.hireRequest.findMany).toHaveBeenCalledWith({
+        where: {
+          organization: { id: organizationId },
+          panels: { some: { readable: true } },
+        },
+        include: {
+          panels: {
+            include: {
+              panelCandidates: {
+                include: { candidate: true },
+              },
+            },
+          },
+        },
+      });
+    });
+  });
+  
+
   describe('scheduleInterview', () => {
     const baseId = 'hr1';
     const baseData = {
