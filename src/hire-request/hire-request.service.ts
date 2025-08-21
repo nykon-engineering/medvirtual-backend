@@ -25,7 +25,7 @@ export class HireRequestService {
     private readonly prisma: PrismaService
   ) {}
 
-  async create(data: CreateHireRequestDto, user: USER):Promise<string> {  
+  async create(data: CreateHireRequestDto, user: USER):Promise<any> {  
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const {skills, client_id, ...hireRequestData} = data;
@@ -80,7 +80,7 @@ export class HireRequestService {
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
 
-    return 'Hire request created successfully';
+    return newHireRequest;
   }
 
   async findAll(user: USER): Promise<object[]> {

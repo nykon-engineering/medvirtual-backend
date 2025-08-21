@@ -121,7 +121,7 @@ describe('HireRequestService', () => {
       };
 
       const result = await service.create(dto as any, user);
-      expect(result).toBe('Hire request created successfully');
+      expect(result).toEqual({ id: 'hr1' });
       expect(prismaMock.hireRequest.create).toHaveBeenCalled();
       expect(prismaMock.hireRequestSkill.createMany).toHaveBeenCalled();
       expect(prismaMock.candidatePanel.create).toHaveBeenCalled();
@@ -134,7 +134,7 @@ describe('HireRequestService', () => {
       const dto = { ...baseDto };
   
       const result = await service.create(dto as any, user);
-      expect(result).toBe('Hire request created successfully');
+      expect(result).toEqual({ id: 'hr1' });
       expect(prismaMock.hireRequestSkill.createMany).not.toHaveBeenCalled();
       expect(prismaMock.candidatePanel.create).toHaveBeenCalled();
     });
@@ -1289,7 +1289,6 @@ describe('HireRequestService', () => {
     });
   });
   
-  /*
   describe('changeWinner', () => {
     const baseId = 'hr1';
     const data = { winner_id: 'cand1' };
@@ -1297,8 +1296,8 @@ describe('HireRequestService', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       (global as any).dbToStageDictionary = {
-        pipeline_stage_hired: 'Hired',
-        pipeline_stage_losers: 'Available Candidates',
+        pipeline_stage_hired: '261214844',
+        pipeline_stage_losers: '261075105',
       };
     });
   
@@ -1382,24 +1381,24 @@ describe('HireRequestService', () => {
       // check HubSpot API calls for losers (loop sequencial)
       expect(axiosPatchMock).toHaveBeenCalledWith(
         expect.stringContaining('hub2'),
-        expect.objectContaining({ properties: { hs_pipeline_stage: 'pipeline_stage_losers' } }),
+        expect.objectContaining({ properties: { hs_pipeline_stage: '261075105' } }),
         expect.any(Object),
       );
       expect(axiosPatchMock).toHaveBeenCalledWith(
         expect.stringContaining('hub3'),
-        expect.objectContaining({ properties: { hs_pipeline_stage: 'pipeline_stage_losers' } }),
+        expect.objectContaining({ properties: { hs_pipeline_stage: '261075105' } }),
         expect.any(Object),
       );
   
       // check HubSpot API call for winner
       expect(axiosPatchMock).toHaveBeenCalledWith(
         expect.stringContaining('hub123'),
-        expect.objectContaining({ properties: { hs_pipeline_stage: 'pipeline_stage_hired' } }),
+        expect.objectContaining({ properties: { hs_pipeline_stage: '261214844' } }),
         expect.any(Object),
       );
     });
   });
-  */
+  
   
   
 });
