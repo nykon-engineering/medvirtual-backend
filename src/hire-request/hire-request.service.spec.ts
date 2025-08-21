@@ -702,20 +702,18 @@ describe('HireRequestService', () => {
 
       const result = await service.getPanel(baseId, user);
 
-      expect(result).toHaveProperty('hireRequestId', baseId);
-      expect(result).toHaveProperty('panelId', basePanel.id);
+      expect(result).toHaveProperty('hireRequest', { id: baseId});
+      expect(result).toHaveProperty('panel', { id: basePanel.id});
       expect(result.panelCandidates).toEqual(basePanelCandidates);
 
       expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
         where: {
           id: baseId,
           org_id: user.role.includes('organization') ? user.organization_id : undefined,
-        },
-        select: { id: true },
+        }
       });
       expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
-        where: { hire_request_id: baseHireRequest.id },
-        select: { id: true },
+        where: { hire_request_id: baseHireRequest.id }
       });
       expect(prismaMock.panelCandidate.findMany).toHaveBeenCalledWith(
         expect.objectContaining({

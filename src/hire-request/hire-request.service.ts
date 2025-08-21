@@ -460,9 +460,6 @@ console.log('Candidates:', data.candidates_id);
       where: {
         id: id,
         org_id: user.role.includes('organization') ?  user.organization_id : undefined,
-      },
-      select: {
-        id: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -471,13 +468,10 @@ console.log('Candidates:', data.candidates_id);
       where: {
         hire_request_id: hireRequest.id,
       },
-      select:{
-        id : true,
-      }
     });
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
-    result.hireRequestId = id;
-    result.panelId = panel.id;
+    result.hireRequest = hireRequest;
+    result.panel = panel;
 
     const panelCandidates = await this.prisma.panelCandidate.findMany({
       where: {
