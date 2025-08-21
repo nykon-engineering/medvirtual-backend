@@ -218,6 +218,30 @@ export class HireRequestService {
 
     if (data.status === 'cancelled'){
 
+      const candidates = await this.prisma.panelCandidate.findMany({
+        where: {
+          panel: {
+            hire_request_id: id,
+          },
+        },
+        select: {
+          candidate: {
+            select: {
+              id: true,
+              hubspot_id: true,
+            }
+          }
+        },
+      })
+
+      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Available Candidates';
+      })
+      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
+      //update candidates pipeline status to 'Available Candidates'
+      //comunicate with hubspot to update status
+      
+
       //update all candidates for the hire request to 'returned_to_pool'
       const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
         where: {
@@ -229,32 +253,9 @@ export class HireRequestService {
           status: 'returned_to_pool',
         },
       });
-
-      //update candidates pipeline status to '261075105'
-      /*
-      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-        return dbToStageDictionary[key] === 'Available Candidates';
-      })
-      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
-      const candidatesPipelineUpdated = await this.prisma.candidate.updateMany({
-        where: {
-          id: {
-            in: candidatesUpdated.map(c => c.candidate_id),
-          },
-        },
-        data: {
-          pipeline_status: pipelineStatus,
-        },
-      });
-      
-      comunicar com o hubspot
-      */
-
-
     }
-    /*
-      next or previus stages;
-    */
+
+    
     if ( 
       Number(newKey)+1 === Number(currentKey) ||
       Number(newKey)-1 === Number(currentKey) || 
@@ -448,16 +449,20 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatus
       }
     };
-    candidates.forEach(async (candidate) => {
-      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
-        body,
-        {
+    await Promise.all(
+      candidates.map((candidate) =>
+        axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+          body,
+          {
             headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json'
-            }
-        })
-    })
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+      )
+    );
 
     return true;
   }
@@ -542,16 +547,20 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatus
       }
     };
-    candidates.forEach(async (candidate) => {
-      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
-        body,
-        {
+    await Promise.all(
+      candidates.map((candidate) =>
+        axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+          body,
+          {
             headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json'
-            }
-        })
-    })
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+      )
+    );
 
 
 
@@ -1012,20 +1021,20 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatusLosers
       }
     };
-    loserExists.forEach(async (loser) => {
-      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
-        bodyLosser,
-        {
+    await Promise.all(
+      loserExists.map((loser) =>
+        axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
+          bodyLosser,
+          {
             headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json'
-            }
-        })
-    }
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        )
+      )
     );
-
-
-
 
     
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
