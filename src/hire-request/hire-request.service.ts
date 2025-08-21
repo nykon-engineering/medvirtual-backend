@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { HireRequestStatus, USER } from '@prisma/client';
+import axios from 'axios';
 
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,7 +16,7 @@ import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
-import axios from 'axios';
+
 
 @Injectable()
 export class HireRequestService {
@@ -553,9 +554,10 @@ export class HireRequestService {
         hs_pipeline_stage: pipelineStatus
       }
     };
-    await Promise.all(
-      candidates.map((candidate) =>
-        axios.patch(
+
+    for (const candidate of candidates) {
+      try {
+        await axios.patch(
           `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
           body,
           {
@@ -563,12 +565,13 @@ export class HireRequestService {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
+            timeout: 120000,
           }
-        )
-      )
-    );
-
-
+        );
+      } catch (error) {
+        console.error('Error updating loser candidate in HubSpot:', error.code);
+      }
+    }
 
     return true;
   }
@@ -730,6 +733,12 @@ export class HireRequestService {
             specialization: true,
             location: true,
             assign_user_id: true,
+            skills: {
+              select: {
+                skill_name: true,
+                required_level: true
+              },
+            }
           },
         },
       },
@@ -1060,7 +1069,7 @@ export class HireRequestService {
     });
     if (!candidateUpdated) throw new BadRequestException(`Candidate not updated to endorsed`);
 
-    //communication with hubspot to update status ired can be added here
+    //communication with hubspot to update status hired can be added here
     const bodyWinner = {
       properties: {
         hs_pipeline_stage: pipelineStatus
@@ -1134,6 +1143,12 @@ export class HireRequestService {
             specialization: true,
             location: true,
             assign_user_id: true,
+            skills: {
+              select: {
+                skill_name: true,
+                required_level: true
+              },
+            }
           },
         },
       },
