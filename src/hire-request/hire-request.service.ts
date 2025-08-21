@@ -95,7 +95,36 @@ export class HireRequestService {
       include: {
         skills: true,
         organization: true,
-        panels: true,
+        panels: {
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+            readable: true,
+            panelCandidates: {
+              select: {
+                status: true,
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                    email: true,
+                    country: true,
+                    languages: true,
+                    specialization: true,
+                    skills: {
+                      select: {
+                        skill_name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }
       }
     })
     if(!hireRequests) throw new NotFoundException('No hire requests found');
@@ -234,13 +263,46 @@ export class HireRequestService {
           }
         },
       })
+      
 
       const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
         return dbToStageDictionary[key] === 'Available Candidates';
       })
       if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
       //update candidates pipeline status to 'Available Candidates'
+      const candidatesPipelineUpdated = await this.prisma.candidate.updateMany({
+        where: {
+          id: {
+            in: candidates.map(c => c.candidate.id),
+          },
+        },
+        data: {
+          pipeline_status: pipelineStatus,
+        },
+      });
       //comunicate with hubspot to update status
+      const body = {
+        properties: {
+          hs_pipeline_stage: pipelineStatus
+        }
+      };
+  
+      for (const candidate of candidates) {
+        try {
+          await axios.patch(
+            `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.candidate.hubspot_id}`,
+            body,
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              }
+            }
+          );
+        } catch (error) {
+          console.error('Error updating loser candidate in HubSpot:', error.code);
+        }
+      }
       
 
       //update all candidates for the hire request to 'returned_to_pool'
@@ -460,8 +522,7 @@ export class HireRequestService {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
-            },
-            timeout: 120000,
+            }
           }
         );
       } catch (error) {
@@ -564,8 +625,7 @@ export class HireRequestService {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
-            },
-            timeout: 120000,
+            }
           }
         );
       } catch (error) {
@@ -1048,8 +1108,7 @@ export class HireRequestService {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
-            },
-            timeout: 120000,
+            }
           }
         );
       } catch (error) {
@@ -1082,8 +1141,7 @@ export class HireRequestService {
             headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
                 'Content-Type': 'application/json'
-            },
-            timeout: 120000, // Set a timeout of 120 seconds
+            }
         })
     }catch (error) {
       console.error('Error updating candidate in HubSpot:', error);

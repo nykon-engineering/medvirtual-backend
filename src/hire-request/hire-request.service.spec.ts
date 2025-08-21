@@ -987,6 +987,9 @@ describe('HireRequestService', () => {
                 experiences: [
                   { start_date: new Date('2016-01-01') },
                 ],
+                skills: [
+                  { skill_name: 'JavaScript', required_level: 'advanced' },
+                ],
               },
             },
           ],
@@ -1005,6 +1008,9 @@ describe('HireRequestService', () => {
             specialization: 'Frontend',
             location: 'Remote',
             assign_user_id: 'user123',
+            skills: [
+              { skill_name: 'React', required_level: 'advanced' },
+            ],
           },
         },
       ];
@@ -1065,6 +1071,12 @@ describe('HireRequestService', () => {
               specialization: true,
               location: true,
               assign_user_id: true,
+              skills:{
+                select: {
+                  skill_name: true,
+                  required_level: true,
+                },
+              }
             },
           },
         },
@@ -1278,7 +1290,7 @@ describe('HireRequestService', () => {
   });
   
   /*
-    describe('changeWinner', () => {
+  describe('changeWinner', () => {
     const baseId = 'hr1';
     const data = { winner_id: 'cand1' };
   
@@ -1310,7 +1322,6 @@ describe('HireRequestService', () => {
   
     it('should throw NotFoundException if hireRequest not found', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue(null);
-  
       await expect(service.changeWinner(baseId, data, user))
         .rejects.toThrow(NotFoundException);
     });
@@ -1318,98 +1329,28 @@ describe('HireRequestService', () => {
     it('should throw NotFoundException if panel does not exist', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
-  
       await expect(service.changeWinner(baseId, data, user))
         .rejects.toThrow(NotFoundException);
     });
   
-    it('should throw NotFoundException if winner does not exist in panel', async () => {
+    it('should throw NotFoundException if winner not in panel', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.findFirst.mockResolvedValue(null);
-  
       await expect(service.changeWinner(baseId, data, user))
         .rejects.toThrow(NotFoundException);
     });
   
-    it('should throw NotFoundException if no losers found in panel', async () => {
+    it('should throw NotFoundException if no losers found', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([]); // nenhum outro candidato
-  
+      prismaMock.panelCandidate.findMany.mockResolvedValue([]);
       await expect(service.changeWinner(baseId, data, user))
         .rejects.toThrow(NotFoundException);
     });
   
-    it('should throw BadRequestException if panel update fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue(null);
-  
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if hireRequest update fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
-      prismaMock.hireRequest.update.mockResolvedValue(null);
-  
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if winner update fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
-      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
-      prismaMock.panelCandidate.updateMany.mockResolvedValueOnce(null);
-  
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if updating other candidates fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
-      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
-      prismaMock.panelCandidate.updateMany
-        .mockResolvedValueOnce({ count: 1 }) // winner
-        .mockResolvedValueOnce(null);        // losers
-  
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if candidate update fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
-      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
-      prismaMock.panelCandidate.updateMany
-        .mockResolvedValueOnce({ count: 1 }) // winner ok
-        .mockResolvedValueOnce({ count: 1 }); // losers ok
-      prismaMock.candidate.update.mockResolvedValue(null);
-  
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should complete successfully and call Hubspot API for winner and losers', async () => {
+    it('should complete successfully and call HubSpot API for winner and losers sequentially', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
@@ -1432,34 +1373,33 @@ describe('HireRequestService', () => {
   
       const result = await service.changeWinner(baseId, data, user);
   
-      expect(result).toBe(true);
-  
-      // check candidate updated
+      expect(result).toBeDefined();
       expect(prismaMock.candidate.update).toHaveBeenCalledWith({
         where: { id: data.winner_id },
         data: { pipeline_status: expect.any(String) },
       });
   
-      // check HubSpot API calls for losers
+      // check HubSpot API calls for losers (loop sequencial)
       expect(axiosPatchMock).toHaveBeenCalledWith(
         expect.stringContaining('hub2'),
-        expect.objectContaining({ properties: { hs_pipeline_stage: expect.any(String) } }),
+        expect.objectContaining({ properties: { hs_pipeline_stage: 'pipeline_stage_losers' } }),
         expect.any(Object),
       );
       expect(axiosPatchMock).toHaveBeenCalledWith(
         expect.stringContaining('hub3'),
-        expect.objectContaining({ properties: { hs_pipeline_stage: expect.any(String) } }),
+        expect.objectContaining({ properties: { hs_pipeline_stage: 'pipeline_stage_losers' } }),
         expect.any(Object),
       );
   
       // check HubSpot API call for winner
       expect(axiosPatchMock).toHaveBeenCalledWith(
         expect.stringContaining('hub123'),
-        expect.objectContaining({ properties: { hs_pipeline_stage: expect.any(String) } }),
+        expect.objectContaining({ properties: { hs_pipeline_stage: 'pipeline_stage_hired' } }),
         expect.any(Object),
       );
     });
   });
   */
+  
   
 });
