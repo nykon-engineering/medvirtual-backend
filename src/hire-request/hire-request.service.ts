@@ -288,27 +288,31 @@ export class HireRequestService {
           },
         });
         //comunicate with hubspot to update status
+        
+        const inputs = candidates.map(c => ({
+            id: c.candidate.hubspot_id,
+            properties: {
+              hs_pipeline_stage: pipelineStatus
+            }
+        }))
         const body = {
-          properties: {
-            hs_pipeline_stage: pipelineStatus
-          }
+          inputs: inputs,
+          idProperty: "hs_object_id"
         };
-    
-        for (const candidate of candidates) {
-          try {
-            await axios.patch(
-              `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.candidate.hubspot_id}`,
-              body,
-              {
-                headers: {
-                  Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                  'Content-Type': 'application/json',
-                }
+
+        try {
+          await axios.post(
+            `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/update`,
+            body,
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
               }
-            );
-          } catch (error) {
-            console.error('Error updating loser candidate in HubSpot:', error.code);
-          }
+            }
+          );
+        } catch (error) {
+          console.error('Error updating loser candidate in HubSpot:', error.code);
         }
         
   

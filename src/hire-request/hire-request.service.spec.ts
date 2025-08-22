@@ -105,49 +105,74 @@ describe('HireRequestService', () => {
       jest.clearAllMocks();
     });
   
-
+    it('should throw NotFoundException if user has no org', async () => {
+      await expect(service.create(baseDto as any, { ...user, organization_id: null }))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should throw BadRequestException if user is system and has no client_id', async () => {
+      const systemUser = { ...user, role: 'system' }; // role como string
+      await expect(service.create(baseDto as any, systemUser))
+        .rejects.toThrow(BadRequestException); // <<< agora recebe BadRequestException
+    });
+  
+    it('should throw NotFoundException if organization not found', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue(null);
+      await expect(service.create(baseDto as any, user))
+        .rejects.toThrow(NotFoundException);
+    });
+  
     it('should create hire request with skills', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.hireRequestSkill.createMany.mockResolvedValue({ count: 2 });
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
-      prismaMock.organization.findUnique.mockResolvedValue({ id: 'org1' });
-
+      prismaMock.hireRequest.findUnique.mockResolvedValue({
+        id: 'hr1',
+        skills: [{ skill_name: 'JS' }, { skill_name: 'TS' }],
+      });
+  
       const dto = {
-        title: 'Dev',
+        ...baseDto,
         skills: [
           { name: 'JS', level: 'advanced' },
           { name: 'TS', level: 'intermediate' },
         ],
       };
-
+  
       const result = await service.create(dto as any, user);
-      expect(result).toEqual({ id: 'hr1' });
+  
+      expect(result).toEqual({
+        id: 'hr1',
+        skills: [{ skill_name: 'JS' }, { skill_name: 'TS' }],
+      });
       expect(prismaMock.hireRequest.create).toHaveBeenCalled();
       expect(prismaMock.hireRequestSkill.createMany).toHaveBeenCalled();
       expect(prismaMock.candidatePanel.create).toHaveBeenCalled();
     });
-
+  
     it('should create hire request without skills', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1', skills: [] });
   
       const dto = { ...baseDto };
   
       const result = await service.create(dto as any, user);
-      expect(result).toEqual({ id: 'hr1' });
+  
+      expect(result).toEqual({ id: 'hr1', skills: [] });
       expect(prismaMock.hireRequestSkill.createMany).not.toHaveBeenCalled();
       expect(prismaMock.candidatePanel.create).toHaveBeenCalled();
     });
-
-    it('should set status as pending_signature if user is prospect', async () => {
+  
+    it('should set status as pending_signature if organization is not active', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'prospect' });
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
-      prismaMock.organization.findUnique.mockResolvedValue({ id: 'org1' });
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1', skills: [] });
   
-      const user2 = { ...user, status: 'prospect' };
-      const dto = { ...baseDto };
-  
-      await service.create(dto as any, user2);
+      await service.create(baseDto as any, user);
   
       expect(prismaMock.hireRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -157,19 +182,62 @@ describe('HireRequestService', () => {
         }),
       );
     });
-
-    it('should throw NotFoundException if user has no org', async () => {
-      await expect(service.create({} as any, { ...user, organization_id: null }))
-        .rejects.toThrow(NotFoundException);
+  
+    it('should set status as new if organization is active', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+      prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
+      prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1', skills: [] });
+  
+      await service.create(baseDto as any, user);
+  
+      expect(prismaMock.hireRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'new',
+          }),
+        }),
+      );
     });
-
+  
     it('should throw BadRequestException if hireRequest is not created', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
       prismaMock.hireRequest.create.mockResolvedValue(null);
   
       await expect(service.create(baseDto as any, user))
         .rejects.toThrow(BadRequestException);
     });
+  
+    it('should throw BadRequestException if hireRequestSkills is not created when skills exist', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+      prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
+      prismaMock.hireRequestSkill.createMany.mockResolvedValue(null);
+  
+      const dto = {
+        ...baseDto,
+        skills: [{ name: 'JS', level: 'advanced' }],
+      };
+  
+      await expect(service.create(dto as any, user))
+        .rejects.toThrow(BadRequestException);
+    });
+  
+    it('should throw BadRequestException if panel is not created', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+      prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
+      prismaMock.hireRequestSkill.createMany.mockResolvedValue({ count: 1 });
+      prismaMock.candidatePanel.create.mockResolvedValue(null);
+  
+      const dto = {
+        ...baseDto,
+        skills: [{ name: 'JS', level: 'advanced' }],
+      };
+  
+      await expect(service.create(dto as any, user))
+        .rejects.toThrow(BadRequestException);
+    });
   });
+  
 
   describe('findAll', () => {
     it('should return hire requests', async () => {
