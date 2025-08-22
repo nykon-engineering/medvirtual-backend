@@ -393,12 +393,14 @@ export class HireRequestService {
   async reassign(id: string, user: USER, data: reassignDTO): Promise<boolean> {
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const hireRequest = await this.prisma.hireRequest.updateMany({
+    const hireRequest = await this.prisma.hireRequest.update({
       where: {
         id: id
       },
       data:{
-        assign_user_id: data.user_id,
+        assigned_user: data.user_id
+        ? { connect: { id: data.user_id } }
+        : { disconnect: true },
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);

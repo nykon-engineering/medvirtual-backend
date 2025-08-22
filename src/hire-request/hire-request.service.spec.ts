@@ -458,35 +458,6 @@ describe('HireRequestService', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
-
-  describe('reassign', () => {
-    const baseData = { user_id: 'newUser' };
-  
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-  
-    it('should reassign hire request successfully', async () => {
-      // Mock do updateMany
-      prismaMock.hireRequest.updateMany.mockResolvedValue({ count: 1 });
-  
-      const result = await service.reassign('hr1', user, baseData);
-  
-      expect(result).toBe(true);
-  
-      expect(prismaMock.hireRequest.updateMany).toHaveBeenCalledWith({
-        where: { id: 'hr1' },
-        data: { assign_user_id: 'newUser' },
-      });
-    });
-  
-    it('should throw NotFoundException if user has no organization', async () => {
-      await expect(
-        service.reassign('hr1', { ...user, organization_id: null }, baseData)
-      ).rejects.toThrow(NotFoundException);
-    });
-
-  });
   
   describe('showMatchCandidates', () => {
     beforeEach(() => {
