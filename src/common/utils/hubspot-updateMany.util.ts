@@ -1,6 +1,8 @@
 import axios from "axios";
 
 export async function hubspotUpdateMany(candidates, pipelineStatus){
+  return true;  
+  
     try {
         const inputs = await candidates.map(c => ({
           id: c.hubspot_id,
