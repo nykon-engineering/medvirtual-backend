@@ -272,8 +272,8 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
-    const assaign_user = await this.verifyAssignUser(data.status, id);
-    if (!assaign_user) {
+    const assign_user = await this.verifyAssignUser(data.status, id);
+    if (!assign_user) {
       throw new BadRequestException(`Status ${data.status} requires an assigned user`);
     }
 
@@ -631,7 +631,6 @@ export class HireRequestService {
   async editPanel(data: ConfirmPanelHireRequestDto, user: USER) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
-    if (data.candidates_id.length < 3) throw new BadRequestException('You need to chosse at least 3 candidates');
 
     //check if panel exists
     const panelExists = await this.prisma.candidatePanel.findFirst({
