@@ -317,6 +317,13 @@ export class HireRequestService {
 
 
     if (data.status === 'cancelled'){
+
+      //remove all candidates from the panel
+      await this.prisma.candidatePanel.deleteMany({
+        where: {
+          hire_request_id: id,
+        },
+      })
       
       if (candidates.length > 0) {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
@@ -337,21 +344,9 @@ export class HireRequestService {
 
         //comunicate with hubspot to update status
         const candidatesHubspot = candidates.map(c => c.candidate);
-        console.log('Candidates to hubspot',candidatesHubspot);
         const updateHubspot = await hubspotUpdateMany(candidatesHubspot, pipelineStatus);
         if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
-        
-        //update all candidates for the hire request to 'returned_to_pool'
-        const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
-          where: {
-            panel: {
-              hire_request_id: id,
-            },
-          },
-          data: {
-            status: 'returned_to_pool',
-          },
-        });
+      
       }
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
