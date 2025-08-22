@@ -314,8 +314,6 @@ export class HireRequestService {
       return hireRequestDictionary[key] === data.status;
     })
 
-
-
     if (data.status === 'cancelled'){
 
       //remove all candidates from the panel
@@ -435,7 +433,7 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     
-    }else if(hireRequest.status == 'panel_ready' && data.status === 'placement_completed' ){
+    }else if(hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
       const panelExists = await this.prisma.candidatePanel.findFirst({
         where: {
           hire_request_id: id,
@@ -446,7 +444,7 @@ export class HireRequestService {
       });
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       const winnerCandidate = panelExists.panelCandidates.find(pc => pc.status === 'selected_by_client');
-      if (!winnerCandidate) throw new BadRequestException(`You need to select a candidate as winner before completing the placement`);
+      if (!winnerCandidate) throw new BadRequestException(`You need to select a candidate as winner before before moving to ${data.status.replace("_"," ").toUpperCase()}`);
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
@@ -527,7 +525,7 @@ export class HireRequestService {
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
       if( panelExists.interviews.length === 0) {
-        throw new BadRequestException(`You need to schedule an interview before changing the status to interview_scheduled`);
+        throw new BadRequestException(`You need to schedule an interview before changing the status to ${data.status.replace("_"," ").toUpperCase()}`);
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
@@ -547,17 +545,11 @@ export class HireRequestService {
       if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
       if (!panelExists.scheduled_date){
-        throw new BadRequestException(`You need to schedule an interview before changing the status to awaiting_decision`);
+        throw new BadRequestException(`You need to schedule an interview before changing the status to ${data.status.replace("_"," ").toUpperCase()}`);
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
-    }else if ( 
-      hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed') { 
-        
-        const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
-        if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-        return true;
     }else{
       throw new BadRequestException(`Status change from ${hireRequest.status.replace("_"," ").toUpperCase()} to ${data.status.replace("_"," ").toUpperCase()} is not allowed`);
     }
