@@ -26,13 +26,13 @@ export class HireRequestService {
     private readonly prisma: PrismaService
   ) {}
 
-  private async verifyAssignUser (statusTo, hireRequest_id){
-    try{
+  private async verifyAssignUser (statusTo, hireRequest_id): Promise<boolean> {
+
       const hireRequest = await this.prisma.hireRequest.findUnique({
         where: { id: hireRequest_id },
         select: {
           assign_user_id: true,
-                  }
+        }
       });
 
       if (statusTo==='pending_signature' || statusTo === 'new' || statusTo === 'cancelled'){
@@ -44,9 +44,6 @@ export class HireRequestService {
           throw new BadRequestException(`Status ${statusTo} requires an assigned user`);
         }
       }
-    }catch (error){
-      throw new BadRequestException(`Error verifying assigned user`);
-    }
   }
 
   private async updateHireRequestStatus(id: string, status: HireRequestStatus): Promise<boolean> {
@@ -275,7 +272,10 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
-    await this.verifyAssignUser(data.status, id);
+    const assaign_user = await this.verifyAssignUser(data.status, id);
+    if (!assaign_user) {
+      throw new BadRequestException(`Status ${data.status} requires an assigned user`);
+    }
 
     if (!data || !data.status) throw new BadRequestException('Data for status change is required');
     const hireRequest = await this.prisma.hireRequest.findUnique({
@@ -401,11 +401,14 @@ export class HireRequestService {
       
     } else if (hireRequest.status == 'new' && data.status === 'sourcing'){
       //verify if there panel created with this hire_request_id
+      let updatedRequest;
       const panelExists = await this.prisma.candidatePanel.findFirst({
         where: {
           hire_request_id: id,
         },
       });
+      updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       if (panelExists) return true;
 
       //create Panel with default user_id
@@ -416,7 +419,7 @@ export class HireRequestService {
         }
       })
 
-      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     
