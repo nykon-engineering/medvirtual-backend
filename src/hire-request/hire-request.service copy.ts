@@ -564,79 +564,65 @@ export class HireRequestService {
     if (data.candidates_id.length < 3) throw new BadRequestException('You need to chosse at least 3 candidates');
 
     //check if panel exists
-    const panelExists = await this.prisma.candidatePanel.findFirst({
+    const panel = await this.prisma.candidatePanel.findFirst({
       where: {hire_request_id: data.hireRequest_id,},
       select: {id: true,},
     });
-    if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+    if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Endorsed to Client';
     })
     if (!pipelineStatus) throw new BadRequestException(`Pipeline status mapping not found`);
 
+    try {
+      //usar transação para garantir atomicidade no banco
+      const result = await this.prisma.$transaction(async (tx) => {
+  
+        //remove old panel candidates
+        await tx.panelCandidate.deleteMany({
+          where: { panel_id: panel.id },
+        });
+  
+        //add new candidates
+        await tx.panelCandidate.createMany({
+          data: data.candidates_id.map(candidateId => ({
+            candidate_id: candidateId,
+            panel_id: panel.id,
+          })),
+        });
+  
+        //update panel status
+        await tx.hireRequest.update({
+          where: { id: data.hireRequest_id },
+          data: { status: 'sourcing' },
+        });
+  
+        //update candidates pipeline status
+        await tx.candidate.updateMany({
+          where: { id: { in: data.candidates_id } },
+          data: { pipeline_status: pipelineStatus },
+        });
+  
+        //select candidates for HubSpot update
+        const candidates = await tx.candidate.findMany({
+          where: { id: { in: data.candidates_id } },
+          select: { id: true, hubspot_id: true },
+        });
+  
+        if (!candidates.length) throw new NotFoundException(`Candidates not found`);
+  
 
-    //remove old panel
-    const removeCandidates = await this.prisma.panelCandidate.deleteMany({
-      where: {
-        panel_id: panelExists.id,
-      },
-    });
-    if (!removeCandidates) throw new BadRequestException(`Panel candidates not removed`);
-
-    //add each candidate to the panel
-    const addCandidates = await this.prisma.panelCandidate.createMany({
-      data: data.candidates_id.map(candidateId => ({
-        candidate_id: candidateId,
-        panel_id: panelExists.id,
-      })),
-    })
-    if (!addCandidates) throw new BadRequestException(`Panel candidates not added`);
-
-    //update panel with status = 'sourcing'
-    const panelUpdated = await this.prisma.hireRequest.update({
-      where: {
-        id: data.hireRequest_id,
-      },
-      data: {
-        status: 'sourcing',
-      },
-    });
-    if (!panelUpdated) throw new BadRequestException(`Panel not confirmed`);
-
-    
-    //update candidates with pipelinestatus = 'Endorsed to Client'
-    const candidatesUpdated = await this.prisma.candidate.updateMany({
-      where: {
-        id: {
-          in: data.candidates_id,
-        },
-      },
-      data: {
-        pipeline_status: pipelineStatus,
-      },
-    });
-    if (!candidatesUpdated) throw new BadRequestException(`Candidates not updated to endorsed`);
-    
-    //select candidates
-    const candidates = await this.prisma.candidate.findMany({
-      where: {
-        id: {
-          in: data.candidates_id,
-        },
-      },
-      select: {
-        id: true,
-        hubspot_id: true,
-      },
-    });
-    if( !candidates) throw new NotFoundException(`Candidates not found`);
-
-    //comunicate with hubspot to update status
-    const updateHubspot = await hubspotUpdateMany(candidates, pipelineStatus);
-    if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
-
-    return true;
+        const hubspotUpdated = await hubspotUpdateMany(candidates, pipelineStatus);
+        if (!hubspotUpdated) throw new Error('HubSpot update failed');
+  
+        return true;
+      });
+  
+      return result;
+    } catch (error) {
+      throw new BadRequestException(error.message || 'Failed to edit panel');
+    }
   }
 
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
