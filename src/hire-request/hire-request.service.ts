@@ -478,7 +478,6 @@ export class HireRequestService {
 
     }else if(hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){
       //remove the interview_scheduled panel
-
       //remove the interview_scheduled panel
       const panelExists = await this.prisma.candidatePanel.findFirst({
         where: {
@@ -512,13 +511,48 @@ export class HireRequestService {
       return true;
 
     }else if(hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return true;
+    }else if(hireRequest.status == 'panel_ready' && data.status === 'interview_scheduled' ){
+      const panelExists = await this.prisma.candidatePanel.findFirst({
+        where: {
+          hire_request_id: id,
+        },
+        include: {
+          panelCandidates: true,
+          interviews: true,
+        }
+      });
+      if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
+      if( panelExists.interviews.length === 0) {
+        throw new BadRequestException(`You need to schedule an interview before changing the status to interview_scheduled`);
+      }
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return true;
+
+    
+    }else if(hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
+      const panelExists = await this.prisma.candidatePanel.findFirst({
+        where: {
+          hire_request_id: id,
+        },
+        include: {
+          panelCandidates: true,
+          interviews: true,
+        }
+      });
+      if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
+      if (!panelExists.scheduled_date){
+        throw new BadRequestException(`You need to schedule an interview before changing the status to awaiting_decision`);
+      }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     }else if ( 
-      Number(newKey)+1 === Number(currentKey) ||
-      Number(newKey)-1 === Number(currentKey) || 
       hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed') { 
         
         const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
