@@ -16,6 +16,7 @@ import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { hubspotUpdateMany } from '../common/utils/hubspot-updateMany.util';
 
 
 @Injectable()
@@ -287,34 +288,12 @@ export class HireRequestService {
             pipeline_status: pipelineStatus,
           },
         });
-        //comunicate with hubspot to update status
-        
-        const inputs = candidates.map(c => ({
-            id: c.candidate.hubspot_id,
-            properties: {
-              hs_pipeline_stage: pipelineStatus
-            }
-        }))
-        const body = {
-          inputs: inputs,
-          idProperty: "hs_object_id"
-        };
-        console.log("New body for HubSpot:", body);
 
-        try {
-          await axios.post(
-            `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/update`,
-            body,
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-              }
-            }
-          );
-        } catch (error) {
-          console.log('Error updating loser candidate in HubSpot:', error.code);
-        }
+        //comunicate with hubspot to update status
+        const candidatesHubspot = candidates.map(c => c.candidate);
+        console.log('Candidates to hubspot',candidatesHubspot);
+        const updateHubspot = await hubspotUpdateMany(candidatesHubspot, pipelineStatus);
+        if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
         
         //update all candidates for the hire request to 'returned_to_pool'
         const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
@@ -520,31 +499,10 @@ export class HireRequestService {
     });
     if( !candidates) throw new NotFoundException(`Candidates not found`);
 
-    //communication with hubspot to update status can be added here
-    const body = {
-      properties: {
-        hs_pipeline_stage: pipelineStatus
-      }
-    };
 
-    for (const candidate of candidates) {
-      try {
-        await axios.patch(
-          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
-          body,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-      } catch (error) {
-        console.error('Error updating loser candidate in HubSpot:', error.code);
-      }
-    }
-
-
+    //comunicate with hubspot to update status
+    const updateHubspot = await hubspotUpdateMany(candidates, pipelineStatus);
+    if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
 
     return true;
   }
@@ -623,29 +581,9 @@ export class HireRequestService {
     });
     if( !candidates) throw new NotFoundException(`Candidates not found`);
 
-    //communication with hubspot to update status can be added here
-    const body = {
-      properties: {
-        hs_pipeline_stage: pipelineStatus
-      }
-    };
-
-    for (const candidate of candidates) {
-      try {
-        await axios.patch(
-          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
-          body,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-      } catch (error) {
-        console.error('Error updating loser candidate in HubSpot:', error.code);
-      }
-    }
+    //comunicate with hubspot to update status
+    const updateHubspot = await hubspotUpdateMany(candidates, pipelineStatus);
+    if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
 
     return true;
   }
@@ -1104,32 +1042,11 @@ export class HireRequestService {
       },
     });
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
+
     //comunicate with hubspot to update status
-    
-    
-    const bodyLosser = {
-      properties: {
-        hs_pipeline_stage: pipelineStatusLosers
-      }
-    };
-
-    for (const loser of loserExists) {
-      try {
-        await axios.patch(
-          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${loser.candidate.hubspot_id}`,
-          bodyLosser,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-      } catch (error) {
-        console.error('Error updating loser candidate in HubSpot:', loser.candidate.id, error.code);
-      }
-    }
-
+    const candidateLosers = loserExists.map(c => c.candidate);
+    const updateHubspot = await hubspotUpdateMany(candidateLosers, pipelineStatusLosers);
+    if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
     
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
     const candidateUpdated = await this.prisma.candidate.update({
