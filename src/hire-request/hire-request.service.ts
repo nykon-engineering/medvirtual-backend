@@ -363,18 +363,19 @@ export class HireRequestService {
       const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
         return dbToStageDictionary[key] === 'Available Candidates';
       })
-      
+
+      //remove all candidates from the panel
+      await this.prisma.candidatePanel.deleteMany({
+        where: {
+          hire_request_id: id,
+        },
+      })
       if ( candidates.length > 0) {
         const candidatesToHubspot = candidates.map(c => c.candidate);
         const updateHubspot = await hubspotUpdateMany(candidatesToHubspot, pipelineStatus);
         if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
         
-        //remove all candidates from the panel
-        await this.prisma.candidatePanel.delete({
-          where: {
-            id: candidates[0].panel_id,
-          },
-        })
+        
 
       }
 
