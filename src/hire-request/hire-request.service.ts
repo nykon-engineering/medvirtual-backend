@@ -369,9 +369,6 @@ export class HireRequestService {
         const candidatesToHubspot = candidates.map(c => c.candidate);
         const updateHubspot = await hubspotUpdateMany(candidatesToHubspot, pipelineStatus);
         if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
-        
-        
-
       }
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
@@ -454,10 +451,74 @@ export class HireRequestService {
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
+    
+    }else if(hireRequest.status == 'interview_scheduled' && data.status === 'panel_ready' ){
+      //remove the interview_scheduled panel
+      const panelExists = await this.prisma.candidatePanel.findFirst({
+        where: {
+          hire_request_id: id,
+        },
+        include: {
+          panelCandidates: true,
+        }
+      });
+      if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
+      //remove the interview_scheduled panel
+      const removeInterview = await this.prisma.interview.deleteMany({
+        where:{
+          panel_id: panelExists.id,
+        }
+      });
+      if(!removeInterview) throw new BadRequestException(`Interview not removed`);
+
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return true;
+
+    }else if(hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){
+      //remove the interview_scheduled panel
+
+      //remove the interview_scheduled panel
+      const panelExists = await this.prisma.candidatePanel.findFirst({
+        where: {
+          hire_request_id: id,
+        },
+        include: {
+          panelCandidates: true,
+        }
+      });
+      if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
+      const updatedPanel = await this.prisma.candidatePanel.update({
+        where: {
+          id: panelExists.id,
+        },
+        data: {
+          scheduled_date: null
+        }
+      })
+      if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
+      //remove the interview_scheduled panel
+      const removeInterview = await this.prisma.interview.deleteMany({
+        where:{
+          panel_id: panelExists.id,
+        }
+      });
+
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return true;
+
+    }else if(hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
+
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return true;
     }else if ( 
       Number(newKey)+1 === Number(currentKey) ||
       Number(newKey)-1 === Number(currentKey) || 
-      hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ||
       hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed') { 
         
         const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
