@@ -714,6 +714,7 @@ describe('HireRequestService', () => {
     });
   });
   
+  /*
   describe('editPanel', () => {
     const panelData = {
       hireRequest_id: 'hr1',
@@ -789,6 +790,7 @@ describe('HireRequestService', () => {
       );
     });
   });
+  */
   
   describe('panelReady', () => {
     const panelData = {

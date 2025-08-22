@@ -662,17 +662,6 @@ export class HireRequestService {
     })
     if (!addCandidates) throw new BadRequestException(`Panel candidates not added`);
 
-    //update panel with status = 'sourcing'
-    const panelUpdated = await this.prisma.hireRequest.update({
-      where: {
-        id: data.hireRequest_id,
-      },
-      data: {
-        status: 'sourcing',
-      },
-    });
-    if (!panelUpdated) throw new BadRequestException(`Panel not confirmed`);
-
     
     //update candidates with pipelinestatus = 'Endorsed to Client'
     const candidatesUpdated = await this.prisma.candidate.updateMany({
