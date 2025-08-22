@@ -1,6 +1,7 @@
 import axios from "axios";
 
 export async function hubspotUpdateMany(candidates, pipelineStatus){
+    console.log("Candidates arriving on the function: ", candidates);
     try {
         const inputs = candidates.map(c => ({
           id: c.hubspot_id,
@@ -24,7 +25,7 @@ export async function hubspotUpdateMany(candidates, pipelineStatus){
         );
         return true;
       } catch (error) {
-        console.log('Error updating loser candidate in HubSpot:', error.code, error.message);
+        console.log('Error updating candidates in HubSpot:', error.code, error.message);
         return false;
       }
   

@@ -606,8 +606,9 @@ export class HireRequestService {
     if( !candidates) throw new NotFoundException(`Candidates not found`);
 
     //comunicate with hubspot to update status
+    console.log("Candidates outside the function: ", candidates);
     const updateHubspot = await hubspotUpdateMany(candidates, pipelineStatus);
-    if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
+    if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
 
     return true;
   }
