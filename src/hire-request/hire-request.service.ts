@@ -241,10 +241,23 @@ export class HireRequestService {
         status: true,
       }
     });
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
-    if (!hireRequest) {
-      throw new NotFoundException(`Hire request not found`);
-    }
+    const candidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        panel: {
+          hire_request_id: id,
+        },
+      },
+      select: {
+        candidate: {
+          select: {
+            id: true,
+            hubspot_id: true,
+          }
+        }
+      },
+    })
 
     //verify rules for changes
     const currentKey = Object.keys(hireRequestDictionary).find(key => {
@@ -254,23 +267,9 @@ export class HireRequestService {
       return hireRequestDictionary[key] === data.status;
     })
 
-    if (data.status === 'cancelled'){
 
-      const candidates = await this.prisma.panelCandidate.findMany({
-        where: {
-          panel: {
-            hire_request_id: id,
-          },
-        },
-        select: {
-          candidate: {
-            select: {
-              id: true,
-              hubspot_id: true,
-            }
-          }
-        },
-      })
+
+    if (data.status === 'cancelled'){
       
       if (candidates.length > 0) {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
@@ -308,21 +307,6 @@ export class HireRequestService {
         });
       }
 
-      
-    }
-
-    
-    if ( 
-      Number(newKey)+1 === Number(currentKey) ||
-      Number(newKey)-1 === Number(currentKey) || 
-      hireRequest.status == 'cancelled' && data.status === 'new' ||
-      hireRequest.status == 'placement_completed' && data.status === 'new' ||
-      hireRequest.status == 'cancelled' && data.status === 'sourcing' ||
-      hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ||
-      hireRequest.status == 'panel_ready' && data.status === 'placement_completed' ||
-      hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ||
-      data.status === 'cancelled'
-    ) { 
       const updatedRequest = await this.prisma.hireRequest.update({
         where: {
           id: id,
@@ -334,6 +318,46 @@ export class HireRequestService {
   
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
+      
+    }else if (hireRequest.status == 'cancelled' && data.status === 'new' || hireRequest.status == 'placement_completed' && data.status === 'new'){
+      //REOPEN AS NEW
+      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Available Candidates';
+      })
+      
+      const candidatesToHubspot = candidates.map(c => c.candidate);
+      const updateHubspot = await hubspotUpdateMany(candidatesToHubspot, pipelineStatus);
+      if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
+
+      const updatedRequest = await this.prisma.hireRequest.update({
+        where: {
+          id: id,
+        },
+        data: {
+          status: data.status as HireRequestStatus,
+        },
+      });
+  
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return true;
+    }else if ( 
+      Number(newKey)+1 === Number(currentKey) ||
+      Number(newKey)-1 === Number(currentKey) || 
+      hireRequest.status == 'cancelled' && data.status === 'sourcing' ||
+      hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ||
+      hireRequest.status == 'panel_ready' && data.status === 'placement_completed' ||
+      hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed') { 
+        const updatedRequest = await this.prisma.hireRequest.update({
+          where: {
+            id: id,
+          },
+          data: {
+            status: data.status as HireRequestStatus,
+          },
+        });
+    
+        if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+        return true;
     }else{
       throw new BadRequestException(`Status change from ${hireRequest.status.replace("_"," ").toUpperCase()} to ${data.status.replace("_"," ").toUpperCase()} is not allowed`);
     }

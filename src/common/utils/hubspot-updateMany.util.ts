@@ -1,7 +1,6 @@
 import axios from "axios";
 
 export async function hubspotUpdateMany(candidates, pipelineStatus){
-
     try {
         const inputs = candidates.map(c => ({
           id: c.hubspot_id,
@@ -13,7 +12,6 @@ export async function hubspotUpdateMany(candidates, pipelineStatus){
           inputs: inputs,
           idProperty: "hs_object_id"
         };
-        
         await axios.post(
           `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/update`,
           body,
@@ -26,7 +24,7 @@ export async function hubspotUpdateMany(candidates, pipelineStatus){
         );
         return true;
       } catch (error) {
-        console.log('Error updating loser candidate in HubSpot:', error.code);
+        console.log('Error updating loser candidate in HubSpot:', error.code, error.message);
         return false;
       }
   
