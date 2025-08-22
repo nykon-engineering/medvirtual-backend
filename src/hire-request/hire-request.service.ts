@@ -299,6 +299,7 @@ export class HireRequestService {
           inputs: inputs,
           idProperty: "hs_object_id"
         };
+        console.log("New body for HubSpot:", body);
 
         try {
           await axios.post(
@@ -312,10 +313,9 @@ export class HireRequestService {
             }
           );
         } catch (error) {
-          console.error('Error updating loser candidate in HubSpot:', error.code);
+          console.log('Error updating loser candidate in HubSpot:', error.code);
         }
         
-  
         //update all candidates for the hire request to 'returned_to_pool'
         const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
           where: {
