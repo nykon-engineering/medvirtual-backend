@@ -32,12 +32,17 @@ export class HireRequestService {
         where: { id: hireRequest_id },
         select: {
           assign_user_id: true,
-        }
+                  }
       });
-      if (statusTo==='pending_signature' && hireRequest?.assign_user_id || statusTo === 'new' && hireRequest?.assign_user_id || statusTo === 'cancelled' && hireRequest?.assign_user_id){
+
+      if (statusTo==='pending_signature' || statusTo === 'new' || statusTo === 'cancelled'){
         return true;
       }else{
-        throw new BadRequestException(`Status ${statusTo} requires an assigned user`);
+        if (hireRequest?.assign_user_id) {
+          return true;
+        }else{
+          throw new BadRequestException(`Status ${statusTo} requires an assigned user`);
+        }
       }
     }catch (error){
       throw new BadRequestException(`Error verifying assigned user`);
