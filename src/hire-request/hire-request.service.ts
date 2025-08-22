@@ -26,6 +26,24 @@ export class HireRequestService {
     private readonly prisma: PrismaService
   ) {}
 
+  private async verifyAssignUser (statusTo, hireRequest_id){
+    try{
+      const hireRequest = await this.prisma.hireRequest.findUnique({
+        where: { id: hireRequest_id },
+        select: {
+          assign_user_id: true,
+        }
+      });
+      if (statusTo==='pending_signature' && hireRequest?.assign_user_id || statusTo === 'new' && hireRequest?.assign_user_id || statusTo === 'cancelled' && hireRequest?.assign_user_id){
+        return true;
+      }else{
+        throw new BadRequestException(`Status ${statusTo} requires an assigned user`);
+      }
+    }catch (error){
+      throw new BadRequestException(`Error verifying assigned user`);
+    }
+  }
+
   private async updateHireRequestStatus(id: string, status: HireRequestStatus): Promise<boolean> {
     const updatedRequest = await this.prisma.hireRequest.update({
       where: {
@@ -251,6 +269,9 @@ export class HireRequestService {
     if (!user || !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
+
+    await this.verifyAssignUser(data.status, id);
+
     if (!data || !data.status) throw new BadRequestException('Data for status change is required');
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
@@ -389,6 +410,9 @@ export class HireRequestService {
           readable: false,
         }
       })
+
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     
     
@@ -406,6 +430,8 @@ export class HireRequestService {
       if (panelExists.panelCandidates.length < 3) {
         throw new BadRequestException(`Panel must have at least 3 candidates`);
       }
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     
     }else if ( 
