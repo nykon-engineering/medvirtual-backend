@@ -269,6 +269,7 @@ export class HireRequestService {
         },
       },
       select: {
+        panel_id: true,
         candidate: {
           select: {
             id: true,
@@ -276,6 +277,7 @@ export class HireRequestService {
           }
         }
       },
+      
     })
 
     //verify rules for changes
@@ -341,17 +343,13 @@ export class HireRequestService {
         const updateHubspot = await hubspotUpdateMany(candidatesToHubspot, pipelineStatus);
         if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
         
-        //update all candidates for the hire request to 'returned_to_pool'
-        const candidatesUpdated = await this.prisma.panelCandidate.updateMany({
+        //remove all candidates from the panel
+        await this.prisma.candidatePanel.delete({
           where: {
-            panel: {
-              hire_request_id: id,
-            },
+            id: candidates[0].panel_id,
           },
-          data: {
-            status: 'returned_to_pool',
-          },
-        });
+        })
+
       }
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
@@ -375,6 +373,41 @@ export class HireRequestService {
       return true;
 
       
+    } else if (hireRequest.status == 'new' && data.status === 'sourcing'){
+      //verify if there panel created with this hire_request_id
+      const panelExists = await this.prisma.candidatePanel.findFirst({
+        where: {
+          hire_request_id: id,
+        },
+      });
+      if (panelExists) return true;
+
+      //create Panel with default user_id
+      await this.prisma.candidatePanel.create({
+        data: {
+          hire_request_id: id,
+          readable: false,
+        }
+      })
+      return true;
+    
+    
+    } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){
+
+      const panelExists = await this.prisma.candidatePanel.findFirst({
+        where: {
+          hire_request_id: id,
+        },
+        include: {
+          panelCandidates: true,
+        }
+      });
+      if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+      if (panelExists.panelCandidates.length < 3) {
+        throw new BadRequestException(`Panel must have at least 3 candidates`);
+      }
+      return true;
+    
     }else if ( 
       Number(newKey)+1 === Number(currentKey) ||
       Number(newKey)-1 === Number(currentKey) || 
