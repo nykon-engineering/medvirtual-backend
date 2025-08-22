@@ -12,6 +12,7 @@ export class CronService {
 
 
     async reRunPipeline(statusDto: reRunPipelineDto): Promise<boolean> {
+        return false; 
         const {status} = statusDto
         const candidates= await this.prisma.candidate.findMany({
             where: {
