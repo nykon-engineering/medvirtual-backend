@@ -433,7 +433,7 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     
-    }else if(hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
       const panelExists = await this.prisma.candidatePanel.findFirst({
         where: {
           hire_request_id: id,
@@ -450,7 +450,7 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     
-    }else if(hireRequest.status == 'interview_scheduled' && data.status === 'panel_ready' ){
+    } else if (hireRequest.status == 'interview_scheduled' && data.status === 'panel_ready' ){
       //remove the interview_scheduled panel
       const panelExists = await this.prisma.candidatePanel.findFirst({
         where: {
@@ -474,7 +474,7 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
 
-    }else if(hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){
+    } else if (hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){
       //remove the interview_scheduled panel
       //remove the interview_scheduled panel
       const panelExists = await this.prisma.candidatePanel.findFirst({
@@ -508,11 +508,11 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
 
-    }else if(hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
+    } else if (hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
-    }else if(hireRequest.status == 'panel_ready' && data.status === 'interview_scheduled' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'interview_scheduled' ){
       const panelExists = await this.prisma.candidatePanel.findFirst({
         where: {
           hire_request_id: id,
@@ -532,7 +532,7 @@ export class HireRequestService {
       return true;
 
     
-    }else if(hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
+    } else if (hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
       const panelExists = await this.prisma.candidatePanel.findFirst({
         where: {
           hire_request_id: id,
@@ -550,7 +550,7 @@ export class HireRequestService {
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
-    }else{
+    } else{
       throw new BadRequestException(`Status change from ${hireRequest.status.replace("_"," ").toUpperCase()} to ${data.status.replace("_"," ").toUpperCase()} is not allowed`);
     }
   }

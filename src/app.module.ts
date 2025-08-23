@@ -18,6 +18,7 @@ import { OpenaiModule } from './openai/openai.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CronModule } from './cron/cron.module';
 import { HireRequestModule } from './hire-request/hire-request.module';
+import { GooglesheetModule } from './googlesheet/googlesheet.module';
 
 @Module({
   imports: [
@@ -38,7 +39,8 @@ import { HireRequestModule } from './hire-request/hire-request.module';
     OpenaiModule,
     DashboardModule,
     CronModule,
-    HireRequestModule
+    HireRequestModule,
+    GooglesheetModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],
