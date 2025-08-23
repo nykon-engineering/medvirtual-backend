@@ -24,9 +24,6 @@ export class GooglesheetController {
         
         console.log('Received dadas from Google sheet:', { secret, eventId, body });
         console.log('Values:', body?.values);
-        body.values.map((row: any) => {
-            console.log('Row:', row);
-        })
  
 
 
