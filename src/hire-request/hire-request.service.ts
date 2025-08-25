@@ -170,6 +170,14 @@ export class HireRequestService {
                 },
               },
             },
+            interviews: {
+              select: {
+                id: true,
+                scheduled_date: true,
+                status: true,
+                notes: true,
+              },
+            },
           },
         }
       }
