@@ -303,16 +303,18 @@ export class HireRequestService {
           }
         }
       },
-      
     })
 
-    //verify rules for changes
-    const currentKey = Object.keys(hireRequestDictionary).find(key => {
-      return hireRequestDictionary[key] === hireRequest.status;
-    })
-    const newKey = Object.keys(hireRequestDictionary).find(key => {
-      return hireRequestDictionary[key] === data.status;
-    })
+    const panelExists = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: id,
+      },
+      include: {
+        panelCandidates: true,
+        interviews: true,
+      }
+    });
+
 
     if (data.status === 'cancelled'){
 
@@ -363,7 +365,7 @@ export class HireRequestService {
           hire_request_id: id,
         },
       })
-      if ( candidates.length > 0) {
+      if ( candidates.length > 0 ) {
         const candidatesToHubspot = candidates.map(c => c.candidate);
         const updateHubspot = await hubspotUpdateMany(candidatesToHubspot, pipelineStatus);
         if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
@@ -392,39 +394,27 @@ export class HireRequestService {
       
     } else if (hireRequest.status == 'new' && data.status === 'sourcing'){
       //verify if there panel created with this hire_request_id
-      let updatedRequest;
-      const panelExists = await this.prisma.candidatePanel.findFirst({
-        where: {
-          hire_request_id: id,
-        },
-      });
-      updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
-      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      if (panelExists) return true;
 
-      //create Panel with default user_id
-      await this.prisma.candidatePanel.create({
-        data: {
-          hire_request_id: id,
-          readable: false,
-        }
-      })
 
-      updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
-      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
-    
+      if (panelExists) {
+        const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+        if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+        return true;
+      }else{
+        //create Panel with default user_id
+        await this.prisma.candidatePanel.create({
+          data: {
+            hire_request_id: id,
+            readable: false,
+          }
+        })
+        const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+        if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+        return true;
+      }
     
     } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){
 
-      const panelExists = await this.prisma.candidatePanel.findFirst({
-        where: {
-          hire_request_id: id,
-        },
-        include: {
-          panelCandidates: true,
-        }
-      });
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       if (panelExists.panelCandidates.length < 3) {
         throw new BadRequestException(`Panel must have at least 3 candidates`);
@@ -434,14 +424,7 @@ export class HireRequestService {
       return true;
     
     } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
-      const panelExists = await this.prisma.candidatePanel.findFirst({
-        where: {
-          hire_request_id: id,
-        },
-        include: {
-          panelCandidates: true,
-        }
-      });
+      
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       const winnerCandidate = panelExists.panelCandidates.find(pc => pc.status === 'selected_by_client');
       if (!winnerCandidate) throw new BadRequestException(`You need to select a candidate as winner before before moving to ${data.status.replace("_"," ").toUpperCase()}`);
@@ -451,15 +434,6 @@ export class HireRequestService {
       return true;
     
     } else if (hireRequest.status == 'interview_scheduled' && data.status === 'panel_ready' ){
-      //remove the interview_scheduled panel
-      const panelExists = await this.prisma.candidatePanel.findFirst({
-        where: {
-          hire_request_id: id,
-        },
-        include: {
-          panelCandidates: true,
-        }
-      });
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
       //remove the interview_scheduled panel
@@ -474,19 +448,9 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
 
-    } else if (hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){
-      //remove the interview_scheduled panel
-      //remove the interview_scheduled panel
-      const panelExists = await this.prisma.candidatePanel.findFirst({
-        where: {
-          hire_request_id: id,
-        },
-        include: {
-          panelCandidates: true,
-        }
-      });
+    } else if (hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){ 
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
-
+      //remove the scheduled date => due date to decide
       const updatedPanel = await this.prisma.candidatePanel.update({
         where: {
           id: panelExists.id,
@@ -513,15 +477,6 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return true;
     } else if (hireRequest.status == 'panel_ready' && data.status === 'interview_scheduled' ){
-      const panelExists = await this.prisma.candidatePanel.findFirst({
-        where: {
-          hire_request_id: id,
-        },
-        include: {
-          panelCandidates: true,
-          interviews: true,
-        }
-      });
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
       if( panelExists.interviews.length === 0) {
@@ -533,15 +488,7 @@ export class HireRequestService {
 
     
     } else if (hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
-      const panelExists = await this.prisma.candidatePanel.findFirst({
-        where: {
-          hire_request_id: id,
-        },
-        include: {
-          panelCandidates: true,
-          interviews: true,
-        }
-      });
+      
       if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
       if (!panelExists.scheduled_date){
