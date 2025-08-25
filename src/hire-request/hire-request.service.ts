@@ -819,14 +819,21 @@ export class HireRequestService {
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
 
-    //check if panelCandidate there are ate least 3 
-    const panelCandidates = await this.prisma.panelCandidate.findMany({
+    const panel = await this.prisma.candidatePanel.findFirst({
       where: {
-        panel_id: data.hireRequest_id,
+        hire_request_id: data.hireRequest_id,
+      },
+      include: {
+        panelCandidates: true,
       },
     });
-    if (!panelCandidates || panelCandidates.length < 3) {
-      throw new BadRequestException(`Panel must have at least 3 candidates`);
+
+    if (!panel) {
+      throw new NotFoundException(`Panel for this hire request not found`);
+    }
+
+    if (panel.panelCandidates.length < 3) {
+      throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
     }
 
     return true;
