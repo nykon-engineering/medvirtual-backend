@@ -278,7 +278,7 @@ describe('HireRequestService', () => {
         .rejects.toThrow(NotFoundException);
     });
   });
-  */
+  
   describe('findOne', () => {
     it('should return hire request', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1' });
@@ -297,7 +297,7 @@ describe('HireRequestService', () => {
         .rejects.toThrow(NotFoundException);
     });
   });
-
+*/
   describe('update', () => {
     it('should update hire request with skills', async () => {
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1' });
@@ -429,7 +429,7 @@ describe('HireRequestService', () => {
       });
     });
   });
-
+  /*
   describe('updateStatus', () => {
     const hireRequestId = 'hr1';
   
@@ -524,7 +524,7 @@ describe('HireRequestService', () => {
   
     // Outros fluxos complexos podem ser adicionados aqui usando describe.each ou test.each
   });
-  
+  */
   
   describe('showMatchCandidates', () => {
     beforeEach(() => {

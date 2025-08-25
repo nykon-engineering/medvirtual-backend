@@ -208,11 +208,62 @@ export class HireRequestService {
       include: {
         skills: true,
         organization: true,
-      },
+        assigned_user:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        panels: {
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+            readable: true,
+            panelCandidates: {
+              select: {
+                status: true,
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                    email: true,
+                    country: true,
+                    languages: true,
+                    specialization: true,
+                    skills: {
+                      select: {
+                        skill_name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            interviews: {
+              select: {
+                scheduled_date: true,
+              },
+            },
+          },
+        }
+      }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
-    return hireRequest;
+    const formatted = {
+      ...hireRequest,
+      panels: hireRequest.panels.map(panel => ({
+        ...panel,
+        interview_date: panel.interviews[0]?.scheduled_date || null,
+        interviews: undefined,
+      }))
+    };
+
+    return formatted;
   }
 
   async update(id: string, data: UpdateHireRequestDto, user: USER): Promise<object> {
@@ -367,7 +418,7 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
       
     }else if (hireRequest.status == 'sourcing' && data.status === 'new' || hireRequest.status == 'cancelled' && data.status === 'new' || hireRequest.status == 'placement_completed' && data.status === 'new'){
       //REOPEN AS NEW
@@ -389,7 +440,7 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
 
     } else if (hireRequest.status == 'panel_ready' && data.status === 'sourcing' || hireRequest.status == 'cancelled' && data.status === 'sourcing'){
       //update panel to readable=false
@@ -405,7 +456,7 @@ export class HireRequestService {
       });
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
 
       
     } else if (hireRequest.status == 'new' && data.status === 'sourcing'){
@@ -415,7 +466,7 @@ export class HireRequestService {
       if (panelExists) {
         const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
         if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-        return true;
+        return this.findOne(id, user);
       }else{
         //create Panel with default user_id
         await this.prisma.candidatePanel.create({
@@ -426,7 +477,7 @@ export class HireRequestService {
         })
         const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
         if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-        return true;
+        return this.findOne(id, user);
       }
     
     } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){
@@ -437,7 +488,7 @@ export class HireRequestService {
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
     
     } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
       
@@ -447,7 +498,7 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
     
     } else if (hireRequest.status == 'interview_scheduled' && data.status === 'panel_ready' ){
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
@@ -462,7 +513,7 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
 
     } else if (hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){ 
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
@@ -486,12 +537,12 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
 
     } else if (hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
     } else if (hireRequest.status == 'panel_ready' && data.status === 'interview_scheduled' ){
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
@@ -500,7 +551,7 @@ export class HireRequestService {
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
 
     
     } else if (hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
@@ -512,7 +563,7 @@ export class HireRequestService {
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-      return true;
+      return this.findOne(id, user);
     } else{
       throw new BadRequestException(`Status change from ${hireRequest.status.replace("_"," ").toUpperCase()} to ${data.status.replace("_"," ").toUpperCase()} is not allowed`);
     }
@@ -1009,67 +1060,7 @@ export class HireRequestService {
     });
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
 
-    const hireRequests = await this.prisma.hireRequest.findMany({
-      where: { id: id },
-      include: {
-        skills: true,
-        organization: true,
-        assigned_user:{
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-          }
-        },
-        panels: {
-          select: {
-            id: true,
-            status: true,
-            scheduled_date: true,
-            readable: true,
-            panelCandidates: {
-              select: {
-                status: true,
-                candidate: {
-                  select: {
-                    id: true,
-                    first_name: true,
-                    last_name: true,
-                    name: true,
-                    email: true,
-                    country: true,
-                    languages: true,
-                    specialization: true,
-                    skills: {
-                      select: {
-                        skill_name: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            interviews: {
-              select: {
-                scheduled_date: true,
-              },
-            },
-          },
-        }
-      }
-    })
-    if(!hireRequests) throw new NotFoundException('No hire requests found');
-
-    const formatted = hireRequests.map(hr => ({
-      ...hr,
-      panels: hr.panels.map(panel => ({
-        ...panel,
-        interview_date: panel.interviews[0]?.scheduled_date || null,
-        interviews: undefined
-      }))
-    }));
-
-    return formatted;
+    return this.findOne(id, user);
 
   }
 
