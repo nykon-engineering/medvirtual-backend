@@ -167,6 +167,10 @@ export class AuthService {
       data: {
         name: data.companyName || 'Default Organization',
         email: data.email,
+        status: 'incomplete',
+        admin: {
+          connect: { id: data.organizationId }, // Connect to the user who is signing up
+        },
         
       },
     })
@@ -504,7 +508,6 @@ export class AuthService {
       companyName: user.organization_name,
     };
   }
-
 
   async invitedUserSignup(data: AuthinvitedUserSignupDto): Promise<string>{
     let decodedToken; 

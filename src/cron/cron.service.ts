@@ -12,10 +12,11 @@ export class CronService {
 
 
     async reRunPipeline(statusDto: reRunPipelineDto): Promise<boolean> {
+        return false; 
         const {status} = statusDto
         const candidates= await this.prisma.candidate.findMany({
             where: {
-                processing_status: status
+                processing_status: status,
             },
             select: {
                 id: true,
@@ -26,8 +27,19 @@ export class CronService {
 
         for( const candidate of candidates) {
             console.log(`Re-running pipeline for candidate ID: ${candidate.id}, Name: ${candidate.first_name} ${candidate.last_name}`);
-            await this.candidate.processData(candidate.id);
-            console.log(`===>Finished Pipeline re-run for candidate ID: ${candidate.id}`);
+            try{
+                await this.candidate.processData(candidate.id);
+                console.log(`===>Finished Pipeline for the candidate ID: ${candidate.id}`);
+            }catch{
+                await this.prisma.candidate.update({
+                    where: { id: candidate.id },
+                    data: {
+                        processing_status: 'failed'
+                    },
+                });
+                console.log(`===>Error in Pipeline for the candidate ID: ${candidate.id}`);
+            }
+           
         }
         return true;
     }

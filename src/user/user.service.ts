@@ -45,14 +45,33 @@ export class UserService {
     }
     return user;
   }
-
-  async findByOrganizationId(organizationId: string): Promise<USER[] | null> {
+  
+  async findByOrganizationId(organizationId: string): Promise<any>{
     const users = await this.prisma.uSER.findMany({
       where: { organization_id: organizationId },
+      select: {
+        id: true,
+        email: true,
+        organization_id: true,
+        organization_name: true,
+        first_name: true,
+        last_name: true,
+        phone: true,
+        avatar: true,
+        job_title: true,
+        role: true,
+        workos_id: true,
+        authentication_method: true,
+        status: true,
+        verified: true,
+        createdAt: true,
+        updatedAt: true,
+      }
     });
     if (!users || users.length === 0) {
       throw new NotFoundException(`No users found in this organization.`);
     }
+    
     return users;
   }
 

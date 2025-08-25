@@ -19,7 +19,7 @@ export class HandlerObjectCreation {
 
         const properties = Object.keys(candidadeToDbDictionary).join(',');
         try{
-            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${event.objectId}?properties=language_spoken,${properties}`, 
+            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${event.objectId}?properties=career_highlights_relevant_job_experiences,language_spoken,${properties}`, 
                 {
                     headers: {
                         Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -46,6 +46,21 @@ export class HandlerObjectCreation {
             })
             if (!createCandidate) {
                 throw new BadRequestException('Error creating candidate in the database');
+            }
+            
+            //Here, I start to work with the skills
+            if (getObject.data.properties.career_highlights_relevant_job_experiences) {
+                const candidadeSkills = getObject.data.properties.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
+
+                for (const skill of candidadeSkills) {
+                    await this.prisma.candidateSkill.create({
+                        data: {
+                            candidate_id: createCandidate.id,
+                            skill_name: skill,
+                            skill_type: undefined,// This field is not used in the current implementation
+                        }
+                    })
+                }
             }
 
             //here I start to work with the language

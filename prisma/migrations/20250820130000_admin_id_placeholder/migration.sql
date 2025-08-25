@@ -1,0 +1,1 @@
+-- Placeholder migration: admin_id already exists in database
