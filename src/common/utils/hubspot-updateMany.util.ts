@@ -9,7 +9,7 @@ const httpsAgent = new https.Agent({ keepAlive: true });
 const hubspotClient = axios.create({
   httpAgent,
   httpsAgent,
-  timeout: 15000, // 15 segundos, ajuste se necessário
+  timeout: 60000, // 15 segundos, ajuste se necessário
 });
 
 
