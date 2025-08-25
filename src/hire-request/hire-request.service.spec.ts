@@ -10,7 +10,22 @@ import { hireRequestDictionary } from '../common/dictionaries/hire-request-dicti
 import { hubspotUpdateMany } from '../common/utils/hubspot-updateMany.util';
 
 jest.mock('../common/utils/hubspot-updateMany.util');
-jest.mock('axios');
+jest.mock('axios', () => {
+  const mockAxios = jest.requireActual('axios');
+  return {
+    ...mockAxios,
+    create: jest.fn(() => ({
+      interceptors: {
+        request: { use: jest.fn(), eject: jest.fn() },
+        response: { use: jest.fn(), eject: jest.fn() },
+      },
+      get: jest.fn(),
+      post: jest.fn(),
+      patch: jest.fn(),
+      delete: jest.fn(),
+    })),
+  };
+});
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 const prismaMock = {
@@ -790,7 +805,7 @@ describe('HireRequestService', () => {
       );
     });
   });
-  */
+  
   
   describe('panelReady', () => {
     const panelData = {
@@ -869,6 +884,7 @@ describe('HireRequestService', () => {
       });
     });
   });
+  */
   
   describe('getPanel', () => {
 

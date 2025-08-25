@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { AxiosInstance } from "axios";
 import axiosRetry from "axios-retry";
 import http from "http";
 import https from "https";
@@ -7,13 +7,13 @@ const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50 });
 const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50 });
 
 
-const hubspotClient = axios.create({
+const hubspotClient: AxiosInstance = axios.create({
   httpAgent,
   httpsAgent,
   timeout: 120000,
 });
 
-axiosRetry(hubspotClient, {
+axiosRetry(hubspotClient as any, {
   retries: 3, 
   retryDelay: axiosRetry.exponentialDelay,
   retryCondition: (error: any) =>
