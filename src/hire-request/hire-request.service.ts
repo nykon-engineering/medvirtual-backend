@@ -185,7 +185,8 @@ export class HireRequestService {
       ...hr,
       panels: hr.panels.map(panel => ({
         ...panel,
-        interviews: panel.interviews[0]?.scheduled_date || null
+        interview_date: panel.interviews[0]?.scheduled_date || null,
+        interviews: undefined
       }))
     }));
 
@@ -1007,7 +1008,68 @@ export class HireRequestService {
       },
     });
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
-    return true;
+
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: { id: id },
+      include: {
+        skills: true,
+        organization: true,
+        assigned_user:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        panels: {
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+            readable: true,
+            panelCandidates: {
+              select: {
+                status: true,
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                    email: true,
+                    country: true,
+                    languages: true,
+                    specialization: true,
+                    skills: {
+                      select: {
+                        skill_name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            interviews: {
+              select: {
+                scheduled_date: true,
+              },
+            },
+          },
+        }
+      }
+    })
+    if(!hireRequests) throw new NotFoundException('No hire requests found');
+
+    const formatted = hireRequests.map(hr => ({
+      ...hr,
+      panels: hr.panels.map(panel => ({
+        ...panel,
+        interview_date: panel.interviews[0]?.scheduled_date || null,
+        interviews: undefined
+      }))
+    }));
+
+    return formatted;
 
   }
 

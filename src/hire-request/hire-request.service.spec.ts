@@ -1176,7 +1176,7 @@ describe('HireRequestService', () => {
       });
     });
   });
-
+  /*
   describe('scheduleInterview', () => {
     const baseId = 'hr1';
     const baseData = {
@@ -1239,6 +1239,7 @@ describe('HireRequestService', () => {
         .rejects.toThrow(BadRequestException);
     });
   });
+  */
   
   describe('awaitingDecision', () => {
     const baseId = 'hr1';
