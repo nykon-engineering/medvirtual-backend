@@ -80,6 +80,7 @@ model Organization {
   address                 String?
   contact_info            String?
   specialties             String?
+  description             String?
   createdAt               DateTime                @default(now())
   hire_requests           HireRequest[]
   organization_candidates OrganizationCandidate[]
