@@ -172,10 +172,7 @@ export class HireRequestService {
             },
             interviews: {
               select: {
-                id: true,
                 scheduled_date: true,
-                status: true,
-                notes: true,
               },
             },
           },
@@ -184,7 +181,17 @@ export class HireRequestService {
     })
     if(!hireRequests) throw new NotFoundException('No hire requests found');
 
-    return hireRequests;
+    const formatted = hireRequests.map(hr => ({
+      ...hr,
+      panels: hr.panels.map(panel => ({
+        ...panel,
+        interviews: panel.interviews[0]?.scheduled_date || null
+      }))
+    }));
+
+    return formatted;
+    
+
   }
 
   async findOne(id: string, user: USER): Promise<any> {

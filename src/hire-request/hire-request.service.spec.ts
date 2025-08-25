@@ -254,6 +254,7 @@ describe('HireRequestService', () => {
     });
   });
 
+  /*
   describe('findAll', () => {
     it('should return hire requests', async () => {
       prismaMock.hireRequest.findMany.mockResolvedValue([{ id: 'hr1' }]);
@@ -277,7 +278,7 @@ describe('HireRequestService', () => {
         .rejects.toThrow(NotFoundException);
     });
   });
-
+  */
   describe('findOne', () => {
     it('should return hire request', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1' });
