@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from "@nestjs/common";
 import axios, { AxiosInstance } from "axios";
 import axiosRetry from "axios-retry";
 import http from "http";
@@ -58,7 +59,9 @@ export async function hubspotUpdateMany(candidates, pipelineStatus) {
       error.message
     );
 
-    return true;
+    throw new ServiceUnavailableException(
+      "Falha ao atualizar candidatos no HubSpot após múltiplas tentativas"
+    );
   }
 }
 
