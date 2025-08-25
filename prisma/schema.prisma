@@ -86,6 +86,7 @@ model Organization {
   createdAt               DateTime                @default(now())
   admin_id                String?                 @default("")
   hire_requests           HireRequest[]
+  tickets                 Ticket[]
   admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
   organization_candidates OrganizationCandidate[]
   users                   USER[]
@@ -286,13 +287,16 @@ model Interview {
 
 model Ticket {
   id          String       @id @default(uuid())
-  user_id     String
-  type        TicketType
+  user_id     String       //user assigned or responsible
+  org_id      String       //client (organization)
+  type        String  
   title       String
   description String
-  status      TicketStatus @default(open)
+  status      TicketStatus @default(new)
+  priority    Priority     
   createdAt   DateTime     @default(now())
   user        USER         @relation(fields: [user_id], references: [id])
+  organization Organization @relation(fields: [org_id], references: [id])
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
@@ -393,15 +397,8 @@ enum InterviewStatus {
   cancelled
 }
 
-enum TicketType {
-  bonus_request
-  termination_request
-  general_support
-  technical_issue
-}
-
 enum TicketStatus {
-  open
+  new
   in_progress
   resolved
   closed

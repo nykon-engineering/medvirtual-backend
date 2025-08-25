@@ -44,7 +44,7 @@ export class HandlerClient {
         user: {
           organization_id: user.organization_id,
         },
-        status: 'open',
+        status: 'new',
       },
     });
     result.openTickets = openTicketsCount;
