@@ -1089,7 +1089,7 @@ export class HireRequestService {
     });
     if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
-    const updatedDate = new Date(`${data.date}T${data.time}:00.000Z`);
+    const updatedDate = new Date(`${data.date_time}`);
 
     const hireRequestUpdated = await this.prisma.candidatePanel.update({
       where: {
@@ -1142,7 +1142,7 @@ export class HireRequestService {
     });
     if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
-    const updatedDate = new Date(`${data.date}T${data.time}:00.000Z`);
+    const updatedDate = new Date(`${data.date_time}`);
 
     const panelUpdated = await this.prisma.candidatePanel.update({
       where: {

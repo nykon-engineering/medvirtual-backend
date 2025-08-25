@@ -1469,7 +1469,7 @@ describe('HireRequestService', () => {
   
   describe('awaitingDecision', () => {
     const baseId = 'hr1';
-    const baseData = { date: '2025-08-21', time: '14:00' };
+    const baseData = { date_time: '2025-08-21T14:00:00.000Z' };
   
     beforeEach(() => {
       jest.clearAllMocks();
@@ -1521,30 +1521,34 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
   
+      // spy apenas no método público findOne
       const findOneMock = jest.spyOn(service, 'findOne').mockResolvedValue(true);
   
       const result = await service.awaitingDecision(baseId, baseData as any, user);
   
       expect(result).toBe(true);
   
-      const expectedDate = new Date(`${baseData.date}T${baseData.time}:00.000Z`);
+      // Verifica atualização do painel
+      const expectedDate = new Date(baseData.date_time);
       expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
         where: { id: 'panel1' },
         data: { status: 'decision_pending', scheduled_date: expectedDate },
       });
   
+      // Verifica atualização do hireRequest
       expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
         where: { id: baseId },
         data: { status: 'awaiting_decision' },
       });
   
+      // Verifica chamada do findOne
       expect(findOneMock).toHaveBeenCalledWith(baseId, user);
     });
   });  
   
   describe('allowMoreTime', () => {
     const baseId = 'hr1';
-    const baseData = { date: '2025-08-25', time: '16:00' };
+    const baseData = { date_time: '2025-08-25T16:00:00.000Z' };
   
     beforeEach(() => {
       jest.clearAllMocks();
@@ -1593,13 +1597,14 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
   
+      // Spy apenas no método público findOne
       const findOneMock = jest.spyOn(service, 'findOne').mockResolvedValue(true);
   
       const result = await service.allowMoreTime(baseId, baseData as any, user);
   
       expect(result).toBe(true);
   
-      const expectedDate = new Date(`${baseData.date}T${baseData.time}:00.000Z`);
+      const expectedDate = new Date(baseData.date_time);
       expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
         where: { id: 'panel1' },
         data: { scheduled_date: expectedDate },
@@ -1607,7 +1612,7 @@ describe('HireRequestService', () => {
   
       expect(findOneMock).toHaveBeenCalledWith(baseId, user);
     });
-  });
+  });  
   
   describe('changeWinner', () => {
     const baseId = 'hr1';
