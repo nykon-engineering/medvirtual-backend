@@ -11,7 +11,7 @@ const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50 });
 const hubspotClient: AxiosInstance = axios.create({
   httpAgent,
   httpsAgent,
-  timeout: 120000,
+  timeout: 180000,
 });
 
 axiosRetry(hubspotClient as any, {
@@ -63,36 +63,4 @@ export async function hubspotUpdateMany(candidates, pipelineStatus) {
       "Falha ao atualizar candidatos no HubSpot após múltiplas tentativas"
     );
   }
-}
-
-export async function hubspotUpdateMany_old(candidates, pipelineStatus){
-  return true;  
-  
-    try {
-        const inputs = await candidates.map(c => ({
-          id: c.hubspot_id,
-          properties: {
-            hs_pipeline_stage: pipelineStatus
-          }
-        }))
-        const body = {
-          inputs: inputs,
-          idProperty: "hs_object_id"
-        };
-        await axios.post(
-          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/update`,
-          body,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-        return true;
-    } catch (error) {
-        console.log('Error updating candidates in HubSpot:', error.code, error.message);
-        return false;
-    }
-  
 }
