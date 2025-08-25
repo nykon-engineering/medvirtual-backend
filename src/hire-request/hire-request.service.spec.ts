@@ -254,50 +254,148 @@ describe('HireRequestService', () => {
     });
   });
 
-  /*
   describe('findAll', () => {
-    it('should return hire requests', async () => {
-      prismaMock.hireRequest.findMany.mockResolvedValue([{ id: 'hr1' }]);
-      const result = await service.findAll(user);
-      expect(result).toEqual([{ id: 'hr1' }]);
+    it('should return formatted hire requests with interview_date', async () => {
+      prismaMock.hireRequest.findMany.mockResolvedValue([
+        {
+          id: 'hr1',
+          panels: [
+            {
+              id: 'p1',
+              status: 'scheduled',
+              scheduled_date: new Date(),
+              readable: true,
+              panelCandidates: [],
+              interviews: [{ scheduled_date: new Date('2025-08-25T10:00:00Z') }],
+            },
+          ],
+        },
+      ]);
+  
+      const result = await service.findAll({ ...user, role: 'organization_admin' });
+  
+      expect(result).toEqual([
+        {
+          id: 'hr1',
+          panels: [
+            {
+              id: 'p1',
+              status: 'scheduled',
+              scheduled_date: expect.any(Date),
+              readable: true,
+              panelCandidates: [],
+              interview_date: new Date('2025-08-25T10:00:00Z'),
+              interviews: undefined,
+            },
+          ],
+        },
+      ]);
+  
+      expect(prismaMock.hireRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { organization: { id: user.organization_id } },
+        }),
+      );
     });
-
-    it('should throw NotFoundException if no org', async () => {
+  
+    it('should throw NotFoundException if user has no organization', async () => {
       await expect(service.findAll({ ...user, organization_id: null }))
         .rejects.toThrow(NotFoundException);
     });
-
-    it('should throw NotFoundException if role missing', async () => {
+  
+    it('should throw NotFoundException if user has no role', async () => {
       await expect(service.findAll({ ...user, role: '' }))
         .rejects.toThrow(NotFoundException);
     });
-
-    it('should throw NotFoundException if no results', async () => {
-      prismaMock.hireRequest.findMany.mockResolvedValue(null);
+  
+    it('should throw NotFoundException if no hire requests found', async () => {
+      prismaMock.hireRequest.findMany.mockResolvedValue([]);
       await expect(service.findAll(user))
         .rejects.toThrow(NotFoundException);
     });
   });
-  
-  describe('findOne', () => {
-    it('should return hire request', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1' });
-      const result = await service.findOne('hr1', user);
-      expect(result).toEqual({ id: 'hr1' });
-    });
 
+  describe('findOne', () => {
+    it('should return formatted hire request with interview_date', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({
+        id: 'hr1',
+        panels: [
+          {
+            id: 'p1',
+            status: 'scheduled',
+            scheduled_date: new Date(),
+            readable: true,
+            panelCandidates: [],
+            interviews: [{ scheduled_date: new Date('2025-08-25T10:00:00Z') }],
+          },
+        ],
+      });
+  
+      const result = await service.findOne('hr1', user);
+  
+      expect(result).toEqual({
+        id: 'hr1',
+        panels: [
+          {
+            id: 'p1',
+            status: 'scheduled',
+            scheduled_date: expect.any(Date),
+            readable: true,
+            panelCandidates: [],
+            interview_date: new Date('2025-08-25T10:00:00Z'),
+            interviews: undefined,
+          },
+        ],
+      });
+  
+      expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 'hr1',
+            organization: { id: user.organization_id },
+          },
+        }),
+      );
+    });
+  
     it('should throw NotFoundException if no org', async () => {
       await expect(service.findOne('hr1', { ...user, organization_id: null }))
         .rejects.toThrow(NotFoundException);
     });
-
-    it('should throw NotFoundException if not found', async () => {
+  
+    it('should throw NotFoundException if hire request not found', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue(null);
       await expect(service.findOne('hr1', user))
         .rejects.toThrow(NotFoundException);
     });
+  
+    it('should return panel with interview_date = null if no interviews', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({
+        id: 'hr1',
+        panels: [
+          {
+            id: 'p1',
+            status: 'scheduled',
+            scheduled_date: new Date(),
+            readable: true,
+            panelCandidates: [],
+            interviews: [],
+          },
+        ],
+      });
+  
+      const result = await service.findOne('hr1', user);
+  
+      expect(result.panels[0]).toEqual(
+        expect.objectContaining({
+          id: 'p1',
+          interview_date: null,
+          interviews: undefined,
+        }),
+      );
+    });
   });
-*/
+  
   describe('update', () => {
     it('should update hire request with skills', async () => {
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1' });
@@ -855,10 +953,7 @@ describe('HireRequestService', () => {
   });
   
   describe('panelReady', () => {
-    const panelData = {
-      hireRequest_id: 'hr1',
-      readable: true,
-    };
+    const panelData = { hireRequest_id: 'hr1', readable: true };
   
     beforeEach(() => {
       jest.clearAllMocks();
@@ -873,7 +968,7 @@ describe('HireRequestService', () => {
     it('should throw BadRequestException if data is missing', async () => {
       await expect(service.panelReady({} as panelReadyDTO, user))
         .rejects.toThrow(BadRequestException);
-      await expect(service.panelReady({} as any, user))
+      await expect(service.panelReady(null as any, user))
         .rejects.toThrow(BadRequestException);
     });
   
@@ -906,14 +1001,14 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.updateMany.mockResolvedValue({ count: 1 });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({
         id: 'panel1',
-        panelCandidates: [{ id: 'pc1' }, { id: 'pc2' }], // apenas 2 candidatos
+        panelCandidates: [{ id: 'pc1' }, { id: 'pc2' }],
       });
   
       await expect(service.panelReady(panelData, user))
         .rejects.toThrow(BadRequestException);
     });
   
-    it('should update hireRequest, update panel, validate candidates and return true', async () => {
+    it('should call findOne and return its result if all validations pass', async () => {
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'panel_ready' });
       prismaMock.candidatePanel.updateMany.mockResolvedValue({ count: 1 });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({
@@ -922,28 +1017,30 @@ describe('HireRequestService', () => {
           { id: 'pc1' },
           { id: 'pc2' },
           { id: 'pc3' },
-        ], // pelo menos 3 candidatos
+        ],
       });
   
+      const findOneMock = jest.spyOn(service, 'findOne').mockResolvedValue(true);
+  
       const result = await service.panelReady(panelData, user);
+  
       expect(result).toBe(true);
   
       expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
         where: { id: panelData.hireRequest_id },
         data: { status: 'panel_ready' },
       });
-  
       expect(prismaMock.candidatePanel.updateMany).toHaveBeenCalledWith({
         where: { hire_request_id: panelData.hireRequest_id },
         data: { readable: panelData.readable },
       });
-  
       expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
         where: { hire_request_id: panelData.hireRequest_id },
         include: { panelCandidates: true },
       });
+      expect(findOneMock).toHaveBeenCalledWith(panelData.hireRequest_id, user);
     });
-  });  
+  });
   
   describe('getPanel', () => {
 
@@ -1243,10 +1340,7 @@ describe('HireRequestService', () => {
   
   describe('awaitingDecision', () => {
     const baseId = 'hr1';
-    const baseData = {
-      date: '2025-08-21',
-      time: '14:00',
-    };
+    const baseData = { date: '2025-08-21', time: '14:00' };
   
     beforeEach(() => {
       jest.clearAllMocks();
@@ -1292,37 +1386,36 @@ describe('HireRequestService', () => {
         .rejects.toThrow(BadRequestException);
     });
   
-    it('should update panel and hireRequest status successfully', async () => {
+    it('should update panel and hireRequest and return result of findOne', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
   
+      const findOneMock = jest.spyOn(service, 'findOne').mockResolvedValue(true);
+  
       const result = await service.awaitingDecision(baseId, baseData as any, user);
   
       expect(result).toBe(true);
   
+      const expectedDate = new Date(`${baseData.date}T${baseData.time}:00.000Z`);
       expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
         where: { id: 'panel1' },
-        data: {
-          status: 'decision_pending',
-          scheduled_date: new Date('2025-08-21T14:00:00.000Z'),
-        },
+        data: { status: 'decision_pending', scheduled_date: expectedDate },
       });
   
       expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
         where: { id: baseId },
         data: { status: 'awaiting_decision' },
       });
+  
+      expect(findOneMock).toHaveBeenCalledWith(baseId, user);
     });
-  });
+  });  
   
   describe('allowMoreTime', () => {
     const baseId = 'hr1';
-    const baseData = {
-      date: '2025-08-25',
-      time: '16:00',
-    };
+    const baseData = { date: '2025-08-25', time: '16:00' };
   
     beforeEach(() => {
       jest.clearAllMocks();
@@ -1366,20 +1459,24 @@ describe('HireRequestService', () => {
         .rejects.toThrow(BadRequestException);
     });
   
-    it('should update panel scheduled_date successfully', async () => {
+    it('should update panel scheduled_date and return result of findOne', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
   
+      const findOneMock = jest.spyOn(service, 'findOne').mockResolvedValue(true);
+  
       const result = await service.allowMoreTime(baseId, baseData as any, user);
   
       expect(result).toBe(true);
+  
+      const expectedDate = new Date(`${baseData.date}T${baseData.time}:00.000Z`);
       expect(prismaMock.candidatePanel.update).toHaveBeenCalledWith({
         where: { id: 'panel1' },
-        data: {
-          scheduled_date: new Date('2025-08-25T16:00:00.000Z'),
-        },
+        data: { scheduled_date: expectedDate },
       });
+  
+      expect(findOneMock).toHaveBeenCalledWith(baseId, user);
     });
   });
   

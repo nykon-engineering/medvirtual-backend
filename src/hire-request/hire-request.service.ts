@@ -179,7 +179,7 @@ export class HireRequestService {
         }
       }
     })
-    if(!hireRequests) throw new NotFoundException('No hire requests found');
+    if(!hireRequests || hireRequests.length === 0) throw new NotFoundException('No hire requests found');
 
     const formatted = hireRequests.map(hr => ({
       ...hr,
@@ -850,7 +850,7 @@ export class HireRequestService {
       throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
     }
 
-    return true;
+    return this.findOne(data.hireRequest_id, user);
   }
 
   async getPanel(id: string, user: USER): Promise<returnGetPanelDto> {
@@ -1113,7 +1113,7 @@ export class HireRequestService {
     });
     if (!hireRequestStatusUpdated) throw new BadRequestException(`Hire request status not updated to awaiting decision`);
 
-    return true;
+    return this.findOne(id, user);
   }
 
   async allowMoreTime(id: string, data: awaitingDecisionDTO, user: USER): Promise<boolean>{
@@ -1154,7 +1154,7 @@ export class HireRequestService {
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to allow more time`);
 
-    return true;
+    return this.findOne(id, user);
   }
 
   async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<any> {
