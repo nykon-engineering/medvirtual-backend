@@ -68,7 +68,10 @@ export class TicketService {
         }
       })
       if(!ticket) throw new BadRequestException('Failed to create ticket')
-      return ticket;
+      
+      const ticketFull = await this.findOne(ticket.id)
+      return ticketFull;
+      
     }catch(error){
       throw new BadRequestException('Error creating ticket', error.message)
     }

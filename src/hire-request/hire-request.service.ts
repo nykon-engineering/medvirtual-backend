@@ -325,6 +325,15 @@ export class HireRequestService {
     });
     if (!hireRequest)  throw new NotFoundException(`Hire request not found`);
 
+    //===> after the status 'sourcing' the hire request cannot be deleted
+    const statusKey = Object.keys(hireRequestDictionary).find(key => {
+      return hireRequestDictionary[key] === hireRequest.status;
+    })
+    if( !statusKey) throw new NotFoundException(`Status not found for hire request`);
+    if(Number(statusKey) > 2) {
+      throw new BadRequestException(`Hire request with status ${hireRequest.status.replace("_"," ").toUpperCase()} cannot be deleted`);
+    }
+
     //check if there is a panel associated with this hire request. If so, I need to comunicate whit hubspot to update the candidates status to 'Available Candidates'
     const panelExists = await this.prisma.panelCandidate.findMany({
       where: {
@@ -366,18 +375,6 @@ export class HireRequestService {
     
     }
 
-
-
-
-
-    //===> after the status 'sourcing' the hire request cannot be deleted
-    const statusKey = Object.keys(hireRequestDictionary).find(key => {
-      return hireRequestDictionary[key] === hireRequest.status;
-    })
-    if( !statusKey) throw new NotFoundException(`Status not found for hire request`);
-    if(Number(statusKey) > 2) {
-      throw new BadRequestException(`Hire request with status ${hireRequest.status.replace("_"," ").toUpperCase()} cannot be deleted`);
-    }
 
     const requestdeleted = await this.prisma.hireRequest.delete({
       where: {

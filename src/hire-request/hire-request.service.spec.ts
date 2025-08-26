@@ -436,7 +436,7 @@ describe('HireRequestService', () => {
     });
   });
 
-  /*
+  
   describe('remove', () => {
     let service: HireRequestService;
     const baseId = 'hr1';
@@ -598,7 +598,7 @@ describe('HireRequestService', () => {
       expect(prismaMock.hireRequest.delete).toHaveBeenCalled();
     });
   });
-  */
+  
   
   describe('updateStatus', () => {
     const hireRequestId = 'hr1';
