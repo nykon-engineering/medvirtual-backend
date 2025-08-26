@@ -7,6 +7,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { reassignTicketDto } from './dto/reassign-ticket.dto';
+import { updateStatusTicketDto } from './dto/update-status-ticket.dto';
 
 
 @Controller('ticket')
@@ -68,6 +69,26 @@ export class TicketController {
   @ApiResponse({ status: 400, description: 'Error reassigning ticket.'})
   async reassing(@Param('id') id: string, @Body() data: reassignTicketDto) {
     const result = await this.ticketService.reassing(id, data);
+    return{
+      status: 200,
+      message: 'Ticket reassigned successfully',
+      data: result
+    }
+  }
+
+  @Post('update-status/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'update a ticket to another status',})
+  @ApiParam({ name: 'id', required: true, description: 'ID of the ticket to reassign', type: String })
+  @ApiBody({ type: updateStatusTicketDto })
+  @ApiResponse({ status: 200, description: 'Ticket reassigned successfully.'})
+  @ApiResponse({ status: 400, description: 'User to assign not found'})
+  @ApiResponse({ status: 400, description: 'Failed to reassign ticket'})
+  @ApiResponse({ status: 400, description: 'Failed to fetch reassigned ticket'})
+  @ApiResponse({ status: 400, description: 'Error reassigning ticket.'})
+  async updateStatus(@Param('id') id: string, @Body() data: updateStatusTicketDto) {
+    const result = await this.ticketService.updateStatus(id, data);
     return{
       status: 200,
       message: 'Ticket reassigned successfully',

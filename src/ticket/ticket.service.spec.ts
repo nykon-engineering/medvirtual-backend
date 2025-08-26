@@ -234,9 +234,7 @@ describe('TicketService', () => {
   });
   
   describe('reassign', () => {
-    const dto = {
-      assign_user_id: 'user1',
-    };
+    const dto = { assign_user_id: 'user1' };
     const ticketId = 'ticket123';
     const mockUser = { id: 'user1', first_name: 'John' };
     const mockTicketUpdated = { id: ticketId };
@@ -281,8 +279,8 @@ describe('TicketService', () => {
     it('should throw BadRequestException if fetching reassigned ticket fails', async () => {
       mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
       mockPrisma.ticket.update.mockResolvedValue(mockTicketUpdated);
-      mockPrisma.ticket.findUnique.mockResolvedValue(null);
-  
+      mockPrisma.ticket.findUnique.mockResolvedValue(null); // <--- retorna null para simular falha
+    
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.ticket.findUnique).toHaveBeenCalledWith({
         where: { id: ticketId },
@@ -302,6 +300,7 @@ describe('TicketService', () => {
         },
       });
     });
+    
   
     it('should reassign ticket successfully', async () => {
       mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
@@ -335,6 +334,7 @@ describe('TicketService', () => {
           },
         },
       });
+      
     });
   
     it('should throw BadRequestException if Prisma throws error', async () => {
@@ -343,6 +343,101 @@ describe('TicketService', () => {
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
     });
   });
+  
+  describe('updateStatus', () => {
+    const ticketId = 'ticket123';
+    const newStatus = 'in_progress';
+    const mockTicketUpdated = { id: ticketId, status: newStatus };
+    const mockTicketFinal = {
+      id: ticketId,
+      status: newStatus,
+      organization: { id: 'org1', name: 'Org 1' },
+      user: { id: 'user1', first_name: 'John', last_name: 'Doe' },
+    };
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should throw BadRequestException if ticket not found', async () => {
+      mockPrisma.ticket.findUnique.mockResolvedValue(null);
+  
+      await expect(service.updateStatus(ticketId, { status: newStatus }))
+        .rejects.toThrow('Ticket not found');
+    });
+  
+    it('should throw BadRequestException if status is the same', async () => {
+      mockPrisma.ticket.findUnique.mockResolvedValue({ status: newStatus });
+  
+      await expect(service.updateStatus(ticketId, { status: newStatus }))
+        .rejects.toThrow(`Ticket is already in status: ${newStatus}`);
+    });
+  
+    it('should throw BadRequestException if changing from closed to resolved', async () => {
+      mockPrisma.ticket.findUnique.mockResolvedValue({ status: 'closed' });
+  
+      await expect(service.updateStatus(ticketId, { status: 'resolved' }))
+        .rejects.toThrow('Cannot change status from CLOSED to RESOLVED');
+    });
+  
+    it('should throw BadRequestException if ticket update fails', async () => {
+      mockPrisma.ticket.findUnique.mockResolvedValue({ status: 'open' }); 
+      mockPrisma.ticket.update.mockResolvedValue(null as any); 
+  
+      await expect(service.updateStatus(ticketId, { status: newStatus }))
+        .rejects.toThrow('Error updating ticket status');
+  
+      expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        data: { status: newStatus },
+      });
+    });
+  
+    it('should throw BadRequestException if fetching updated ticket fails', async () => {
+      mockPrisma.ticket.findUnique
+        .mockResolvedValueOnce({ status: 'open' }) 
+        .mockResolvedValueOnce(null);
+    
+      mockPrisma.ticket.update.mockResolvedValue(mockTicketUpdated);
+    
+      await expect(service.updateStatus(ticketId, { status: newStatus }))
+        .rejects.toThrow('Error updating ticket status');
+    
+      expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        data: { status: newStatus },
+      });
+    });
+    
+  
+    it('should update ticket status successfully', async () => {
+      mockPrisma.ticket.findUnique
+        .mockResolvedValueOnce({ status: 'open' }) // currentStatus
+        .mockResolvedValueOnce(mockTicketFinal);  // findOne simulado
+      mockPrisma.ticket.update.mockResolvedValue(mockTicketUpdated);
+  
+      const result = await service.updateStatus(ticketId, { status: newStatus });
+  
+      expect(result).toEqual(mockTicketFinal);
+      expect(mockPrisma.ticket.findUnique).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        select: { status: true },
+      });
+      expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        data: { status: newStatus },
+      });
+    });
+  
+    it('should throw BadRequestException if Prisma throws error', async () => {
+      mockPrisma.ticket.findUnique.mockRejectedValue(new Error('DB error'));
+
+      await expect(service.updateStatus(ticketId, { status: newStatus }))
+      .rejects.toThrow('DB error'); // espera o erro real do Prisma
+
+    });
+  });
+  
   
 
   describe('remove', () => {

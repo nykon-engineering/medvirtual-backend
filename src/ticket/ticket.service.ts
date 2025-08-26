@@ -3,7 +3,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { CreateTicketDto } from './dto/create-ticket.dto';
-import { Priority } from '@prisma/client';
+import { Priority, TicketStatus } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
 import { reassignTicketDto } from './dto/reassign-ticket.dto';
 
@@ -13,6 +13,30 @@ export class TicketService {
   constructor(
     private readonly prisma: PrismaService
   ){}
+
+  private async findOne(id: string): Promise<any> {
+
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id },
+      include: {
+        organization: true,
+        user: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            job_title: true,
+            role: true,
+            status: true,
+            email: true,
+          }
+        },
+      },
+    })
+
+    return ticket;
+  }
+
 
   async create(createTicketDto: CreateTicketDto): Promise<Object> {
     const typeBE = ticketTypeDictionary[createTicketDto.type] ?? null;
@@ -84,30 +108,41 @@ export class TicketService {
       })
       if(!ticketUpdated) throw new BadRequestException('Failed to reassign ticket')
 
-      const ticket = await this.prisma.ticket.findUnique({
-        where: { id },
-        include: {
-          organization: true,
-          user: {
-            select: {
-              id: true,
-              first_name: true,
-              last_name: true,
-              job_title: true,
-              role: true,
-              status: true,
-              email: true,
-            }
-          },
-        },
-      })
+      const ticket = await this.findOne(id)
       if(!ticket) throw new BadRequestException('Failed to fetch reassigned ticket')
       return ticket;
+
     }catch(error){
       throw new BadRequestException('Error reassigning ticket', error.message)
     }
   }
   
+  async updateStatus(id: string, data: { status: string }): Promise<Object> {
+    const currentStatus = await this.prisma.ticket.findUnique({
+      where: { id },
+      select: { status: true }
+    })
+    if(!currentStatus) throw new BadRequestException('Ticket not found')
+    if(currentStatus.status === data.status) throw new BadRequestException(`Ticket is already in status: ${data.status}`)
+
+    if(currentStatus.status === 'closed' && data.status=== 'resolved') throw new BadRequestException('Cannot change status from CLOSED to RESOLVED')
+
+    try{
+      const ticketUpdated = await this.prisma.ticket.update({
+        where: { id },
+        data: {
+          status: data.status as TicketStatus
+        }
+      })
+      if(!ticketUpdated) throw new BadRequestException('Failed to update ticket status')
+
+      const ticket = await this.findOne(id)
+      if(!ticket) throw new BadRequestException('Failed to fetch reassigned ticket')
+      return ticket;
+    }catch(error){
+      throw new BadRequestException('Error updating ticket status', error.message)
+    }
+  }
  
   remove(id: number) {
     return `This action removes a #${id} ticket`;
