@@ -3,4 +3,5 @@ export const ticketTypeDictionary : Record<string, string> ={
     "Termination": "termination",
     "Interview Request": "interview",
     "Support":  "support",
+    "Referral":  "referral",
 }
