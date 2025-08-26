@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
 import { TicketService } from './ticket.service';
@@ -10,7 +10,7 @@ import { reassignTicketDto } from './dto/reassign-ticket.dto';
 import { updateStatusTicketDto } from './dto/update-status-ticket.dto';
 
 
-@Controller('ticket')
+@Controller('tickets')
 export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
 
