@@ -18,8 +18,24 @@ export class TicketService {
 
     const ticket = await this.prisma.ticket.findUnique({
       where: { id },
-      include: {
-        organization: true,
+      select:{
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        createdAt: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            type: true,
+            status: true,
+            admin_id: true,
+          }
+        },
         user: {
           select: {
             id: true,
@@ -30,8 +46,8 @@ export class TicketService {
             status: true,
             email: true,
           }
-        },
-      },
+        }
+      }
     })
 
     return ticket;
@@ -63,7 +79,7 @@ export class TicketService {
     priority?: string,
     assign_user_id?: string,
     search?: string,
-    ): Promise<Object[]> {
+    ): Promise<Object> {
     try{
       const tickets = await this.prisma.ticket.findMany({
         where:{
@@ -75,8 +91,24 @@ export class TicketService {
             { title: { contains: search, mode: 'insensitive' } }
           ] : undefined
         },
-        include: {
-          organization: true,
+        select:{
+          id: true,
+          type: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          createdAt: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              type: true,
+              status: true,
+              admin_id: true,
+            }
+          },
           user: {
             select: {
               id: true,
@@ -87,12 +119,12 @@ export class TicketService {
               status: true,
               email: true,
             }
-          },
-        },
+          }
+        }
+        
       })
       if(!tickets) throw new BadRequestException('Failed to fetch tickets')
       return tickets;
-
     }catch(error){
       throw new BadRequestException('Error fetching tickets')
     }
