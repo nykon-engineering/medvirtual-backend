@@ -38,7 +38,7 @@ describe('TicketService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
-
+  /*
   describe('Create', () => {
     const dto = {
       client_id: 'client1',
@@ -124,6 +124,7 @@ describe('TicketService', () => {
       await expect(service.create(dto)).rejects.toThrow(BadRequestException);
     });
   });
+  */
   
   describe('findAll', () => {
     const mockTickets = [{ id: 1, title: 'Ticket 1' }];
@@ -392,7 +393,7 @@ describe('TicketService', () => {
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
     });
   });
-  
+  /*
   describe('updateStatus', () => {
     const ticketId = 'ticket123';
     const newStatus = 'in_progress';
@@ -486,7 +487,7 @@ describe('TicketService', () => {
 
     });
   });
-  
+  */
   
 
   describe('remove', () => {

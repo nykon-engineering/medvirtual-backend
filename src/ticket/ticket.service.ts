@@ -71,7 +71,7 @@ export class TicketService {
       
       const ticketFull = await this.findOne(ticket.id)
       return ticketFull;
-      
+
     }catch(error){
       throw new BadRequestException('Error creating ticket', error.message)
     }
@@ -161,12 +161,20 @@ export class TicketService {
   async updateStatus(id: string, data: { status: string }): Promise<Object> {
     const currentStatus = await this.prisma.ticket.findUnique({
       where: { id },
-      select: { status: true }
+      select: { 
+        status: true,
+        user: { 
+          select: { 
+            id: true 
+          } 
+        }
+      }
     })
     if(!currentStatus) throw new BadRequestException('Ticket not found')
     if(currentStatus.status === data.status) throw new BadRequestException(`Ticket is already in status: ${data.status}`)
 
     if(currentStatus.status === 'closed' && data.status=== 'resolved') throw new BadRequestException('Cannot change status from CLOSED to RESOLVED')
+    if(currentStatus.status === 'new' && data.status=== 'in_progress' && !currentStatus.user?.id) throw new BadRequestException('Status IN PROGRESS requires an assigned user')
 
     try{
       const ticketUpdated = await this.prisma.ticket.update({
