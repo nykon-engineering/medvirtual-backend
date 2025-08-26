@@ -58,7 +58,12 @@ export class TicketService {
     }
   }
 
-  async findAll(type?: string, priority?: string, assign_user_id?: string, search?: string): Promise<Object[]> {
+  async findAll(
+    type?: string,
+    priority?: string,
+    assign_user_id?: string,
+    search?: string,
+    ): Promise<Object[]> {
     try{
       const tickets = await this.prisma.ticket.findMany({
         where:{
@@ -87,6 +92,7 @@ export class TicketService {
       })
       if(!tickets) throw new BadRequestException('Failed to fetch tickets')
       return tickets;
+
     }catch(error){
       throw new BadRequestException('Error fetching tickets')
     }

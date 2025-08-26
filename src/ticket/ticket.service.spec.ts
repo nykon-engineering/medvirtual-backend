@@ -4,7 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException } from '@nestjs/common';
 import { Priority } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
-import { find } from 'rxjs';
+import { find, take } from 'rxjs';
+import { skip } from 'node:test';
 
 describe('TicketService', () => {
   let service: TicketService;

@@ -756,13 +756,36 @@ export class HireRequestService {
     if (!pipelineStatus) throw new BadRequestException(`Pipeline status mapping not found`);
 
 
-    //remove old panel
+    //====>remove old panel and update all candidates to 'Available Candidates' in hubspot
+    const currentCandidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        panel_id: panelExists.id,
+      },
+      select: {
+        candidate_id: true,
+        candidate: {
+          select:{
+            hubspot_id: true,
+          }
+        }
+      },
+    })
+    if (!currentCandidates) throw new NotFoundException(`Current panel candidates not found`);
+
+    const pipelineStatusOldCandidates = Object.keys(dbToStageDictionary).find(key => {
+      return dbToStageDictionary[key] === 'Available Candidates';
+    })
+    const oldCandidates = currentCandidates.map(c => c.candidate);
+    const updateHubspotOldCandidates = await hubspotUpdateMany(oldCandidates, pipelineStatusOldCandidates);
+    if (!updateHubspotOldCandidates) throw new NotFoundException(`Candidates not updated on the hubspot`);
+
     const removeCandidates = await this.prisma.panelCandidate.deleteMany({
       where: {
         panel_id: panelExists.id,
       },
     });
     if (!removeCandidates) throw new BadRequestException(`Panel candidates not removed`);
+    //====> finish remove old panel and update all candidates to 'Available Candidates' in hubspot
 
     //add each candidate to the panel
     const addCandidates = await this.prisma.panelCandidate.createMany({

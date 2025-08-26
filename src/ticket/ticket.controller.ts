@@ -50,10 +50,10 @@ export class TicketController {
   ): Promise<Object> {
     const result = await this.ticketService.findAll(type, priority, assign_user_id, search);
     return {
-      status: 200,
+      status: 200, 
       message: 'List of tickets retrieved successfully',
-      data: result
-    }
+      data: result,
+    };
   }
 
   @Post('reassign/:id')
