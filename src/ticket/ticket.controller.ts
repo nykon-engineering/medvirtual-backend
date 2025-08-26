@@ -1,13 +1,12 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
 import { TicketService } from './ticket.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
-import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Priority } from '@prisma/client';
+import { reassignTicketDto } from './dto/reassign-ticket.dto';
 
 
 @Controller('ticket')
@@ -52,6 +51,26 @@ export class TicketController {
     return {
       status: 200,
       message: 'List of tickets retrieved successfully',
+      data: result
+    }
+  }
+
+  @Post('reassign/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Reassign a ticket to another user',})
+  @ApiParam({ name: 'id', required: true, description: 'ID of the ticket to reassign', type: String })
+  @ApiBody({ type: reassignTicketDto })
+  @ApiResponse({ status: 200, description: 'Ticket reassigned successfully.'})
+  @ApiResponse({ status: 400, description: 'User to assign not found'})
+  @ApiResponse({ status: 400, description: 'Failed to reassign ticket'})
+  @ApiResponse({ status: 400, description: 'Failed to fetch reassigned ticket'})
+  @ApiResponse({ status: 400, description: 'Error reassigning ticket.'})
+  async reassing(@Param('id') id: string, @Body() data: reassignTicketDto) {
+    const result = await this.ticketService.reassing(id, data);
+    return{
+      status: 200,
+      message: 'Ticket reassigned successfully',
       data: result
     }
   }

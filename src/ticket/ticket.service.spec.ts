@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException } from '@nestjs/common';
 import { Priority } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
+import { find } from 'rxjs';
 
 describe('TicketService', () => {
   let service: TicketService;
@@ -13,7 +14,12 @@ describe('TicketService', () => {
     ticket: {
       create: jest.fn(),
       findMany: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
     },
+    uSER:{
+      findUnique: jest.fn(),
+    }
   }
 
   beforeEach(async () => {
@@ -138,6 +144,20 @@ describe('TicketService', () => {
           user: undefined,
           OR: undefined,
         },
+        include: {
+          organization: true,
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              job_title: true,
+              role: true,
+              status: true,
+              email: true,
+            }
+          },
+        },
       });
     });
   
@@ -210,6 +230,117 @@ describe('TicketService', () => {
       await expect(
         service.findAll(undefined, undefined, undefined, undefined),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+  
+  describe('reassign', () => {
+    const dto = {
+      assign_user_id: 'user1',
+    };
+    const ticketId = 'ticket123';
+    const mockUser = { id: 'user1', first_name: 'John' };
+    const mockTicketUpdated = { id: ticketId };
+    const mockTicketFinal = {
+      id: ticketId,
+      organization: { id: 'org1', name: 'Org 1' },
+      user: {
+        id: 'user1',
+        first_name: 'John',
+        last_name: 'Doe',
+        job_title: 'Dev',
+        role: 'Admin',
+        status: 'ACTIVE',
+        email: 'john@example.com',
+      },
+    };
+  
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+  
+    it('should throw BadRequestException if user to assign not found', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+  
+      await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.uSER.findUnique).toHaveBeenCalledWith({
+        where: { id: dto.assign_user_id },
+      });
+    });
+  
+    it('should throw BadRequestException if ticket update fails', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.ticket.update.mockResolvedValue(null);
+  
+      await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        data: { user: { connect: { id: dto.assign_user_id } } },
+      });
+    });
+  
+    it('should throw BadRequestException if fetching reassigned ticket fails', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.ticket.update.mockResolvedValue(mockTicketUpdated);
+      mockPrisma.ticket.findUnique.mockResolvedValue(null);
+  
+      await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.ticket.findUnique).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        include: {
+          organization: true,
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              job_title: true,
+              role: true,
+              status: true,
+              email: true,
+            },
+          },
+        },
+      });
+    });
+  
+    it('should reassign ticket successfully', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.ticket.update.mockResolvedValue(mockTicketUpdated);
+      mockPrisma.ticket.findUnique.mockResolvedValue(mockTicketFinal);
+  
+      const result = await service.reassing(ticketId, dto);
+  
+      expect(result).toEqual(mockTicketFinal);
+      expect(mockPrisma.uSER.findUnique).toHaveBeenCalledWith({
+        where: { id: dto.assign_user_id },
+      });
+      expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        data: { user: { connect: { id: dto.assign_user_id } } },
+      });
+      expect(mockPrisma.ticket.findUnique).toHaveBeenCalledWith({
+        where: { id: ticketId },
+        include: {
+          organization: true,
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              job_title: true,
+              role: true,
+              status: true,
+              email: true,
+            },
+          },
+        },
+      });
+    });
+  
+    it('should throw BadRequestException if Prisma throws error', async () => {
+      mockPrisma.uSER.findUnique.mockRejectedValue(new Error('DB error'));
+  
+      await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
     });
   });
   

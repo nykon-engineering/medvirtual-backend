@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { Priority } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
+import { reassignTicketDto } from './dto/reassign-ticket.dto';
 
 @Injectable()
 export class TicketService {
@@ -14,7 +15,6 @@ export class TicketService {
   ){}
 
   async create(createTicketDto: CreateTicketDto): Promise<Object> {
-
     const typeBE = ticketTypeDictionary[createTicketDto.type] ?? null;
     try{
       const ticket = await this.prisma.ticket.create({
@@ -32,7 +32,6 @@ export class TicketService {
     }catch(error){
       throw new BadRequestException('Error creating ticket', error.message)
     }
-
   }
 
   async findAll(type?: string, priority?: string, assign_user_id?: string, search?: string): Promise<Object[]> {
@@ -46,7 +45,21 @@ export class TicketService {
             { organization: { name: { contains: search, mode: 'insensitive' } } },
             { title: { contains: search, mode: 'insensitive' } }
           ] : undefined
-        }
+        },
+        include: {
+          organization: true,
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              job_title: true,
+              role: true,
+              status: true,
+              email: true,
+            }
+          },
+        },
       })
       if(!tickets) throw new BadRequestException('Failed to fetch tickets')
       return tickets;
@@ -55,6 +68,46 @@ export class TicketService {
     }
   }
 
+  async reassing(id: string, data: reassignTicketDto): Promise<Object> {
+    try{
+
+      const user = await this.prisma.uSER.findUnique({
+        where: { id: data.assign_user_id }
+      })
+      if (!user) throw new BadRequestException('User to assign not found')
+
+      const ticketUpdated = await this.prisma.ticket.update({
+        where: { id },
+        data: {
+          user: { connect: { id: data.assign_user_id } }
+        }
+      })
+      if(!ticketUpdated) throw new BadRequestException('Failed to reassign ticket')
+
+      const ticket = await this.prisma.ticket.findUnique({
+        where: { id },
+        include: {
+          organization: true,
+          user: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              job_title: true,
+              role: true,
+              status: true,
+              email: true,
+            }
+          },
+        },
+      })
+      if(!ticket) throw new BadRequestException('Failed to fetch reassigned ticket')
+      return ticket;
+    }catch(error){
+      throw new BadRequestException('Error reassigning ticket', error.message)
+    }
+  }
+  
  
   remove(id: number) {
     return `This action removes a #${id} ticket`;
