@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
 import { TicketService } from './ticket.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -7,6 +7,7 @@ import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Priority } from '@prisma/client';
 
 
 @Controller('ticket')
@@ -34,11 +35,20 @@ export class TicketController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
   @ApiOperation({ summary: 'Get all tickets',})
+  @ApiQuery({ name: 'type', required: false, description: 'Filter by ticket type' })
+  @ApiQuery({ name: 'priority', required: false, description: 'Filter by ticket priority' })
+  @ApiQuery({ name: 'assign_user_id', required: false, description: 'Filter by assigned user ID' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by client or subject' })
   @ApiResponse({ status: 200, description: 'List of tickets retrieved successfully.'})
   @ApiResponse({ status: 400, description: 'Failed to fetch tickets'})
   @ApiResponse({ status: 400, description: 'Error fetching tickets'})
-  async findAll(): Promise<Object> {
-    const result = await this.ticketService.findAll();
+  async findAll(
+    @Query('type') type: string, 
+    @Query('priority') priority: string,
+    @Query('assign_user_id') assign_user_id: string,
+    @Query('search') search: string
+  ): Promise<Object> {
+    const result = await this.ticketService.findAll(type, priority, assign_user_id, search);
     return {
       status: 200,
       message: 'List of tickets retrieved successfully',

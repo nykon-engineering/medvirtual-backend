@@ -287,7 +287,7 @@ model Interview {
 
 model Ticket {
   id          String       @id @default(uuid())
-  user_id     String       //user assigned or responsible
+  user_id     String?       //user assigned or responsible
   org_id      String       //client (organization)
   type        String  
   title       String
@@ -295,7 +295,7 @@ model Ticket {
   status      TicketStatus @default(new)
   priority    Priority     
   createdAt   DateTime     @default(now())
-  user        USER         @relation(fields: [user_id], references: [id])
+  user        USER?         @relation(fields: [user_id], references: [id])
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@index([user_id], map: "idx_tickets_user_id")

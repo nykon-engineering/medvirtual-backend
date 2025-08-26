@@ -1,5 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsString } from "class-validator";
+import { IsIn, IsOptional, IsString } from "class-validator";
+import { ticketTypeDictionary } from "../../common/dictionaries/ticket-type";
+import { Priority } from "@prisma/client";
 
 export class CreateTicketDto {
 
@@ -7,22 +9,26 @@ export class CreateTicketDto {
     @IsString()
     client_id: string;
 
-    @ApiProperty({ description: 'Type of the ticket', required: true, type: String })
+    @ApiProperty({ description: 'Type of the ticket', required: true, type: String, enum: Object.keys(ticketTypeDictionary) })
     @IsString()
+    @IsIn(Object.keys(ticketTypeDictionary), { message: `Type must be one of the following values: ${Object.keys(ticketTypeDictionary).join(', ')}` })
     type: string;
 
     @ApiProperty({ description: 'Title of the ticket', required: true, type: String })
     @IsString()
     title: string;
+
     @ApiProperty({ description: 'Description of the ticket', required: true, type: String })
     @IsString()
     description: string;
 
-    @ApiProperty({ description: 'Priority of the ticket', required: true, type: String })
+    @ApiProperty({ description: 'Priority of the ticket', required: true, type: String, enum: Object.values(Priority) })
     @IsString()
-    priority: string;
+    @IsIn(Object.values(Priority), { message: `Priority must be one of the following values: ${Object.values(Priority).join(', ')}` })
+    priority: Priority;
 
     @ApiProperty({ description: 'ID of the user assigned to the ticket', required: true, type: String })
     @IsString()
-    assign_id: string;
+    @IsOptional()
+    assign_user_id: string;
 }

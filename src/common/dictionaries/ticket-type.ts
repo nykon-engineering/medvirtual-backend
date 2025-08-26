@@ -1,4 +1,4 @@
-export const ticketType : Record<string, string> ={
+export const ticketTypeDictionary : Record<string, string> ={
     "Bonus": "bonus",
     "Termination": "termination",
     "Interview Request": "interview",
