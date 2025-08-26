@@ -313,9 +313,64 @@ export class HireRequestService {
         id: id,
         organization: user.role.includes('organization') ? { id : user.organization_id} : undefined,
       },
+      select:{
+        id: true,
+        status: true,
+        panels: {
+          select: {
+            id: true,
+          },
+        }
+      }
     });
-
     if (!hireRequest)  throw new NotFoundException(`Hire request not found`);
+
+    //check if there is a panel associated with this hire request. If so, I need to comunicate whit hubspot to update the candidates status to 'Available Candidates'
+    const panelExists = await this.prisma.panelCandidate.findMany({
+      where: {
+        panel: {
+          hire_request_id: id,
+        },
+      },
+      select: {
+        candidate: {
+          select: {
+            id: true,
+            hubspot_id: true,
+          }
+        }
+      },
+    })
+    if(!panelExists) throw new NotFoundException(`Panel candidates not found`);
+    if (panelExists.length > 0) {
+      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Available Candidates';
+      })
+      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
+      //update candidates pipeline status to 'Available Candidates'
+      const candidatesPipelineUpdated = await this.prisma.candidate.updateMany({
+        where: {
+          id: {
+            in: panelExists.map(c => c.candidate.id),
+          },
+        },
+        data: {
+          pipeline_status: pipelineStatus,
+        },
+      });
+
+      //comunicate with hubspot to update status
+      const candidatesHubspot = panelExists.map(c => c.candidate);
+      const updateHubspot = await hubspotUpdateMany(candidatesHubspot, pipelineStatus);
+      if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
+    
+    }
+
+
+
+
+
+    //===> after the status 'sourcing' the hire request cannot be deleted
     const statusKey = Object.keys(hireRequestDictionary).find(key => {
       return hireRequestDictionary[key] === hireRequest.status;
     })

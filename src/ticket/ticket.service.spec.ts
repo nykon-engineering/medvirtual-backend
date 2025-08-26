@@ -46,7 +46,7 @@ describe('TicketService', () => {
       title: 'Ticket title',
       description: 'Ticket description',
       priority: 'HIGH' as Priority,
-      assign_user_id: 'user1',
+      assigned_user_id: 'user1',
     };
   
     beforeEach(() => {
@@ -68,7 +68,7 @@ describe('TicketService', () => {
           title: dto.title,
           description: dto.description,
           priority: dto.priority,
-          user: { connect: { id: dto.assign_user_id } },
+          user: { connect: { id: dto.assigned_user_id } },
         },
       });
     });
@@ -90,8 +90,8 @@ describe('TicketService', () => {
       });
     });
   
-    it('should create a ticket without assign_user_id', async () => {
-      const dtoNoUser = { ...dto, assign_user_id: "" };
+    it('should create a ticket without assigned_user_id', async () => {
+      const dtoNoUser = { ...dto, assigned_user_id: "" };
       const expected = { id: 3, ...dtoNoUser, type: ticketTypeDictionary[dto.type] ?? null };
     
       mockPrisma.ticket.create.mockResolvedValue(expected);
@@ -145,8 +145,24 @@ describe('TicketService', () => {
           user: undefined,
           OR: undefined,
         },
-        include: {
-          organization: true,
+        select:{
+          id: true,
+          type: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          createdAt: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              type: true,
+              status: true,
+              admin_id: true,
+            }
+          },
           user: {
             select: {
               id: true,
@@ -157,8 +173,8 @@ describe('TicketService', () => {
               status: true,
               email: true,
             }
-          },
-        },
+          }
+        }
       });
     });
   
@@ -186,7 +202,7 @@ describe('TicketService', () => {
       );
     });
   
-    it('should apply assign_user_id filter', async () => {
+    it('should apply assigned_user_id filter', async () => {
       mockPrisma.ticket.findMany.mockResolvedValue(mockTickets);
   
       await service.findAll(undefined, undefined, 'user-123', undefined);
@@ -235,7 +251,7 @@ describe('TicketService', () => {
   });
   
   describe('reassign', () => {
-    const dto = { assign_user_id: 'user1' };
+    const dto = { assigned_user_id: 'user1' };
     const ticketId = 'ticket123';
     const mockUser = { id: 'user1', first_name: 'John' };
     const mockTicketUpdated = { id: ticketId };
@@ -262,7 +278,7 @@ describe('TicketService', () => {
   
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.uSER.findUnique).toHaveBeenCalledWith({
-        where: { id: dto.assign_user_id },
+        where: { id: dto.assigned_user_id },
       });
     });
   
@@ -273,7 +289,7 @@ describe('TicketService', () => {
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
         where: { id: ticketId },
-        data: { user: { connect: { id: dto.assign_user_id } } },
+        data: { user: { connect: { id: dto.assigned_user_id } } },
       });
     });
   
@@ -285,8 +301,24 @@ describe('TicketService', () => {
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.ticket.findUnique).toHaveBeenCalledWith({
         where: { id: ticketId },
-        include: {
-          organization: true,
+        select:{
+          id: true,
+          type: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          createdAt: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              type: true,
+              status: true,
+              admin_id: true,
+            }
+          },
           user: {
             select: {
               id: true,
@@ -296,9 +328,9 @@ describe('TicketService', () => {
               role: true,
               status: true,
               email: true,
-            },
-          },
-        },
+            }
+          }
+        }
       });
     });
     
@@ -312,16 +344,32 @@ describe('TicketService', () => {
   
       expect(result).toEqual(mockTicketFinal);
       expect(mockPrisma.uSER.findUnique).toHaveBeenCalledWith({
-        where: { id: dto.assign_user_id },
+        where: { id: dto.assigned_user_id },
       });
       expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
         where: { id: ticketId },
-        data: { user: { connect: { id: dto.assign_user_id } } },
+        data: { user: { connect: { id: dto.assigned_user_id } } },
       });
       expect(mockPrisma.ticket.findUnique).toHaveBeenCalledWith({
         where: { id: ticketId },
-        include: {
-          organization: true,
+        select:{
+          id: true,
+          type: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          createdAt: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              type: true,
+              status: true,
+              admin_id: true,
+            }
+          },
           user: {
             select: {
               id: true,
@@ -331,9 +379,9 @@ describe('TicketService', () => {
               role: true,
               status: true,
               email: true,
-            },
-          },
-        },
+            }
+          }
+        }
       });
       
     });

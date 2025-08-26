@@ -30,5 +30,5 @@ export class CreateTicketDto {
     @ApiProperty({ description: 'ID of the user assigned to the ticket', required: true, type: String })
     @IsString()
     @IsOptional()
-    assign_user_id: string;
+    assigned_user_id: string;
 }

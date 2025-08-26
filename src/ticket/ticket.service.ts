@@ -64,7 +64,7 @@ export class TicketService {
           title: createTicketDto.title,
           description: createTicketDto.description,
           priority: createTicketDto.priority as Priority,
-          user: createTicketDto.assign_user_id ? { connect: { id: createTicketDto.assign_user_id } } : undefined,
+          user: createTicketDto.assigned_user_id ? { connect: { id: createTicketDto.assigned_user_id } } : undefined,
         }
       })
       if(!ticket) throw new BadRequestException('Failed to create ticket')
@@ -77,7 +77,7 @@ export class TicketService {
   async findAll(
     type?: string,
     priority?: string,
-    assign_user_id?: string,
+    assigned_user_id?: string,
     search?: string,
     ): Promise<Object> {
     try{
@@ -85,7 +85,7 @@ export class TicketService {
         where:{
           type: type ? type : undefined,
           priority: priority ? priority as Priority : undefined,
-          user: assign_user_id ? { is : { id: assign_user_id}} : undefined,
+          user: assigned_user_id ? { is : { id: assigned_user_id}} : undefined,
           OR: search ? [
             { organization: { name: { contains: search, mode: 'insensitive' } } },
             { title: { contains: search, mode: 'insensitive' } }
@@ -134,14 +134,14 @@ export class TicketService {
     try{
 
       const user = await this.prisma.uSER.findUnique({
-        where: { id: data.assign_user_id }
+        where: { id: data.assigned_user_id }
       })
       if (!user) throw new BadRequestException('User to assign not found')
 
       const ticketUpdated = await this.prisma.ticket.update({
         where: { id },
         data: {
-          user: { connect: { id: data.assign_user_id } }
+          user: { connect: { id: data.assigned_user_id } }
         }
       })
       if(!ticketUpdated) throw new BadRequestException('Failed to reassign ticket')
