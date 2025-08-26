@@ -174,7 +174,7 @@ export class TicketService {
     if(currentStatus.status === data.status) throw new BadRequestException(`Ticket is already in status: ${data.status}`)
 
     if(currentStatus.status === 'closed' && data.status=== 'resolved') throw new BadRequestException('Cannot change status from CLOSED to RESOLVED')
-    if(currentStatus.status === 'new' && data.status=== 'in_progress' && !currentStatus.user?.id) throw new BadRequestException('Status IN PROGRESS requires an assigned user')
+    if(currentStatus.status === 'new' && data.status=== 'in_progress' && !currentStatus.user?.id ||  currentStatus.status === 'new' && data.status=== 'resolved' && !currentStatus.user?.id) throw new BadRequestException(`Status ${data.status.replace("_"," ").toUpperCase()} requires an assigned user`)
 
     try{
       const ticketUpdated = await this.prisma.ticket.update({
