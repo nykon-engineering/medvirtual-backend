@@ -15,8 +15,7 @@ export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
 
   @Post()
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
+  @UseGuards(AuthGuard)
   @ApiOperation({ summary: 'Create a new ticket',})
   @ApiBody({ type: CreateTicketDto })
   @ApiResponse({ status: 200, description: 'Ticket created successfully.'})
