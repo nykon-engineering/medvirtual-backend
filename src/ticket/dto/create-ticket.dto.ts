@@ -4,7 +4,6 @@ import { ticketTypeDictionary } from "../../common/dictionaries/ticket-type";
 import { Priority } from "@prisma/client";
 
 export class CreateTicketDto {
-
     @ApiProperty({ description: 'ID of the tickets organization', required: true, type: String })
     @IsString()
     client_id: string;

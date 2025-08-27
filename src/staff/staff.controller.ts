@@ -10,6 +10,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
 import { CurrentUser } from '../auth/current-user.decorator';
+import { CreateBonusDto } from './dto/create-bonus.dto';
+import { terminateDto } from './dto/terminate.dto';
 
 @Controller('staffs')
 export class StaffController {
@@ -30,6 +32,40 @@ export class StaffController {
       data: result
     }
   }
+
+  @Post('bonus')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Add bonus to staff', description: 'Add bonus to a staff member.' })
+  @ApiBody({ type: CreateBonusDto })
+  @ApiResponse({ status: 201, description: 'The bonus has been successfully added' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  @ApiResponse({ status: 400, description: 'Cannot add bonus to inactive staff member' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async addBonus(@Body() data: CreateBonusDto, @CurrentUser() user: USER) {
+    const result = await this.staffService.addBonus(data, user);
+    return {
+      status: 201,
+      message: 'The bonus has been successfully added',
+      data: result
+    }
+  }
+
+  @Post('termination')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Termination with the staff member', description: 'terminate the bond with the staff member' })
+  @ApiBody({ type: terminateDto })
+  @ApiResponse({ status: 201, description: 'The termination has been successfully created' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async requestTermination(@Body() data: terminateDto, @CurrentUser() user: USER) {
+    const result = await this.staffService.requestTermination(data, user);
+    return {
+      status: 201,
+      message: 'The termination has been successfully created',
+      data: result
+    }
+  }
+
 
   @Get()
   @UseGuards(AuthGuard)

@@ -1,16 +1,19 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { USER } from '@prisma/client';
+
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { CreateBonusDto } from './dto/create-bonus.dto';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { title } from 'process';
+import { TicketService } from '../ticket/ticket.service';
+import { terminateDto } from './dto/terminate.dto';
 
 
 @Injectable()
 export class StaffService {
 
   constructor(
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
   ) {}
 
   private async findOne(id: string) {
@@ -89,6 +92,87 @@ export class StaffService {
     }catch(error){
       throw new BadRequestException('Failed to create staff', error.message);
     }
+  }
+
+  async addBonus(data: CreateBonusDto, user: USER): Promise <any> {
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: data.staff_id },
+      select: {
+        id: true,
+        candidate_id: true,
+        status: true,
+        candidate:{
+          select:{
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        }
+      }
+    });
+    if(!staff) throw new NotFoundException('Staff member not found'); 
+    if (staff.status !== 'active') throw new BadRequestException('Cannot add bonus to inactive staff member');
+    if(!user || !user.organization_id) throw new NotFoundException('User not found');
+
+    const [bonus, ticket] = await this.prisma.$transaction([
+      this.prisma.bonus.create({
+        data: {
+          staff_id: data.staff_id,
+          pay_rate: data.pay_rate,
+          description: data.description,
+          created_by: user.id,
+        },
+      }),
+      this.prisma.ticket.create({
+        data:{
+          organization: { connect: { id: user.organization_id } },
+        type: 'Bonus',
+        title: `Bonus Added: $${data.pay_rate} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
+        description: data.description,
+        priority: 'medium',
+        }
+      }),
+    ]);
+    return await this.findOne(data.staff_id);
+  }
+
+  async requestTermination (data: terminateDto, user: USER): Promise<any> {
+
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: data.staff_id },
+      select: {
+        id: true,
+        candidate_id: true,
+        status: true,
+        candidate:{
+          select:{
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        }
+      }
+    });
+    if(!staff) throw new NotFoundException('Staff member not found');
+    if(!user || !user.organization_id) throw new NotFoundException('User not found');
+
+    const [staffStatus, ticket] = await this.prisma.$transaction([
+      this.prisma.staff.update({
+        where: { id: data.staff_id },
+        data: { status: 'termination-requested' },
+      }),
+      this.prisma.ticket.create({
+        data:{
+          organization: { connect: { id: user.organization_id } },
+          type: 'termination',
+          title: `Termination Requested: ${staff.candidate.first_name} ${staff.candidate.last_name}`,
+          description: data.description,
+          priority: 'high',
+        }
+      })
+    ])
+
+    return await this.findOne(data.staff_id);
   }
 
   async findAll(user: USER, page: number, perPage: number, search: string, start_date_from: Date, start_date_to: Date): Promise<Object> { 

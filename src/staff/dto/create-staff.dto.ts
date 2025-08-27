@@ -1,6 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger"
 import { Type } from "class-transformer"
-import { IsDate, IsDecimal, IsString } from "class-validator"
+import { IsDate, IsDecimal, IsIn, IsString } from "class-validator"
+import { staffStatusDictionary } from "../../common/dictionaries/staff-status-dictionary";
 
 export class CreateStaffDto {
     @ApiProperty({ description: 'The ID of the candidate', required: true })
@@ -11,8 +12,9 @@ export class CreateStaffDto {
     @IsString()
     hirerequest_id : string;
 
-    @ApiProperty({ description: 'The status of the staff', required: true })
+    @ApiProperty({ description: 'The status of the staff', required: true, enum: Object.keys(staffStatusDictionary) })
     @IsString()
+    @IsIn(Object.keys(staffStatusDictionary), { message: `Type must be one of the following values: ${Object.keys(staffStatusDictionary).join(', ')}` })
     status : string;
 
     @ApiProperty({ description: 'The salary of the staff', required: true })
