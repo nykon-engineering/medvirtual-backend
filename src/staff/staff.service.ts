@@ -3,6 +3,7 @@ import { USER } from '@prisma/client';
 import { CreateStaffDto } from './dto/create-staff.dto';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { title } from 'process';
 
 
 @Injectable()
@@ -90,7 +91,7 @@ export class StaffService {
     }
   }
 
-  async findAll(user: USER, page: number, perPage: number): Promise<Object> { 
+  async findAll(user: USER, page: number, perPage: number, search: string, start_date_from: Date, start_date_to: Date): Promise<Object> { 
     try{
 
       page = page ? Number(page) : 1;
@@ -99,10 +100,22 @@ export class StaffService {
       const skip =(page - 1) * perPage;
       const take = perPage;
 
-      const where = {
-        hireRequest: {
-          org_id: user.role.includes('organization') ? user.organization_id || undefined : undefined,
-        }
+      const where: any = {
+        hireRequest: {},
+      }
+
+      if (user.role.includes('organization')) {
+        where.hireRequest.org_id = user.organization_id;
+      }
+  
+      if (search) {
+        where.hireRequest.title = { contains: search, mode: 'insensitive' };
+      }
+  
+      if (start_date_from || start_date_to) {
+        where.start_date = {};
+        if (start_date_from) where.start_date.gte = new Date(start_date_from);
+        if (start_date_to) where.start_date.lte = new Date(start_date_to);
       }
 
       const select = {

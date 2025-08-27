@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, Search } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { USER } from '@prisma/client';
 
@@ -11,7 +11,7 @@ import { Roles } from '../auth/roles.decorator';
 
 import { CurrentUser } from '../auth/current-user.decorator';
 
-@Controller('staff')
+@Controller('staffs')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
@@ -36,8 +36,18 @@ export class StaffController {
   @ApiOperation({ summary: 'Get all staff records', description: 'Retrieve all staff records. Accessible only by system_super_admin and system_admin roles.' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number for pagination (default is 1)' })
   @ApiQuery({ name: 'perPage', required: false, type: Number, description: 'Number of records per page for pagination (default is 10)' })
-  async findAll(@Query('page') page: number, @Query('perPage') perPage: number, @CurrentUser() user: USER) {
-    return await this.staffService.findAll(user, page, perPage);
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Role title' })
+  @ApiQuery({ name: 'start_date_from', required: false, type: Date, description: 'Start Date from' })
+  @ApiQuery({ name: 'start_date_to', required: false, type: Date, description: 'Start Date to' })
+  async findAll(
+    @Query('page') page: number,
+    @Query('perPage') perPage: number,
+    @Query('search') search: string,
+    @Query('start_date_from') start_date_from: Date,
+    @Query('start_date_to') start_date_to: Date,
+    @CurrentUser() user: USER
+    ) {
+    return await this.staffService.findAll(user, page, perPage, search, start_date_from, start_date_to);
   }
 
 }

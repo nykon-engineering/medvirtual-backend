@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger"
 import { Type } from "class-transformer"
-import { IsDate, IsDecimal, IsNumber, IsString } from "class-validator"
+import { IsDate, IsDecimal, IsString } from "class-validator"
 
 export class CreateStaffDto {
     @ApiProperty({ description: 'The ID of the candidate', required: true })
@@ -12,6 +12,7 @@ export class CreateStaffDto {
     hirerequest_id : string;
 
     @ApiProperty({ description: 'The status of the staff', required: true })
+    @IsString()
     status : string;
 
     @ApiProperty({ description: 'The salary of the staff', required: true })

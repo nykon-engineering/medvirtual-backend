@@ -150,6 +150,7 @@ export class AuthService {
         lastName: user.last_name,
         email: user.email,
         role: user.role,
+        clientId: user.organization_id
       },
     };
   }
