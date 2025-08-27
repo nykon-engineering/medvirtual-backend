@@ -20,6 +20,7 @@ import { CronModule } from './cron/cron.module';
 import { HireRequestModule } from './hire-request/hire-request.module';
 import { GooglesheetModule } from './googlesheet/googlesheet.module';
 import { TicketModule } from './ticket/ticket.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
   imports: [
@@ -42,7 +43,8 @@ import { TicketModule } from './ticket/ticket.module';
     CronModule,
     HireRequestModule,
     GooglesheetModule,
-    TicketModule
+    TicketModule,
+    StaffModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

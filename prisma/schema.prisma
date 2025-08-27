@@ -194,6 +194,7 @@ model CandidateEducation {
   @@index([year], map: "idx_candidate_education_year")
 }
 
+
 model HireRequest {
   id                  String             @id @default(uuid())
   org_id              String
