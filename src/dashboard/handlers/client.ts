@@ -17,7 +17,6 @@ export class HandlerClient {
 
     const newRequestsCount = await this.prisma.hireRequest.count({
       where: {
-        org_id: user.organization_id,
         status: 'new',
       },
     });
@@ -25,7 +24,6 @@ export class HandlerClient {
 
     const panelToScheduleCount = await this.prisma.hireRequest.count({
       where: {
-        org_id: user.organization_id,
         status: 'panel_ready',
       },
     });
@@ -33,7 +31,6 @@ export class HandlerClient {
 
     const pendingDecisionsCount = await this.prisma.hireRequest.count({
       where: {
-        org_id: user.organization_id,
         status: 'awaiting_decision',
       },
     });
@@ -41,18 +38,12 @@ export class HandlerClient {
 
     const openTicketsCount = await this.prisma.ticket.count({
       where: {
-        user: {
-          organization_id: user.organization_id,
-        },
         status: 'new',
       },
     });
     result.openTickets = openTicketsCount;
 
     const hireRequest = await this.prisma.hireRequest.findMany({
-      where: {
-        org_id: user.organization_id,
-      },
       select: {
         id: true,
         title: true,
@@ -93,6 +84,7 @@ export class HandlerClient {
       orderBy: {
         createdAt: 'desc',
       },
+      take: 10,
     });
     result.hireRequests = hireRequest;
 
