@@ -124,6 +124,7 @@ model Candidate {
   experiences            CandidateExperience[]
   languages              CandidateLanguage[]
   skills                 CandidateSkill[]
+  staff                  Staff[]
   selectedInInterviews   Interview[]             @relation("SelectedCandidate")
   organizationCandidates OrganizationCandidate[]
   panelCandidates        PanelCandidate[]
@@ -212,6 +213,7 @@ model HireRequest {
   assigned_user       USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
   panels              CandidatePanel[]
   organization        Organization       @relation(fields: [org_id], references: [id])
+  staff               Staff[]
   skills              HireRequestSkill[]
 
   @@index([org_id], map: "idx_hire_requests_org_id")
@@ -313,6 +315,39 @@ model GoogleToken {
   expiryDate   BigInt?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model Staff {
+  id              String   @id @default(uuid())
+  candidate_id    String
+  hirerequest_id  String
+  status          String
+  salary          Decimal?
+  start_date      DateTime?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  created_by      String?
+  candidate       Candidate   @relation(fields: [candidate_id], references: [id])
+  hireRequest     HireRequest @relation(fields: [hirerequest_id], references: [id])
+  bonus           Bonus[]
+
+  @@index([candidate_id], map: "idx_staff_candidate_id")
+  @@index([hirerequest_id], map: "idx_staff_hirerequest_id")
+  @@index([status], map: "idx_staff_status")
+}
+
+model Bonus {
+  id              String   @id @default(uuid())
+  staff_id        String
+  pay_rate        Decimal
+  description     String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  created_by      String?
+  staff           Staff    @relation(fields: [staff_id], references: [id])
+
+  @@index([staff_id], map: "idx_bonus_staff_id")
+
 }
 
 enum Role {

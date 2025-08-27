@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, HttpCode } from '@nestjs/common';
 import { USER } from '@prisma/client';
 
 import { HireRequestService } from './hire-request.service';
@@ -84,23 +84,6 @@ export class HireRequestController {
     return {
       status: 200,
       message: 'Hire request updated successfully',
-      data: result,
-    }
-  }
-
-  @Delete(':id')
-  @UseGuards(AuthGuard)
-  @ApiProperty({ description: 'Delete specific requests regarding rules for the current user' })
-  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
-  @ApiResponse({ status: 200, description: 'Hire request deleted successfully' })
-  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
-  @ApiResponse({ status: 404, description: 'Hire request not found' })
-  @ApiResponse({ status: 400, description: 'Hire request not deleted' })
-  async remove(@Param('id') id: string, @CurrentUser() user: USER) {
-    const result = await this.hireRequestService.remove(id, user);
-    return {
-      status: 200,
-      message: 'Hire request deleted successfully',
       data: result,
     }
   }
