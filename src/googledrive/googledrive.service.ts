@@ -209,7 +209,7 @@ export class GoogledriveService {
       try {
         const metadataResponse = await this.axiosInstance.get(metadataUrl, {
           headers,
-          timeout: 15000,
+          timeout: 120000,
         });
     
         if (metadataResponse.status !== 200) {
@@ -236,7 +236,7 @@ export class GoogledriveService {
         const response: AxiosResponse<Buffer> = await this.axiosInstance.get(downloadUrl, {
           headers,
           responseType: 'arraybuffer',
-          timeout: 20000,
+          timeout: 120000,
           validateStatus: () => true,
         });
     
