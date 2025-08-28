@@ -8,7 +8,7 @@ import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 
-jest.mock('../common/utils/hubspot-updateMany.util');
+
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
   return {
@@ -70,7 +70,8 @@ const prismaMock = {
   }
 };
 const hubspotServiceMock = {
-  updateManyCandidatesFromHireRequest: jest.fn(), // Adicione os métodos necessários que são usados no serviço
+  updateManyCandidatesFromHireRequest: jest.fn(),
+  updateOneCandidateFromHireRequest: jest.fn(),
 };
 
 describe('HireRequestService', () => {
@@ -453,7 +454,7 @@ describe('HireRequestService', () => {
       jest.spyOn(service as any, 'updateHireRequestStatus').mockResolvedValue(true);
       jest.spyOn(service as any, 'findOne').mockResolvedValue(true);
   
-       jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
     });
   
     it('should throw NotFoundException if user has no organization', async () => {
@@ -1673,13 +1674,14 @@ describe('HireRequestService', () => {
           },
         },
       ]);
-  
-      const axiosPatchMock = jest.spyOn(axios, 'patch').mockResolvedValue({ status: 200 });
+      
+      jest.spyOn(service['hubspot'], 'updateOneCandidateFromHireRequest').mockResolvedValue(true);
+      
   
       const result = await service.changeWinner(baseId, data, user);
   
       expect(result).toHaveLength(1);
-      expect(axiosPatchMock).toHaveBeenCalled();
+      expect(service['hubspot'].updateOneCandidateFromHireRequest).toHaveBeenCalled();
       expect(prismaMock.panelCandidate.updateMany).toHaveBeenCalledTimes(2);
       expect(prismaMock.candidate.update).toHaveBeenCalledWith({
         where: { id: data.winner_id },

@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
-import * as path from 'path';
 
 import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
@@ -119,6 +118,27 @@ export class HubspotService {
                 }
               );
               return true;
+        }catch (error) {
+            throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
+        }
+    }
+
+    async updateOneCandidateFromHireRequest(hubspot_id: string, pipelineStatus: string): Promise<boolean> {
+        try{
+            if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
+            
+            const updateBody = {
+                properties: {
+                    hs_pipeline_stage: pipelineStatus,
+                },
+            };
+
+            await this.hubspotClient.crm.objects.basicApi.update(
+                process.env.HUBSPOT_CUSTOM_OBJECT,
+                hubspot_id,
+                updateBody, 
+            );
+            return true;
         }catch (error) {
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }

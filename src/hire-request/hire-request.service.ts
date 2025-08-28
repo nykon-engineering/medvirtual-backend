@@ -1281,21 +1281,11 @@ export class HireRequestService {
     });
     if (!candidateUpdated) throw new BadRequestException(`Candidate not updated to endorsed`);
 
-    //communication with hubspot to update status hired can be added here
-    const bodyWinner = {
-      properties: {
-        hs_pipeline_stage: pipelineStatus
-      }
-    };
+    
     try{
-      const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidateUpdated.hubspot_id}`,
-        bodyWinner,
-        {
-            headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json'
-            }
-        })
+      //communication with hubspot to update status hired can be added here
+      await this.hubspot.updateOneCandidateFromHireRequest(candidateUpdated.hubspot_id, pipelineStatus);
+    
     }catch (error) {
       console.error('Error updating candidate in HubSpot:', error);
       throw new BadRequestException(`Error updating candidate in HubSpot`);
