@@ -9,11 +9,9 @@ import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictio
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { GoogledriveService } from '../googledrive/googledrive.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { CandidatesService } from '../candidate/candidates.service';
-import { map } from '@hubspot/api-client/lib/codegen/automation/actions/rxjsStub';
 
 
 @Injectable()
@@ -106,9 +104,28 @@ export class HubspotService {
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
     }
+
+    async updateManyCandidatesFromHireRequest(candidates, pipelineStatus): Promise<boolean> {
+        try{
+            if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
+            await this.hubspotClient.crm.objects.batchApi.update(process.env.HUBSPOT_CUSTOM_OBJECT,
+                {
+                  inputs: candidates.map(c => ({
+                    id: c.hubspot_id,
+                    properties: {
+                      hs_pipeline_stage: pipelineStatus,
+                    },
+                  })),
+                }
+              );
+              return true;
+        }catch (error) {
+            throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
+        }
+    }
     
 
-    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot
     async createCandidates(pipeline_stage: string): Promise<string> {
         const virtualAssistant ='p20630393_Virtual_Assistant';
         const properties = Object.keys(candidadeToDbDictionary).join(',')+',career_highlights_relevant_job_experiences,language_spoken';
@@ -183,7 +200,7 @@ export class HubspotService {
         return 'Candidates created successfully';
     }
     
-    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    ////=> this service is just a example to read candidates on our database and UPDATE it with the data from hubspot
     async updateCandidates(pipeline_stage: string): Promise<any> {
         const virtualAssistant ='p20630393_Virtual_Assistant';
         const properties = Object.keys(candidadeToDbDictionary).join(',')+',career_highlights_relevant_job_experiences,language_spoken';

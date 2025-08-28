@@ -4,6 +4,7 @@ import axios from 'axios';
 
 import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 
 import { CreateHireRequestDto } from './dto/create-hire-request.dto';
 import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
@@ -16,14 +17,15 @@ import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
-import { hubspotUpdateMany } from '../common/utils/hubspot-updateMany.util';
+
 
 
 @Injectable()
 export class HireRequestService {
 
   constructor(
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly hubspot: HubspotService
   ) {}
 
   private async verifyAssignUser (statusTo, hireRequest_id): Promise<boolean> {
@@ -380,7 +382,7 @@ export class HireRequestService {
 
         //comunicate with hubspot to update status
         const candidatesHubspot = candidates.map(c => c.candidate);
-        const updateHubspot = await hubspotUpdateMany(candidatesHubspot, pipelineStatus);
+        const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesHubspot, pipelineStatus);
         if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
       
       }
@@ -403,7 +405,7 @@ export class HireRequestService {
       })
       if ( candidates.length > 0 ) {
         const candidatesToHubspot = candidates.map(c => c.candidate);
-        const updateHubspot = await hubspotUpdateMany(candidatesToHubspot, pipelineStatus);
+        const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesToHubspot, pipelineStatus);
         if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
       }
 
@@ -702,7 +704,7 @@ export class HireRequestService {
 
 
     //comunicate with hubspot to update status
-    const updateHubspot = await hubspotUpdateMany(candidates, pipelineStatus);
+    const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidates, pipelineStatus);
     if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
 
     return true;
@@ -745,7 +747,7 @@ export class HireRequestService {
       return dbToStageDictionary[key] === 'Available Candidates';
     })
     const oldCandidates = currentCandidates.map(c => c.candidate);
-    const updateHubspotOldCandidates = await hubspotUpdateMany(oldCandidates, pipelineStatusOldCandidates);
+    const updateHubspotOldCandidates = await this.hubspot.updateManyCandidatesFromHireRequest(oldCandidates, pipelineStatusOldCandidates);
     if (!updateHubspotOldCandidates) throw new NotFoundException(`Candidates not updated on the hubspot`);
 
     const removeCandidates = await this.prisma.panelCandidate.deleteMany({
@@ -794,7 +796,7 @@ export class HireRequestService {
     if( !candidates) throw new NotFoundException(`Candidates not found`);
 
     //comunicate with hubspot to update status
-    const updateHubspot = await hubspotUpdateMany(candidates, pipelineStatus);
+    const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidates, pipelineStatus);
     if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
 
     return true;
@@ -1265,7 +1267,7 @@ export class HireRequestService {
 
     //comunicate with hubspot to update status
     const candidateLosers = loserExists.map(c => c.candidate);
-    const updateHubspot = await hubspotUpdateMany(candidateLosers, pipelineStatusLosers);
+    const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidateLosers, pipelineStatusLosers);
     if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
     
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot

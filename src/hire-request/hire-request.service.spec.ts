@@ -6,8 +6,7 @@ import { USER } from '@prisma/client';
 import axios from 'axios';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
-import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
-import { hubspotUpdateMany } from '../common/utils/hubspot-updateMany.util';
+import { HubspotService } from '../hubspot/hubspot.service';
 
 jest.mock('../common/utils/hubspot-updateMany.util');
 jest.mock('axios', () => {
@@ -70,6 +69,9 @@ const prismaMock = {
     findUnique: jest.fn(),
   }
 };
+const hubspotServiceMock = {
+  updateManyCandidatesFromHireRequest: jest.fn(), // Adicione os métodos necessários que são usados no serviço
+};
 
 describe('HireRequestService', () => {
   let service: HireRequestService;
@@ -82,6 +84,7 @@ describe('HireRequestService', () => {
       providers: [
         HireRequestService,
         { provide: PrismaService, useValue: prismaMock },
+        {provide: HubspotService, useValue: hubspotServiceMock }
       ],
     }).compile();
 
@@ -445,13 +448,12 @@ describe('HireRequestService', () => {
   
     beforeEach(() => {
       jest.clearAllMocks();
-      (hubspotUpdateMany as jest.Mock).mockReset();
 
       jest.spyOn(service as any, 'verifyAssignUser').mockResolvedValue(true);
       jest.spyOn(service as any, 'updateHireRequestStatus').mockResolvedValue(true);
       jest.spyOn(service as any, 'findOne').mockResolvedValue(true);
   
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+       jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
     });
   
     it('should throw NotFoundException if user has no organization', async () => {
@@ -481,7 +483,7 @@ describe('HireRequestService', () => {
         prismaMock.candidatePanel.deleteMany.mockResolvedValue({ count: 1 });
         prismaMock.candidate.updateMany.mockResolvedValue({ count: candidates.length });
       
-        (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+         jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
       
         const result = await service.updateStatus(hireRequestId, { status: 'cancelled' }, baseUser);
       
@@ -496,7 +498,7 @@ describe('HireRequestService', () => {
           data: expect.any(Object),
         });
       
-        expect(hubspotUpdateMany).toHaveBeenCalledWith(
+        expect(service['hubspot'].updateManyCandidatesFromHireRequest).toHaveBeenCalledWith(
           candidates.map(c => c.candidate),
           expect.any(String)
         );
@@ -515,7 +517,7 @@ describe('HireRequestService', () => {
         prismaMock.hireRequest.findUnique.mockResolvedValue({ status: 'cancelled' });
         prismaMock.panelCandidate.findMany.mockResolvedValue(candidates);
         prismaMock.candidatePanel.deleteMany.mockResolvedValue({ count: 1 });
-        (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+         jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
 
         const result = await service.updateStatus(hireRequestId, { status: 'new' }, baseUser);
       
@@ -525,7 +527,7 @@ describe('HireRequestService', () => {
           where: { hire_request_id: hireRequestId },
         });
       
-        expect(hubspotUpdateMany).toHaveBeenCalledWith(
+        expect(service['hubspot'].updateManyCandidatesFromHireRequest).toHaveBeenCalledWith(
           candidates.map(c => c.candidate),
           expect.any(String)
         );
@@ -715,7 +717,6 @@ describe('HireRequestService', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
-      (hubspotUpdateMany as jest.Mock).mockReset();
     });
 
     it('should throw NotFoundException if user has no organization', async () => {
@@ -740,13 +741,14 @@ describe('HireRequestService', () => {
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
       prismaMock.candidate.updateMany.mockResolvedValue({ count: 0 });
       prismaMock.candidate.findMany.mockResolvedValue([{ id: 'cand1', hubspot_id: 'hub1' }]);
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
-
+    
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
+    
       const result = await service.confirmPanel({ ...panelData, candidates_id: [] }, user);
-
+    
       expect(result).toBe(true);
       expect(prismaMock.panelCandidate.createMany).not.toHaveBeenCalled();
-      expect(hubspotUpdateMany).toHaveBeenCalled();
+      expect(service['hubspot'].updateManyCandidatesFromHireRequest).toHaveBeenCalled();
     });
 
     it('should throw BadRequestException if addCandidates fails', async () => {
@@ -797,7 +799,7 @@ describe('HireRequestService', () => {
         { id: 'cand2', hubspot_id: 'hub2' },
       ]);
 
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
 
       const result = await service.confirmPanel(panelData, user);
       expect(result).toBe(true);
@@ -805,7 +807,7 @@ describe('HireRequestService', () => {
       expect(prismaMock.panelCandidate.createMany).toHaveBeenCalled();
       expect(prismaMock.hireRequest.update).toHaveBeenCalled();
       expect(prismaMock.candidate.updateMany).toHaveBeenCalled();
-      expect(hubspotUpdateMany).toHaveBeenCalledWith(
+      expect(service['hubspot'].updateManyCandidatesFromHireRequest).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ id: 'cand1' }),
           expect.objectContaining({ id: 'cand2' }),
@@ -829,18 +831,27 @@ describe('HireRequestService', () => {
   
     beforeEach(() => {
       jest.clearAllMocks();
-      (hubspotUpdateMany as jest.Mock).mockReset();
     });
   
-    const mockPanelFound = () => prismaMock.candidatePanel.findFirst.mockResolvedValue(panelExistsMock);
-    const mockCurrentCandidates = () => prismaMock.panelCandidate.findMany.mockResolvedValue(currentCandidatesMock);
+    const mockPanelFound = () =>
+      prismaMock.candidatePanel.findFirst.mockResolvedValue(panelExistsMock);
+  
+    const mockCurrentCandidates = () =>
+      prismaMock.panelCandidate.findMany.mockResolvedValue(currentCandidatesMock);
+  
     const mockAddAndUpdateCandidates = () => {
       prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: panelData.candidates_id.length });
       prismaMock.panelCandidate.createMany.mockResolvedValue({ count: panelData.candidates_id.length });
       prismaMock.candidate.updateMany.mockResolvedValue({ count: panelData.candidates_id.length });
-      prismaMock.candidate.findMany.mockResolvedValue(currentCandidatesMock.map(c => ({ id: c.candidate_id, hubspot_id: c.candidate.hubspot_id })));
+      prismaMock.candidate.findMany.mockResolvedValue(
+        currentCandidatesMock.map(c => ({
+          id: c.candidate_id,
+          hubspot_id: c.candidate.hubspot_id,
+        })),
+      );
     };
   
+    // === TESTES ===
     it('should throw NotFoundException if user is invalid', async () => {
       await expect(service.editPanel(panelData, null as any)).rejects.toThrow(NotFoundException);
     });
@@ -855,22 +866,18 @@ describe('HireRequestService', () => {
     });
   
     it('should throw BadRequestException if pipeline status mapping is missing', async () => {
-      mockPanelFound(); // painel existe
+      mockPanelFound();
       prismaMock.panelCandidate.findMany.mockResolvedValue(currentCandidatesMock);
-    
-      // Forçando dicionário vazio
+  
       const originalDict = { ...service['dbToStageDictionary'] };
-      service['dbToStageDictionary'] = {};
-    
-      // Garantir que hubspotUpdateMany não seja chamado
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
-    
-      await expect(service.editPanel(panelData, user))
-        .rejects.toThrow(BadRequestException);
-    
+      service['dbToStageDictionary'] = {}; // força falha no dicionário
+  
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
+  
+      await expect(service.editPanel(panelData, user)).rejects.toThrow(BadRequestException);
+  
       service['dbToStageDictionary'] = originalDict;
     });
-    
   
     it('should throw NotFoundException if current panel candidates not found', async () => {
       mockPanelFound();
@@ -882,7 +889,7 @@ describe('HireRequestService', () => {
     it('should throw NotFoundException if hubspot update for old candidates fails', async () => {
       mockPanelFound();
       mockCurrentCandidates();
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(false);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValueOnce(false);
   
       await expect(service.editPanel(panelData, user)).rejects.toThrow(NotFoundException);
     });
@@ -890,7 +897,7 @@ describe('HireRequestService', () => {
     it('should throw BadRequestException if removing old panel candidates fails', async () => {
       mockPanelFound();
       mockCurrentCandidates();
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
       prismaMock.panelCandidate.deleteMany.mockResolvedValue(null);
   
       await expect(service.editPanel(panelData, user)).rejects.toThrow(BadRequestException);
@@ -899,7 +906,7 @@ describe('HireRequestService', () => {
     it('should throw BadRequestException if adding new candidates fails', async () => {
       mockPanelFound();
       mockCurrentCandidates();
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
       prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
       prismaMock.panelCandidate.createMany.mockResolvedValue(null);
   
@@ -909,7 +916,7 @@ describe('HireRequestService', () => {
     it('should throw BadRequestException if updating candidates fails', async () => {
       mockPanelFound();
       mockCurrentCandidates();
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
       prismaMock.panelCandidate.deleteMany.mockResolvedValue({ count: 5 });
       prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
       prismaMock.candidate.updateMany.mockResolvedValue(null);
@@ -930,7 +937,9 @@ describe('HireRequestService', () => {
       mockPanelFound();
       mockCurrentCandidates();
       mockAddAndUpdateCandidates();
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(false);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest')
+        .mockResolvedValueOnce(true) // para old candidates
+        .mockResolvedValueOnce(false); // para novos
   
       await expect(service.editPanel(panelData, user)).rejects.toThrow(NotFoundException);
     });
@@ -939,7 +948,7 @@ describe('HireRequestService', () => {
       mockPanelFound();
       mockCurrentCandidates();
       mockAddAndUpdateCandidates();
-      (hubspotUpdateMany as jest.Mock).mockResolvedValue(true);
+      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
   
       const result = await service.editPanel(panelData, user);
       expect(result).toBe(true);
@@ -956,9 +965,10 @@ describe('HireRequestService', () => {
         where: { id: { in: panelData.candidates_id } },
         data: { pipeline_status: expect.any(String) },
       });
-      expect(hubspotUpdateMany).toHaveBeenCalledTimes(2);
+      expect(service['hubspot'].updateManyCandidatesFromHireRequest).toHaveBeenCalledTimes(2);
     });
   });
+  
   
   describe('panelReady', () => {
     const panelData = { hireRequest_id: 'hr1', readable: true };
