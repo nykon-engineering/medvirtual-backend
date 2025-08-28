@@ -417,6 +417,7 @@ export class CandidatesService {
         await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
         return false;
       }
+      console.log('step extract ID = OK');
 
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
@@ -425,6 +426,8 @@ export class CandidatesService {
         await this.updateStatus(id, 'failed', 'Failed to download file from Google Drive');
         console.log('Failed to download file from Google Drive');
         return false;
+      }else{
+        console.log('File downloaded successfully:', fileDownloaded);
       }
       console.log('step googleDrive = OK');
 

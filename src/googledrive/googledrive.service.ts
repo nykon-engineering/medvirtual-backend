@@ -139,18 +139,12 @@ export class GoogledriveService {
       const headers = {Authorization: `Bearer ${tokens}`,};
       let downloadUrl: string;
       
-      
       try{
         const metadataResponse = await axios.get(metadataUrl, { headers })
         if (metadataResponse.status !== 200) {
-          await this.prisma.candidate.update({
-            where: { id },
-            data: {
-              processing_status: 'failed'
-            },
-          })
           return; 
         }
+        console.log('metadataResponse.data:', metadataResponse.data);
         const { mimeType } = metadataResponse.data;
 
         const exportableTypes = {
