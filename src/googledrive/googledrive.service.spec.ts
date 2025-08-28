@@ -128,7 +128,7 @@ describe.skip('GoogledriveService', () => {
         expiryDate: Date.now() + 10000,
       });
 
-      const result = await service.downloadFile('fileId', 'file.pdf', '/downloads', 'id');
+      const result = await service.downloadFile('fileId', 'file.pdf', '/downloads');
       expect(result).toBe(true);
       expect(fs.writeFileSync).toHaveBeenCalled();
     });
@@ -143,7 +143,7 @@ describe.skip('GoogledriveService', () => {
         expiryDate: Date.now() + 10000,
       });
 
-      const result = await service.downloadFile('fileId', 'file.pdf', '/downloads', 'id');
+      const result = await service.downloadFile('fileId', 'file.pdf', '/downloads');
       expect(result).toBe(false);
     });
   });

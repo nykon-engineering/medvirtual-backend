@@ -418,10 +418,9 @@ export class CandidatesService {
 
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
-      const fileDownloaded = await this.google.downloadFile(idFile, pdfName, downloadDir, id);
+      const fileDownloaded = await this.google.downloadFile(idFile, pdfName, downloadDir);
       if (!fileDownloaded) {
         await this.updateStatus(id, 'failed', 'Failed to download file from Google Drive');
-        console.log('Failed to download file from Google Drive');
         return false;
       }
 

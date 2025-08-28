@@ -22,7 +22,10 @@ export class CronService {
                 id: true,
                 first_name: true,
                 last_name: true,
-            }
+            },
+            orderBy: {
+                processed_at: 'desc'
+            },
         })
 
         for( const candidate of candidates) {

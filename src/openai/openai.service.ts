@@ -76,7 +76,7 @@ export class OpenaiService {
 
         #### Experience
         - Use only literal data from Textract.
-        - 'description': short paragraph summarizing the role. organizated text with each phrase finalized with ;.
+        - 'description': short paragraph summarizing the role. organizated text with each phrase finalized with ;. each phrase should have between 120 and 160 characters.
         - Return only the JSON. No explanations or preamble.
         - On the start_date and end_date fields, return the date in the format YYYY-MM-DD.
         - if the date is not found, return null.
