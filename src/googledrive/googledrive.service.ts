@@ -1,10 +1,27 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import * as fs from 'fs';
-import axios, { AxiosResponse } from 'axios';
 import * as path from 'path';
+import axios, { AxiosResponse } from 'axios';
+import axiosRetry from 'axios-retry';
+import https from 'https';
+
 import { OAuth2Client } from 'google-auth-library';
 
 import { PrismaService } from '../prisma/prisma.service';
+
+const agent = new https.Agent({ keepAlive: true });
+
+// Configura retry global para o axios
+axiosRetry(axios, {
+  retries: 3,
+  retryDelay: axiosRetry.exponentialDelay,
+  retryCondition: (error) => {
+    return (
+      axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+      error.code === 'ETIMEDOUT'
+    );
+  },
+});
 
 @Injectable()
 export class GoogledriveService {
@@ -132,8 +149,7 @@ export class GoogledriveService {
       }
     
     
-
-    async downloadFile(fileId: string, filename: string, downloadDir: string, id: string) {
+    async downloadFileOld(fileId: string, filename: string, downloadDir: string, id: string) {
       const tokens = await this.getValidAccessToken();
       const metadataUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType&alt=media`;
       const headers = {Authorization: `Bearer ${tokens}`,};
@@ -182,6 +198,65 @@ export class GoogledriveService {
         return true;
       }catch(error: any) {
         console.log(`Erro ao baixar o arquivo: ${error.message}`);
+        return false;
+      }
+    }
+
+    async downloadFile(fileId: string, filename: string, downloadDir: string, id: string) {
+      const tokens = await this.getValidAccessToken();
+      const metadataUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType`;
+      const headers = { Authorization: `Bearer ${tokens}` };
+      let downloadUrl: string;
+    
+      try {
+        const metadataResponse = await axios.get(metadataUrl, {
+          headers,
+          httpsAgent: agent,
+          timeout: 15000,
+        });
+    
+        if (metadataResponse.status !== 200) {
+          console.log(`Failed to get metadata: ${metadataResponse.status}`);
+          return false;
+        }
+    
+        const { mimeType } = metadataResponse.data;
+    
+        const exportableTypes: Record<string, string> = {
+          'application/vnd.google-apps.document': 'application/pdf',
+          'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.google-apps.presentation': 'application/pdf',
+        };
+    
+        if (exportableTypes[mimeType]) {
+          const exportMimeType = exportableTypes[mimeType];
+          downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMimeType)}`;
+        } else {
+          downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+        }
+    
+
+        const response: AxiosResponse<Buffer> = await axios.get(downloadUrl, {
+          headers,
+          httpsAgent: agent,
+          responseType: 'arraybuffer',
+          timeout: 20000,
+          validateStatus: () => true,
+        });
+    
+        if (response.status !== 200) {
+          console.error(`Falha ao baixar arquivo: ${response.status}`);
+          return false;
+        }
+    
+        // 4) Salvar em disco
+        const destinationPath = path.resolve(downloadDir, filename);
+        fs.writeFileSync(destinationPath, response.data);
+    
+        console.log(`Arquivo salvo em ${destinationPath}`);
+        return true;
+      } catch (error: any) {
+        console.error(`Erro ao baixar o arquivo: ${error.message}`);
         return false;
       }
     }
