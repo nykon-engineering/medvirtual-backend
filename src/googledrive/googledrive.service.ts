@@ -144,7 +144,6 @@ export class GoogledriveService {
         if (metadataResponse.status !== 200) {
           return; 
         }
-        console.log('metadataResponse.data:', metadataResponse.data);
         const { mimeType } = metadataResponse.data;
 
         const exportableTypes = {

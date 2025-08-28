@@ -407,17 +407,14 @@ export class CandidatesService {
     if( candidate && candidate.resume_url && candidate.resume_url.includes('http')) {
 
       const idFile = extractDriveFileId(candidate.resume_url);
-      console.log('Extracted file ID from URL:', idFile);
 
       const pdfName = `${candidate.id}_resume.pdf`;
       const downloadDir = path.resolve(__dirname, '/tmp');
-
      
       if (!idFile) {
         await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
         return false;
       }
-      console.log('step extract ID = OK');
 
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
@@ -426,10 +423,7 @@ export class CandidatesService {
         await this.updateStatus(id, 'failed', 'Failed to download file from Google Drive');
         console.log('Failed to download file from Google Drive');
         return false;
-      }else{
-        console.log('File downloaded successfully:', fileDownloaded);
       }
-      console.log('step googleDrive = OK');
 
       //processing_uploadFile
       await this.updateStatus(id, 'processing_uploadFile');
@@ -439,7 +433,6 @@ export class CandidatesService {
         console.log('Failed to upload file to S3');
         return false;
       }
-      console.log('step S3 = OK');
 
       //processing_extractData
       await this.updateStatus(id, 'processing_extractData');
@@ -449,7 +442,6 @@ export class CandidatesService {
         console.log('Failed to start Textract job');
         return false;
       }
-      console.log('step Textract 1 = OK');
 
       //processing_extractText
       await this.updateStatus(id, 'processing_extractText');
@@ -459,7 +451,6 @@ export class CandidatesService {
         console.log('Failed to extract text from Textract');
         return false;
       }
-      console.log('step Textract 2 = OK');
 
       //processing_organizeData
       await this.updateStatus(id, 'processing_organizeData');   
@@ -469,7 +460,6 @@ export class CandidatesService {
         console.log('Failed to organize data from OpenAI');
         return false;
       }
-      console.log('step OpenAi = OK');
 
       const parsedData = JSON.parse(organizedData);
       console.log('The datas were organized successfully by openAi');
