@@ -9,23 +9,11 @@ import { OAuth2Client } from 'google-auth-library';
 
 import { PrismaService } from '../prisma/prisma.service';
 
-const agent = new https.Agent({ keepAlive: true });
-
-// Configura retry global para o axios
-axiosRetry(axios, {
-  retries: 3,
-  retryDelay: axiosRetry.exponentialDelay,
-  retryCondition: (error) => {
-    return (
-      axiosRetry.isNetworkOrIdempotentRequestError(error) ||
-      error.code === 'ETIMEDOUT'
-    );
-  },
-});
 
 @Injectable()
 export class GoogledriveService {
     private readonly oauth2Client: OAuth2Client;
+    private readonly axiosInstance;
 
     constructor(
       private readonly prisma: PrismaService
@@ -35,6 +23,16 @@ export class GoogledriveService {
             process.env.GOOGLE_CLIENT_SECRET,
             process.env.GOOGLE_REDIRECT_URI
         );
+
+        const agent = new https.Agent({ keepAlive: true });
+        this.axiosInstance = axios.create({ httpsAgent: agent });
+        axiosRetry(this.axiosInstance, {
+          retries: 3,
+          retryDelay: axiosRetry.exponentialDelay,
+          retryCondition: (error) =>
+            axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+            error.code === 'ETIMEDOUT',
+        });
     }
 
     // => start with functions to generate the auth URL and get tokens
@@ -209,9 +207,8 @@ export class GoogledriveService {
       let downloadUrl: string;
     
       try {
-        const metadataResponse = await axios.get(metadataUrl, {
+        const metadataResponse = await this.axiosInstance.get(metadataUrl, {
           headers,
-          httpsAgent: agent,
           timeout: 15000,
         });
     
@@ -236,9 +233,8 @@ export class GoogledriveService {
         }
     
 
-        const response: AxiosResponse<Buffer> = await axios.get(downloadUrl, {
+        const response: AxiosResponse<Buffer> = await this.axiosInstance.get(downloadUrl, {
           headers,
-          httpsAgent: agent,
           responseType: 'arraybuffer',
           timeout: 20000,
           validateStatus: () => true,
@@ -249,7 +245,6 @@ export class GoogledriveService {
           return false;
         }
     
-        // 4) Salvar em disco
         const destinationPath = path.resolve(downloadDir, filename);
         fs.writeFileSync(destinationPath, response.data);
     
