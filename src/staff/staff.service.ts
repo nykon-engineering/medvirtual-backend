@@ -64,7 +64,7 @@ export class StaffService {
         bonus:{
           select:{
             id: true,
-            pay_rate: true,
+            amount: true,
             description: true,
             created_at: true,
             created_by: true,
@@ -118,7 +118,7 @@ export class StaffService {
       this.prisma.bonus.create({
         data: {
           staff_id: data.staff_id,
-          pay_rate: data.bonus,
+          amount: data.bonus,
           description: data.description,
           created_by: user.id,
         },
@@ -269,6 +269,7 @@ export class StaffService {
      
 
       return {
+        status: 200,
         data: staff,
         meta: {
           total,

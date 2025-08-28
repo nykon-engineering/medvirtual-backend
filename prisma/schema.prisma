@@ -325,6 +325,7 @@ model Staff {
   status          String
   salary          Decimal?
   start_date      DateTime?
+  terminated_date DateTime?
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
   created_by      String?
@@ -340,7 +341,7 @@ model Staff {
 model Bonus {
   id              String   @id @default(uuid())
   staff_id        String
-  pay_rate        Decimal
+  amount          Decimal
   description     String?
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
