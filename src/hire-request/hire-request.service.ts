@@ -559,7 +559,7 @@ export class HireRequestService {
     return true;
   }
 
-  async showMatchCandidates(id: string, user: USER): Promise <object>{
+  async showMatchCandidates_old(id: string, user: USER): Promise <object>{
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
@@ -633,6 +633,85 @@ export class HireRequestService {
 
     return scoredCandidates;
   }
+
+  async showMatchCandidates(id: string, user: USER): Promise<object> {
+    if (!user || !user.organization_id) 
+      throw new NotFoundException('User not found or not part of an organization');
+  
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        specialization: true,
+        location: true,
+        availability: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        skills: {
+          select: {
+            skill_name: true,
+            required_level: true,
+          },
+        },
+      },
+    });
+  
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+  
+    const requiredSkills = hireRequest.skills.map(s => s.skill_name);
+  
+    const hourly_from = hireRequest.salary_range_from
+      ? Number(hireRequest.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+      : undefined;
+      
+    const hourly_to = hireRequest.salary_range_to
+      ? Number(hireRequest.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+      : undefined;
+  
+    const candidates = await this.prisma.candidate.findMany({
+      include: {
+        skills: true,
+        experiences: true,
+        educations: true,
+      },
+    });
+    
+    //=> score 
+    const scoredCandidates = candidates.map(candidate => {
+      let score = 0;
+  
+      if (hireRequest.specialization && candidate.specialization === hireRequest.specialization) score += 1;
+  
+      if (hireRequest.location && candidate.country === hireRequest.location) score += 1;
+  
+      if (hireRequest.availability && candidate.employment_type === hireRequest.availability) score += 1;
+  
+      if (
+        candidate.hourly_pay_rate !== null &&
+        hourly_from !== undefined &&
+        hourly_to !== undefined &&
+        candidate.hourly_pay_rate.toNumber() >= hourly_from &&
+        candidate.hourly_pay_rate.toNumber() <= hourly_to
+      ) score += 1;
+  
+      const candidateSkills = candidate.skills.map(s => s.skill_name);
+      const matchedSkills = candidateSkills.filter(skill => requiredSkills.includes(skill));
+      score += matchedSkills.length;
+  
+      return {
+        ...candidate,
+        matchedSkills,
+        score,
+      };
+    });
+  
+    //order because I need to delivery the best candidates first
+    scoredCandidates.sort((a, b) => b.score - a.score);
+  
+    return scoredCandidates;
+  }
+  
+
   
   async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
