@@ -142,7 +142,7 @@ export class GoogledriveService {
       try{
         const metadataResponse = await axios.get(metadataUrl, { headers })
         if (metadataResponse.status !== 200) {
-          return; 
+          return false; 
         }
         const { mimeType } = metadataResponse.data;
 
@@ -166,13 +166,7 @@ export class GoogledriveService {
         })
 
         if (response.status !== 200) {
-          await this.prisma.candidate.update({
-            where: { id },
-            data: {
-              processing_status: 'failed'
-            },
-          })
-          return; 
+          return false; 
         }
     
         const destinationPath = path.resolve(downloadDir, filename);
