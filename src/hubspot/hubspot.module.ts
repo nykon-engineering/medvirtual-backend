@@ -11,5 +11,6 @@ import { CandidatesModule } from '../candidate/candidates.module';
   controllers: [HubspotController],
   providers: [HubspotService, HandlerObjectCreation, HandlerObjectPropertyChange],
   imports: [PrismaModule, GoogledriveModule, CandidatesModule],
+  exports: [HubspotService],
 })
 export class HubspotModule {}
