@@ -140,7 +140,13 @@ export class GoogledriveService {
       let downloadUrl: string;
       
       try{
-        const metadataResponse = await axios.get(metadataUrl, { headers })
+        const metadataResponse = await axios.get(metadataUrl, 
+          { 
+            headers,
+            responseType: 'arraybuffer',
+            timeout: 15000, // 15s
+          }
+        )
         if (metadataResponse.status !== 200) {
           return false; 
         }
