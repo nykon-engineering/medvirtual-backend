@@ -36,6 +36,21 @@ export class HandlerOrganization {
           skill_name: true,
         },
       },
+      experiences: {
+        select: {
+          id: true,
+          company: true,
+          position: true,
+          responsabilities: true,
+          end_date: true,
+          start_date: true,
+        },
+      },
+      educations: {
+        degree: true,
+        institution: true,
+        year: true,
+      }
     };
 
     if (!user || !user.organization_id)
