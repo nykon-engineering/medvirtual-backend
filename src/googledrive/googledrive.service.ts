@@ -112,6 +112,7 @@ export class GoogledriveService {
       const { data: metadata } = await drive.files.get({
         fileId,
         fields: 'name,mimeType',
+        supportsAllDrives: true,
       });
 
       const destPath = path.resolve(downloadDir, filename);
@@ -127,7 +128,9 @@ export class GoogledriveService {
         const dest = fs.createWriteStream(destPath);
 
         await drive.files.export(
-          { fileId, mimeType },
+          { fileId,
+            mimeType,
+          },
           { responseType: 'stream' },
           (err, res: any) => {
             if (err) throw err;
@@ -140,7 +143,11 @@ export class GoogledriveService {
       } else {
 
         const dest = fs.createWriteStream(destPath);
-        const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
+        const res = await drive.files.get({
+          fileId,
+          alt: 'media',
+          supportsAllDrives: true,
+        }, { responseType: 'stream' });
 
         await new Promise<void>((resolve, reject) => {
           res.data
@@ -153,10 +160,13 @@ export class GoogledriveService {
         });
       }
 
-      return true;
+      //return true;
+      return 'Download successful';
     } catch (error: any) {
-      console.log(`Failed to download file: ${error.message}`);
-      return false;
+      
+      console.log(`Failed to download file: ${error.message}`, `Code: ${error.code}`);
+      return error.message;
+      //return false;
     }
   }
 }

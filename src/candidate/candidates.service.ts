@@ -415,15 +415,16 @@ export class CandidatesService {
         await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
         return false;
       }
-
+      console.log('starting with download step...');
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
       const fileDownloaded = await this.google.downloadFile(idFile, pdfName, downloadDir);
-      if (!fileDownloaded) {
-        await this.updateStatus(id, 'failed', 'Failed to download file from Google Drive');
+      if (fileDownloaded !== 'Download successful') {
+        await this.updateStatus(id, 'failed', `${fileDownloaded}`);
         return false;
       }
 
+      console.log('starting with upload step...');
       //processing_uploadFile
       await this.updateStatus(id, 'processing_uploadFile');
       const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
@@ -433,6 +434,7 @@ export class CandidatesService {
         return false;
       }
 
+      console.log('starting with first textract step...');
       //processing_extractData
       await this.updateStatus(id, 'processing_extractData');
       const jobId = await this.textract.startTextracktJob(bucketFile);
@@ -442,6 +444,7 @@ export class CandidatesService {
         return false;
       }
 
+      console.log('starting with the second textract step...');
       //processing_extractText
       await this.updateStatus(id, 'processing_extractText');
       const extract = await this.textract.getTextractResult(jobId);
@@ -451,6 +454,7 @@ export class CandidatesService {
         return false;
       }
 
+      console.log('starting with the openAi step...');
       //processing_organizeData
       await this.updateStatus(id, 'processing_organizeData');   
       const organizedData = await this.openai.organizeText(extract, candidate);
@@ -486,6 +490,9 @@ export class CandidatesService {
       await this.updateStatus(id, 'completed');
       
       
+    }else{
+      await this.updateStatus(id, 'failed', 'Resume URL not found');
+      return false;
     }
 
     return true;

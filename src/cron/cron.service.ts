@@ -17,6 +17,12 @@ export class CronService {
         const candidates= await this.prisma.candidate.findMany({
             where: {
                 processing_status: status,
+                AND: [
+                    { resume_url: { not: null } },
+                    { resume_url: { not: 'To Follow' } },
+                    { resume_url: { not: 'To follow' } },
+                    { resume_url: { not: 'N/A' } },
+                ]
             },
             select: {
                 id: true,

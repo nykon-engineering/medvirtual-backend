@@ -9,7 +9,7 @@ export class CreateBonusDto {
 
     @ApiProperty({ description: 'The value of the bonus', required: true })
     @IsDecimal()
-    pay_rate: string;
+    bonus: string;
 
     @ApiProperty({ description: 'The description of the bonus', required: false })
     @IsString()

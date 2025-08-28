@@ -13,7 +13,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { CreateBonusDto } from './dto/create-bonus.dto';
 import { terminateDto } from './dto/terminate.dto';
 
-@Controller('staffs')
+@Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 

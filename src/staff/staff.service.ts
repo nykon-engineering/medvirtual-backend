@@ -118,7 +118,7 @@ export class StaffService {
       this.prisma.bonus.create({
         data: {
           staff_id: data.staff_id,
-          pay_rate: data.pay_rate,
+          pay_rate: data.bonus,
           description: data.description,
           created_by: user.id,
         },
@@ -127,7 +127,7 @@ export class StaffService {
         data:{
           organization: { connect: { id: user.organization_id } },
         type: 'Bonus',
-        title: `Bonus Added: $${data.pay_rate} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
+        title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
         description: data.description,
         priority: 'medium',
         }
@@ -194,6 +194,8 @@ export class StaffService {
   
       if (search) {
         where.hireRequest.title = { contains: search, mode: 'insensitive' };
+        where.candidate.first_name = { contains: search, mode: 'insensitive' };
+        where.candidate.last_name = { contains: search, mode: 'insensitive' };
       }
   
       if (start_date_from || start_date_to) {
