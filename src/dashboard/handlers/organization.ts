@@ -44,12 +44,14 @@ export class HandlerOrganization {
           responsabilities: true,
           end_date: true,
           start_date: true,
-        },
+        }
       },
       educations: {
-        degree: true,
-        institution: true,
-        year: true,
+        select: {
+          degree: true,
+          institution: true,
+          year: true,
+        }
       }
     };
 
