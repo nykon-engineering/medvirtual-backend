@@ -7,7 +7,7 @@ import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
 import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
-import { ApiBody, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -26,7 +26,7 @@ export class HireRequestController {
 
   @Post()
   @UseGuards(AuthGuard)
-  @ApiProperty({ description: 'Create new hire request' })
+  @ApiOperation({ description: 'Create new hire request' })
   @ApiBody({ type: CreateHireRequestDto })
   @ApiResponse({ status: 200, description: 'Hire request created successfully' })
   async create(@Body() createHireRequestDto: CreateHireRequestDto, @CurrentUser() user: USER): Promise<object> {
@@ -40,7 +40,7 @@ export class HireRequestController {
 
   @Get()
   @UseGuards(AuthGuard)
-  @ApiProperty({ description: 'Get all hire requests regarding rules for the current user' })
+  @ApiOperation({ description: 'Get all hire requests regarding rules for the current user' })
   @ApiResponse({ status: 200, description: 'List of hire requests' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
   @ApiResponse({ status: 404, description: 'User role not found' })
@@ -56,7 +56,7 @@ export class HireRequestController {
 
   @Get(':id')
   @UseGuards(AuthGuard)
-  @ApiProperty({ description: 'Get specific requests regarding rules for the current user' })
+  @ApiOperation({ description: 'Get specific requests regarding rules for the current user' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiResponse({ status: 200, description: 'Hire request found successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
@@ -72,7 +72,7 @@ export class HireRequestController {
 
   @Patch(':id')
   @UseGuards(AuthGuard)
-  @ApiProperty({ description: 'Update specific requests regarding rules for the current user' })
+  @ApiOperation({ description: 'Update specific requests regarding rules for the current user' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: UpdateHireRequestDto })
   @ApiResponse({ status: 200, description: 'Hire request updated successfully' })
@@ -91,7 +91,7 @@ export class HireRequestController {
   @Patch('change-status/:id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'organization_super_admin')
-  @ApiProperty({ description: 'Update status of specific hire request' })
+  @ApiOperation({ description: 'Update status of specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'Hire request ID' })
   @ApiBody({ type: changeStatusHireRequesDTO })
   @ApiResponse({ status: 200, description: 'Hire request status updated successfully' })
@@ -113,7 +113,7 @@ export class HireRequestController {
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Reassign specific hire request/Panel to another user' })
+  @ApiOperation({ description: 'Reassign specific hire request/Panel to another user' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: reassignDTO } )
   @ApiResponse({ status: 200, description: 'Hire request reassigned successfully' })
@@ -131,7 +131,7 @@ export class HireRequestController {
   @Get('start-sourcing/show-match-candidates/:id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Show possibles candidates for a specific hire request' })
+  @ApiOperation({ description: 'Show possibles candidates for a specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiResponse({ status: 200, description: 'Candidates returned successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
@@ -149,7 +149,7 @@ export class HireRequestController {
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Confirm panel for a specific hire request' })
+  @ApiOperation({ description: 'Confirm panel for a specific hire request' })
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel confirmed successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
@@ -171,7 +171,7 @@ export class HireRequestController {
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Edit panel for a specific hire request' })
+  @ApiOperation({ description: 'Edit panel for a specific hire request' })
   @ApiBody({ type: ConfirmPanelHireRequestDto })
   @ApiResponse({ status: 200, description: 'Panel updated successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
@@ -194,7 +194,7 @@ export class HireRequestController {
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Mark Panel Ready for a specific hire request' })
+  @ApiOperation({ description: 'Mark Panel Ready for a specific hire request' })
   @ApiBody({ type: panelReadyDTO })
   @ApiResponse({ status: 200, description: 'Panel marked ready successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
@@ -213,7 +213,7 @@ export class HireRequestController {
 
   @Get('get-panel/:id')
   @UseGuards(AuthGuard)
-  @ApiProperty({ description: 'Get specific Panel' })
+  @ApiOperation({ description: 'Get specific Panel' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiResponse({ status: 200, description: 'Panel returned successfully' })
   @ApiResponse({ status: 400, description: 'Hire request ID is required' })
@@ -232,7 +232,7 @@ export class HireRequestController {
   @Get('get-panels-readable/all')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('organization_super_admin', 'organization_admin')
-  @ApiProperty({ description: 'Get all readable Panels of the specific/current logged organization' })
+  @ApiOperation({ description: 'Get all readable Panels of the specific/current logged organization' })
   @ApiResponse({ status: 200, description: 'Panels returned successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
   @ApiResponse({ status: 404, description: 'Panels not found for this current organization' })
@@ -249,7 +249,7 @@ export class HireRequestController {
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Schedule interview for a specific hire request' })
+  @ApiOperation({ description: 'Schedule interview for a specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: scheduleInterviewDTO })
   @ApiResponse({ status: 200, description: 'Interview scheduled successfully' })
@@ -272,7 +272,7 @@ export class HireRequestController {
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Mark hire request as awaiting decision' })
+  @ApiOperation({ description: 'Mark hire request as awaiting decision' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: awaitingDecisionDTO })
   @ApiResponse({ status: 200, description: 'Hire request marked as awaiting decision successfully' })
@@ -294,7 +294,7 @@ export class HireRequestController {
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiProperty({ description: 'Allow more time for the user make their decision' })
+  @ApiOperation({ description: 'Allow more time for the user make their decision' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: awaitingDecisionDTO })
   @ApiResponse({ status: 200, description: 'Deadline updated successfully' })
@@ -314,7 +314,7 @@ export class HireRequestController {
   @Post('change-winner/:id')
   @HttpCode(200)
   @UseGuards(AuthGuard)
-  @ApiProperty({ description: 'Change winner of a specific hire request' })
+  @ApiOperation({ description: 'Change winner of a specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
   @ApiBody({ type: changeWinnerDTO })
   @ApiResponse({ status: 200, description: 'Winner changed successfully and the candidate was moved to endorsed stage on the hubspot' })
@@ -334,6 +334,23 @@ export class HireRequestController {
       status: 200,
       message: 'Winner changed successfully and the candidate was moved to endorsed stage on the hubspot',
       data: result,
+    }
+  }
+
+  @Get('by-candidate/:id')
+  @HttpCode(200)
+  @ApiOperation({ description: 'Get the Matched HireRequest for a specific candidate' })
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'Matched HireRequest retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Candidate not found' })
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  async showMatchHireRequests(@Param('id') id: string) {
+    const result = await this.hireRequestService.showMatchHireRequests(id);
+    return {
+      status: 200,
+      message: 'Matched HireRequest retrieved successfully',
+      data: result
     }
   }
 

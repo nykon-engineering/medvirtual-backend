@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, Query, HttpCode } from '@nestjs/common';
 import { USER } from '@prisma/client';
 import { ApiBody, ApiParam, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 
@@ -61,7 +61,7 @@ export class CandidatesController {
   }
 
 
-  @Get(':id')
+  @Get('candidate/:id')
   @ApiOperation({ summary: 'Get a specific candidate by ID' })
   @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
   @ApiResponse({ status: 200, description: 'Candidate retrieved successfully' })
@@ -152,23 +152,4 @@ export class CandidatesController {
       data: result
     }
   }
-
-  @Get('showMatchHireRequests/:id')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Get the Matched HireRequest for a specific candidate' })
-  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
-  @ApiResponse({ status: 200, description: 'Matched HireRequest retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Candidate not found' })
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
-  async showMatchHireRequests(@Param('id') id: string) {
-    console.log('Fetching Matched HireRequest for candidate ID -  controller:', id);
-    const result = await this.candidatesService.showMatchHireRequests(id);
-    return {
-      status: 200,
-      message: 'Matched HireRequest retrieved successfully',
-      data: result
-    }
-  }
-
 }

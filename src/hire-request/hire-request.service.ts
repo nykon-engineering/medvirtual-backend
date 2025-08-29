@@ -711,8 +711,6 @@ export class HireRequestService {
     return scoredCandidates;
   }
   
-
-  
   async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
@@ -1454,5 +1452,69 @@ export class HireRequestService {
     }));
 
     return result;
+  }
+
+  async showMatchHireRequests(candidateId: string): Promise<object[]> {
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: candidateId },
+      include: { skills: true },
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+  
+    const candidateSkills = candidate.skills.map(s => s.skill_name);
+  
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: { status: 'sourcing' },
+      include: {
+        skills: true,
+        panels: {
+          include: {
+            panelCandidates: true,
+          },
+        },
+      },
+    });
+  
+    const validHireRequests = hireRequests.filter(hr => 
+      hr.panels.every(panel => panel.panelCandidates.length < 5)
+    );
+  
+    const scoredHireRequests = validHireRequests.map(hr => {
+      let score = 0;
+  
+      if (hr.specialization && candidate.specialization === hr.specialization) score += 1;
+  
+      if (hr.location && candidate.country === hr.location) score += 1;
+  
+      if (hr.availability && candidate.employment_type === hr.availability) score += 1;
+  
+      const hourly_from = hr.salary_range_from
+        ? Number(hr.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+        : undefined;
+      const hourly_to = hr.salary_range_to
+        ? Number(hr.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+        : undefined;
+  
+      if (
+        candidate.hourly_pay_rate !== null &&
+        hourly_from !== undefined &&
+        hourly_to !== undefined &&
+        candidate.hourly_pay_rate.toNumber() >= hourly_from &&
+        candidate.hourly_pay_rate.toNumber() <= hourly_to
+      ) score += 1;
+  
+      const requiredSkills = hr.skills.map(s => s.skill_name);
+      const matchedSkills = candidateSkills.filter(skill => requiredSkills.includes(skill));
+      score += matchedSkills.length;
+  
+      return {
+        ...hr,
+        matchedSkills,
+        score,
+      };
+    });
+
+    scoredHireRequests.sort((a, b) => b.score - a.score);
+    return scoredHireRequests;
   }
 }
