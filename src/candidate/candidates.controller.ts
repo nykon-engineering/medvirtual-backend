@@ -1,20 +1,25 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, HttpCode } from '@nestjs/common';
+import { USER } from '@prisma/client';
+import { ApiBody, ApiParam, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+
 import { CandidatesService } from './candidates.service';
 
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { USER } from '@prisma/client';
-import { ApiBody, ApiParam, ApiProperty, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
-import { identity } from 'rxjs';
+
+
 
 @Controller('candidates')
 export class CandidatesController {
   constructor(private readonly candidatesService: CandidatesService) {}
 
   @Get()
-  @ApiProperty({ description: 'Get all candidates for the current user\'s organization filtered by status' })
+  @ApiOperation({ summary: 'Get all candidates for the current user\'s organization filtered by status' })
   @ApiQuery({ name: 'country', required: false, type: String, description: 'Filter candidates by conuntry of residence', example: "USA, France, Brazil" })
   @ApiQuery({ name: 'avaliability', required: false, type: String, description: 'Filter candidates by avaliability', example: "Full-time, Part-time" })
   @ApiQuery({ name: 'monthly_compensation_from', required: false, type: String, description: 'Filter candidates by monthly compensations start', example: "1000" })
@@ -57,7 +62,7 @@ export class CandidatesController {
 
 
   @Get(':id')
-  @ApiProperty({ description: 'Get a specific candidate by ID' })
+  @ApiOperation({ summary: 'Get a specific candidate by ID' })
   @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
   @ApiResponse({ status: 200, description: 'Candidate retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
@@ -73,7 +78,7 @@ export class CandidatesController {
   }
 
   @Patch(':id')
-  @ApiProperty({ description: 'Update a specific candidate by ID' })
+  @ApiOperation({ summary: 'Update a specific candidate by ID' })
   @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
   @ApiResponse({ status: 200, description: 'Candidate updated successfully' })
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
@@ -88,7 +93,7 @@ export class CandidatesController {
   }
 
   @Get('/process-data/:id')
-  @ApiProperty({ description: 'Process data for a specific candidate by ID' })
+  @ApiOperation({ summary: 'Process data for a specific candidate by ID' })
   @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
   @ApiResponse({ status: 200, description: 'Candidate data processed successfully' })
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
@@ -103,7 +108,7 @@ export class CandidatesController {
   }
 
   @Get('/pipelines/all')
-  @ApiProperty({ description: 'Get all pipelines' })
+  @ApiOperation({ summary: 'Get all pipelines' })
   @ApiResponse({ status: 200, description: 'Pipelines retrieved successfully' })
   @UseGuards(AuthGuard)
   async getPipelines() {
@@ -116,7 +121,7 @@ export class CandidatesController {
   }
 
   @Get('properties/all')
-  @ApiProperty({ description: 'Get all countries from HubSpot' })
+  @ApiOperation({ summary: 'Get all countries from HubSpot' })
   @UseGuards(AuthGuard)
   @HttpCode(200)
   @ApiQuery({ name: 'fields', required: false, type: String, description: 'fields properties ', example: "country,specialization, languages, skills, salary_range", })
@@ -128,7 +133,7 @@ export class CandidatesController {
 
   @Post('update-status/:id')
   @HttpCode(200)
-  @ApiProperty({ description: 'Update status of candidates and reflect it on Hubspot' })
+  @ApiOperation({ summary: 'Update status of candidates and reflect it on Hubspot' })
   @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
   @ApiBody({ type: updateStatusHubspotDTO})
   @ApiResponse({ status: 200, description: 'Status updated successfully' })
@@ -144,6 +149,24 @@ export class CandidatesController {
     return {
       status: 200,
       message: 'Status updated successfully',
+      data: result
+    }
+  }
+
+  @Get('showMatchHireRequests/:id')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Get the Matched HireRequest for a specific candidate' })
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'Matched HireRequest retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Candidate not found' })
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  async showMatchHireRequests(@Param('id') id: string) {
+    console.log('Fetching Matched HireRequest for candidate ID -  controller:', id);
+    const result = await this.candidatesService.showMatchHireRequests(id);
+    return {
+      status: 200,
+      message: 'Matched HireRequest retrieved successfully',
       data: result
     }
   }
