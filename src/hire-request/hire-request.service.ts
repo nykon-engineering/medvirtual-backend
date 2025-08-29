@@ -18,8 +18,6 @@ import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 
-
-
 @Injectable()
 export class HireRequestService {
 
@@ -27,6 +25,8 @@ export class HireRequestService {
     private readonly prisma: PrismaService,
     private readonly hubspot: HubspotService
   ) {}
+
+  
 
   private async verifyAssignUser (statusTo, hireRequest_id): Promise<boolean> {
 
@@ -1454,7 +1454,7 @@ export class HireRequestService {
     return result;
   }
 
-  async showMatchHireRequests(candidateId: string): Promise<object[]> {
+  async showMatchHireRequests(candidateId: string): Promise<any> {
     const candidate = await this.prisma.candidate.findUnique({
       where: { id: candidateId },
       include: { skills: true },
@@ -1515,6 +1515,6 @@ export class HireRequestService {
     });
 
     scoredHireRequests.sort((a, b) => b.score - a.score);
-    return scoredHireRequests;
+    return scoredHireRequests ;
   }
 }

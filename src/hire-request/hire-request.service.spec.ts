@@ -2,11 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { USER } from '@prisma/client';
+import { HireRequest, Prisma, USER } from '@prisma/client';
 import axios from 'axios';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { CandidatesService } from '../candidate/candidates.service';
 
 
 jest.mock('axios', () => {
@@ -53,6 +54,7 @@ const prismaMock = {
     findMany: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+    findUnique: jest.fn(),
   },
   panelCandidate: {
     createMany: jest.fn(),
@@ -1682,6 +1684,89 @@ describe('HireRequestService', () => {
         where: { id: data.winner_id },
         data: { pipeline_status: expect.any(String) },
       });
+    });
+  });
+
+
+  describe('showMatchHireRequests', () => {
+   
+  
+    it('should throw NotFoundException if candidate does not exist', async () => {
+      prismaMock.candidate.findUnique.mockResolvedValue(null);
+  
+      await expect(service.showMatchHireRequests('cand1'))
+        .rejects.toThrow(NotFoundException);
+    });
+  
+    it('should return empty array if no hire requests match (all panels full)', async () => {
+      prismaMock.candidate.findUnique.mockResolvedValue({
+        id: 'cand1',
+        specialization: 'IT',
+        country: 'USA',
+        employment_type: 'Full-time',
+        hourly_pay_rate: { toNumber: () => 50 },
+        skills: [{ skill_name: 'Node.js' }],
+      });
+  
+      prismaMock.hireRequest.findMany.mockResolvedValue([
+        {
+          id: 'hr1',
+          specialization: 'IT',
+          location: 'USA',
+          availability: 'Full-time',
+          salary_range_from: '1000',
+          salary_range_to: '5000',
+          skills: [{ skill_name: 'Node.js' }],
+          panels: [
+            { panelCandidates: [{}, {}, {}, {}, {}] },
+          ],
+        },
+      ]);
+  
+      const result = await service.showMatchHireRequests('cand1');
+      expect(result).toEqual([]);
+    });
+  
+    it('should calculate score correctly and sort results', async () => {
+      prismaMock.candidate.findUnique.mockResolvedValue({
+        id: 'cand1',
+        specialization: 'IT',
+        country: 'USA',
+        employment_type: 'Full-time',
+        hourly_pay_rate: { toNumber: () => 50 },
+        skills: [{ skill_name: 'Node.js' }, { skill_name: 'React' }],
+      });
+  
+      prismaMock.hireRequest.findMany.mockResolvedValue([
+        {
+          id: 'hr1',
+          specialization: 'IT',
+          location: 'USA',
+          availability: 'Full-time',
+          salary_range_from: '2000',
+          salary_range_to: '5000',
+          skills: [{ skill_name: 'Node.js' }, { skill_name: 'Angular' }],
+          panels: [{ panelCandidates: [] }],
+        },
+        {
+          id: 'hr2',
+          specialization: 'HR',
+          location: 'Brazil',
+          availability: 'Part-time',
+          salary_range_from: '100',
+          salary_range_to: '200',
+          skills: [{ skill_name: 'Excel' }],
+          panels: [{ panelCandidates: [] }],
+        },
+      ] );
+  
+      const result = await service.showMatchHireRequests('cand1');
+  
+      // hr1 deve ter score > hr2
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('hr1');
+      expect(result[0].score).toBeGreaterThan(result[1].score);
+      expect(result[0].matchedSkills).toContain('Node.js');
     });
   });
   

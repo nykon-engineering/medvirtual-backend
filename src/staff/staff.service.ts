@@ -249,7 +249,7 @@ export class StaffService {
         bonus:{
           select:{
             id: true,
-            pay_rate: true,
+            amount: true,
             description: true,
             created_at: true,
             created_by: true,
