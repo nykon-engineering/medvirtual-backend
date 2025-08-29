@@ -291,6 +291,7 @@ model Interview {
 model Ticket {
   id          String       @id @default(uuid())
   user_id     String?       //user assigned or responsible
+  staff_id    String?       //staff in the case of termination or bonus
   org_id      String       //client (organization)
   type        String  
   title       String
@@ -299,6 +300,7 @@ model Ticket {
   priority    Priority     
   createdAt   DateTime     @default(now())
   user        USER?         @relation(fields: [user_id], references: [id])
+  staff       Staff?        @relation(fields: [staff_id], references: [id])
   organization Organization @relation(fields: [org_id], references: [id])
 
   @@index([user_id], map: "idx_tickets_user_id")
@@ -332,11 +334,13 @@ model Staff {
   candidate       Candidate   @relation(fields: [candidate_id], references: [id])
   hireRequest     HireRequest @relation(fields: [hirerequest_id], references: [id])
   bonus           Bonus[]
+  tickets         Ticket[]
 
   @@index([candidate_id], map: "idx_staff_candidate_id")
   @@index([hirerequest_id], map: "idx_staff_hirerequest_id")
   @@index([status], map: "idx_staff_status")
 }
+
 
 model Bonus {
   id              String   @id @default(uuid())

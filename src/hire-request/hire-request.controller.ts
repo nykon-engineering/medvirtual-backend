@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, UseGuards, HttpCode } from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { USER } from '@prisma/client';
 
 import { HireRequestService } from './hire-request.service';
@@ -7,18 +8,16 @@ import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
 import { changeStatusHireRequesDTO } from './dto/changeStatus-hire-request.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
-import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+
 import { reassignDTO } from './dto/reassign-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
-
-
 
 @Controller('hire-request')
 export class HireRequestController {
@@ -210,7 +209,6 @@ export class HireRequestController {
     }
   }
 
-
   @Get('get-panel/:id')
   @UseGuards(AuthGuard)
   @ApiOperation({ description: 'Get specific Panel' })
@@ -353,6 +351,5 @@ export class HireRequestController {
       data: result
     }
   }
-
 
 }

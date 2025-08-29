@@ -1,8 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { HireRequestStatus, USER } from '@prisma/client';
-import axios from 'axios';
 
-import { hireRequestDictionary } from '../common/dictionaries/hire-request-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 
@@ -25,8 +23,6 @@ export class HireRequestService {
     private readonly prisma: PrismaService,
     private readonly hubspot: HubspotService
   ) {}
-
-  
 
   private async verifyAssignUser (statusTo, hireRequest_id): Promise<boolean> {
 

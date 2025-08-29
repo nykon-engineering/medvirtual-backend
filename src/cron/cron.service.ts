@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { CandidatesService } from '../candidate/candidates.service';

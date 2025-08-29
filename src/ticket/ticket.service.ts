@@ -6,6 +6,7 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { Priority, TicketStatus } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
 import { reassignTicketDto } from './dto/reassign-ticket.dto';
+import { Ticket } from 'dist/ticket/entities/ticket.entity';
 
 @Injectable()
 export class TicketService {
@@ -163,6 +164,7 @@ export class TicketService {
       where: { id },
       select: { 
         status: true,
+        type: true,
         user: { 
           select: { 
             id: true 
@@ -175,7 +177,9 @@ export class TicketService {
 
     if(currentStatus.status === 'closed' && data.status=== 'resolved') throw new BadRequestException('Cannot change status from CLOSED to RESOLVED')
     if(currentStatus.status === 'new' && data.status=== 'in_progress' && !currentStatus.user?.id ||  currentStatus.status === 'new' && data.status=== 'resolved' && !currentStatus.user?.id) throw new BadRequestException(`Status ${data.status.replace("_"," ").toUpperCase()} requires an assigned user`)
-
+    if (data.status === 'resolved' && currentStatus.type === 'termination'){
+      //terminate the staff
+    }
     try{
       const ticketUpdated = await this.prisma.ticket.update({
         where: { id },

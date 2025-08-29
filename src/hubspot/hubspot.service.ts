@@ -5,6 +5,7 @@ import axios from 'axios';
 
 import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
+
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';

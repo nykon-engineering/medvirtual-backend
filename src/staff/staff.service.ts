@@ -3,11 +3,9 @@ import { USER } from '@prisma/client';
 
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateBonusDto } from './dto/create-bonus.dto';
+import { terminateDto } from './dto/terminate.dto';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { TicketService } from '../ticket/ticket.service';
-import { terminateDto } from './dto/terminate.dto';
-import { CardDisplayBody } from '@hubspot/api-client/lib/codegen/crm/extensions/cards';
 
 
 @Injectable()
@@ -128,6 +126,7 @@ export class StaffService {
         data:{
           organization: { connect: { id: user.organization_id } },
         type: 'bonus',
+        staff: { connect: { id: data.staff_id } },
         title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
         description: data.description,
         priority: 'medium',
@@ -165,6 +164,7 @@ export class StaffService {
       this.prisma.ticket.create({
         data:{
           organization: { connect: { id: user.organization_id } },
+          staff: { connect: { id: data.staff_id } },
           type: 'termination',
           title: `Termination Requested: ${staff.candidate.first_name} ${staff.candidate.last_name}`,
           description: data.description,

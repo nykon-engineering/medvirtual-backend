@@ -1,13 +1,14 @@
+import axios from 'axios';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { USER } from '@prisma/client';
+
 import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { HireRequest, Prisma, USER } from '@prisma/client';
-import axios from 'axios';
+
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
-import { CandidatesService } from '../candidate/candidates.service';
 
 
 jest.mock('axios', () => {
