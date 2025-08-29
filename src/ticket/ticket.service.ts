@@ -6,7 +6,6 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { Priority, TicketStatus } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
 import { reassignTicketDto } from './dto/reassign-ticket.dto';
-import { Ticket } from 'dist/ticket/entities/ticket.entity';
 
 @Injectable()
 export class TicketService {
