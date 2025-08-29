@@ -121,7 +121,7 @@ export class AuthService {
     }
     
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-      expiresIn: timeToExpires,
+      expiresIn: '7d',
     });
 
     //revoke previous sessions of this user before I create the new session
