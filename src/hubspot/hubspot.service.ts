@@ -23,7 +23,9 @@ export class HubspotService {
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
       private readonly candidate: CandidatesService
     ) {
-        this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
+        this.hubspotClient = new Client({ 
+            accessToken: process.env.HUBSPOT_ACCESS_TOKEN,
+        });
     }
 
     async getCandidates(data: GetCandidatesDto): Promise<any> {

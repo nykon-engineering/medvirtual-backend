@@ -7,6 +7,8 @@ import { CreateBonusDto } from './dto/create-bonus.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { TicketService } from '../ticket/ticket.service';
 import { terminateDto } from './dto/terminate.dto';
+import { CardDisplayBody } from '@hubspot/api-client/lib/codegen/crm/extensions/cards';
+import { Candidate } from 'dist/candidate/entities/candidate.entity';
 
 
 @Injectable()
@@ -176,7 +178,7 @@ export class StaffService {
   }
 
   async findAll(user: USER, page: number, perPage: number, search: string, start_date_from: Date, start_date_to: Date): Promise<Object> { 
-    try{
+   
 
       page = page ? Number(page) : 1;
       perPage = perPage ? Number(perPage) : 10;
@@ -186,6 +188,7 @@ export class StaffService {
 
       const where: any = {
         hireRequest: {},
+        candidate: {}
       }
 
       if (user.role.includes('organization')) {
@@ -193,11 +196,25 @@ export class StaffService {
       }
   
       if (search) {
-        where.hireRequest.title = { contains: search, mode: 'insensitive' };
-        where.candidate.first_name = { contains: search, mode: 'insensitive' };
-        where.candidate.last_name = { contains: search, mode: 'insensitive' };
+        where.OR = [
+          {
+            hireRequest: {
+              title: { contains: search, mode: 'insensitive' },
+            },
+          },
+          {
+            candidate: {
+              first_name: { contains: search, mode: 'insensitive' },
+            },
+          },
+          {
+            candidate: {
+              last_name: { contains: search, mode: 'insensitive' },
+            },
+          },
+        ];
       }
-  
+      
       if (start_date_from || start_date_to) {
         where.start_date = {};
         if (start_date_from) where.start_date.gte = new Date(start_date_from);
@@ -278,9 +295,7 @@ export class StaffService {
           totalPages: Math.ceil(Number(total) / perPage)
         }
       };
-    }catch(error){
-      throw new BadRequestException('Failed to retrieve staff records', error.message);
-    }
+    
   }
 
 }

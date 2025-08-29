@@ -679,11 +679,9 @@ describe('HireRequestService', () => {
       const result = await service.showMatchCandidates('hr1', user);
   
       expect(result).toHaveLength(2);
-  
       expect(result[0].id).toBe('cand1');
       expect(result[0]).toHaveProperty('matchedSkills', ['React', 'JavaScript']);
       expect(result[0].score).toBe(6);
-  
       expect(result[1].score).toBe(5);
   
       expect(prismaMock.hireRequest.findUnique).toHaveBeenCalledWith({
@@ -692,6 +690,12 @@ describe('HireRequestService', () => {
       });
   
       expect(prismaMock.candidate.findMany).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { pipeline_status: '261075105' },
+            { pipeline_status: '1087596819' },
+          ],
+        },
         include: {
           skills: true,
           experiences: true,
