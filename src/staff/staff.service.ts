@@ -128,7 +128,7 @@ export class StaffService {
       this.prisma.ticket.create({
         data:{
           organization: { connect: { id: user.organization_id } },
-        type: 'Bonus',
+        type: 'bonus',
         title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
         description: data.description,
         priority: 'medium',
