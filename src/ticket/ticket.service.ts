@@ -136,6 +136,8 @@ export class TicketService {
   }
 
   async reassing(id: string, data: reassignTicketDto): Promise<Object> {
+    console.log(data);
+
     try{
       const currentTicket = await this.prisma.ticket.findUnique({
         where: { id },
@@ -145,11 +147,11 @@ export class TicketService {
       })
       if(!currentTicket) throw new BadRequestException('Ticket not found')
       if(currentTicket.status !== 'new' && !data.assigned_user_id) throw new BadRequestException('Reassigning to unassigned is only allowed for NEW tickets');
-
+      
       const ticketUpdated = await this.prisma.ticket.update({
         where: { id },
         data: {
-          user: { connect: { id: data.assigned_user_id } }
+          user: data.assigned_user_id ?  { connect: { id: data.assigned_user_id } } : undefined ,
         }
       })
       if(!ticketUpdated) throw new BadRequestException('Failed to reassign ticket')
