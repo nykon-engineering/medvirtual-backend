@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BadRequestException } from '@nestjs/common';
 import { Priority } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
+import { stat } from 'fs';
 
 describe('TicketService', () => {
   let service: TicketService;
@@ -50,6 +51,7 @@ describe('TicketService', () => {
       assigned_user_id: 'user1',
     };
   
+    
     const mockTicket = { id: '1', ...dto, type: ticketTypeDictionary[dto.type] ?? null };
     const mockTicketFull = { id: '1', title: 'Ticket title', status: 'open' };
   
@@ -264,6 +266,7 @@ describe('TicketService', () => {
   describe('reassign', () => {
     const dto = { assigned_user_id: 'user1' };
     const ticketId = 'ticket123';
+    const currentTicketmock = {status: 'open'};
     const mockUser = { id: 'user1', first_name: 'John' };
     const mockTicketUpdated = { id: ticketId };
     const mockTicketFinal = {
@@ -285,6 +288,7 @@ describe('TicketService', () => {
     });
   
     it('should throw BadRequestException if user to assign not found', async () => {
+      mockPrisma.ticket.findUnique.mockResolvedValue(currentTicketmock);
       mockPrisma.uSER.findUnique.mockResolvedValue(null);
   
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
@@ -305,9 +309,12 @@ describe('TicketService', () => {
     });
   
     it('should throw BadRequestException if fetching reassigned ticket fails', async () => {
+      mockPrisma.ticket.findUnique
+      .mockImplementationOnce(() => Promise.resolve(currentTicketmock))
+      .mockImplementationOnce(() => Promise.resolve(null));
+      
       mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
       mockPrisma.ticket.update.mockResolvedValue(mockTicketUpdated);
-      mockPrisma.ticket.findUnique.mockResolvedValue(null); // <--- retorna null para simular falha
     
       await expect(service.reassing(ticketId, dto)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.ticket.findUnique).toHaveBeenCalledWith({

@@ -1,9 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsOptional, IsString } from "class-validator";
 
 export class reassignTicketDto {
-    @ApiProperty({ description: 'ID of the user assigned to the ticket', required: true, type: String })
+    @ApiProperty({ description: 'ID of the user assigned to the ticket', required: false, type: String })
     @IsString()
-    @IsNotEmpty()
+    @IsOptional()
     assigned_user_id: string;
 }
