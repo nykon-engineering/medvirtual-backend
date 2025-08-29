@@ -669,6 +669,12 @@ export class HireRequestService {
       : undefined;
   
     const candidates = await this.prisma.candidate.findMany({
+      where : {
+        OR: [
+          {pipeline_status: '261075105'},
+          {pipeline_status: '1087596819'}
+        ]
+      },
       include: {
         skills: true,
         experiences: true,
