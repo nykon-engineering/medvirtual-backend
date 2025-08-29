@@ -8,7 +8,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TicketService } from '../ticket/ticket.service';
 import { terminateDto } from './dto/terminate.dto';
 import { CardDisplayBody } from '@hubspot/api-client/lib/codegen/crm/extensions/cards';
-import { Candidate } from 'dist/candidate/entities/candidate.entity';
 
 
 @Injectable()
