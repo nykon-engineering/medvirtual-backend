@@ -145,11 +145,6 @@ export class TicketService {
       })
       if(!currentTicket) throw new BadRequestException('Ticket not found')
       if(currentTicket.status !== 'new' && !data.assigned_user_id) throw new BadRequestException('Reassigning to unassigned is only allowed for NEW tickets');
-      
-      const user = await this.prisma.uSER.findUnique({
-        where: { id: data.assigned_user_id }
-      })
-      if (!user) throw new BadRequestException('User to assign not found')
 
       const ticketUpdated = await this.prisma.ticket.update({
         where: { id },
