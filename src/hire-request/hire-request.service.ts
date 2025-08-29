@@ -205,7 +205,7 @@ export class HireRequestService {
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        organization: { id : user.organization_id,}
+        organization: user.role.includes('organization') ?  { id: user.organization_id } : undefined,
       },
       include: {
         skills: true,
