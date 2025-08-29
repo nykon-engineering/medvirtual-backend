@@ -162,7 +162,7 @@ export class TicketService {
   }
   
   async updateStatus(id: string, data: { status: string }): Promise<Object> {
-    const currentStatus = await this.prisma.ticket.findUnique({
+    const ticket = await this.prisma.ticket.findUnique({
       where: { id },
       select: { 
         status: true,
@@ -179,17 +179,16 @@ export class TicketService {
         }
       }
     })
-    if(!currentStatus) throw new BadRequestException('Ticket not found')
-    if(currentStatus.status === data.status) throw new BadRequestException(`Ticket is already in status: ${data.status}`)
+    if(!ticket) throw new BadRequestException('Ticket not found')
+    if(ticket.status === data.status) throw new BadRequestException(`Ticket is already in status: ${data.status}`)
 
-    if(currentStatus.status === 'closed' && data.status=== 'resolved') throw new BadRequestException('Cannot change status from CLOSED to RESOLVED')
-    if(currentStatus.status === 'new' && data.status=== 'in_progress' && !currentStatus.user?.id ||  currentStatus.status === 'new' && data.status=== 'resolved' && !currentStatus.user?.id) throw new BadRequestException(`Status ${data.status.replace("_"," ").toUpperCase()} requires an assigned user`)
-    if (data.status === 'resolved' && currentStatus.type === 'termination' && currentStatus.staff?.id) {
+    if(ticket.status === 'closed' && data.status=== 'resolved') throw new BadRequestException('Cannot change status from CLOSED to RESOLVED')
+    if(ticket.status === 'new' && data.status=== 'in_progress' && !ticket.user?.id ||  ticket.status === 'new' && data.status=== 'resolved' && !ticket.user?.id) throw new BadRequestException(`Status ${data.status.replace("_"," ").toUpperCase()} requires an assigned user`)
+    if (data.status === 'resolved' && ticket.type === 'termination' && ticket.staff?.id) {
       //terminate the staff => update staff status to terminated and terminated staff
       await this.prisma.staff.update({
         where:{
-          id: currentStatus.staff?.id,
-          status: { not: 'terminated' }
+          id: ticket.staff.id,
         },
         data:{
           status: 'terminated',

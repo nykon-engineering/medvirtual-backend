@@ -471,7 +471,7 @@ describe('TicketService', () => {
       const result = await service.updateStatus(ticketId, { status: 'resolved' });
   
       expect(mockPrisma.staff.update).toHaveBeenCalledWith({
-        where: { id: 'staff1', status: { not: 'terminated' } },
+        where: { id: 'staff1' },
         data: expect.objectContaining({ status: 'terminated' }),
       });
       expect(result).toEqual(mockTicketFinal);

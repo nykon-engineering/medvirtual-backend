@@ -158,13 +158,13 @@ export class StaffService {
 
     const [staffStatus, ticket] = await this.prisma.$transaction([
       this.prisma.staff.update({
-        where: { id: data.staff_id },
+        where: { id: staff.id },
         data: { status: 'termination-requested' },
       }),
       this.prisma.ticket.create({
         data:{
           organization: { connect: { id: user.organization_id } },
-          staff: { connect: { id: data.staff_id } },
+          staff: { connect: { id: staff.id } },
           type: 'termination',
           title: `Termination Requested: ${staff.candidate.first_name} ${staff.candidate.last_name}`,
           description: data.description,
@@ -241,6 +241,11 @@ export class StaffService {
             languages: {
               select: {
                 name: true,
+              }
+            },
+            skills:{
+              select:{
+                skill_name: true,
               }
             },
             createdAt: true,
