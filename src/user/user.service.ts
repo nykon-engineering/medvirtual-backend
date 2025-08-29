@@ -45,8 +45,8 @@ export class UserService {
     }
     return user;
   }
-  
-  async findByOrganizationId(organizationId: string): Promise<any>{
+
+  async findByOrganizationId(organizationId: string): Promise<any> {
     const users = await this.prisma.uSER.findMany({
       where: { organization_id: organizationId },
       select: {
@@ -66,12 +66,12 @@ export class UserService {
         verified: true,
         createdAt: true,
         updatedAt: true,
-      }
+      },
     });
     if (!users || users.length === 0) {
       throw new NotFoundException(`No users found in this organization.`);
     }
-    
+
     return users;
   }
 
@@ -111,6 +111,7 @@ export class UserService {
             address: user.organization.address || undefined,
             contact_info: user.organization.contact_info || undefined,
             specialties: user.organization.specialties || undefined,
+            description: user.organization.description || undefined,
             createdAt: user.organization.createdAt,
           }
         : undefined,
@@ -131,6 +132,27 @@ export class UserService {
       const currentUser = await this.findById(id);
       if (!currentUser) {
         throw new NotFoundException(`User not found`);
+      }
+
+      // Handle organization updates if organization fields are provided
+      if (
+        profileData.organization_name ||
+        profileData.organization_description
+      ) {
+        if (currentUser.organization_id) {
+          // Update existing organization
+          await this.prisma.organization.update({
+            where: { id: currentUser.organization_id },
+            data: {
+              ...(profileData.organization_name && {
+                name: profileData.organization_name,
+              }),
+              ...(profileData.organization_description && {
+                description: profileData.organization_description,
+              }),
+            },
+          });
+        }
       }
 
       const updatedUser = await this.prisma.uSER.update({
@@ -165,6 +187,7 @@ export class UserService {
               address: updatedUser.organization.address || undefined,
               contact_info: updatedUser.organization.contact_info || undefined,
               specialties: updatedUser.organization.specialties || undefined,
+              description: updatedUser.organization.description || undefined,
               createdAt: updatedUser.organization.createdAt,
             }
           : undefined,
