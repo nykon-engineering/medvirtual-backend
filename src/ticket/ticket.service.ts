@@ -71,6 +71,8 @@ export class TicketService {
       if(!ticket) throw new BadRequestException('Failed to create ticket')
       
       const ticketFull = await this.findOne(ticket.id)
+      if (!ticketFull) throw new BadRequestException('Failed to retrieve full ticket');
+
       return ticketFull;
 
     }catch(error){
@@ -213,7 +215,4 @@ export class TicketService {
     }
   }
  
-  remove(id: number) {
-    return `This action removes a #${id} ticket`;
-  }
 }

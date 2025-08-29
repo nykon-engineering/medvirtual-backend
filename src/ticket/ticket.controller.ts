@@ -95,10 +95,4 @@ export class TicketController {
     }
   }
 
-  
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.ticketService.remove(+id);
-  }
 }
