@@ -97,9 +97,8 @@ export class AuthService {
       return token;
   }
 
-
   async signIn(data: AuthSignInDto): Promise<object> {
-    const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000;
+    const timeToExpires= data.rememberMe ? Number(process.env.TOKEN_TIME_EXPIRED) : 8 * 60 * 60 * 1000;
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (!user) {
@@ -129,7 +128,7 @@ export class AuthService {
     }
     
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-      expiresIn: '7d',
+      expiresIn: data.rememberMe ? '7d' : '8h',
     });
 
     //revoke previous sessions of this user before I create the new session
@@ -142,7 +141,7 @@ export class AuthService {
       data:{
         userId: user.id,
         token: token,
-        expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
+        expiresAt: new Date(Date.now() +  timeToExpires ), 
       }
     })
 

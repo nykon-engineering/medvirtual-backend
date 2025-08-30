@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class AuthSignInDto {
   @ApiProperty({ required: true, description: 'User email' })
@@ -10,4 +10,9 @@ export class AuthSignInDto {
   @IsString()
   @MinLength(6)
   password: string;
+
+  @ApiProperty({ required: false, description: 'Remember me option' })
+  @IsBoolean()
+  @IsOptional()
+  rememberMe?: boolean;
 }
