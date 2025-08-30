@@ -12,6 +12,7 @@ import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
 import axios from 'axios';
+import { language } from 'googleapis/build/src/apis/language';
 
 @Injectable()
 export class CandidatesService {
@@ -57,11 +58,13 @@ export class CandidatesService {
     : [];
     const languageFilter = languagesArray?.length
     ? {
-        languages: {
-          some: {
-            name: { in: languagesArray }
+        AND: languagesArray.map(language => ({
+          languages: {
+            some: {
+              name: language
+            }
           }
-        }
+        }))
       }
     : {};
 
@@ -70,13 +73,13 @@ export class CandidatesService {
     : [];
     const skillFilter = skillsArray?.length
     ? {
-        skills: {
-          some: {
-            skill_name: { 
-              in: skillsArray
+        AND: skillsArray.map(skill => ({
+          skills: {
+            some: {
+              skill_name: skill
             }
           }
-        }
+        }))
       }
     : {};
 
@@ -102,9 +105,9 @@ export class CandidatesService {
 
     const specializationFilter = specializationArray.length
     ? {
-        OR: specializationArray.map(spec => ({
+        AND: specializationArray.map(spec => ({
           specialization: {
-            contains: spec, 
+            contains: spec,
             mode: 'insensitive' as Prisma.QueryMode,
           }
         }))
