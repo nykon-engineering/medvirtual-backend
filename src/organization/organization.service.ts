@@ -207,11 +207,21 @@ export class OrganizationService {
     }
   }
 
-  async delete(id: string): Promise<Organization> {
+  async delete(id: string): Promise<Boolean> {
     try {
-      return await this.prisma.organization.delete({
-        where: { id },
-      });
+      
+      await this.prisma.$transaction([
+        this.prisma.organization.update({
+          where: { id },
+          data: { status: 'deleted' },
+        }),
+        this.prisma.uSER.updateMany({
+          where: { organization_id: id },
+          data: { status: 'deleted' },
+        })
+      ])
+      
+      return true
     } catch {
       throw new NotFoundException('Organization not found');
     }

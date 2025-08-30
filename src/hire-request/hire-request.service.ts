@@ -526,7 +526,7 @@ export class HireRequestService {
       if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
       if (!panelExists.scheduled_date){
-        throw new BadRequestException(`You need to schedule an interview before changing the status to ${data.status.replace("_"," ").toUpperCase()}`);
+        throw new BadRequestException(`You need to set a Deadline before changing the status to ${data.status.replace("_"," ").toUpperCase()}`);
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);

@@ -367,6 +367,7 @@ enum UserStatus {
   incomplete
   active
   inactive
+  deleted
 }
 
 enum CandidateStatus {

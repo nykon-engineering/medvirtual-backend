@@ -95,7 +95,7 @@ export class OrganizationController {
     };
   }
 
-  @Delete('delete/:id')
+  @Post('delete/:id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin')
   @HttpCode(200)

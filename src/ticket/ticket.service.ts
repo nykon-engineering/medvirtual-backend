@@ -136,7 +136,6 @@ export class TicketService {
   }
 
   async reassing(id: string, data: reassignTicketDto): Promise<Object> {
-    console.log(data);
 
     try{
       const currentTicket = await this.prisma.ticket.findUnique({
