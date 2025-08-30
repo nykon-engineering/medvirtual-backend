@@ -35,7 +35,8 @@ export class CandidatesService {
     skills?: string,
     languages?: string,
     page?: number,
-    perPage?: number
+    perPage?: number,
+    search?: string
   ): Promise <any> {
 
     page = page ? Number(page) : 1;
@@ -96,10 +97,10 @@ export class CandidatesService {
     }
 
     const specializationArray = specializations 
-  ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
-  : [];
+    ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
+    : [];
 
-  const specializationFilter = specializationArray.length
+    const specializationFilter = specializationArray.length
     ? {
         OR: specializationArray.map(spec => ({
           specialization: {
@@ -107,6 +108,17 @@ export class CandidatesService {
             mode: 'insensitive' as Prisma.QueryMode,
           }
         }))
+      }
+    : {};
+
+    const searchFilter = search
+    ? {
+        OR: [
+          { first_name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
+          { last_name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
+          { name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
+          { email: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
+        ],
       }
     : {};
 
@@ -126,6 +138,7 @@ export class CandidatesService {
           ...languageFilter,
           ...experienceFilter,
           ...specializationFilter,
+          ...searchFilter,
         },
         {
           country: country ? country : undefined,
@@ -140,6 +153,7 @@ export class CandidatesService {
           ...languageFilter,
           ...experienceFilter,
           ...specializationFilter,
+          ...searchFilter,
         },
         {
           country: country ? country : undefined,
@@ -154,6 +168,7 @@ export class CandidatesService {
           ...languageFilter,
           ...experienceFilter,
           ...specializationFilter,
+          ...searchFilter,
         },
         {
           country: country ? country : undefined,
@@ -168,6 +183,7 @@ export class CandidatesService {
           ...languageFilter,
           ...experienceFilter,
           ...specializationFilter,
+          ...searchFilter,
         }
       ]
     }

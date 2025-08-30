@@ -42,7 +42,8 @@ export class CandidatesController {
     @Query('skills') skills: string,
     @Query('languages') languages: string,
     @Query('page') page,
-    @Query('perPage') perPage
+    @Query('perPage') perPage,
+    @Query('search') search: string,
   ) {
     const result = await this.candidatesService.findAll(
       user, 
@@ -55,7 +56,8 @@ export class CandidatesController {
       skills,
       languages,
       page,
-      perPage
+      perPage,
+      search,
     );
     return result
   }
