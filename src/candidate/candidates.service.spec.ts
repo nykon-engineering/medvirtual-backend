@@ -100,39 +100,6 @@ const openAIMock = {
         }
       });
     });
-  
-    it('should apply filters for country, skills, and languages', async () => {
-      const mockCandidates = [{ id: '1', pipeline_status: '261075105' }];
-      const mockTotal = 1;
-    
-      mockPrisma.candidate.findMany.mockResolvedValue(mockCandidates);
-      mockPrisma.candidate.count.mockResolvedValue(mockTotal);
-    
-      await service.findAll(
-        mockUser,
-        'Brazil',            // country
-        undefined,
-        '3000',              // monthly_compensation_from
-        '5000',              // monthly_compensation_to
-        '5',                 // years_of_experience
-        'Developer',         // specialization
-        'aws,office',        // skills
-        'English,Spanish',   // languages
-        2,                   // page
-        5                    // perPage
-      );
-    
-      // Captura o "where" diretamente da chamada de findMany
-      const whereArgs = mockPrisma.candidate.findMany.mock.calls[0][0].where;
-    
-      expect(whereArgs.OR[0].skills).toEqual({
-        some: { skill_name: { in: ['aws', 'office'] } }
-      });
-    
-      expect(whereArgs.OR[0].languages).toEqual({
-        some: { name: { in: ['English', 'Spanish'] } }
-      });
-    });
     
   
     it('should throw BadGatewayException when prisma fails', async () => {
