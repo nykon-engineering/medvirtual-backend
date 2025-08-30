@@ -544,6 +544,7 @@ export class HireRequestService {
         id: id
       },
       data:{
+        status: 'new',
         assigned_user: data.user_id
         ? { connect: { id: data.user_id } }
         : { disconnect: true },
