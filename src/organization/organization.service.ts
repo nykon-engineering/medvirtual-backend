@@ -130,6 +130,7 @@ export class OrganizationService {
       return await this.prisma.organization.findMany({
         where:{
           admin_id: user.role.includes('organization') ? user.id : undefined,
+          status: { not: 'deleted' }
         },
         orderBy: {
           name: 'asc',
