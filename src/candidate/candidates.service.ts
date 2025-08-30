@@ -202,6 +202,8 @@ export class CandidatesService {
       specialization: true,
       tools: true,
       medical_tools: true,
+      processing_status: true,
+      processing_error: true,
       languages: {
         select: {
           name: true,
