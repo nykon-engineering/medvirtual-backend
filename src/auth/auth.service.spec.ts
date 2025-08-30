@@ -152,147 +152,206 @@ describe('AuthService - WorkOsSign', () => {
   })
 })
 
-describe('AuthService - SignIn', () => {
+describe('AuthService - signIn', () => {
   let service: AuthService;
   let user: UserService;
   let prisma: PrismaService;
-  let mail: MailService;
+
+  const userMock = {
+    create: jest.fn(),
+    findByEmail: jest.fn(),
+  };
+
+  const mailMock = { sendMail: jest.fn() };
+
+  const prismaMock = {
+    session: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    organization: {
+      findUnique: jest.fn(),
+    },
+    user: {
+      findUnique: jest.fn(),
+    },
+  };
 
   beforeEach(async () => {
-    const userMock = {
-      create: jest.fn(),
-      findByEmail: jest.fn(),
-    }
-    const mailMock = {
-      sendMail: jest.fn(),
-    }
-    const prismaMock = {
-      session: {
-        create: jest.fn(),
-        updateMany: jest.fn(),
-      },
-    }
-
     const module: TestingModule = await Test.createTestingModule({
-      providers : [
+      providers: [
         AuthService,
         { provide: UserService, useValue: userMock },
         { provide: MailService, useValue: mailMock },
         { provide: PrismaService, useValue: prismaMock },
-        { provide: WorkosService, useValue: {} }, // vazio se não usar
-      ]
+        { provide: WorkosService, useValue: {} },
+      ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     user = module.get<UserService>(UserService);
-    mail = module.get<MailService>(MailService);
     prisma = module.get<PrismaService>(PrismaService);
+
+    jest.clearAllMocks();
   });
 
-  //should return 400 if the session is not created - Failed to create session
-  //should return 200 if everything is ok
+  const dataFake = { email: 'test@test.com', password: 'testpassword' };
+  const authenticationMethod = 'OwnSign';
 
-  it('should return 401 if the user not found', async () => {
-    const dataFake = {email: 'test@test.com', password: 'testpassword'};
-    user.findByEmail = jest.fn().mockResolvedValue(null);
+  it('should throw if user not found', async () => {
+    userMock.findByEmail.mockResolvedValue(null);
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
-      new BadRequestException('User not found with this email'),
+      new UnauthorizedException('User not found with this email'),
     );
-  })
+  });
 
-  it('should return 401 if the method is wrong', async () => {
-    const dataFake = {email: 'test@test.com', password: 'testpassword'};
-    const authenticationMethod = 'OwnSign'
-    user.findByEmail = jest.fn().mockResolvedValue({
-      id: 'existing-user-id',
-      authenticationMethod: 'differentMethod',
+  it('should throw if user is deleted', async () => {
+    userMock.findByEmail.mockResolvedValue({ status: 'deleted' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('This user does not have permission to log in.'),
+    );
+  });
+
+  it('should throw if user has no organization', async () => {
+    userMock.findByEmail.mockResolvedValue({
+      id: 'u1',
+      status: 'active',
+      organization_id: null,
     });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
-      new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used')
+      new UnauthorizedException('User does not belong to any organization. Please contact support.'),
     );
-  })
+  });
 
-  it('should return 401 if the user is not verified', async () => {
-    const dataFake = {email: 'test@test.com', password: 'testpassword'};
-    const authenticationMethod = 'OwnSign'
-    user.findByEmail = jest.fn().mockResolvedValue({
-      id: 'existing-user-id',
+  it('should throw if organization not found or deleted', async () => {
+    userMock.findByEmail.mockResolvedValue({
+      id: 'u1',
+      status: 'active',
+      organization_id: 'org1',
+    });
+    prismaMock.organization.findUnique.mockResolvedValue({ status: 'deleted' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('User organization not found or deleted. Please contact support.'),
+    );
+  });
+
+  it('should throw if user has wrong auth method', async () => {
+    userMock.findByEmail.mockResolvedValue({
+      id: 'u1',
+      organization_id: 'org1',
+      authentication_method: 'different',
+      status: 'active',
+    });
+    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException(
+        'User does not use this authentication method. You need to Sign in with the first method you have used',
+      ),
+    );
+  });
+
+  it('should throw if user is not verified', async () => {
+    userMock.findByEmail.mockResolvedValue({
+      id: 'u1',
+      organization_id: 'org1',
       authentication_method: authenticationMethod,
       verified: false,
+      status: 'active',
     });
+    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new UnauthorizedException('User not verified'),
     );
-  })
+  });
 
-  it('should return 400 if the password is invalid', async () => {
-    const dataFake = {email: 'test@test.com', password: 'testpassword'};
-    const authenticationMethod = 'OwnSign'
-    user.findByEmail = jest.fn().mockResolvedValue({
-      id: 'existing-user-id',
+  it('should throw if password is invalid', async () => {
+    userMock.findByEmail.mockResolvedValue({
+      id: 'u1',
+      email: dataFake.email,
+      password: 'hashed-pass',
       authentication_method: authenticationMethod,
       verified: true,
+      status: 'active',
+      organization_id: 'org1',
     });
+    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new BadRequestException('Invalid password'),
     );
-  })
+  });
 
-  it('should return 400 if the session is not created', async () => {
-    const dataFake = {email: 'test@test.com', password: 'testpassword'};
-    const authenticationMethod = 'OwnSign'
-    user.findByEmail = jest.fn().mockResolvedValue({
-      id: 'existing-user-id',
+  it('should throw if session creation fails', async () => {
+    userMock.findByEmail.mockResolvedValue({
+      id: 'u1',
       email: dataFake.email,
+      password: 'hashed-pass',
       authentication_method: authenticationMethod,
       verified: true,
+      status: 'active',
+      organization_id: 'org1',
     });
+    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-
-    (jwt.sign as jest.Mock).mockImplementation(() => 'mocked-jwt-token');
-    prisma.session.create = jest.fn().mockResolvedValue(null);
+    (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
+    prismaMock.session.updateMany.mockResolvedValue({});
+    prismaMock.session.create.mockResolvedValue(null);
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new BadRequestException('Failed to create session'),
     );
-  })
+  });
 
-  it('should return 200 if everything is ok', async () => {
-    const dataFake = {email: 'test@test.com', firstName: 'Test', lastName: 'Last', password: 'testpassword'};
-    const authenticationMethod = 'OwnSign'
-    user.findByEmail = jest.fn().mockResolvedValue({
-      id: 'existing-user-id',
+  it('should return token and user if everything is ok', async () => {
+    const userObj = {
+      id: 'u1',
       email: dataFake.email,
+      password: 'hashed-pass',
       authentication_method: authenticationMethod,
       verified: true,
-    });
+      status: 'active',
+      organization_id: 'org1',
+      first_name: 'Test',
+      last_name: 'User',
+      role: 'admin',
+    };
+    userMock.findByEmail.mockResolvedValue(userObj);
+    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
+    prismaMock.session.updateMany.mockResolvedValue({});
+    prismaMock.session.create.mockResolvedValue({ id: 'session1' });
 
-    (jwt.sign as jest.Mock).mockImplementation(() => 'mocked-jwt-token');
-    prisma.session.create = jest.fn().mockResolvedValue(true);
+    const result = await service.signIn(dataFake);
 
-    await expect(service.signIn(dataFake)).resolves.toEqual({
-      message: 'User authenticated successfully',
+    expect(result).toEqual({
       statusCode: 200,
-      token: 'mocked-jwt-token',
-      user : {
+      message: 'User authenticated successfully',
+      token: 'mocked-token',
+      user: {
+        firstName: 'Test',
+        lastName: 'User',
         email: dataFake.email,
-        firstName: undefined,
-        lastName: undefined,
-        role: undefined
-      }
-    })
-  })
-
-})
+        role: 'admin',
+        clientId: 'org1',
+      },
+    });
+    expect(prisma.session.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      data: { isRevoked: true },
+    });
+  });
+});
 
 
 describe('AuthService - Signup', () => {

@@ -105,6 +105,14 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found with this email');
     }
+    if(user.status === 'deleted') throw new UnauthorizedException('This user does not have permission to log in.');
+    if (!user.organization_id) throw new UnauthorizedException('User does not belong to any organization. Please contact support.');
+
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: user.organization_id },
+      select: { status: true },
+    })
+    if(!organization || organization.status === 'deleted')  throw new UnauthorizedException('User organization not found or deleted. Please contact support.');
 
     if (user.authentication_method !== authenticationMethod) {
       throw new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used');

@@ -41,6 +41,10 @@ describe('OrganizationService', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    $transaction: jest.fn(),
+    uSER: {
+      updateMany: jest.fn(),
+    },
   };
 
   const mockAuthService = {
@@ -61,10 +65,23 @@ describe('OrganizationService', () => {
 
     service = module.get<OrganizationService>(OrganizationService);
     prisma = module.get<PrismaService>(PrismaService);
+
+    mockPrismaService.$transaction = jest.fn(async (operations) => {
+      if (Array.isArray(operations)) {
+        return Promise.all(operations);
+      }
+
+      if (typeof operations === 'function') {
+        return operations(mockPrismaService);
+      }
+      return true;
+    });
+    
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   describe('getAll', () => {
@@ -145,26 +162,27 @@ describe('OrganizationService', () => {
     });
 
     it('should throw BadRequestException if update fails', async () => {
-      mockPrismaService.organization.update.mockRejectedValue(new Error());
+      mockPrismaService.organization.update.mockRejectedValue(new Error('fail'));
 
       await expect(service.update('1', { name: '', cellphone: '', email: '' })).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('delete', () => {
-    it('should delete and return the organization', async () => {
-      const org = { id: '1', name: 'Org', contact_info: '000', email: 'org@example.com' };
-
-      mockPrismaService.organization.delete.mockResolvedValue(org);
-
+    it('should soft delete organization and users, returning true', async () => {
+      mockPrismaService.$transaction.mockResolvedValue(true);
+  
       const result = await service.delete('1');
-      expect(result).toEqual(org);
+  
+      expect(mockPrismaService.$transaction).toHaveBeenCalledTimes(1);
+      expect(result).toBe(true);
     });
-
-    it('should throw NotFoundException if delete fails', async () => {
-      mockPrismaService.organization.delete.mockRejectedValue(new Error());
-
+  
+    it('should throw NotFoundException if transaction fails', async () => {
+      mockPrismaService.$transaction.mockRejectedValue(new Error());
+  
       await expect(service.delete('invalid-id')).rejects.toThrow(NotFoundException);
     });
   });
+  
 });
