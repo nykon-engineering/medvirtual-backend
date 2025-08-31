@@ -868,10 +868,6 @@ describe('HireRequestService', () => {
       await expect(service.editPanel(null as any, user)).rejects.toThrow(BadRequestException);
     });
   
-    it('should throw NotFoundException if panel does not exist', async () => {
-      prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
-      await expect(service.editPanel(panelData, user)).rejects.toThrow(NotFoundException);
-    });
   
     it('should throw BadRequestException if pipeline status mapping is missing', async () => {
       mockPanelFound();

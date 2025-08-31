@@ -801,13 +801,17 @@ export class HireRequestService {
       select: {id: true,},
     });
     if (!panelExists) {
-      //create Panel with default user_id
+      //it means the user acessed 'start sourcing'. So we need to create the panel and move this card to 'sourcing' stage
       currentPanel = await this.prisma.candidatePanel.create({
         data: {
           hire_request_id: data.hireRequest_id,
           readable: false,
         }
       })
+
+      const updatedRequest = await this.updateHireRequestStatus(data.hireRequest_id, 'sourcing');
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
     }else{
       currentPanel = panelExists;
     }
