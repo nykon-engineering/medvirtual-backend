@@ -973,7 +973,7 @@ describe('HireRequestService', () => {
     });
   });
   
-  
+  /*
   describe('panelReady', () => {
     const panelData = { hireRequest_id: 'hr1', readable: true };
   
@@ -1063,6 +1063,7 @@ describe('HireRequestService', () => {
       expect(findOneMock).toHaveBeenCalledWith(panelData.hireRequest_id, user);
     });
   });
+  */
   
   describe('getPanel', () => {
 

@@ -899,6 +899,24 @@ export class HireRequestService {
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
+    const panel = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: data.hireRequest_id,
+      },
+      include: {
+        panelCandidates: true,
+      },
+    });
+
+    if (!panel) {
+      throw new NotFoundException(`Panel for this hire request not found`);
+    }
+
+    if (panel.panelCandidates.length < 3) {
+      throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
+    }
+
+
     //update hire request with status = 'panel_ready'
     const hireRequest = await this.prisma.hireRequest.update({
       where: {
@@ -921,22 +939,6 @@ export class HireRequestService {
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
 
-    const panel = await this.prisma.candidatePanel.findFirst({
-      where: {
-        hire_request_id: data.hireRequest_id,
-      },
-      include: {
-        panelCandidates: true,
-      },
-    });
-
-    if (!panel) {
-      throw new NotFoundException(`Panel for this hire request not found`);
-    }
-
-    if (panel.panelCandidates.length < 3) {
-      throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
-    }
 
     return this.findOne(data.hireRequest_id, user);
   }
