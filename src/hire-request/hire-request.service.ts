@@ -793,14 +793,24 @@ export class HireRequestService {
   async editPanel(data: ConfirmPanelHireRequestDto, user: USER) : Promise<boolean> {
     if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
+    let currentPanel;
 
     //check if panel exists
     const panelExists = await this.prisma.candidatePanel.findFirst({
       where: {hire_request_id: data.hireRequest_id,},
       select: {id: true,},
     });
-    if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
-
+    if (!panelExists) {
+      //create Panel with default user_id
+      currentPanel = await this.prisma.candidatePanel.create({
+        data: {
+          hire_request_id: data.hireRequest_id,
+          readable: false,
+        }
+      })
+    }else{
+      currentPanel = panelExists;
+    }
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Endorsed to Client';
     })
@@ -810,7 +820,7 @@ export class HireRequestService {
     //====>remove old panel and update all candidates to 'Available Candidates' in hubspot
     const currentCandidates = await this.prisma.panelCandidate.findMany({
       where: {
-        panel_id: panelExists.id,
+        panel_id: currentPanel.id,
       },
       select: {
         candidate_id: true,
@@ -832,7 +842,7 @@ export class HireRequestService {
 
     const removeCandidates = await this.prisma.panelCandidate.deleteMany({
       where: {
-        panel_id: panelExists.id,
+        panel_id: currentPanel.id,
       },
     });
     if (!removeCandidates) throw new BadRequestException(`Panel candidates not removed`);
@@ -842,7 +852,7 @@ export class HireRequestService {
     const addCandidates = await this.prisma.panelCandidate.createMany({
       data: data.candidates_id.map(candidateId => ({
         candidate_id: candidateId,
-        panel_id: panelExists.id,
+        panel_id: currentPanel.id,
       })),
     })
     if (!addCandidates) throw new BadRequestException(`Panel candidates not added`);
