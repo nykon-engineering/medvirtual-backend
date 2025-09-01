@@ -121,63 +121,89 @@ export class HireRequestService {
     return hireRequestWithSkills;
   }
 
-  async findAll(user: USER): Promise<object[]> {
+  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10): Promise<any> {
     
     if (!user || !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
     if(!user.role) throw new NotFoundException('User role not found');
 
-    const hireRequests = await this.prisma.hireRequest.findMany({
-      where: user.role.includes('organization') ?  { organization: { id: user.organization_id } }: undefined,
-      include: {
-        skills: true,
-        organization: true,
-        assigned_user:{
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-          }
-        },
-        panels: {
-          select: {
-            id: true,
-            status: true,
-            scheduled_date: true,
-            readable: true,
-            panelCandidates: {
-              select: {
-                status: true,
-                candidate: {
-                  select: {
-                    id: true,
-                    first_name: true,
-                    last_name: true,
-                    name: true,
-                    email: true,
-                    country: true,
-                    languages: true,
-                    specialization: true,
-                    skills: {
-                      select: {
-                        skill_name: true,
+    const baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
+    const searchWhere = search ? { title: { contains: search, mode: 'insensitive' as const } } : {};
+    const whereClause = user.role.includes('organization') ? { ...baseWhere, ...searchWhere } : searchWhere;
+
+    const skip = (page - 1) * perPage;
+    const take = perPage;
+
+    const [hireRequests, total] = await this.prisma.$transaction([
+      this.prisma.hireRequest.findMany({
+        where: whereClause,
+        include: {
+          skills: true,
+          organization: true,
+          assigned_user:{
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+            }
+          },
+          panels: {
+            select: {
+              id: true,
+              status: true,
+              scheduled_date: true,
+              readable: true,
+              panelCandidates: {
+                select: {
+                  status: true,
+                  candidate: {
+                    select: {
+                      id: true,
+                      first_name: true,
+                      last_name: true,
+                      name: true,
+                      email: true,
+                      country: true,
+                      languages: true,
+                      specialization: true,
+                      skills: {
+                        select: {
+                          skill_name: true,
+                        },
                       },
                     },
                   },
                 },
               },
-            },
-            interviews: {
-              select: {
-                scheduled_date: true,
+              interviews: {
+                select: {
+                  scheduled_date: true,
+                },
               },
             },
-          },
+          }
+        },
+        skip,
+        take,
+        orderBy: {
+          createdAt: 'desc'
         }
-      }
-    })
-    if(!hireRequests || hireRequests.length === 0) throw new NotFoundException('No hire requests found');
+      }),
+      this.prisma.hireRequest.count({ where: whereClause })
+    ]);
+
+    if(!hireRequests || hireRequests.length === 0) {
+      return {
+        data: [],
+        meta: {
+          total: 0,
+          page,
+          perPage,
+          totalPages: 0
+        }
+      };
+    }
 
     const formatted = hireRequests.map(hr => ({
       ...hr,
@@ -188,7 +214,15 @@ export class HireRequestService {
       }))
     }));
 
-    return formatted;
+    return {
+      data: formatted,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(total / perPage)
+      }
+    };
     
 
   }
@@ -1035,15 +1069,53 @@ export class HireRequestService {
                 first_name: true,
                 last_name: true,
                 name: true,
+                about_me: true,
                 hourly_pay_rate: true,
+                years_of_experience: true,
                 country: true,
+                specialization: true,
+                employment_type: true,
+                skills: {
+                  select: {
+                    id: true,
+                    skill_name: true,
+                    proficiency_level: true,
+                    skill_type: true,
+                  },
+                },
+                educations: {
+                  orderBy: { year: 'desc' },
+                  select: {
+                    id: true,
+                    degree: true,
+                    institution: true,
+                    year: true,
+                  },
+                },
                 experiences: {
-                  orderBy: { start_date: 'asc' },
-                  take: 1, 
-                  select: { start_date: true },
+                  orderBy: { start_date: 'desc' },
+                  select: {
+                    id: true,
+                    company: true,
+                    position: true,
+                    responsabilities: true,
+                    start_date: true,
+                    end_date: true,
+                  },
+                },
+                languages: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
                 },
               },
             },
+          },
+        },
+        interviews: {
+          select: {
+            scheduled_date: true,
           },
         },
         hireRequest: {
@@ -1077,16 +1149,25 @@ export class HireRequestService {
 
     const result = panels.map(panel => ({
       ...panel,
+      interview_date: panel.interviews[0]?.scheduled_date || null,
+      interviews: undefined,
       panelCandidates: panel.panelCandidates.map(pc => {
-        const startDate = pc.candidate.experiences[0]?.start_date;
-        const years_of_experience = startDate
-          ? new Date().getFullYear() - new Date(startDate).getFullYear()
+        // Calculate years of experience from the earliest experience if not already set
+        const validExperiences = pc.candidate.experiences.filter(exp => exp.start_date !== null);
+        const earliestExperience = validExperiences.length > 0 
+          ? validExperiences.sort((a, b) => new Date(a.start_date!).getTime() - new Date(b.start_date!).getTime())[0]
+          : null;
+        
+        const calculatedYearsOfExperience = earliestExperience?.start_date
+          ? new Date().getFullYear() - new Date(earliestExperience.start_date!).getFullYear()
           : 0;
+        
         return {
           ...pc,
           candidate: {
             ...pc.candidate,
-            years_of_experience,
+            // Use the stored years_of_experience or calculate from experiences
+            years_of_experience: pc.candidate.years_of_experience ?? calculatedYearsOfExperience,
           },
         };
       }),
@@ -1118,6 +1199,7 @@ export class HireRequestService {
     });
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
     const updatedDate = new Date(`${data.date_time}`);
+    console.log(updatedDate, data.date_time, 'updatedDate');
 
     const interviewScheduled = await this.prisma.interview.create({
       data: {
