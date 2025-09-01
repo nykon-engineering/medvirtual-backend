@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, HttpCode, Query } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { USER } from '@prisma/client';
 
@@ -40,16 +40,25 @@ export class HireRequestController {
   @Get()
   @UseGuards(AuthGuard)
   @ApiOperation({ description: 'Get all hire requests regarding rules for the current user' })
-  @ApiResponse({ status: 200, description: 'List of hire requests' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search hire requests by title' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number for pagination' })
+  @ApiQuery({ name: 'perPage', required: false, description: 'Number of items per page' })
+  @ApiResponse({ status: 200, description: 'List of hire requests with pagination info' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
   @ApiResponse({ status: 404, description: 'User role not found' })
-  @ApiResponse({ status: 404, description: 'No hire requests found for this organization' })
-  async findAll(@CurrentUser() user: USER) {
-    const result = await this.hireRequestService.findAll(user);
+  async findAll(
+    @CurrentUser() user: USER, 
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string
+  ) {
+    const pageNumber = page ? parseInt(page, 10) : 1;
+    const perPageNumber = perPage ? parseInt(perPage, 10) : 10;
+    const result = await this.hireRequestService.findAll(user, search, pageNumber, perPageNumber);
     return {
       status: 200,
       message: 'Data retrieved successfully',
-      data: result,
+      ...result,
     }
   }
 
