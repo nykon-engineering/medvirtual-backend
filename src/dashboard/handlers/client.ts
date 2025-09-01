@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Ticket } from 'dist/ticket/entities/ticket.entity';
 import { TicketStatus } from '@prisma/client';
 
 @Injectable()
