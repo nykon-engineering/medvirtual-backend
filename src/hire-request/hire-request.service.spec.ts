@@ -37,6 +37,7 @@ const prismaMock = {
     update: jest.fn(),
     delete: jest.fn(),
     updateMany: jest.fn(),
+    count: jest.fn(),
   },
   hireRequestSkill: {
     createMany: jest.fn(),
@@ -70,7 +71,8 @@ const prismaMock = {
   },
   organization: {
     findUnique: jest.fn(),
-  }
+  },
+  $transaction: jest.fn(),
 };
 const hubspotServiceMock = {
   updateManyCandidatesFromHireRequest: jest.fn(),
@@ -262,8 +264,8 @@ describe('HireRequestService', () => {
   });
 
   describe('findAll', () => {
-    it('should return formatted hire requests with interview_date', async () => {
-      prismaMock.hireRequest.findMany.mockResolvedValue([
+        it('should return formatted hire requests with interview_date and pagination', async () => {
+      const mockHireRequests = [
         {
           id: 'hr1',
           panels: [
@@ -277,32 +279,46 @@ describe('HireRequestService', () => {
             },
           ],
         },
-      ]);
-  
+      ];
+      const mockTotal = 1;
+
+      prismaMock.$transaction.mockResolvedValue([mockHireRequests, mockTotal]);
+
       const result = await service.findAll({ ...user, role: 'organization_admin' });
-  
-      expect(result).toEqual([
-        {
-          id: 'hr1',
-          panels: [
-            {
-              id: 'p1',
-              status: 'scheduled',
-              scheduled_date: expect.any(Date),
-              readable: true,
-              panelCandidates: [],
-              interview_date: new Date('2025-08-25T10:00:00Z'),
-              interviews: undefined,
-            },
-          ],
-        },
-      ]);
-  
-      expect(prismaMock.hireRequest.findMany).toHaveBeenCalledWith(
+
+      expect(result).toEqual({
+        data: [
+          {
+            id: 'hr1',
+            panels: [
+              {
+                id: 'p1',
+                status: 'scheduled',
+                scheduled_date: expect.any(Date),
+                readable: true,
+                panelCandidates: [],
+                interview_date: new Date('2025-08-25T10:00:00Z'),
+                interviews: undefined,
+              },
+            ],
+          },
+        ],
+        meta: {
+          total: 1,
+          page: 1,
+          perPage: 10,
+          totalPages: 1
+        }
+      });
+
+      expect(prismaMock.$transaction).toHaveBeenCalledWith([
         expect.objectContaining({
           where: { organization: { id: user.organization_id } },
         }),
-      );
+        expect.objectContaining({
+          where: { organization: { id: user.organization_id } },
+        })
+      ]);
     });
   
     it('should throw NotFoundException if user has no organization', async () => {
@@ -315,10 +331,46 @@ describe('HireRequestService', () => {
         .rejects.toThrow(NotFoundException);
     });
   
-    it('should throw NotFoundException if no hire requests found', async () => {
-      prismaMock.hireRequest.findMany.mockResolvedValue([]);
-      await expect(service.findAll(user))
-        .rejects.toThrow(NotFoundException);
+    it('should return empty array with pagination meta if no hire requests found', async () => {
+      prismaMock.$transaction.mockResolvedValue([[], 0]);
+      const result = await service.findAll(user);
+      expect(result).toEqual({
+        data: [],
+        meta: {
+          total: 0,
+          page: 1,
+          perPage: 10,
+          totalPages: 0
+        }
+      });
+    });
+
+    it('should filter hire requests by title when search parameter is provided', async () => {
+      const mockHireRequests = [
+        {
+          id: 'hr1',
+          title: 'Software Engineer',
+          panels: [],
+        },
+      ];
+      prismaMock.$transaction.mockResolvedValue([mockHireRequests, 1]);
+
+      const result = await service.findAll({ ...user, role: 'organization_admin' }, 'Software');
+
+      expect(prismaMock.$transaction).toHaveBeenCalledWith([
+        expect.objectContaining({
+          where: { 
+            organization: { id: user.organization_id },
+            title: { contains: 'Software', mode: 'insensitive' }
+          },
+        }),
+        expect.objectContaining({
+          where: { 
+            organization: { id: user.organization_id },
+            title: { contains: 'Software', mode: 'insensitive' }
+          },
+        })
+      ]);
     });
   });
 
