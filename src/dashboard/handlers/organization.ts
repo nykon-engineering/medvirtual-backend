@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { count } from 'console';
 
 @Injectable()
 export class HandlerOrganization {
@@ -10,7 +11,7 @@ export class HandlerOrganization {
 
   async execute(user): Promise<object> {
     const result: any = {};
-    //this variable will be used to hiredStaff and otherTalents
+    //this variable will be used to otherTalents
     const select = {
       id: true,
       first_name: true,
@@ -57,13 +58,40 @@ export class HandlerOrganization {
 
     if (!user || !user.organization_id)
       throw new BadRequestException('User or organization not found');
-    const hiredStaff = await this.prisma.candidate.findMany({
-      where: {
-        organization_id: user.organization_id,
-      },
-      select,
-    });
-    result.hiredStaff = hiredStaff;
+
+    const hiredStaff = await this.prisma.staff.findMany({
+      where:{
+        hireRequest:{
+          org_id: user.organization_id,
+        }
+      }, 
+      select:{
+        id: true,
+        candidate: {
+          select:{
+            first_name: true,
+            last_name: true,
+            name: true,
+            email: true,
+            country: true,
+            hourly_pay_rate: true,
+            organization_id: true,
+          }
+        },
+      }
+    })
+    const objectHired = hiredStaff.map((staff) => ({
+      id: staff.id,
+      first_name: staff.candidate.first_name,
+      last_name: staff.candidate.last_name,
+      name: staff.candidate.name,
+      email: staff.candidate.email,
+      country: staff.candidate.country,
+      hourly_pay_rate: staff.candidate.hourly_pay_rate,
+      organization_id: staff.candidate.organization_id,
+    }));
+
+    result.hiredStaff = objectHired;
 
     const hireRequest = await this.prisma.hireRequest.findMany({
       where: {

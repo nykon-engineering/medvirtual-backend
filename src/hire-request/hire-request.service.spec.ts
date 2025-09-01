@@ -10,7 +10,6 @@ import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 
-
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
   return {

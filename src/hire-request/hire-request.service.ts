@@ -1046,7 +1046,6 @@ export class HireRequestService {
   async getPanelsByOrganization(user: USER){
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         readable: true,
