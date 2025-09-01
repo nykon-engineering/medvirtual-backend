@@ -67,6 +67,7 @@ export class HandlerOrganization {
       }, 
       select:{
         id: true,
+        status: true,
         candidate: {
           select:{
             first_name: true,
@@ -82,6 +83,7 @@ export class HandlerOrganization {
     })
     const objectHired = hiredStaff.map((staff) => ({
       id: staff.id,
+      status: staff.status,
       first_name: staff.candidate.first_name,
       last_name: staff.candidate.last_name,
       name: staff.candidate.name,
