@@ -65,35 +65,67 @@ export class HandlerOrganization {
           org_id: user.organization_id,
         }
       }, 
-      select:{
+      select : {
         id: true,
+        hirerequest_id: true,
         status: true,
-        candidate: {
+        salary: true,
+        start_date: true,
+        created_at: true,
+        updated_at: true,
+        candidate:{
           select:{
+            id: true,
             first_name: true,
             last_name: true,
-            name: true,
             email: true,
+            specialization: true,
+            employment_type: true,
             country: true,
+            about_me: true,
             hourly_pay_rate: true,
-            organization_id: true,
+            languages: {
+              select: {
+                name: true,
+              }
+            },
+            skills:{
+              select:{
+                skill_name: true,
+              }
+            },
+            createdAt: true,
           }
         },
+        hireRequest: {
+          select:{
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            availability: true,
+            contract_length: true,
+            expected_start_date: true,
+            salary_range_from: true,
+            salary_range_to: true,
+            specialization: true,
+            location: true,
+          }
+        },
+        bonus:{
+          select:{
+            id: true,
+            amount: true,
+            description: true,
+            created_at: true,
+            created_by: true,
+          }
+        }
       }
     })
-    const objectHired = hiredStaff.map((staff) => ({
-      id: staff.id,
-      status: staff.status,
-      first_name: staff.candidate.first_name,
-      last_name: staff.candidate.last_name,
-      name: staff.candidate.name,
-      email: staff.candidate.email,
-      country: staff.candidate.country,
-      hourly_pay_rate: staff.candidate.hourly_pay_rate,
-      organization_id: staff.candidate.organization_id,
-    }));
 
-    result.hiredStaff = objectHired;
+    result.hiredStaff = hiredStaff;
 
     const hireRequest = await this.prisma.hireRequest.findMany({
       where: {
