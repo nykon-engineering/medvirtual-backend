@@ -86,6 +86,25 @@ export class UserController {
     return this.userService.findByOrganizationId(organizationId);
   }
 
+  @Get('organization/users/by-current-user')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin')
+  @ApiOperation({ summary: 'Get all users of the organization from current User' })
+  @ApiResponse({ status: 200, description: 'Users found successfully.' })
+  @ApiResponse({
+    status: 404,
+    description: 'No users found in this organization.',
+  })
+  async findUsersByOrganizationByCurrentUser(@CurrentUser() user: USER) {
+    return this.userService.findUsersByOrganizationByCurrentUser(user);
+  }
+
+
+
+
+
+  
+
   @Patch(':id')
   @ApiBody({ type: CreateUserDto })
   @UseGuards(AuthGuard, RolesGuard)

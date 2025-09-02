@@ -75,6 +75,29 @@ export class UserService {
     return users;
   }
 
+  async findUsersByOrganizationByCurrentUser(user: USER): Promise<any> {
+    const users = await this.prisma.uSER.findMany({
+      where: { organization_id: user.organization_id },
+      select: {
+        id: true,
+        email: true,
+        organization_id: true,
+        organization_name: true,
+        first_name: true,
+        last_name: true,
+        job_title: true,
+        role: true,
+        status: true,      
+        createdAt: true,
+      },
+    });
+    if (!users || users.length === 0) {
+      throw new NotFoundException(`No users found in this organization.`);
+    }
+
+    return users;
+  }
+
   async getProfileById(id: string): Promise<GetProfileDto> {
     const user = await this.prisma.uSER.findUnique({
       where: { id },
