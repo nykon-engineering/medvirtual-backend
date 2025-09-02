@@ -5,11 +5,15 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "scripts": {
     "build": "nest build",
     "prisma:generate": "prisma generate",
     "prisma:clean": "rm -rf node_modules/.prisma",
-    "build:webpack": "webpack --config webpack.config.js",
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "build:webpack": "node --max-old-space-size=8192 ./node_modules/.bin/webpack --config webpack.config.js",
     "build:esbuild": "node esbuild.config.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

@@ -10,48 +10,39 @@ datasource db {
 }
 
 model USER {
-  id                                       String              @id @default(uuid())
-  email                                    String              @unique
-  organization_id                          String?
-  organization_name                        String
-  first_name                               String
-  last_name                                String
-  phone                                    String
-  avatar                                   String
-  job_title                                String
-  role                                     String
-  workos_id                                String
-  password                                 String              @db.VarChar(255)
-  authentication_method                    String
-  status                                   String
-  verified                                 Boolean             @default(false)
-  createdAt                                DateTime            @default(now())
-  updatedAt                                DateTime            @updatedAt
-  assigned_system_admin                    String?
-  client_activated_at                      DateTime?
-  document_signed_at                       DateTime?
-  is_organization_owner                    Boolean             @default(false)
-  panda_doc_signed_url                     String?
-  prospect_created_at                      DateTime?
-  userRole                                 UserRole            @default(prospect)
-  email_invitations                        EmailInvitation[]
-  email_verifications                      EmailVerification[]
-  hireRequestsAssigned                     HireRequest[]       @relation("AssignedUser")
-  adminOrganizations                       Organization[]      @relation("OrganizationAdmin")
-  Organization_Organization_owner_idToUSER Organization[]      @relation("Organization_owner_idToUSER")
-  sessions                                 Session[]
-  tickets                                  Ticket[]
-  USER                                     USER?               @relation("USERToUSER", fields: [assigned_system_admin], references: [id])
-  other_USER                               USER[]              @relation("USERToUSER")
-  organization                             Organization?       @relation(fields: [organization_id], references: [id])
+  id                     String              @id @default(uuid())
+  email                  String              @unique
+  organization_id        String?
+  organization_name      String
+  first_name             String
+  last_name              String
+  phone                  String
+  avatar                 String
+  job_title              String
+  role                   String
+  workos_id              String
+  password               String              @db.VarChar(255)
+  authentication_method  String
+  status                 String
+  verified               Boolean             @default(false)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  is_organization_owner  Boolean             @default(false)
+  email_invitations      EmailInvitation[]
+  email_verifications    EmailVerification[]
+  hireRequestsAssigned   HireRequest[]       @relation("AssignedUser")
+  adminOrganizations     Organization[]      @relation("OrganizationAdmin")
+  ownedOrganizations     Organization[]      @relation("OrganizationOwner")
+  conciergeOrganizations Organization[]      @relation("OrganizationConcierge")
+  sessions               Session[]
+  tickets                Ticket[]
+  organization           Organization?       @relation(fields: [organization_id], references: [id])
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
   @@index([organization_id], map: "idx_users_organization_id")
   @@index([status], map: "idx_users_status")
-  @@index([assigned_system_admin], map: "idx_users_assigned_system_admin")
   @@index([is_organization_owner], map: "idx_users_is_organization_owner")
-  @@index([userRole], map: "idx_users_userRole")
 }
 
 model Session {
@@ -86,31 +77,52 @@ model EmailInvitation {
 }
 
 model Organization {
-  id                               String                  @id @default(uuid())
-  name                             String
-  email                            String                  @unique
-  type                             String?
-  hubspot_id                       String?                 @unique
-  status                           UserStatus              @default(active)
-  address                          String?
-  contact_info                     String?
-  specialties                      String?
-  createdAt                        DateTime                @default(now())
-  admin_id                         String?                 @default("")
-  description                      String?
-  owner_id                         String?
-  hire_requests                    HireRequest[]
-  admin                            USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
-  USER_Organization_owner_idToUSER USER?                   @relation("Organization_owner_idToUSER", fields: [owner_id], references: [id], onDelete: Restrict)
-  organization_candidates          OrganizationCandidate[]
-  tickets                          Ticket[]
-  users                            USER[]
+  id                   String             @id @default(uuid())
+  name                 String
+  email                String             @unique
+  phone                String?
+  website_url          String?
+  location             String?
+  description          String?
+  industry             String?
+  organization_role    OrganizationRole   @default(prospect)
+  number_of_employees  Int?
+  date_founded         DateTime?
+  date_joined          DateTime?
+  date_became_client   DateTime?
+  status               OrganizationStatus @default(active)
+  signed_document_url  String?
+  signed_document_date DateTime?
+  hubspot_id           String?            @unique
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  // Relationships
+  owner_id     String? @unique // One owner per organization
+  concierge_id String? // Assigned system admin/super admin
+  admin_id     String? @default("") // Legacy field, consider removing
+
+  // Many-to-many relationships
+  specialties             String[]
+  services                String[]
+  users                   USER[] // All users in the organization
+  organization_candidates OrganizationCandidate[]
+  hire_requests           HireRequest[]
+  tickets                 Ticket[]
+
+  // Relations
+  owner     USER? @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
+  concierge USER? @relation("OrganizationConcierge", fields: [concierge_id], references: [id], onDelete: Restrict)
+  admin     USER? @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
   @@index([name], map: "idx_organizations_name")
   @@index([admin_id], map: "idx_organizations_admin_id")
   @@index([owner_id], map: "idx_organizations_owner_id")
+  @@index([concierge_id], map: "idx_organizations_concierge_id")
+  @@index([organization_role], map: "idx_organizations_role")
+  @@index([industry], map: "idx_organizations_industry")
 }
 
 model Candidate {
@@ -463,9 +475,12 @@ enum TicketStatus {
   closed
 }
 
-enum UserRole {
+enum OrganizationRole {
   prospect
   client
-  admin
-  super_admin
+}
+
+enum OrganizationStatus {
+  active
+  inactive
 }

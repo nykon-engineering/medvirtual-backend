@@ -10,26 +10,41 @@ export class OrganizationDto {
   @ApiProperty({ description: 'Organization email' })
   email: string;
 
-  @ApiProperty({ description: 'Organization type', required: false })
-  type?: string;
+  @ApiProperty({ description: 'Organization phone', required: false })
+  phone?: string;
+
+  @ApiProperty({ description: 'Organization website URL', required: false })
+  website_url?: string;
+
+  @ApiProperty({ description: 'Organization location', required: false })
+  location?: string;
 
   @ApiProperty({ description: 'Organization status' })
   status: string;
 
-  @ApiProperty({ description: 'Organization address', required: false })
-  address?: string;
-
-  @ApiProperty({ description: 'Organization contact info', required: false })
-  contact_info?: string;
+  @ApiProperty({ description: 'Organization role' })
+  organization_role: string;
 
   @ApiProperty({ description: 'Organization specialties', required: false })
-  specialties?: string;
+  specialties?: string[];
+
+  @ApiProperty({ description: 'Organization services', required: false })
+  services?: string[];
 
   @ApiProperty({ description: 'Organization description', required: false })
   description?: string;
 
+  @ApiProperty({ description: 'Organization industry', required: false })
+  industry?: string;
+
+  @ApiProperty({ description: 'Number of employees', required: false })
+  number_of_employees?: number;
+
   @ApiProperty({ description: 'Organization creation date' })
   createdAt: Date;
+
+  @ApiProperty({ description: 'Organization last update date' })
+  updatedAt: Date;
 }
 
 export class GetProfileDto {

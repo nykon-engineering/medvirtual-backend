@@ -5,8 +5,7 @@ import { OrganizationService } from './organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
-
+import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
 const userfake = { 
   id: '1',
@@ -22,20 +21,14 @@ const userfake = {
   job_title: '',
   workos_id: '',
   authentication_method: 'OwnSign',
-  assigned_system_admin: null,
-  client_activated_at: null,
-  document_signed_at: null,
-  panda_doc_signed_url: null,
-  prospect_created_at: null,
   status: 'active',
   is_organization_owner: false,
-  userRole: UserRole.prospect,
   verified: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 }
 
-describe.skip('OrganizationService', () => {
+describe('OrganizationService', () => {
   let service: OrganizationService;
   let prisma: PrismaService;
 
@@ -49,6 +42,8 @@ describe.skip('OrganizationService', () => {
     },
     $transaction: jest.fn(),
     uSER: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
       updateMany: jest.fn(),
     },
   };
@@ -90,11 +85,25 @@ describe.skip('OrganizationService', () => {
     jest.resetAllMocks();
   });
 
-  describe.skip('getAll', () => {
+  describe('getAll', () => {
     it('should return an array of organizations', async () => {
       const organizations = [
-        { id: '1', name: 'Org 1', contact_info: '123', email: 'org1@example.com' },
-        { id: '2', name: 'Org 2', contact_info: '567', email: 'org2@example.com' },
+        { 
+          id: '1', 
+          name: 'Org 1', 
+          phone: '123', 
+          email: 'org1@example.com',
+          status: OrganizationStatus.active,
+          organization_role: OrganizationRole.prospect
+        },
+        { 
+          id: '2', 
+          name: 'Org 2', 
+          phone: '567', 
+          email: 'org2@example.com',
+          status: OrganizationStatus.active,
+          organization_role: OrganizationRole.client
+        },
       ];
 
       mockPrismaService.organization.findMany.mockResolvedValue(organizations);
@@ -113,7 +122,14 @@ describe.skip('OrganizationService', () => {
 
   describe('getById', () => {
     it('should return an organization by id', async () => {
-      const org = { id: '1', name: 'Org 1', contact_info: '123', email: 'org1@example.com' };
+      const org = { 
+        id: '1', 
+        name: 'Org 1', 
+        phone: '123', 
+        email: 'org1@example.com',
+        status: OrganizationStatus.active,
+        organization_role: OrganizationRole.prospect
+      };
 
       mockPrismaService.organization.findUnique.mockResolvedValue(org);
 
@@ -133,14 +149,28 @@ describe.skip('OrganizationService', () => {
       await expect(service.getById('1')).rejects.toThrow(NotFoundException);
     });
   });
-  /*
+
   describe('create', () => {
     it('should create and return a new organization', async () => {
-      const dto = { name: 'Org 1', cellphone: '123', email: 'org1@example.com', super_admin_email: 'admin@admin' , admin_id: '1' };
-      const created = { id: '1', name: dto.name, contact_info: dto.cellphone, email: dto.email };
+      const dto = { 
+        name: 'Org 1', 
+        phone: '123', 
+        email: 'org1@example.com', 
+        owner_email: 'admin@admin.com'
+      };
+      const created = { 
+        id: '1', 
+        name: dto.name, 
+        phone: dto.phone, 
+        email: dto.email,
+        status: OrganizationStatus.active,
+        organization_role: OrganizationRole.prospect
+      };
 
       mockPrismaService.organization.findUnique.mockResolvedValue(null);
       mockPrismaService.organization.create.mockResolvedValue(created);
+      mockPrismaService.uSER.findUnique.mockResolvedValue(null);
+      mockPrismaService.uSER.findMany.mockResolvedValue([{ id: 'admin1', role: 'system_admin' }]);
 
       mockAuthService.inviteUser.mockResolvedValue(true);
 
@@ -148,19 +178,43 @@ describe.skip('OrganizationService', () => {
       expect(result).toEqual(created);
     });
 
-    
+    it('should throw BadRequestException if organization already exists', async () => {
+      const dto = { 
+        name: 'Org 1', 
+        phone: '123', 
+        email: 'org1@example.com', 
+        owner_email: 'admin@admin.com'
+      };
+
+      mockPrismaService.organization.findUnique.mockResolvedValue({ id: '1', name: 'Existing Org' });
+
+      await expect(service.create(dto, userfake)).rejects.toThrow(BadRequestException);
+    });
+
     it('should throw BadRequestException if creation fails', async () => {
+      mockPrismaService.organization.findUnique.mockResolvedValue(null);
       mockPrismaService.organization.create.mockRejectedValue(new Error());
 
-      await expect(service.create({ name: '', cellphone: '', email: '', super_admin_email: '' }, userfake)).rejects.toThrow(BadRequestException);
+      await expect(service.create({ 
+        name: 'Org 1', 
+        phone: '123', 
+        email: 'org1@example.com', 
+        owner_email: 'admin@admin.com' 
+      }, userfake)).rejects.toThrow(BadRequestException);
     });
   });
-  */
 
   describe('update', () => {
     it('should update and return the organization', async () => {
-      const dto = { name: 'Updated Org', cellphone: '999', email: 'updated@example.com' };
-      const updated = { id: '1', name: dto.name, contact_info: dto.cellphone, email: dto.email };
+      const dto = { name: 'Updated Org', phone: '999', email: 'updated@example.com' };
+      const updated = { 
+        id: '1', 
+        name: dto.name, 
+        phone: dto.phone, 
+        email: dto.email,
+        status: OrganizationStatus.active,
+        organization_role: OrganizationRole.prospect
+      };
 
       mockPrismaService.organization.update.mockResolvedValue(updated);
 
@@ -171,7 +225,94 @@ describe.skip('OrganizationService', () => {
     it('should throw BadRequestException if update fails', async () => {
       mockPrismaService.organization.update.mockRejectedValue(new Error('fail'));
 
-      await expect(service.update('1', { name: '', cellphone: '', email: '' })).rejects.toThrow(BadRequestException);
+      await expect(service.update('1', { name: '', phone: '', email: '' })).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('convertToClient', () => {
+    it('should convert prospect to client successfully', async () => {
+      const prospectOrg = {
+        id: '1',
+        name: 'Prospect Org',
+        organization_role: OrganizationRole.prospect,
+        status: OrganizationStatus.active
+      };
+
+      const clientOrg = {
+        ...prospectOrg,
+        organization_role: OrganizationRole.client,
+        date_became_client: new Date(),
+        signed_document_url: 'https://example.com/doc.pdf',
+        signed_document_date: new Date()
+      };
+
+      mockPrismaService.organization.findUnique.mockResolvedValue(prospectOrg);
+      mockPrismaService.organization.update.mockResolvedValue(clientOrg);
+
+      const convertDto = {
+        signed_document_url: 'https://example.com/doc.pdf',
+        signed_document_date: new Date().toISOString()
+      };
+
+      const result = await service.convertToClient('1', convertDto);
+      expect(result.organization_role).toBe(OrganizationRole.client);
+      expect(result.signed_document_url).toBe(convertDto.signed_document_url);
+    });
+
+    it('should throw BadRequestException if organization is already a client', async () => {
+      const clientOrg = {
+        id: '1',
+        name: 'Client Org',
+        organization_role: OrganizationRole.client,
+        status: OrganizationStatus.active
+      };
+
+      mockPrismaService.organization.findUnique.mockResolvedValue(clientOrg);
+
+      const convertDto = {
+        signed_document_url: 'https://example.com/doc.pdf'
+      };
+
+      await expect(service.convertToClient('1', convertDto)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('assignConcierge', () => {
+    it('should assign concierge successfully', async () => {
+      const concierge = {
+        id: 'admin1',
+        role: 'system_admin',
+        status: 'active'
+      };
+
+      const org = {
+        id: '1',
+        name: 'Test Org',
+        concierge_id: null
+      };
+
+      const updatedOrg = {
+        ...org,
+        concierge_id: 'admin1'
+      };
+
+      mockPrismaService.uSER.findUnique.mockResolvedValue(concierge);
+      mockPrismaService.organization.update.mockResolvedValue(updatedOrg);
+
+      const result = await service.assignConcierge('1', 'admin1');
+      expect(result.concierge_id).toBe('admin1');
+    });
+
+    it('should throw BadRequestException if concierge is not a system admin', async () => {
+      const user = {
+        id: 'user1',
+        role: 'organization_admin',
+        status: 'active'
+      };
+
+      mockPrismaService.uSER.findUnique.mockResolvedValue(user);
+
+      await expect(service.assignConcierge('1', 'user1')).rejects.toThrow(BadRequestException);
     });
   });
 
