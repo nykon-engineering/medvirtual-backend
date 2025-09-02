@@ -50,38 +50,44 @@ export class CandidatesService {
     const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
     const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
 
-    //Create exception for availability
-
+    const combinedFilters: Record<string, any>[] = [];
 
     const languagesArray = languages ?
     languages.split(',').map(l => l.trim()).filter(Boolean)
     : [];
-    const languageFilter = languagesArray?.length
-    ? {
-        AND: languagesArray.map(language => ({
-          languages: {
-            some: {
-              name: language
-            }
-          }
-        }))
-      }
-    : {};
-
     const skillsArray = skills ? 
     skills.split(',').map(s => s.trim()).filter(Boolean)
     : [];
-    const skillFilter = skillsArray?.length
-    ? {
-        AND: skillsArray.map(skill => ({
-          skills: {
-            some: {
-              skill_name: skill
-            }
-          }
+    const specializationArray = specializations 
+    ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
+    : [];
+    
+    if (languagesArray.length) {
+      combinedFilters.push(
+        ...languagesArray.map(lang => ({
+          languages: { some: { name: lang } }
         }))
-      }
-    : {};
+      );
+    }
+
+    if (skillsArray.length) {
+      combinedFilters.push(
+        ...skillsArray.map(skill => ({
+          skills: { some: { skill_name: { contains: skill, mode: 'insensitive' } } }
+        }))
+      );
+    }
+    if (specializationArray.length) {
+      combinedFilters.push(
+        ...specializationArray.map(spec => ({
+          specialization: { contains: spec, mode: 'insensitive' }
+        }))
+      );
+    }
+
+    
+    
+    
 
     // Calculate limit date
     let experienceFilter = {};
@@ -99,20 +105,6 @@ export class CandidatesService {
       };
     }
 
-    const specializationArray = specializations 
-    ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
-    : [];
-
-    const specializationFilter = specializationArray.length
-    ? {
-        AND: specializationArray.map(spec => ({
-          specialization: {
-            contains: spec,
-            mode: 'insensitive' as Prisma.QueryMode,
-          }
-        }))
-      }
-    : {};
 
     const searchFilter = search
     ? {
@@ -137,10 +129,8 @@ export class CandidatesService {
           },
           organization_id: organization_id,
           pipeline_status: '261075105',
-          ...skillFilter,
-          ...languageFilter,
+          AND: combinedFilters,
           ...experienceFilter,
-          ...specializationFilter,
           ...searchFilter,
         },
         {
@@ -152,10 +142,8 @@ export class CandidatesService {
           },
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
-          ...skillFilter,
-          ...languageFilter,
+          AND: combinedFilters,
           ...experienceFilter,
-          ...specializationFilter,
           ...searchFilter,
         },
         {
@@ -167,10 +155,8 @@ export class CandidatesService {
           },
           organization_id: organization_id,
           pipeline_status: '1087596819',
-          ...skillFilter,
-          ...languageFilter,
+          AND: combinedFilters,
           ...experienceFilter,
-          ...specializationFilter,
           ...searchFilter,
         },
         {
@@ -182,10 +168,8 @@ export class CandidatesService {
           },
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
-          ...skillFilter,
-          ...languageFilter,
+          AND: combinedFilters,
           ...experienceFilter,
-          ...specializationFilter,
           ...searchFilter,
         }
       ]
@@ -233,7 +217,13 @@ export class CandidatesService {
           end_date: true,
           responsabilities: true
         } 
+      },
+      selectedInInterviews: {
+        select: {
+          scheduled_date: true,
+        }
       }
+      
     }
 
 
@@ -256,8 +246,14 @@ export class CandidatesService {
         }
       });
 
+      const candidatesWithScheduledInterview = candidates.map(candidate => ({
+        ...candidate,
+        scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
+        selectedInInterviews: undefined // opcional: remove o array original
+      }));
+
       return {
-        data: candidates,
+        data: candidatesWithScheduledInterview,
         meta: {
           total,
           page,
@@ -269,6 +265,8 @@ export class CandidatesService {
       throw new BadGatewayException('Failed to fetch candidates', error.message);
     }
   }
+
+  
 
   async findOne(id: string, user: USER) {
     const {organization_id} = user;
