@@ -226,16 +226,17 @@ describe('AuthService - signIn', () => {
     );
   });
 
-  it('should throw if organization not found or deleted', async () => {
+  it('should throw if organization not found or inactive', async () => {
     userMock.findByEmail.mockResolvedValue({
       id: 'u1',
       status: 'active',
       organization_id: 'org1',
+      authentication_method: 'OwnSign',
     });
-    prismaMock.organization.findUnique.mockResolvedValue({ status: 'deleted' });
+    prismaMock.organization.findUnique.mockResolvedValue({ status: 'inactive' });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
-      new UnauthorizedException('User organization not found or deleted. Please contact support.'),
+      new UnauthorizedException('User organization not found or inactive. Please contact support.'),
     );
   });
 

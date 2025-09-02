@@ -31,7 +31,6 @@ export class TicketService {
             id: true,
             name: true,
             email: true,
-            type: true,
             status: true,
             admin_id: true,
           }
@@ -109,7 +108,6 @@ export class TicketService {
               id: true,
               name: true,
               email: true,
-              type: true,
               status: true,
               admin_id: true,
             }

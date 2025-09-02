@@ -105,13 +105,19 @@ export class AuthService {
       throw new UnauthorizedException('User not found with this email');
     }
     if(user.status === 'deleted') throw new UnauthorizedException('This user does not have permission to log in.');
-    if (!user.organization_id) throw new UnauthorizedException('User does not belong to any organization. Please contact support.');
+    // System admins don't need to belong to an organization
+    if (!user.organization_id && !['system_super_admin', 'system_admin'].includes(user.role)) {
+      throw new UnauthorizedException('User does not belong to any organization. Please contact support.');
+    }
 
-    const organization = await this.prisma.organization.findUnique({
-      where: { id: user.organization_id },
-      select: { status: true },
-    })
-    if(!organization || organization.status === 'deleted')  throw new UnauthorizedException('User organization not found or deleted. Please contact support.');
+    // Only check organization status for users who belong to an organization
+    if (user.organization_id) {
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: user.organization_id },
+        select: { status: true },
+      })
+      if(!organization || organization.status === 'inactive')  throw new UnauthorizedException('User organization not found or inactive. Please contact support.');
+    }
 
     if (user.authentication_method !== authenticationMethod) {
       throw new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used');
@@ -175,7 +181,7 @@ export class AuthService {
       data: {
         name: data.companyName || 'Default Organization',
         email: data.email,
-        status: 'incomplete',
+        status: 'active',
         admin: {
           connect: { id: data.organizationId }, // Connect to the user who is signing up
         },

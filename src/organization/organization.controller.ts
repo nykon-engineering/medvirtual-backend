@@ -13,6 +13,7 @@ import { ApiBody, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestj
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
+import { ConvertToClientDto } from './dto/convertToClient.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -35,7 +36,7 @@ export class OrganizationController {
 
   @Get('')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin')
+  @Roles('system_super_admin', 'system_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get all organizations' })
   @ApiResponse({status: 200, description: 'List of organizations retrieved successfully'})
@@ -45,7 +46,7 @@ export class OrganizationController {
 
   @Get('/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_admin','system_super_admin')
+  @Roles('system_admin','system_super_admin', 'organization_admin', 'organization_super_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get organization by Id' })
   @ApiResponse({
@@ -59,7 +60,7 @@ export class OrganizationController {
   
   @Post('create')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin')
+  @Roles('system_super_admin', 'system_admin')
   @HttpCode(201)
   @ApiBody({ type: CreateOrganizationDto })
   @ApiOperation({ summary: 'Create a new organization' })
@@ -78,7 +79,7 @@ export class OrganizationController {
 
   @Put('edit/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_admin','system_super_admin')
+  @Roles('system_admin','system_super_admin', 'organization_admin', 'organization_super_admin')
   @HttpCode(200)
   @ApiBody({ type: UpdateOrganizationDto })
   @ApiOperation({ summary: 'Edit organization info' })
@@ -91,6 +92,43 @@ export class OrganizationController {
     return {
       status: 200,
       message: 'Organization updated successfully',
+      organization: org,
+    };
+  }
+
+  @Post('convert-to-client/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin', 'organization_admin', 'organization_super_admin')
+  @HttpCode(200)
+  @ApiBody({ type: ConvertToClientDto })
+  @ApiOperation({ summary: 'Convert organization from prospect to client' })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization converted to client successfully',
+  })
+  async convertToClient(@Param('id') id: string, @Body() data: ConvertToClientDto) {
+    const org = await this.organizationService.convertToClient(id, data);
+    return {
+      status: 200,
+      message: 'Organization converted to client successfully',
+      organization: org,
+    };
+  }
+
+  @Put('assign-concierge/:id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Assign a concierge to an organization' })
+  @ApiResponse({
+    status: 200,
+    description: 'Concierge assigned successfully',
+  })
+  async assignConcierge(@Param('id') id: string, @Body('concierge_id') conciergeId: string) {
+    const org = await this.organizationService.assignConcierge(id, conciergeId);
+    return {
+      status: 200,
+      message: 'Concierge assigned successfully',
       organization: org,
     };
   }
