@@ -167,9 +167,30 @@ export class HireRequestService {
                       country: true,
                       languages: true,
                       specialization: true,
+                      about_me: true,
+                      hourly_pay_rate: true,
                       skills: {
                         select: {
                           skill_name: true,
+                          proficiency_level: true,
+                        },
+                      },
+                      educations: {
+                        orderBy: { year: 'desc' },
+                        select: {
+                          institution: true,
+                          degree: true,
+                          year: true,
+                        },
+                      },
+                      experiences: {
+                        orderBy: { start_date: 'desc' },
+                        select: {
+                          company: true,
+                          position: true,
+                          responsabilities: true,
+                          start_date: true,
+                          end_date: true,
                         },
                       },
                     },
@@ -1046,7 +1067,6 @@ export class HireRequestService {
   async getPanelsByOrganization(user: USER){
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         readable: true,

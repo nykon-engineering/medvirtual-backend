@@ -33,14 +33,14 @@ export class OpenaiService {
         ### OUTPUT STRUCTURE (fixed)
 
         {
-        "bio": ,
+        "bio": "",
         "experience": [
             {
             "company": "",
             "role": "",
             "start_date": null,
             "end_date": null,
-            "description": "" ,
+            "description": ""
             }
         ],
         "education": [
@@ -49,7 +49,7 @@ export class OpenaiService {
             "degree": "",
             "start_date": null,
             "end_date": null,
-            "description": "",
+            "description": ""
             }
         ]
         }

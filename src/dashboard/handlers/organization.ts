@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { count } from 'console';
 
 @Injectable()
 export class HandlerOrganization {
@@ -10,7 +11,7 @@ export class HandlerOrganization {
 
   async execute(user): Promise<object> {
     const result: any = {};
-    //this variable will be used to hiredStaff and otherTalents
+    //this variable will be used to otherTalents
     const select = {
       id: true,
       first_name: true,
@@ -57,12 +58,76 @@ export class HandlerOrganization {
 
     if (!user || !user.organization_id)
       throw new BadRequestException('User or organization not found');
-    const hiredStaff = await this.prisma.candidate.findMany({
-      where: {
-        organization_id: user.organization_id,
-      },
-      select,
-    });
+
+    const hiredStaff = await this.prisma.staff.findMany({
+      where:{
+        status: {
+          not: 'terminated',
+        },
+        hireRequest:{
+          org_id: user.organization_id,
+        }
+      }, 
+      select : {
+        id: true,
+        hirerequest_id: true,
+        status: true,
+        salary: true,
+        start_date: true,
+        created_at: true,
+        updated_at: true,
+        candidate:{
+          select:{
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            specialization: true,
+            employment_type: true,
+            country: true,
+            about_me: true,
+            hourly_pay_rate: true,
+            languages: {
+              select: {
+                name: true,
+              }
+            },
+            skills:{
+              select:{
+                skill_name: true,
+              }
+            },
+            createdAt: true,
+          }
+        },
+        hireRequest: {
+          select:{
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            availability: true,
+            contract_length: true,
+            expected_start_date: true,
+            salary_range_from: true,
+            salary_range_to: true,
+            specialization: true,
+            location: true,
+          }
+        },
+        bonus:{
+          select:{
+            id: true,
+            amount: true,
+            description: true,
+            created_at: true,
+            created_by: true,
+          }
+        }
+      }
+    })
+
     result.hiredStaff = hiredStaff;
 
     const hireRequest = await this.prisma.hireRequest.findMany({

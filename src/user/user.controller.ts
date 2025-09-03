@@ -137,7 +137,7 @@ export class UserController {
   ) {
     return this.userService.findByOrganizationId(organizationId);
   }
-
+  
   @Get('organization/:organizationId/paginated')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
@@ -237,6 +237,19 @@ export class UserController {
       inviteData,
       user,
     );
+  }
+
+  @Get('organization/users/by-current-user')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin')
+  @ApiOperation({ summary: 'Get all users of the organization from current User' })
+  @ApiResponse({ status: 200, description: 'Users found successfully.' })
+  @ApiResponse({
+    status: 404,
+    description: 'No users found in this organization.',
+  })
+  async findUsersByOrganizationByCurrentUser(@CurrentUser() user: USER) {
+    return this.userService.findUsersByOrganizationByCurrentUser(user);
   }
 
   @Patch(':id')

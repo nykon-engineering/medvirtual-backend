@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TicketStatus } from '@prisma/client';
 
 @Injectable()
 export class HandlerClient {
@@ -38,7 +39,11 @@ export class HandlerClient {
 
     const openTicketsCount = await this.prisma.ticket.count({
       where: {
-        status: 'new',
+        OR: [
+          { status: TicketStatus.new },
+          { status: TicketStatus.in_progress },
+        ]
+        
       },
     });
     result.openTickets = openTicketsCount;

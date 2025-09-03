@@ -6,6 +6,7 @@ import { CreateBonusDto } from './dto/create-bonus.dto';
 import { terminateDto } from './dto/terminate.dto';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
 
 
 @Injectable()
@@ -75,11 +76,12 @@ export class StaffService {
 
   async create(createStaffDto: CreateStaffDto, user: USER) {
     try{
+      const statusHandled = staffStatusDictionary[createStaffDto.status];
       const staff = await this.prisma.staff.create({
         data: {
           candidate_id: createStaffDto.candidate_id,
           hirerequest_id: createStaffDto.hirerequest_id,
-          status: createStaffDto.status,
+          status: statusHandled,
           salary: createStaffDto.salary,
           start_date: createStaffDto.start_date,
           created_by: user.id,

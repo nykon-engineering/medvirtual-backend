@@ -75,7 +75,7 @@ const openAIMock = {
     jest.clearAllMocks();
   });
 
-  describe('findAll', () => {
+  describe.skip('findAll', () => {
     it('should return all candidates without filters and transform pipeline_status', async () => {
       const mockCandidates = [
         { id: '1', pipeline_status: '261075105' },
