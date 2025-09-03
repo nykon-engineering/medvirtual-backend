@@ -98,7 +98,7 @@ export class AuthService {
   }
 
   async signIn(data: AuthSignInDto): Promise<object> {
-    const timeToExpires= data.rememberMe ? Number(process.env.TOKEN_TIME_EXPIRED) : 8 * 60 * 60 * 1000;
+    const timeToExpires= data.rememberMe ? 7 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
     const authenticationMethod = 'OwnSign'
     const user = await this.userService.findByEmail(data.email);
     if (!user) {
