@@ -3,17 +3,26 @@ import {
   Controller,
   Post,
   Put,
-  Delete,
   Param,
   HttpCode,
   Get,
   UseGuards,
+  Query,
 } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiProperty, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiProperty,
+  ApiResponse,
+  ApiTags,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { ConvertToClientDto } from './dto/convertToClient.dto';
+import { GetOrganizationsDto } from './dto/getOrganizations.dto';
+import { PaginatedOrganizationsResponseDto } from './dto/organizationResponse.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -26,10 +35,9 @@ import { USER } from '@prisma/client';
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
-  
   @Get('hubspot')
   @ApiProperty({ description: 'Get all organizations from hubspot' })
-  async getfromHubspot(){
+  async getfromHubspot() {
     return await this.organizationService.getAllFromHubspot();
   }
   //========== // =========
@@ -39,14 +47,100 @@ export class OrganizationController {
   @Roles('system_super_admin', 'system_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get all organizations' })
-  @ApiResponse({status: 200, description: 'List of organizations retrieved successfully'})
+  @ApiResponse({
+    status: 200,
+    description: 'List of organizations retrieved successfully',
+  })
   async getAll(@CurrentUser() user: USER) {
     return await this.organizationService.getAll(user);
   }
 
+  @Get('paginated')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(
+    'system_super_admin',
+    'system_admin',
+    'organization_admin',
+    'organization_super_admin',
+  )
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Get organizations with pagination, filtering, and search',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of organizations retrieved successfully',
+    type: PaginatedOrganizationsResponseDto,
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10, max: 100)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for name, email, or description',
+  })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    enum: ['prospect', 'client'],
+    description: 'Filter by organization role',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['active', 'inactive'],
+    description: 'Filter by organization status',
+  })
+  @ApiQuery({
+    name: 'industry',
+    required: false,
+    type: String,
+    description: 'Filter by industry',
+  })
+  @ApiQuery({
+    name: 'location',
+    required: false,
+    type: String,
+    description: 'Filter by location',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],
+    description: 'Sort field (default: createdAt)',
+  })
+  @ApiQuery({
+    name: 'sortOrder',
+    required: false,
+    enum: ['asc', 'desc'],
+    description: 'Sort order (default: desc)',
+  })
+  async getAllPaginated(
+    @CurrentUser() user: USER,
+    @Query() query: GetOrganizationsDto,
+  ): Promise<PaginatedOrganizationsResponseDto> {
+    return await this.organizationService.getAllPaginated(user, query);
+  }
+
   @Get('/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_admin','system_super_admin', 'organization_admin', 'organization_super_admin')
+  @Roles(
+    'system_admin',
+    'system_super_admin',
+    'organization_admin',
+    'organization_super_admin',
+  )
   @HttpCode(200)
   @ApiOperation({ summary: 'Get organization by Id' })
   @ApiResponse({
@@ -57,7 +151,6 @@ export class OrganizationController {
     return await this.organizationService.getById(id);
   }
 
-  
   @Post('create')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
@@ -79,7 +172,12 @@ export class OrganizationController {
 
   @Put('edit/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_admin','system_super_admin', 'organization_admin', 'organization_super_admin')
+  @Roles(
+    'system_admin',
+    'system_super_admin',
+    'organization_admin',
+    'organization_super_admin',
+  )
   @HttpCode(200)
   @ApiBody({ type: UpdateOrganizationDto })
   @ApiOperation({ summary: 'Edit organization info' })
@@ -98,7 +196,12 @@ export class OrganizationController {
 
   @Post('convert-to-client/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_admin', 'system_super_admin', 'organization_admin', 'organization_super_admin')
+  @Roles(
+    'system_admin',
+    'system_super_admin',
+    'organization_admin',
+    'organization_super_admin',
+  )
   @HttpCode(200)
   @ApiBody({ type: ConvertToClientDto })
   @ApiOperation({ summary: 'Convert organization from prospect to client' })
@@ -106,7 +209,10 @@ export class OrganizationController {
     status: 200,
     description: 'Organization converted to client successfully',
   })
-  async convertToClient(@Param('id') id: string, @Body() data: ConvertToClientDto) {
+  async convertToClient(
+    @Param('id') id: string,
+    @Body() data: ConvertToClientDto,
+  ) {
     const org = await this.organizationService.convertToClient(id, data);
     return {
       status: 200,
@@ -124,7 +230,10 @@ export class OrganizationController {
     status: 200,
     description: 'Concierge assigned successfully',
   })
-  async assignConcierge(@Param('id') id: string, @Body('concierge_id') conciergeId: string) {
+  async assignConcierge(
+    @Param('id') id: string,
+    @Body('concierge_id') conciergeId: string,
+  ) {
     const org = await this.organizationService.assignConcierge(id, conciergeId);
     return {
       status: 200,
@@ -133,20 +242,20 @@ export class OrganizationController {
     };
   }
 
-  @Post('delete/:id')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin')
-  @HttpCode(200)
-  @ApiOperation({ summary: 'Delete organization' })
-  @ApiResponse({
-    status: 200,
-    description: 'Organization deleted successfully',
-  })
-  async delete(@Param('id') id: string) {
-    await this.organizationService.delete(id);
-    return {
-      status: 200,
-      message: 'Organization deleted successfully',
-    };
-  }
+  // @Post('delete/:id')
+  // @UseGuards(AuthGuard, RolesGuard)
+  // @Roles('system_super_admin')
+  // @HttpCode(200)
+  // @ApiOperation({ summary: 'Delete organization' })
+  // @ApiResponse({
+  //   status: 200,
+  //   description: 'Organization deleted successfully',
+  // })
+  // async delete(@Param('id') id: string) {
+  //   await this.organizationService.delete(id);
+  //   return {
+  //     status: 200,
+  //     message: 'Organization deleted successfully',
+  //   };
+  // }
 }

@@ -16,6 +16,11 @@ import {
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { ConvertToClientDto } from './dto/convertToClient.dto';
+import { GetOrganizationsDto } from './dto/getOrganizations.dto';
+import {
+  PaginatedOrganizationsResponseDto,
+  OrganizationResponseDto,
+} from './dto/organizationResponse.dto';
 import { AuthService } from '../auth/auth.service';
 
 @Injectable()
@@ -155,6 +160,187 @@ export class OrganizationService {
     }
   }
 
+  async getAllPaginated(
+    user: USER,
+    query: GetOrganizationsDto,
+  ): Promise<PaginatedOrganizationsResponseDto> {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        search,
+        role,
+        status,
+        industry,
+        location,
+        sortBy = 'createdAt',
+        sortOrder = 'desc',
+      } = query;
+
+      const skip = (page - 1) * limit;
+
+      // Build where clause
+      const whereClause: any = {
+        status: { not: OrganizationStatus.inactive },
+      };
+
+      // Add user-specific filtering for non-system admins
+      if (!['system_super_admin', 'system_admin'].includes(user.role)) {
+        whereClause.OR = [
+          { admin_id: user.id },
+          { owner_id: user.id },
+          { concierge_id: user.id },
+          {
+            admin_id: user.role.includes('organization') ? user.id : undefined,
+          },
+        ].filter(Boolean);
+      }
+
+      // Add search filter
+      if (search) {
+        whereClause.OR = [
+          ...(whereClause.OR || []),
+          {
+            name: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+          {
+            email: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+          {
+            description: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+        ];
+      }
+
+      // Add role filter
+      if (role) {
+        whereClause.organization_role = role;
+      }
+
+      // Add status filter
+      if (status) {
+        whereClause.status = status;
+      }
+
+      // Add industry filter
+      if (industry) {
+        whereClause.industry = {
+          contains: industry,
+          mode: 'insensitive',
+        };
+      }
+
+      // Add location filter
+      if (location) {
+        whereClause.location = {
+          contains: location,
+          mode: 'insensitive',
+        };
+      }
+
+      // Build orderBy clause
+      const orderBy: any = {};
+      orderBy[sortBy] = sortOrder;
+
+      // Get total count
+      const total = await this.prisma.organization.count({
+        where: whereClause,
+      });
+
+      // Get paginated results
+      const organizations = await this.prisma.organization.findMany({
+        where: whereClause,
+        skip,
+        take: limit,
+        orderBy,
+        include: {
+          owner: {
+            select: {
+              id: true,
+              email: true,
+              first_name: true,
+              last_name: true,
+              job_title: true,
+              phone: true,
+            },
+          },
+          concierge: {
+            select: {
+              id: true,
+              email: true,
+              first_name: true,
+              last_name: true,
+              job_title: true,
+              phone: true,
+            },
+          },
+          users: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      // Transform data
+      const data: OrganizationResponseDto[] = organizations.map((org) => ({
+        id: org.id,
+        name: org.name,
+        email: org.email,
+        phone: org.phone || undefined,
+        website_url: org.website_url || undefined,
+        location: org.location || undefined,
+        description: org.description || undefined,
+        industry: org.industry || undefined,
+        organization_role: org.organization_role,
+        number_of_employees: org.number_of_employees || undefined,
+        date_founded: org.date_founded || undefined,
+        date_joined: org.date_joined || undefined,
+        date_became_client: org.date_became_client || undefined,
+        status: org.status,
+        signed_document_url: org.signed_document_url || undefined,
+        signed_document_date: org.signed_document_date || undefined,
+        specialties: org.specialties || undefined,
+        services: org.services || undefined,
+        owner_id: org.owner_id || undefined,
+        concierge_id: org.concierge_id || undefined,
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+        owner: org.owner || undefined,
+        concierge: org.concierge || undefined,
+        userCount: org.users.length,
+      }));
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(total / limit);
+      const hasNext = page < totalPages;
+      const hasPrev = page > 1;
+
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNext,
+          hasPrev,
+        },
+      };
+    } catch (error) {
+      throw new NotFoundException('Organizations not found');
+    }
+  }
+
   async getById(id: string): Promise<Organization> {
     try {
       const organization = await this.prisma.organization.findUnique({
@@ -187,15 +373,50 @@ export class OrganizationService {
         throw new BadRequestException('Organization already exists');
       }
 
-      // Find or create owner if owner_email is provided
+      // Handle owner assignment based on owner_type
       let ownerId: string | undefined = undefined;
-      if (data.owner_email) {
-        const owner = await this.prisma.uSER.findUnique({
+      let ownerEmail: string | undefined = undefined;
+
+      if (data.owner_type === 'existing' && data.owner_id) {
+        // Use existing user as owner
+        const existingOwner = await this.prisma.uSER.findUnique({
+          where: { id: data.owner_id },
+        });
+
+        if (!existingOwner) {
+          throw new BadRequestException('Selected owner user not found');
+        }
+
+        // Check if user is already an owner of another organization
+        if (existingOwner.is_organization_owner) {
+          throw new BadRequestException(
+            'User is already an owner of another organization',
+          );
+        }
+
+        ownerId = existingOwner.id;
+        ownerEmail = existingOwner.email;
+      } else if (data.owner_type === 'new' && data.owner_email) {
+        // Check if user with this email already exists
+        const existingUser = await this.prisma.uSER.findUnique({
           where: { email: data.owner_email },
         });
-        if (owner) {
-          ownerId = owner.id;
+
+        if (existingUser) {
+          throw new BadRequestException(
+            'User with this email already exists. Please select "existing" owner type.',
+          );
         }
+
+        ownerEmail = data.owner_email;
+      } else if (
+        data.owner_type &&
+        data.owner_type !== 'existing' &&
+        data.owner_type !== 'new'
+      ) {
+        throw new BadRequestException(
+          'Invalid owner_type. Must be "existing" or "new"',
+        );
       }
 
       // Assign a random concierge if not specified
@@ -244,19 +465,38 @@ export class OrganizationService {
         },
       });
 
-      // If owner_email was provided but user doesn't exist, invite them
-      if (data.owner_email && !ownerId) {
-        const dataInvitedUser = {
-          email: data.owner_email,
+      // Handle owner creation/invitation
+      if (data.owner_type === 'existing' && ownerId) {
+        // Update existing user to be owner of this organization
+        await this.prisma.uSER.update({
+          where: { id: ownerId },
+          data: {
+            organization_id: organization.id,
+            organization_name: organization.name,
+            role: 'organization_super_admin',
+            is_organization_owner: true,
+          },
+        });
+      } else if (data.owner_type === 'new' && ownerEmail) {
+        // Invite new user as owner
+        const inviteData = {
+          email: ownerEmail,
           role: 'organization_super_admin',
           companyName: data.name,
           organizationId: organization.id,
+          first_name: data.owner_first_name || '',
+          last_name: data.owner_last_name || '',
+          job_title: data.owner_job_title || '',
+          phone: data.owner_phone || '',
         };
-        await this.auth.inviteUser(dataInvitedUser);
+        await this.auth.inviteUser(inviteData);
       }
 
       return organization;
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new BadRequestException('Failed to create organization', error);
     }
   }
