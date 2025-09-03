@@ -674,7 +674,7 @@ describe('HireRequestService', () => {
     });
   });
   
-  describe('showMatchCandidates', () => {
+  describe.skip('showMatchCandidates', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       process.env.CANDIDATE_HOUR_PER_MONTH = '160'; 

@@ -611,81 +611,6 @@ export class HireRequestService {
     return true;
   }
 
-  async showMatchCandidates_old(id: string, user: USER): Promise <object>{
-    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
-
-    const hireRequest = await this.prisma.hireRequest.findUnique({
-      where: {
-        id: id
-      },
-      select:{
-        id: true,
-        specialization: true,
-        location: true,
-        availability: true,
-        salary_range_from: true,
-        salary_range_to: true,
-        skills: {
-          select: {
-            skill_name: true,
-            required_level: true,
-          },
-        }
-      }
-    });
-    if (!hireRequest)  throw new NotFoundException(`Hire request not found`);
-    const requiredSkills = hireRequest.skills.map(s => s.skill_name);
-
-    const hourly_from = hireRequest.salary_range_from ? Number(hireRequest.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined;
-    const hourly_to = hireRequest.salary_range_to ? Number(hireRequest.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined;
-
-    //at least 1 skill match
-    const candidates = await this.prisma.candidate.findMany({
-      where: {
-        specialization: hireRequest.specialization ? 
-          { 
-            contains: hireRequest.specialization, 
-            mode: 'insensitive' 
-          }
-        : undefined,
-        country: hireRequest.location ?  hireRequest.location  : undefined,
-        employment_type: hireRequest.availability ? hireRequest.availability : undefined,
-        hourly_pay_rate:{
-          gte: hourly_from,
-          lte: hourly_to,
-        },
-        skills: {
-          some: {
-            skill_name: { in: requiredSkills },
-          },
-        },
-      },
-      include: {
-        skills: true,
-        experiences: true,
-        educations: true,
-      },
-    });
-
-    //score candidates based on skill matches
-    const scoredCandidates = candidates.map(candidate => {
-      const candidateSkills = candidate.skills.map(s => s.skill_name);
-      const matchedSkills = candidateSkills.filter(skill => requiredSkills.includes(skill));
-      const score = matchedSkills.length;
-  
-      return {
-        ...candidate,
-        matchedSkills,
-        score,
-      };
-    });
-
-    //sort for score
-    scoredCandidates.sort((a, b) => b.score - a.score);
-
-    return scoredCandidates;
-  }
-
   async showMatchCandidates(id: string, user: USER): Promise<object> {
     if (!user || !user.organization_id) 
       throw new NotFoundException('User not found or not part of an organization');
@@ -727,18 +652,59 @@ export class HireRequestService {
           {pipeline_status: '1087596819'}
         ]
       },
-      include: {
-        skills: true,
-        experiences: true,
-        educations: true,
+      select:{
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        about_me: true,
+        hourly_pay_rate: true,
+        pipeline_status: true,
+        country: true,
+        specialization: true,
+        employment_type : true,
+        skills: {
+          select: {
+            skill_name: true,
+            proficiency_level: true,
+          },
+        },
+        experiences: {
+          select: {
+            company: true,
+            position: true,
+            responsabilities: true,
+            start_date: true,
+            end_date: true,
+          },
+        },
+        educations: {
+          select: {
+            institution: true,
+            degree: true,
+            year: true,
+          },
+        },
+        
       },
+      
     });
+
+    const hireRequestSpecialization = hireRequest.specialization ? 
+      hireRequest.specialization.split(';').map(s => s.trim()) : [];
     
     //=> score 
     const scoredCandidates = candidates.map(candidate => {
       let score = 0;
   
-      if (hireRequest.specialization && candidate.specialization === hireRequest.specialization) score += 1;
+      if (
+        hireRequestSpecialization.length > 0 &&
+        candidate.specialization &&
+        hireRequestSpecialization.includes(candidate.specialization)
+      ) {
+        score += 1;
+      }
   
       if (hireRequest.location && candidate.country === hireRequest.location) score += 1;
   
