@@ -10,6 +10,7 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/updateProfile.dto';
 import { GetProfileDto } from './dto/getProfile.dto';
+import { SearchUsersDto } from './dto/searchUsers.dto';
 
 @Injectable()
 export class UserService {
@@ -115,7 +116,8 @@ export class UserService {
             services: user.organization.services || undefined,
             description: user.organization.description || undefined,
             industry: user.organization.industry || undefined,
-            number_of_employees: user.organization.number_of_employees || undefined,
+            number_of_employees:
+              user.organization.number_of_employees || undefined,
             createdAt: user.organization.createdAt,
             updatedAt: user.organization.updatedAt,
           }
@@ -196,7 +198,8 @@ export class UserService {
               services: updatedUser.organization.services || undefined,
               description: updatedUser.organization.description || undefined,
               industry: updatedUser.organization.industry || undefined,
-              number_of_employees: updatedUser.organization.number_of_employees || undefined,
+              number_of_employees:
+                updatedUser.organization.number_of_employees || undefined,
               createdAt: updatedUser.organization.createdAt,
               updatedAt: updatedUser.organization.updatedAt,
             }
@@ -264,6 +267,272 @@ export class UserService {
       });
     } catch (error) {
       throw new BadRequestException(`Failed to update user status: ${error}`);
+    }
+  }
+
+  async searchUsers(query: SearchUsersDto): Promise<any[]> {
+    const { search, role, status, organization_id, limit = 10 } = query;
+
+    const whereClause: Prisma.USERWhereInput = {};
+
+    // Add search filter
+    if (search) {
+      whereClause.OR = [
+        {
+          first_name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          last_name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          email: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          job_title: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+      ];
+    }
+
+    // Add role filter
+    if (role) {
+      whereClause.role = role;
+    }
+
+    // Add status filter
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Add organization filter
+    if (organization_id) {
+      whereClause.organization_id = organization_id;
+    }
+
+    const users = await this.prisma.uSER.findMany({
+      where: whereClause,
+      take: limit,
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        job_title: true,
+        role: true,
+        status: true,
+        organization_name: true,
+        organization_id: true,
+        avatar: true,
+        phone: true,
+        verified: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // Transform users to handle empty avatars
+    return users.map((user) => ({
+      ...user,
+      avatar:
+        user.avatar ||
+        this.generateDefaultAvatar(user.first_name, user.last_name),
+      full_name: `${user.first_name} ${user.last_name}`.trim(),
+    }));
+  }
+
+  private generateDefaultAvatar(firstName: string, lastName: string): string {
+    // Generate initials for default avatar
+    const initials =
+      `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+    // Return a data URL for a simple colored circle with initials
+    // This is a simple SVG-based avatar
+    const svg = `
+      <svg width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="20" cy="20" r="20" fill="#4F46E5"/>
+        <text x="20" y="26" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="bold">${initials}</text>
+      </svg>
+    `;
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  }
+
+  async getOrganizationUsersPaginated(
+    organizationId: string,
+    query: any,
+  ): Promise<any> {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      role,
+      status,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query;
+
+    const skip = (page - 1) * limit;
+
+    // Build where clause
+    const whereClause: any = {
+      organization_id: organizationId,
+    };
+
+    // Add search filter
+    if (search) {
+      whereClause.OR = [
+        { first_name: { contains: search, mode: 'insensitive' } },
+        { last_name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { job_title: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Add role filter
+    if (role) {
+      whereClause.role = role;
+    }
+
+    // Add status filter
+    if (status) {
+      whereClause.status = status;
+    }
+
+    // Build orderBy clause
+    const orderBy: any = {};
+    orderBy[sortBy] = sortOrder;
+
+    try {
+      // Get total count
+      const total = await this.prisma.uSER.count({
+        where: whereClause,
+      });
+
+      // Get paginated users
+      const users = await this.prisma.uSER.findMany({
+        where: whereClause,
+        skip,
+        take: limit,
+        orderBy,
+        select: {
+          id: true,
+          email: true,
+          first_name: true,
+          last_name: true,
+          phone: true,
+          avatar: true,
+          job_title: true,
+          role: true,
+          status: true,
+          verified: true,
+          organization_id: true,
+          organization_name: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      // Transform users to include full_name and default avatar
+      const transformedUsers = users.map((user) => ({
+        ...user,
+        full_name: `${user.first_name} ${user.last_name}`.trim(),
+        avatar:
+          user.avatar ||
+          this.generateDefaultAvatar(user.first_name, user.last_name),
+      }));
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        users: transformedUsers,
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      };
+    } catch (error) {
+      throw new NotFoundException('Failed to fetch organization users');
+    }
+  }
+
+  async inviteUserToOrganization(
+    organizationId: string,
+    inviteData: any,
+    currentUser: any,
+  ): Promise<string> {
+    try {
+      // Check if user already exists
+      const existingUser = await this.prisma.uSER.findUnique({
+        where: { email: inviteData.email },
+      });
+
+      if (existingUser) {
+        throw new BadRequestException('User with this email already exists');
+      }
+
+      // Get organization details
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      // Create the user with invited status
+      const newUser = await this.prisma.uSER.create({
+        data: {
+          email: inviteData.email,
+          first_name: inviteData.first_name,
+          last_name: inviteData.last_name,
+          phone: inviteData.phone || '',
+          job_title: inviteData.job_title || '',
+          organization_id: organizationId,
+          organization_name: organization.name,
+          role: inviteData.role || 'organization_admin',
+          workos_id: '',
+          password: '', // Will be set when user completes signup
+          authentication_method: 'OwnSign',
+          status: 'invited',
+          verified: false,
+          avatar: '',
+        },
+      });
+
+      // Generate invitation token
+      const jwt = require('jsonwebtoken');
+      const token = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
+        expiresIn: '24h',
+      });
+
+      // Send invitation email
+      const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${token}`;
+
+      // You can integrate with your mail service here
+      // await this.mailService.sendInvitationEmail(inviteData.email, inviteLink, organization.name);
+
+      return `User invited successfully. Invitation link: ${inviteLink}`;
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to invite user to organization');
     }
   }
 }
