@@ -148,7 +148,7 @@ export class TicketService {
       const ticketUpdated = await this.prisma.ticket.update({
         where: { id },
         data: {
-          user: data.assigned_user_id ?  { connect: { id: data.assigned_user_id } } : undefined ,
+          user: data.assigned_user_id ?  { connect: { id: data.assigned_user_id } } : { disconnect: true },
         }
       })
       if(!ticketUpdated) throw new BadRequestException('Failed to reassign ticket')
