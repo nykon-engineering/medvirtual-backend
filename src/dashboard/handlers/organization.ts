@@ -61,7 +61,9 @@ export class HandlerOrganization {
 
     const hiredStaff = await this.prisma.staff.findMany({
       where:{
-        status: 'Active',
+        status: {
+          not: 'terminated',
+        },
         hireRequest:{
           org_id: user.organization_id,
         }
