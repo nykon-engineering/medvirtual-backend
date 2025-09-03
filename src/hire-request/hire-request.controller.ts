@@ -98,7 +98,7 @@ export class HireRequestController {
 
   @Patch('change-status/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
   @ApiOperation({ description: 'Update status of specific hire request' })
   @ApiQuery({ name: 'id', required: true, description: 'Hire request ID' })
   @ApiBody({ type: changeStatusHireRequesDTO })
