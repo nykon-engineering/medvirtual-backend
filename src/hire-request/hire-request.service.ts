@@ -1036,12 +1036,20 @@ export class HireRequestService {
 
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
-        readable: true,
         hireRequest: {
           organization: {
             id: user.organization_id,
           },
         },
+        OR: [
+          {
+            readable: true,
+            status: "decision_pending",
+          },
+          { status: "interview_completed" },
+          { status: "interview_scheduled" },
+          { status: "created" },
+        ],
       },
       select:{
         id: true,
