@@ -915,7 +915,7 @@ export class HireRequestService {
     const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidates, pipelineStatus);
     if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
 
-    return true;
+    return this.findOne(data.hireRequest_id, user);
   }
 
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{

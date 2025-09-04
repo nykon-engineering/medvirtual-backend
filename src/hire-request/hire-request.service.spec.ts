@@ -1001,8 +1001,11 @@ describe('HireRequestService', () => {
       mockAddAndUpdateCandidates();
       jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
   
+      const expectedHireRequest = { id: panelData.hireRequest_id, name: 'Test Request' };
+      jest.spyOn(service, 'findOne').mockResolvedValue(expectedHireRequest as any);
+      
       const result = await service.editPanel(panelData, user);
-      expect(result).toBe(true);
+      expect(result).toBe(expectedHireRequest);
   
       expect(prismaMock.candidatePanel.findFirst).toHaveBeenCalledWith({
         where: { hire_request_id: panelData.hireRequest_id },
