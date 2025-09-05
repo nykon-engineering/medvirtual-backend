@@ -236,6 +236,22 @@ export class HireRequestController {
     }
   }
 
+  @Get('get-panels/all')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('organization_super_admin', 'organization_admin')
+  @ApiOperation({ description: 'Get all readable Panels of the specific/current logged organization' })
+  @ApiResponse({ status: 200, description: 'Panels returned successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Panels not found for this current organization' })
+  async getPanels(@CurrentUser() user: USER) {
+    const result = await this.hireRequestService.getPanels(user);
+    return {
+      status: 200,
+      message: 'Panels returned successfully',
+      data: result,
+    }
+  }
+
   @Get('get-panels-readable/all')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('organization_super_admin', 'organization_admin')

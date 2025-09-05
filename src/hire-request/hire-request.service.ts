@@ -1035,6 +1035,153 @@ export class HireRequestService {
 
   }
 
+  async getPanels(user: USER){
+    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    /*select all hirerequests to show on the client page "My interview Panels"
+    -awaiting_decision + readable = true
+    -panel_ready
+    */
+
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: {
+        organization: {
+          id: user.organization_id,
+        },
+        OR: [
+          { status: "panel_ready" },
+          {
+            status: "awaiting_decision",
+            panels:{
+              some: {
+                readable: true,
+              }
+            }
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        createdAt: true,
+        availability: true,
+        contract_length: true,
+        expected_start_date: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        specialization: true,
+        location: true,
+        assign_user_id: true,
+        skills: {
+          select: {
+            skill_name: true,
+            required_level: true
+          },
+        },
+        panels:{
+          select: {
+            id: true,
+            scheduled_date: true,
+            status: true,
+            panelCandidates: {
+              select: {
+                status: true,
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                    about_me: true,
+                    hourly_pay_rate: true,
+                    years_of_experience: true,
+                    country: true,
+                    specialization: true,
+                    employment_type: true,
+                    skills: {
+                      select: {
+                        id: true,
+                        skill_name: true,
+                        proficiency_level: true,
+                        skill_type: true,
+                      },
+                    },
+                    educations: {
+                      orderBy: { year: 'desc' },
+                      select: {
+                        id: true,
+                        degree: true,
+                        institution: true,
+                        year: true,
+                      },
+                    },
+                    experiences: {
+                      orderBy: { start_date: 'desc' },
+                      select: {
+                        id: true,
+                        company: true,
+                        position: true,
+                        responsabilities: true,
+                        start_date: true,
+                        end_date: true,
+                      },
+                    },
+                    languages: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            interviews: {
+              select: {
+                scheduled_date: true,
+              },
+            },
+          }
+        }
+      }
+    })
+    
+    if (!hireRequests || hireRequests.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
+
+    const result = hireRequests.map(hireRequest => ({
+      ...hireRequest,
+      panels: hireRequest.panels.map(panel => ({
+        ...panel,
+        interview_date: panel.interviews[0]?.scheduled_date || null,
+        interviews: undefined, // removendo o array original
+        panelCandidates: panel.panelCandidates.map(pc => {
+          // filtra experiências válidas
+          const validExperiences = pc.candidate.experiences.filter(exp => exp.start_date !== null);
+          const earliestExperience = validExperiences.length > 0
+            ? validExperiences.sort((a, b) => new Date(a.start_date!).getTime() - new Date(b.start_date!).getTime())[0]
+            : null;
+    
+          const calculatedYearsOfExperience = earliestExperience?.start_date
+            ? new Date().getFullYear() - new Date(earliestExperience.start_date!).getFullYear()
+            : 0;
+    
+          return {
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              years_of_experience: pc.candidate.years_of_experience ?? calculatedYearsOfExperience,
+            },
+          };
+        }),
+      })),
+    }));
+    
+    return result;
+  }
+
   async getPanelsByOrganization(user: USER){
     if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 

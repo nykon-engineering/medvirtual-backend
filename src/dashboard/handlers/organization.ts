@@ -129,7 +129,7 @@ export class HandlerOrganization {
     })
 
     result.hiredStaff = hiredStaff;
-
+    
     const hireRequest = await this.prisma.hireRequest.findMany({
       where: {
         org_id: user.organization_id,
