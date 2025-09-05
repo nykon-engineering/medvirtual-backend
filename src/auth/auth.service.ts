@@ -569,15 +569,34 @@ export class AuthService {
 
     const passwordCript = await bcrypt.hash(data.password, 10);
     //set password and update status to prospect
+    const updateData: {
+      password: string;
+      verified: boolean;
+      first_name?: string;
+      last_name?: string;
+      job_title?: string;
+      status?: string;
+    } = {
+      password: passwordCript,
+      verified: true, // Set verified to true after signup
+    };
+
+    // Only update fields that are provided
+    if (data.firstName !== undefined) {
+      updateData.first_name = data.firstName;
+    }
+    if (data.lastName !== undefined) {
+      updateData.last_name = data.lastName;
+    }
+    if (data.jobTitle !== undefined) {
+      updateData.job_title = data.jobTitle;
+    }
+    if (data.status !== undefined) {
+      updateData.status = data.status;
+    }
+
     const updatePass = await this.prisma.uSER.update({
-      data: {
-        first_name: data.firstName,
-        last_name: data.lastName,
-        job_title: data.jobTitle,
-        password: passwordCript,
-        status: data.status,
-        verified: true, // Set verified to true after signup
-      },
+      data: updateData,
       where: { id: decodedToken.id },
     });
 

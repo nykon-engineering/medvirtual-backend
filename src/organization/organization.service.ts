@@ -180,9 +180,7 @@ export class OrganizationService {
       const skip = (page - 1) * limit;
 
       // Build where clause
-      const whereClause: any = {
-        status: { not: OrganizationStatus.inactive },
-      };
+      const whereClause: any = {};
 
       // Add user-specific filtering for non-system admins
       if (!['system_super_admin', 'system_admin'].includes(user.role)) {
