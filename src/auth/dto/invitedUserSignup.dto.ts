@@ -1,27 +1,30 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { isNotEmpty, IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { AuthGetInviteDto } from './authGetInvite.dto';
 
 export class AuthinvitedUserSignupDto extends AuthGetInviteDto {
-  @ApiProperty({ required: true, description: 'First name provided by user' })
+  @ApiProperty({ required: false, description: 'First name provided by user' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  firstName: string;
+  firstName?: string;
 
-  @ApiProperty({ required: true, description: 'Last name provided by user' })
+  @ApiProperty({ required: false, description: 'Last name provided by user' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  lastName: string;
+  lastName?: string;
 
-  @ApiProperty({ required: true, description: 'Job title provided by user' })
+  @ApiProperty({ required: false, description: 'Job title provided by user' })
+  @IsOptional()
   @IsString()
-  jobTitle: string;
+  jobTitle?: string;
 
   @ApiProperty({ required: true, description: 'password provided by user' })
   @IsString()
+  @IsNotEmpty()
   password: string;
 
-  @ApiProperty({ required: true, description: 'status provided by frontend' })
+  @ApiProperty({ required: false, description: 'status provided by frontend' })
+  @IsOptional()
   @IsString()
-  status: string;
+  status?: string;
 }
