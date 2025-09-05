@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { find } from 'rxjs';
 
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
@@ -41,6 +42,7 @@ const prismaMock = {
   hireRequestSkill: {
     createMany: jest.fn(),
     deleteMany: jest.fn(),
+    findMany: jest.fn(),
   },
   candidatePanel:{
     create: jest.fn(),
@@ -455,6 +457,8 @@ describe('HireRequestService', () => {
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1' });
       prismaMock.hireRequestSkill.deleteMany.mockResolvedValue({});
       prismaMock.hireRequestSkill.createMany.mockResolvedValue({ count: 2 });
+      const mockSkills = [{ skill_name: 'JS', required_level: 'advanced', hire_request_id: 'hr1' }];
+      prismaMock.hireRequestSkill.findMany.mockResolvedValue(mockSkills);
 
       const dto = {
         title: 'Updated',
@@ -462,7 +466,8 @@ describe('HireRequestService', () => {
       };
 
       const result = await service.update('hr1', dto as any, user);
-      expect(result).toHaveProperty('id');
+      expect(result).toHaveProperty('id', 'hr1');
+      expect(result).toHaveProperty('skills', mockSkills)
       expect(prismaMock.hireRequest.update).toHaveBeenCalled();
       expect(prismaMock.hireRequestSkill.deleteMany).toHaveBeenCalled();
       expect(prismaMock.hireRequestSkill.createMany).toHaveBeenCalled();

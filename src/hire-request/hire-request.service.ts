@@ -351,7 +351,11 @@ export class HireRequestService {
         })),
       });
       if (!skillsUpdated) throw new BadRequestException(`Hire request skills not updated`);
-      result.skills = skillsUpdated;
+
+      const newSkills = await this.prisma.hireRequestSkill.findMany({
+        where: { hire_request_id: id },
+      });
+      result.skills = newSkills;
     }
     return result;
   }
