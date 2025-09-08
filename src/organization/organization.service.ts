@@ -293,7 +293,7 @@ export class OrganizationService {
       const data: OrganizationResponseDto[] = organizations.map((org) => ({
         id: org.id,
         name: org.name,
-        email: org.email,
+        email: org.email || undefined,
         phone: org.phone || undefined,
         website_url: org.website_url || undefined,
         location: org.location || undefined,
@@ -362,14 +362,14 @@ export class OrganizationService {
 
   async create(data: CreateOrganizationDto, user: USER): Promise<Organization> {
     try {
-      // Check if the organization already exists
-      const existingOrganization = await this.prisma.organization.findUnique({
-        where: { email: data.email },
-      });
+      // // Check if the organization already exists
+      // const existingOrganization = await this.prisma.organization.findUnique({
+      //   where: { email: data.email },
+      // });
 
-      if (existingOrganization) {
-        throw new BadRequestException('Organization already exists');
-      }
+      // if (existingOrganization) {
+      //   throw new BadRequestException('Organization already exists');
+      // }
 
       // Handle owner assignment based on owner_type
       let ownerId: string | undefined = undefined;

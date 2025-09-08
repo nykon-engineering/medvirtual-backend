@@ -1,7 +1,10 @@
-import { EmailHeader, EmailFooter } from "./components"
+import { EmailHeader, EmailFooter } from './components';
 
-export default function getResetPasswordTemplate(userName: string, resetLink: string) {
-    return (`
+export default function getResetPasswordTemplate(
+  userName: string,
+  resetLink: string,
+) {
+  return `
     <!DOCTYPE html>
 <html lang="en">
 
@@ -49,15 +52,11 @@ export default function getResetPasswordTemplate(userName: string, resetLink: st
             </p>
         </div>
 
-        <div style="padding: 24px 40px; border-top: 1px solid #e2e8f0; text-align: center;">
-            <p style="margin: 0; color: #94a3b8; font-size: 12px;">
-                MedVirtual © 2025
-            </p>
-        </div>
+        ${EmailFooter}
 
     </div>
 </body>
 
 </html>
-`)
+`;
 }

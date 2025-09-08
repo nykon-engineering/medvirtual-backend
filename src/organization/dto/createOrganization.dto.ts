@@ -17,11 +17,12 @@ export class CreateOrganizationDto {
   name: string;
 
   @ApiProperty({
-    required: true,
+    required: false,
     description: 'Email address of the organization',
   })
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @ApiProperty({
     required: false,

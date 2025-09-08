@@ -4,17 +4,23 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Prisma, USER } from '@prisma/client';
-// import * as jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { UpdateProfileDto } from './dto/updateProfile.dto';
 import { GetProfileDto } from './dto/getProfile.dto';
 import { SearchUsersDto } from './dto/searchUsers.dto';
+import InviteSignup from '../common/utils/email-templates/invite-signup';
+import { InviteUserToOrganizationDto } from './dto/inviteUserToOrganization.dto';
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   async create(userData: Prisma.USERCreateInput): Promise<USER> {
     const { password, ...rest } = userData;
@@ -88,7 +94,7 @@ export class UserService {
         last_name: true,
         job_title: true,
         role: true,
-        status: true,      
+        status: true,
         createdAt: true,
       },
     });
@@ -129,7 +135,7 @@ export class UserService {
         ? {
             id: user.organization.id,
             name: user.organization.name,
-            email: user.organization.email,
+            email: user.organization.email || undefined,
             phone: user.organization.phone || undefined,
             website_url: user.organization.website_url || undefined,
             location: user.organization.location || undefined,
@@ -211,7 +217,7 @@ export class UserService {
           ? {
               id: updatedUser.organization.id,
               name: updatedUser.organization.name,
-              email: updatedUser.organization.email,
+              email: updatedUser.organization.email || undefined,
               phone: updatedUser.organization.phone || undefined,
               website_url: updatedUser.organization.website_url || undefined,
               location: updatedUser.organization.location || undefined,
@@ -493,8 +499,8 @@ export class UserService {
 
   async inviteUserToOrganization(
     organizationId: string,
-    inviteData: any,
-    currentUser: any,
+    inviteData: InviteUserToOrganizationDto,
+    // currentUser: USER,
   ): Promise<string> {
     try {
       // Check if user already exists
@@ -519,8 +525,8 @@ export class UserService {
       const newUser = await this.prisma.uSER.create({
         data: {
           email: inviteData.email,
-          first_name: inviteData.first_name,
-          last_name: inviteData.last_name,
+          first_name: inviteData.first_name || '',
+          last_name: inviteData.last_name || '',
           phone: inviteData.phone || '',
           job_title: inviteData.job_title || '',
           organization_id: organizationId,
@@ -536,18 +542,39 @@ export class UserService {
       });
 
       // Generate invitation token
-      const jwt = require('jsonwebtoken');
-      const token = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
+      const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
         expiresIn: '24h',
       });
 
-      // Send invitation email
-      const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${token}`;
+      // Send signup link via email
+      const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+      const emailBody = InviteSignup(inviteLink);
+      const mailSent = await this.mailService.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: inviteData.email,
+        subject: 'MedVirtual Invitation',
+        html: emailBody,
+      });
 
-      // You can integrate with your mail service here
-      // await this.mailService.sendInvitationEmail(inviteData.email, inviteLink, organization.name);
+      if (!mailSent) {
+        throw new BadRequestException('Failed to send invitation email');
+      }
 
-      return `User invited successfully. Invitation link: ${inviteLink}`;
+      // Store the verification code in the database with an expiration time
+      const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours - same time as JWT
+      const storeCode = await this.prisma.emailInvitation.create({
+        data: {
+          userId: newUser.id,
+          email_from: inviteData.email,
+          code: code,
+          expiresAt: codeExpiresAt,
+        },
+      });
+      if (!storeCode) {
+        throw new BadRequestException('Failed to store invite code');
+      }
+
+      return `Invitation sent successfully to ${inviteData.email}`;
     } catch (error) {
       if (
         error instanceof BadRequestException ||
