@@ -1054,8 +1054,7 @@ export class HireRequestService {
             readable: true,
           },
           { status: 'interview_completed' },
-          { status: 'interview_scheduled' },
-          { status: 'created' },
+          { status: 'interview_scheduled' }
         ]
       },
       select: {

@@ -45,7 +45,8 @@ export class CandidatesService {
 
     const skip =(page - 1) * perPage;
     const take = perPage;
-    const {organization_id} = user;    
+    const {organization_id} = user;
+    if (!organization_id) throw new BadRequestException('The current user doent have an organization_id');
 
     const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
     const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
@@ -238,7 +239,6 @@ export class CandidatesService {
         this.prisma.candidate.count({where})
       ])
       
-      //change pipeline_status to name
       candidates.forEach(candidate => {
         if (candidate.pipeline_status) {
           const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
@@ -246,10 +246,33 @@ export class CandidatesService {
         }
       });
 
+      const candidateIds = candidates.map(candidate => candidate.id);
+      
+      const interviewRequestTickets = await this.prisma.ticket.findMany({
+        where: {
+          organization: { is: { id: organization_id} },
+          type: 'interview',
+          status: {
+            in: ['new', 'in_progress']
+          },
+          candidate_id: {
+            in: candidateIds
+          }
+        },
+        select: {
+          candidate_id: true
+        }
+      });
+
+      const candidatesWithInterviewScheduled = new Set(
+        interviewRequestTickets.map(ticket => ticket.candidate_id)
+      );
+
       const candidatesWithScheduledInterview = candidates.map(candidate => ({
         ...candidate,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
-        selectedInInterviews: undefined // opcional: remove o array original
+        hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
+        selectedInInterviews: undefined
       }));
 
       return {
