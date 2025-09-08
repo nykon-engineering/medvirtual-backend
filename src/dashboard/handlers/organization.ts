@@ -183,6 +183,11 @@ export class HandlerOrganization {
                         end_date: true,
                       }
                     },
+                    languages: {
+                      select: {
+                        name: true,
+                      },
+                    },
                   },
                 },
               },
