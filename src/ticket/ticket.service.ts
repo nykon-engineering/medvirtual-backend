@@ -45,6 +45,15 @@ export class TicketService {
             status: true,
             email: true,
           }
+        },
+        candidate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            name: true,
+          }
         }
       }
     })
@@ -55,6 +64,20 @@ export class TicketService {
 
   async create(createTicketDto: CreateTicketDto): Promise<Object> {
     const typeBE = ticketTypeDictionary[createTicketDto.type] ?? null;
+    
+    if (createTicketDto.type === 'Interview Request' && !createTicketDto.candidate_id) {
+      throw new BadRequestException('Candidate ID is required for Interview Request tickets');
+    }
+    
+    if (createTicketDto.candidate_id) {
+      const candidate = await this.prisma.candidate.findUnique({
+        where: { id: createTicketDto.candidate_id }
+      });
+      if (!candidate) {
+        throw new BadRequestException('Candidate not found');
+      }
+    }
+    
     try{
       const ticket = await this.prisma.ticket.create({
         data: {
@@ -64,6 +87,7 @@ export class TicketService {
           description: createTicketDto.description,
           priority: createTicketDto.priority as Priority,
           user: createTicketDto.assigned_user_id ? { connect: { id: createTicketDto.assigned_user_id } } : undefined,
+          candidate: createTicketDto.candidate_id ? { connect: { id: createTicketDto.candidate_id } } : undefined,
         }
       })
       if(!ticket) throw new BadRequestException('Failed to create ticket')

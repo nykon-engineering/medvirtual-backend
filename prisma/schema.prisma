@@ -157,6 +157,7 @@ model Candidate {
   organizationCandidates OrganizationCandidate[]
   panelCandidates        PanelCandidate[]
   staff                  Staff[]
+  tickets                Ticket[]
 }
 
 model CandidateLanguage {
@@ -327,14 +328,17 @@ model Ticket {
   org_id       String
   priority     Priority
   staff_id     String?
+  candidate_id String?
   organization Organization @relation(fields: [org_id], references: [id])
   staff        Staff?       @relation(fields: [staff_id], references: [id])
   user         USER?        @relation(fields: [user_id], references: [id])
+  candidate    Candidate?   @relation(fields: [candidate_id], references: [id])
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
   @@index([status], map: "idx_tickets_status")
   @@index([createdAt], map: "idx_tickets_createdAt")
+  @@index([candidate_id], map: "idx_tickets_candidate_id")
 }
 
 model GoogleToken {

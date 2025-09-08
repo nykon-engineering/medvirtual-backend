@@ -30,4 +30,9 @@ export class CreateTicketDto {
     @IsString()
     @IsOptional()
     assigned_user_id: string;
+
+    @ApiProperty({ description: 'ID of the candidate (required for Interview Request tickets)', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    candidate_id?: string;
 }
