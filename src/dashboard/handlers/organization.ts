@@ -159,6 +159,30 @@ export class HandlerOrganization {
                     email: true,
                     hourly_pay_rate: true,
                     organization_id: true,
+                    skills: {
+                      select:{
+                        id: true,
+                        skill_name: true,
+                      }
+                    },
+                    educations: {
+                      select:{
+                        id: true,
+                        degree: true,
+                        institution: true,
+                        year: true,
+                      }
+                    },
+                    experiences: {
+                      select:{
+                        id: true,
+                        company: true,
+                        position: true,
+                        responsabilities: true,
+                        start_date: true,
+                        end_date: true,
+                      }
+                    },
                   },
                 },
               },
