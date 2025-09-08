@@ -579,6 +579,7 @@ export class AuthService {
     } = {
       password: passwordCript,
       verified: true, // Set verified to true after signup
+      status: 'active',
     };
 
     // Only update fields that are provided

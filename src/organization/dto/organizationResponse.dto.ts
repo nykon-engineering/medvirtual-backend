@@ -28,8 +28,8 @@ export class OrganizationResponseDto {
   @ApiProperty({ description: 'Organization name' })
   name: string;
 
-  @ApiProperty({ description: 'Organization email' })
-  email: string;
+  @ApiProperty({ description: 'Organization email', required: false })
+  email?: string;
 
   @ApiProperty({ description: 'Organization phone', required: false })
   phone?: string;
