@@ -45,7 +45,8 @@ export class CandidatesService {
 
     const skip =(page - 1) * perPage;
     const take = perPage;
-    const {organization_id} = user;    
+    const {organization_id} = user;
+    if (!organization_id) throw new BadRequestException('The current user doent have an organization_id');
 
     const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
     const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
@@ -249,7 +250,7 @@ export class CandidatesService {
       
       const interviewRequestTickets = await this.prisma.ticket.findMany({
         where: {
-          org_id: organization_id,
+          organization: { is: { id: organization_id} },
           type: 'interview',
           status: {
             in: ['new', 'in_progress']
