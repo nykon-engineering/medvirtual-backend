@@ -8,6 +8,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { reassignTicketDto } from './dto/reassign-ticket.dto';
 import { updateStatusTicketDto } from './dto/update-status-ticket.dto';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { USER } from '@prisma/client';
 
 
 @Controller('tickets')
@@ -21,8 +23,8 @@ export class TicketController {
   @ApiResponse({ status: 200, description: 'Ticket created successfully.'})
   @ApiResponse({ status: 400, description: 'Failed to create ticket.'})
   @ApiResponse({ status: 400, description: 'Error creating ticket.'})
-  async create(@Body() createTicketDto: CreateTicketDto): Promise <Object> {
-    const result = await this.ticketService.create(createTicketDto);
+  async create(@Body() createTicketDto: CreateTicketDto, @CurrentUser() user: USER): Promise <Object> {
+    const result = await this.ticketService.create(createTicketDto, user);
     return {
       status: 200,
       message: 'Ticket created successfully',

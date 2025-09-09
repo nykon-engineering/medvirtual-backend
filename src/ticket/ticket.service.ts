@@ -3,7 +3,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 import { CreateTicketDto } from './dto/create-ticket.dto';
-import { Priority, TicketStatus } from '@prisma/client';
+import { Priority, TicketStatus, USER } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
 import { reassignTicketDto } from './dto/reassign-ticket.dto';
 
@@ -62,7 +62,7 @@ export class TicketService {
   }
 
 
-  async create(createTicketDto: CreateTicketDto): Promise<Object> {
+  async create(createTicketDto: CreateTicketDto, user: USER): Promise<Object> {
     const typeBE = ticketTypeDictionary[createTicketDto.type] ?? null;
     
     if (createTicketDto.type === 'Interview Request' && !createTicketDto.candidate_id) {
@@ -77,6 +77,19 @@ export class TicketService {
         throw new BadRequestException('Candidate not found');
       }
     }
+
+    let assignedValidated;
+    if (user.role.includes('organization')){
+      //get the concierge client as assigned user
+      const org = await this.prisma.organization.findUnique({
+        where: { id: createTicketDto.client_id },
+        select: { admin_id: true }
+      })
+      if(!org) throw new BadRequestException('Organization not found')
+      assignedValidated = org.admin_id;
+    }else{
+      assignedValidated = createTicketDto.assigned_user_id;
+    }
     
     try{
       const ticket = await this.prisma.ticket.create({
@@ -86,7 +99,7 @@ export class TicketService {
           title: createTicketDto.title,
           description: createTicketDto.description,
           priority: createTicketDto.priority as Priority,
-          user: createTicketDto.assigned_user_id ? { connect: { id: createTicketDto.assigned_user_id } } : undefined,
+          user: createTicketDto.assigned_user_id ? { connect: { id: assignedValidated } } : undefined,
           candidate: createTicketDto.candidate_id ? { connect: { id: createTicketDto.candidate_id } } : undefined,
         }
       })
