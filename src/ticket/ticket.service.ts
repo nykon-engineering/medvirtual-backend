@@ -100,7 +100,7 @@ export class TicketService {
           title: createTicketDto.title,
           description: createTicketDto.description,
           priority: createTicketDto.priority as Priority,
-          user: createTicketDto.assigned_user_id ? { connect: { id: assignedValidated } } : undefined,
+          user: { connect: { id: assignedValidated } } ,
           candidate: createTicketDto.candidate_id ? { connect: { id: createTicketDto.candidate_id } } : undefined,
         }
       })
