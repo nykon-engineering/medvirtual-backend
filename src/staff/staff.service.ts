@@ -115,6 +115,20 @@ export class StaffService {
     if (staff.status !== 'active') throw new BadRequestException('Cannot add bonus to inactive staff member');
     if(!user || !user.organization_id) throw new NotFoundException('User not found');
 
+    let assignedValidated;
+
+    if (user.role.includes('organization')){
+      //get the concierge client as assigned user
+      const org = await this.prisma.organization.findUnique({
+        where: { id: user.organization_id },
+        select: { admin_id: true }
+      })
+      if(!org) throw new BadRequestException('Organization not found')
+      assignedValidated = org.admin_id;
+    }else{
+      assignedValidated = undefined;
+    }
+
     const [bonus, ticket] = await this.prisma.$transaction([
       this.prisma.bonus.create({
         data: {
@@ -132,6 +146,7 @@ export class StaffService {
         title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
         description: data.description,
         priority: 'medium',
+        user: assignedValidated ? { connect: { id: assignedValidated } } : undefined,
         }
       }),
     ]);
@@ -158,6 +173,20 @@ export class StaffService {
     if(!staff) throw new NotFoundException('Staff member not found');
     if(!user || !user.organization_id) throw new NotFoundException('User not found');
 
+    let assignedValidated;
+
+    if (user.role.includes('organization')){
+      //get the concierge client as assigned user
+      const org = await this.prisma.organization.findUnique({
+        where: { id: user.organization_id },
+        select: { admin_id: true }
+      })
+      if(!org) throw new BadRequestException('Organization not found')
+      assignedValidated = org.admin_id;
+    }else{
+      assignedValidated = undefined;
+    }
+
     const [staffStatus, ticket] = await this.prisma.$transaction([
       this.prisma.staff.update({
         where: { id: staff.id },
@@ -171,6 +200,7 @@ export class StaffService {
           title: `Termination Requested: ${staff.candidate.first_name} ${staff.candidate.last_name}`,
           description: data.description,
           priority: 'high',
+          user: assignedValidated ? { connect: { id: assignedValidated } } : undefined,
         }
       })
     ])
