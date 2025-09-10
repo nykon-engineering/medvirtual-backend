@@ -21,7 +21,6 @@ import {
 
 import { UserService } from './user.service';
 import { AuthGuard } from '../auth/auth.guard';
-import { CreateUserDto } from './dto/createUser.dto';
 import { UpdateUserDto } from './dto/updateUser.dto';
 import { UpdateProfileDto } from './dto/updateProfile.dto';
 import { GetProfileDto } from './dto/getProfile.dto';
@@ -67,11 +66,58 @@ export class UserController {
   })
   @ApiResponse({ status: 400, description: 'Invalid profile data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Insufficient permissions for organization fields',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   async updateCurrentUserProfile(
     @CurrentUser() user: USER,
     @Body() profileData: UpdateProfileDto,
   ) {
+    // Check permissions for organization fields
+    const organizationFields = [
+      'organization_name',
+      'organization_description',
+      'organization_website_url',
+      'organization_industry',
+      'organization_number_of_employees',
+      'organization_location',
+      'organization_date_founded',
+      'organization_specialties',
+    ];
+
+    const systemAdminFields = ['organization_role', 'signed_document_url'];
+
+    // Check if user is trying to update organization fields
+    const hasOrganizationFields = organizationFields.some(
+      (field) => profileData[field] !== undefined,
+    );
+
+    const hasSystemAdminFields = systemAdminFields.some(
+      (field) => profileData[field] !== undefined,
+    );
+
+    // Organization fields can only be updated by organization admins and owners
+    if (
+      hasOrganizationFields &&
+      !['organization_admin', 'organization_super_admin'].includes(user.role)
+    ) {
+      throw new UnauthorizedException(
+        'Insufficient permissions to update organization fields',
+      );
+    }
+
+    // System admin fields can only be updated by system admins
+    if (
+      hasSystemAdminFields &&
+      !['system_admin', 'system_super_admin'].includes(user.role)
+    ) {
+      throw new UnauthorizedException(
+        'Insufficient permissions to update system admin fields',
+      );
+    }
+
     return this.userService.updateProfile(user.id, profileData);
   }
 
@@ -326,10 +372,27 @@ export class UserController {
 
   @Delete(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @ApiOperation({ summary: 'Delete user' })
-  @Roles('system_super_admin')
-  @ApiResponse({ status: 200, description: 'User deleted successfully.' })
-  @ApiResponse({ status: 400, description: 'Failed to delete user' })
+  @ApiOperation({ 
+    summary: 'Delete user',
+    description: 'Permanently deletes a user and all related data. Handles foreign key constraints by cleaning up related records first. Cannot delete system super admins or users who are the only admin/owner of an organization.'
+  })
+  @Roles('system_super_admin', 'system_admin')
+  @ApiResponse({ 
+    status: 200, 
+    description: 'User deleted successfully.'
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Failed to delete user - may be due to foreign key constraints, security restrictions, or business rules'
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'User not found'
+  })
+  @ApiResponse({ 
+    status: 403, 
+    description: 'Insufficient permissions'
+  })
   async deleteUser(@Param('id') id: string) {
     return this.userService.delete(id);
   }

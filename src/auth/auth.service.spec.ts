@@ -210,7 +210,47 @@ describe('AuthService - signIn', () => {
     userMock.findByEmail.mockResolvedValue({ status: 'deleted' });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
-      new UnauthorizedException('This user does not have permission to log in.'),
+      new UnauthorizedException('This account has been deleted. Please contact support.'),
+    );
+  });
+
+  it('should throw if user is inactive', async () => {
+    userMock.findByEmail.mockResolvedValue({ status: 'inactive' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('Your account is inactive. Please contact your administrator to reactivate your account.'),
+    );
+  });
+
+  it('should throw if user is suspended', async () => {
+    userMock.findByEmail.mockResolvedValue({ status: 'suspended' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('Your account has been suspended. Please contact support for assistance.'),
+    );
+  });
+
+  it('should throw if user is pending verification', async () => {
+    userMock.findByEmail.mockResolvedValue({ status: 'pending_verification' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('Your account is pending verification. Please check your email and verify your account.'),
+    );
+  });
+
+  it('should throw if user is prospect', async () => {
+    userMock.findByEmail.mockResolvedValue({ status: 'prospect' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('Your account is not yet activated. Please contact support.'),
+    );
+  });
+
+  it('should throw if user is incomplete', async () => {
+    userMock.findByEmail.mockResolvedValue({ status: 'incomplete' });
+
+    await expect(service.signIn(dataFake)).rejects.toThrow(
+      new UnauthorizedException('Your account setup is incomplete. Please contact support.'),
     );
   });
 

@@ -104,16 +104,49 @@ export class AuthService {
   }
 
   async signIn(data: AuthSignInDto): Promise<object> {
-    const timeToExpires= data.rememberMe ? 7 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
+    const timeToExpires = data.rememberMe
+      ? 7 * 24 * 60 * 60 * 1000
+      : 8 * 60 * 60 * 1000;
     const authenticationMethod = 'OwnSign';
     const user = await this.userService.findByEmail(data.email);
     if (!user) {
       throw new UnauthorizedException('User not found with this email');
     }
-    if (user.status === 'deleted')
-      throw new UnauthorizedException(
-        'This user does not have permission to log in.',
-      );
+    // Check user status - only allow active users to login
+    if (user.status !== 'active') {
+      let errorMessage = 'This user does not have permission to log in.';
+
+      switch (user.status) {
+        case 'deleted':
+          errorMessage =
+            'This account has been deleted. Please contact support.';
+          break;
+        case 'inactive':
+          errorMessage =
+            'Your account is inactive. Please contact your administrator to reactivate your account.';
+          break;
+        case 'suspended':
+          errorMessage =
+            'Your account has been suspended. Please contact support for assistance.';
+          break;
+        case 'pending_verification':
+          errorMessage =
+            'Your account is pending verification. Please check your email and verify your account.';
+          break;
+        case 'prospect':
+          errorMessage =
+            'Your account is not yet activated. Please contact support.';
+          break;
+        case 'incomplete':
+          errorMessage =
+            'Your account setup is incomplete. Please contact support.';
+          break;
+        default:
+          errorMessage = 'This user does not have permission to log in.';
+      }
+
+      throw new UnauthorizedException(errorMessage);
+    }
     // System admins don't need to belong to an organization
     if (
       !user.organization_id &&

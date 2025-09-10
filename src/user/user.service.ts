@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, USER } from '@prisma/client';
+import { Prisma, USER, OrganizationRole } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
@@ -170,30 +170,114 @@ export class UserService {
         throw new NotFoundException(`User not found`);
       }
 
+      // Separate user fields from organization fields
+      const {
+        organization_name,
+        organization_description,
+        organization_website_url,
+        organization_industry,
+        organization_number_of_employees,
+        organization_location,
+        organization_date_founded,
+        organization_specialties,
+        organization_role,
+        signed_document_url,
+        ...userFields
+      } = profileData;
+
+      // Filter out undefined values from user fields to avoid Prisma errors
+      const filteredUserFields = Object.fromEntries(
+        Object.entries(userFields).filter(([_, value]) => value !== undefined),
+      );
+
       // Handle organization updates if organization fields are provided
-      if (
-        profileData.organization_name ||
-        profileData.organization_description
-      ) {
-        if (currentUser.organization_id) {
-          // Update existing organization
-          await this.prisma.organization.update({
-            where: { id: currentUser.organization_id },
-            data: {
-              ...(profileData.organization_name && {
-                name: profileData.organization_name,
-              }),
-              ...(profileData.organization_description && {
-                description: profileData.organization_description,
-              }),
-            },
-          });
+      const organizationFields = {
+        organization_name,
+        organization_description,
+        organization_website_url,
+        organization_industry,
+        organization_number_of_employees,
+        organization_location,
+        organization_date_founded,
+        organization_specialties,
+        organization_role,
+        signed_document_url,
+      };
+
+      // Check if any organization fields are provided
+      const hasOrganizationFields = Object.values(organizationFields).some(
+        (value) => value !== undefined,
+      );
+
+      if (hasOrganizationFields && currentUser.organization_id) {
+        // Prepare organization update data
+        const organizationUpdateData: {
+          name?: string;
+          description?: string;
+          website_url?: string;
+          industry?: string;
+          number_of_employees?: number;
+          location?: string;
+          date_founded?: Date;
+          specialties?: string[];
+        } = {};
+
+        if (organization_name !== undefined) {
+          organizationUpdateData.name = organization_name;
         }
+        if (organization_description !== undefined) {
+          organizationUpdateData.description = organization_description;
+        }
+        if (organization_website_url !== undefined) {
+          organizationUpdateData.website_url = organization_website_url;
+        }
+        if (organization_industry !== undefined) {
+          organizationUpdateData.industry = organization_industry;
+        }
+        if (organization_number_of_employees !== undefined) {
+          // Ensure it's a valid integer
+          const numEmployees = parseInt(
+            organization_number_of_employees.toString(),
+            10,
+          );
+          if (isNaN(numEmployees) || numEmployees < 1) {
+            throw new BadRequestException(
+              'Number of employees must be a valid positive integer',
+            );
+          }
+          organizationUpdateData.number_of_employees = numEmployees;
+        }
+        if (organization_location !== undefined) {
+          organizationUpdateData.location = organization_location;
+        }
+        if (
+          organization_date_founded !== undefined &&
+          organization_date_founded !== ''
+        ) {
+          organizationUpdateData.date_founded = new Date(
+            organization_date_founded,
+          );
+        }
+        if (organization_specialties !== undefined) {
+          // Convert comma-separated string to array
+          const specialtiesArray = organization_specialties
+            .split(',')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+          organizationUpdateData.specialties = specialtiesArray;
+        }
+
+        // Update organization
+        await this.prisma.organization.update({
+          where: { id: currentUser.organization_id },
+          data: organizationUpdateData,
+        });
       }
 
+      // Update user fields
       const updatedUser = await this.prisma.uSER.update({
         where: { id },
-        data: profileData,
+        data: filteredUserFields,
         include: {
           organization: true,
         },
@@ -272,11 +356,102 @@ export class UserService {
 
   async delete(id: string): Promise<USER> {
     try {
-      await this.findById(id);
-      return await this.prisma.uSER.delete({
-        where: { id },
+      const user = await this.findById(id);
+      if (!user) {
+        throw new NotFoundException(`User not found`);
+      }
+
+      // Additional safety check: Prevent deletion of system super admins
+      if (user.role === 'system_super_admin') {
+        throw new BadRequestException(
+          'Cannot delete system super admin users for security reasons',
+        );
+      }
+
+      // Check if user is the only owner of any organization
+      const ownedOrganizations = await this.prisma.organization.findMany({
+        where: { owner_id: id },
+      });
+
+      if (ownedOrganizations.length > 0) {
+        // Check if there are other users in the organization who could become owners
+        for (const org of ownedOrganizations) {
+          const otherUsers = await this.prisma.uSER.findMany({
+            where: {
+              organization_id: org.id,
+              id: { not: id },
+              role: { in: ['organization_admin', 'organization_super_admin'] },
+            },
+          });
+
+          if (otherUsers.length === 0) {
+            throw new BadRequestException(
+              `Cannot delete user. User is the only admin/owner of organization: ${org.name}. Please assign another admin first.`,
+            );
+          }
+        }
+      }
+
+      // Use a transaction to handle all deletions atomically
+      return await this.prisma.$transaction(async (tx) => {
+        // 1. Delete sessions (has RESTRICT constraint)
+        await tx.session.deleteMany({
+          where: { userId: id },
+        });
+
+        // 2. Delete email verifications (has RESTRICT constraint)
+        await tx.emailVerification.deleteMany({
+          where: { userId: id },
+        });
+
+        // 3. Delete email invitations (has RESTRICT constraint)
+        await tx.emailInvitation.deleteMany({
+          where: { userId: id },
+        });
+
+        // 4. Handle organization relationships (has RESTRICT constraints)
+        // Update organizations where this user is admin_id
+        await tx.organization.updateMany({
+          where: { admin_id: id },
+          data: { admin_id: null },
+        });
+
+        // Update organizations where this user is owner_id
+        await tx.organization.updateMany({
+          where: { owner_id: id },
+          data: { owner_id: null },
+        });
+
+        // Update organizations where this user is concierge_id
+        await tx.organization.updateMany({
+          where: { concierge_id: id },
+          data: { concierge_id: null },
+        });
+
+        // 5. Update hire requests where this user is assigned (has SET NULL constraint)
+        await tx.hireRequest.updateMany({
+          where: { assign_user_id: id },
+          data: { assign_user_id: null },
+        });
+
+        // 6. Update tickets where this user is the user (has SET NULL constraint)
+        await tx.ticket.updateMany({
+          where: { user_id: id },
+          data: { user_id: null },
+        });
+
+        // 7. Finally, delete the user
+        return await tx.uSER.delete({
+          where: { id },
+        });
       });
     } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
       throw new BadRequestException(`Failed to delete user: ${error}`);
     }
   }

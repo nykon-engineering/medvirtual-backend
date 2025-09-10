@@ -513,9 +513,19 @@ export class OrganizationService {
       if (data.description !== undefined)
         updateData.description = data.description;
       if (data.industry !== undefined) updateData.industry = data.industry;
-      if (data.number_of_employees !== undefined)
-        updateData.number_of_employees = data.number_of_employees;
-      if (data.date_founded !== undefined)
+
+      // Fix number_of_employees validation
+      if (data.number_of_employees !== undefined) {
+        // Ensure it's a valid integer
+        const numEmployees = parseInt(data.number_of_employees.toString(), 10);
+        if (isNaN(numEmployees) || numEmployees < 1) {
+          throw new BadRequestException(
+            'Number of employees must be a valid positive integer',
+          );
+        }
+        updateData.number_of_employees = numEmployees;
+      }
+      if (data.date_founded !== undefined && data.date_founded !== '')
         updateData.date_founded = new Date(data.date_founded);
       if (data.date_joined !== undefined)
         updateData.date_joined = new Date(data.date_joined);
@@ -526,6 +536,18 @@ export class OrganizationService {
       if (data.concierge_id !== undefined)
         updateData.concierge_id = data.concierge_id;
 
+      // Handle organization_role update
+      if (data.organization_role !== undefined) {
+        updateData.organization_role = data.organization_role;
+      }
+
+      // Handle signed_document_url update
+      if (data.signed_document_url !== undefined) {
+        updateData.signed_document_url = data.signed_document_url;
+        // Update the signed document date when URL is provided
+        updateData.signed_document_date = new Date();
+      }
+
       return await this.prisma.organization.update({
         where: { id },
         data: updateData,
@@ -535,7 +557,10 @@ export class OrganizationService {
           users: true,
         },
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new BadRequestException('Failed to update organization');
     }
   }
