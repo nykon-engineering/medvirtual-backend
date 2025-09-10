@@ -285,11 +285,47 @@ export class HireRequestService {
                     name: true,
                     email: true,
                     country: true,
-                    languages: true,
+                    employment_type: true,
+                    hourly_pay_rate: true,
+                    years_of_experience: true,
+                    pipeline_status: true,
+                    about_me: true,
                     specialization: true,
+                    processing_status: true,
+                    processing_error: true,
+                    organization_id: true,
+                    languages: {
+                      select: {
+                        name: true,
+                      },
+                    },
                     skills: {
                       select: {
                         skill_name: true,
+                        proficiency_level: true,
+                      },
+                    },
+                    educations: {
+                      orderBy: { year: 'desc' },
+                      select: {
+                        institution: true,
+                        degree: true,
+                        year: true,
+                      },
+                    },
+                    experiences: {
+                      orderBy: { start_date: 'desc' },
+                      select: {
+                        company: true,
+                        position: true,
+                        responsabilities: true,
+                        start_date: true,
+                        end_date: true,
+                      },
+                    },
+                    selectedInInterviews: {
+                      select: {
+                        scheduled_date: true,
                       },
                     },
                   },
@@ -1053,12 +1089,9 @@ export class HireRequestService {
             status: 'decision_pending',
             readable: true,
           },
-          { 
-            status: 'decision_made',
-            readable: true,
-          },
           { status: 'interview_completed' },
-          { status: 'interview_scheduled' }
+          { status: 'interview_scheduled' },
+          { status: 'created' },
         ]
       },
       select: {
@@ -1570,24 +1603,13 @@ export class HireRequestService {
                 first_name: true,
                 last_name: true,
                 name: true,
-                email: true,
-                specialization: true,
-                country: true,
-                employment_type: true,
-                about_me: true,
-                years_of_experience: true,
                 hourly_pay_rate: true,
-                organization_id: true,
-                processing_status: true,
-                processing_error: true,
-                educations: true,
+                country: true,
                 experiences: {
                   orderBy: { start_date: 'asc' },
                   take: 1, 
                   select: { start_date: true },
                 },
-                skills:true,
-                languages: true,
               },
             },
           },
