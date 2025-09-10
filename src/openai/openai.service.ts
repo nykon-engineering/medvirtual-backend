@@ -73,6 +73,7 @@ export class OpenaiService {
         - If relevant details exist in both Textract and HubSpot, combine them.
         - Only include facts actually present in the inputs; do not invent achievements or roles.
         - Length: 2–4 sentences, concise, professional.
+        - Don't include the name of the candidate on the bio.
 
         #### Experience
         - Use only literal data from Textract.
