@@ -1126,6 +1126,11 @@ export class HireRequestService {
             },
           },
         },
+        interviews: {
+          select: {
+            scheduled_date: true,
+          },
+        },
         hireRequest: {
           select: {
             id: true,
@@ -1145,8 +1150,16 @@ export class HireRequestService {
         },
       },
     });
+
+
+    const result = panels.map(panel => ({
+      ...panel,
+      interview_date: panel.interviews[0]?.scheduled_date || null,
+      interviews: undefined,
+      
+    }));
     
-    return panels;
+    return result;
   }
 
   async getPanelsByOrganization(user: USER){
