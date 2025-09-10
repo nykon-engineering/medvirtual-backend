@@ -1091,7 +1091,6 @@ export class HireRequestService {
           },
           { status: 'interview_completed' },
           { status: 'interview_scheduled' },
-          { status: 'created' },
         ]
       },
       select: {
