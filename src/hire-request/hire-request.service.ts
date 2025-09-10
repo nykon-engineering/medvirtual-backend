@@ -1089,6 +1089,10 @@ export class HireRequestService {
             status: 'decision_pending',
             readable: true,
           },
+          { 
+            status: 'created',
+            readable: true,
+          },
           { status: 'interview_completed' },
           { status: 'interview_scheduled' },
         ]
