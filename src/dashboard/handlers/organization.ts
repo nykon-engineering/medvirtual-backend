@@ -243,9 +243,6 @@ export class HandlerOrganization {
         ]
       },
       select,
-      orderBy: {
-        createdAt: 'desc',
-      },
       take: 8,
     });
     result.otherTalents = otherTalents;
