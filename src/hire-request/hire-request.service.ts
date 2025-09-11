@@ -1084,19 +1084,11 @@ export class HireRequestService {
         hireRequest: {
           org_id: user.organization_id || undefined,
         },
+        readable: true,
         OR: [
-          { 
-            status: 'decision_pending',
-            readable: true,
-          },
-          { 
-            status: 'decision_made',
-            readable: true,
-          },
-          { 
-            status: 'created',
-            readable: true,
-          },
+          { status: 'decision_pending'},
+          { status: 'decision_made'},
+          { status: 'created'},
           { status: 'interview_completed' },
           { status: 'interview_scheduled' },
         ]
