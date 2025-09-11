@@ -1125,6 +1125,7 @@ export class HireRequestService {
                 educations: true,
                 experiences: true,
                 skills:true,
+                pipeline_status: true
               },
             },
           },
