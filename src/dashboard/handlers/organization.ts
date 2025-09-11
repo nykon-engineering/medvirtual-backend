@@ -233,6 +233,14 @@ export class HandlerOrganization {
     const otherTalents = await this.prisma.candidate.findMany({
       where: {
         organization_id: null,
+        OR: [
+          {
+            pipeline_status: '261075105'
+          },
+          {
+            pipeline_status: '1087596819'
+          }
+        ]
       },
       select,
       orderBy: {
