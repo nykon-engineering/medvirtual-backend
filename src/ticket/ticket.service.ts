@@ -79,11 +79,11 @@ export class TicketService {
     }
 
     let assignedValidated;
-    if (!user || !user.organization_id) throw new BadRequestException('User organization not found');
+    if (!user || user.role.includes("organization") && !user.organization_id) throw new BadRequestException('User organization not found');
     if (user.role.includes('organization')){
       //get the concierge client as assigned user
       const org = await this.prisma.organization.findUnique({
-        where: { id: user.organization_id },
+        where: { id: user.organization_id ||  undefined},
         select: { admin_id: true }
       })
       if(!org) throw new BadRequestException('Organization not found')

@@ -56,7 +56,7 @@ export class HandlerOrganization {
       }
     };
 
-    if (!user || !user.organization_id)
+    if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('User or organization not found');
 
     const hiredStaff = await this.prisma.staff.findMany({

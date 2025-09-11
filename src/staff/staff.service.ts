@@ -113,14 +113,14 @@ export class StaffService {
     });
     if(!staff) throw new NotFoundException('Staff member not found'); 
     if (staff.status !== 'active') throw new BadRequestException('Cannot add bonus to inactive staff member');
-    if(!user || !user.organization_id) throw new NotFoundException('User not found');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found');
 
     let assignedValidated;
 
     if (user.role.includes('organization')){
       //get the concierge client as assigned user
       const org = await this.prisma.organization.findUnique({
-        where: { id: user.organization_id },
+        where: { id: user.organization_id || undefined },
         select: { admin_id: true }
       })
       if(!org) throw new BadRequestException('Organization not found')
@@ -140,7 +140,7 @@ export class StaffService {
       }),
       this.prisma.ticket.create({
         data:{
-          organization: { connect: { id: user.organization_id } },
+          organization: { connect: { id: user.organization_id || undefined} },
         type: 'bonus',
         staff: { connect: { id: data.staff_id } },
         title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
@@ -171,14 +171,14 @@ export class StaffService {
       }
     });
     if(!staff) throw new NotFoundException('Staff member not found');
-    if(!user || !user.organization_id) throw new NotFoundException('User not found');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found');
 
     let assignedValidated;
 
     if (user.role.includes('organization')){
       //get the concierge client as assigned user
       const org = await this.prisma.organization.findUnique({
-        where: { id: user.organization_id },
+        where: { id: user.organization_id || undefined },
         select: { admin_id: true }
       })
       if(!org) throw new BadRequestException('Organization not found')
@@ -194,7 +194,7 @@ export class StaffService {
       }),
       this.prisma.ticket.create({
         data:{
-          organization: { connect: { id: user.organization_id } },
+          organization: { connect: { id: user.organization_id || undefined } },
           staff: { connect: { id: staff.id } },
           type: 'termination',
           title: `Termination Requested: ${staff.candidate.first_name} ${staff.candidate.last_name}`,

@@ -57,7 +57,7 @@ export class HireRequestService {
   }
 
   async create(data: CreateHireRequestDto, user: USER):Promise<any> {  
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const {skills, client_id, ...hireRequestData} = data;
 
@@ -82,7 +82,7 @@ export class HireRequestService {
 
     const hireRequest = {
       ...hireRequestData,
-      organization: user.role.includes('organization') ?  {connect: {id: user.organization_id}} : { connect : { id: client_id } },
+      organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       status: organizationSQL.status !== 'active' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
     };
 
@@ -123,7 +123,7 @@ export class HireRequestService {
 
   async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10): Promise<any> {
     
-    if (!user || !user.organization_id) {
+    if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
     if(!user.role) throw new NotFoundException('User role not found');
@@ -249,14 +249,14 @@ export class HireRequestService {
   }
 
   async findOne(id: string, user: USER): Promise<any> {
-    if (!user || !user.organization_id) {
+    if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        organization: user.role.includes('organization') ?  { id: user.organization_id } : undefined,
+        organization: user.role.includes('organization') ?  { id: user.organization_id || undefined } : undefined,
       },
       include: {
         skills: true,
@@ -357,7 +357,7 @@ export class HireRequestService {
 
   async update(id: string, data: UpdateHireRequestDto, user: USER): Promise<object> {
     let result;
-    if(!user || !user.organization_id) {
+    if(!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
@@ -397,7 +397,7 @@ export class HireRequestService {
   }
 
   async updateStatus(id: string, data: changeStatusHireRequesDTO, user: USER): Promise<boolean> {
-    if (!user || !user.organization_id) {
+    if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
@@ -410,7 +410,7 @@ export class HireRequestService {
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        organization: user.role.includes('organization') ?  { id: user.organization_id } : undefined,
+        organization: user.role.includes('organization') ?  { id: user.organization_id || undefined } : undefined,
       },
       select:{
         status: true,
@@ -633,7 +633,7 @@ export class HireRequestService {
   }
 
   async reassign(id: string, user: USER, data: reassignDTO): Promise<boolean> {
-    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const hireRequest = await this.prisma.hireRequest.update({
       where: {
@@ -653,7 +653,7 @@ export class HireRequestService {
   }
 
   async showMatchCandidates(id: string, user: USER): Promise<object> {
-    if (!user || !user.organization_id) 
+    if (!user || user.role.includes("organization") && !user.organization_id) 
       throw new NotFoundException('User not found or not part of an organization');
   
     const hireRequest = await this.prisma.hireRequest.findUnique({
@@ -777,7 +777,7 @@ export class HireRequestService {
   }
   
   async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
     //if (data.candidates_id.length !== 5) throw new BadRequestException('Exactly 5 candidates must be selected to confirm panel');
 
@@ -853,7 +853,7 @@ export class HireRequestService {
   }
 
   async editPanel(data: ConfirmPanelHireRequestDto, user: USER) : Promise<boolean> {
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.candidates_id) throw new BadRequestException('Data is required to confirm panel');
     let currentPanel;
 
@@ -959,7 +959,7 @@ export class HireRequestService {
   }
 
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
     const panel = await this.prisma.candidatePanel.findFirst({
       where: {
@@ -1008,12 +1008,12 @@ export class HireRequestService {
   async getPanel(id: string, user: USER): Promise<returnGetPanelDto> {
     let result: any = {};
     if(!id) throw new BadRequestException('Hire request ID is required');
-    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        org_id: user.role.includes('organization') ?  user.organization_id : undefined,
+        org_id: user.role.includes('organization') ?  user.organization_id || undefined: undefined,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -1072,7 +1072,7 @@ export class HireRequestService {
   }
 
   async getPanels(user: USER){
-    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     /*select all hirerequests to show on the client page "My interview Panels"
     -awaiting_decision + readable = true
@@ -1082,7 +1082,7 @@ export class HireRequestService {
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         hireRequest: {
-          org_id: user.organization_id,
+          org_id: user.organization_id || undefined,
         },
         OR: [
           { 
@@ -1166,13 +1166,13 @@ export class HireRequestService {
   }
 
   async getPanelsByOrganization(user: USER){
-    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         hireRequest: {
           organization: {
-            id: user.organization_id,
+            id: user.organization_id || undefined,
           },
         },
         OR: [
@@ -1305,12 +1305,12 @@ export class HireRequestService {
   }
 
   async scheduleInterview(id: string, data: scheduleInterviewDTO, user: USER){
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        organization: user.role.includes('organization') ? { id : user.organization_id,} : undefined
+        organization: user.role.includes('organization') ? { id : user.organization_id || undefined,} : undefined
       },
       select:{
         id: true,
@@ -1366,12 +1366,12 @@ export class HireRequestService {
   }
 
   async awaitingDecision(id: string, data: awaitingDecisionDTO, user: USER): Promise<boolean> {
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        organization: user.role.includes('organization') ? { id : user.organization_id,} : undefined
+        organization: user.role.includes('organization') ? { id : user.organization_id || undefined,} : undefined
       },
       select:{
         id: true,
@@ -1419,12 +1419,12 @@ export class HireRequestService {
 
   async allowMoreTime(id: string, data: awaitingDecisionDTO, user: USER): Promise<boolean>{
 
-    if(!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        organization: user.role.includes('organization') ? { id : user.organization_id,} : undefined
+        organization: user.role.includes('organization') ? { id : user.organization_id || undefined} : undefined
       },
       select:{
         id: true,
@@ -1459,7 +1459,7 @@ export class HireRequestService {
   }
 
   async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<any> {
-    if (!user || !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+    if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Hired';
@@ -1473,7 +1473,7 @@ export class HireRequestService {
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
-        organization: user.role.includes('organization') ? { id : user.organization_id,} : undefined
+        organization: user.role.includes('organization') ? { id : user.organization_id || undefined} : undefined
       },
       select:{
         id: true,

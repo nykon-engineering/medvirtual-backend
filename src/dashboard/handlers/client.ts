@@ -11,9 +11,8 @@ export class HandlerClient {
 
   async execute(user: any): Promise<object> {
     const result: any = {};
-
-    if (!user || !user.organization_id) {
-      throw new Error('User or organization not found');
+    if (!user || user.role.includes("organization") && !user.organization_id) {
+      throw new Error('User or organization not found!!');
     }
 
     const newRequestsCount = await this.prisma.hireRequest.count({
