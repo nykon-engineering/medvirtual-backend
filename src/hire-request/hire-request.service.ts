@@ -561,6 +561,17 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      const updatedPanel = await this.prisma.candidatePanel.update({
+        where: {
+          id: panelExists.id,
+        },
+        data: {
+          status: 'decision_made',
+        }
+      })
+      if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
       return this.findOne(id, user);
     
     } else if (hireRequest.status == 'interview_scheduled' && data.status === 'panel_ready' ){
@@ -576,6 +587,15 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      const updatePanel = await this.prisma.candidatePanel.update({
+        where: {
+          id: panelExists.id,
+        },
+        data: {
+          scheduled_date: null,
+        }
+      })
       return this.findOne(id, user);
 
     } else if (hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){ 
@@ -586,7 +606,7 @@ export class HireRequestService {
           id: panelExists.id,
         },
         data: {
-          scheduled_date: null
+          status: 'created',
         }
       })
       if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
@@ -603,8 +623,21 @@ export class HireRequestService {
       return this.findOne(id, user);
 
     } else if (hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
+      if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      const updatedPanel = await this.prisma.candidatePanel.update({
+        where: {
+          id: panelExists.id,
+        },
+        data: {
+          status: 'created',
+        }
+      })
+      if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
       return this.findOne(id, user);
     } else if (hireRequest.status == 'panel_ready' && data.status === 'interview_scheduled' ){
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
@@ -614,6 +647,18 @@ export class HireRequestService {
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      const updatedPanel = await this.prisma.candidatePanel.update({
+        where: {
+          id: panelExists.id,
+        },
+        data: {
+          status: 'interview_scheduled',
+        }
+      })
+      if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
+      
       return this.findOne(id, user);
 
     
@@ -626,6 +671,18 @@ export class HireRequestService {
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      const updatedPanel = await this.prisma.candidatePanel.update({
+        where: {
+          id: panelExists.id,
+        },
+        data: {
+          status: 'decision_pending',
+        }
+      })
+      if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
+
       return this.findOne(id, user);
     } else{
       throw new BadRequestException(`Status change from ${hireRequest.status.replace("_"," ").toUpperCase()} to ${data.status.replace("_"," ").toUpperCase()} is not allowed`);
