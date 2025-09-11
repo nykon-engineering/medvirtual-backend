@@ -1090,6 +1090,10 @@ export class HireRequestService {
             readable: true,
           },
           { 
+            status: 'decision_made',
+            readable: true,
+          },
+          { 
             status: 'created',
             readable: true,
           },
