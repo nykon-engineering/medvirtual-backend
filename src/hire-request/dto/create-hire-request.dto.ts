@@ -31,8 +31,9 @@ export class CreateHireRequestDto {
     @IsString()
     availability: string;
 
-    @ApiProperty({ example: 'We are looking for a skilled software engineer to join our team...', description: 'The description of the hire request', required: true,  type: String })
+    @ApiProperty({ example: 'We are looking for a skilled software engineer to join our team...', description: 'The description of the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     description: string;
 
     @ApiProperty({ example: '2024-07-01', description: 'The expected start date for the hire request', required: true,  type: Date, format: 'date' })
@@ -40,8 +41,9 @@ export class CreateHireRequestDto {
     @Type(() => Date)
     expected_start_date: Date;
 
-    @ApiProperty({ example: '6 months', description: 'The contract length for the hire request', required: true,  type: String })
+    @ApiProperty({ example: '6 months', description: 'The contract length for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     contract_length: string;
 
     @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: true,  type: String })
@@ -52,16 +54,18 @@ export class CreateHireRequestDto {
     @IsString()
     salary_range_to: string;
 
-    @ApiProperty({ example: 'New York, Remote', description: 'The work location for the hire request', required: true,  type: String })
+    @ApiProperty({ example: 'New York, Remote', description: 'The work location for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     location: string;
 
     @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: true,  type: String, enum: ['high', 'medium', 'low'] })
     @IsString()
     priority: 'high' | 'medium' | 'low';
 
-    @ApiProperty({ type: [HireRequestSkillDTO], description: 'The skills required for the hire request', required: true })
+    @ApiProperty({ type: [HireRequestSkillDTO], description: 'The skills required for the hire request', required: false })
     @IsArray()
+    @IsOptional()
     skills: HireRequestSkillDTO[];
 }
 
