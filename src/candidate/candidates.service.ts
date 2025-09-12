@@ -706,7 +706,6 @@ export class CandidatesService {
     return updatedCandidate;
   }
 
-
   async showMatchHireRequests(user: USER, candidateId: string): Promise<object[]> {
     if (!user || (user.role.includes("organization") && !user.organization_id)) {
       throw new NotFoundException("User not found or not part of an organization");
@@ -737,6 +736,7 @@ export class CandidatesService {
       select: {
         id: true,
         title: true,
+        description: true,
         specialization: true,
         location: true,
         availability: true,
