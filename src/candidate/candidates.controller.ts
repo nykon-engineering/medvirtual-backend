@@ -171,7 +171,7 @@ export class CandidatesController {
     return {
       status: 200,
       message: 'Data retrieved successfully',
-      ...result,
+      data: result,
     }
   }
 }
