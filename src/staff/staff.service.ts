@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { USER } from '@prisma/client';
 
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -8,13 +12,9 @@ import { terminateDto } from './dto/terminate.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
 
-
 @Injectable()
 export class StaffService {
-
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   private async findOne(id: string) {
     return await this.prisma.staff.findUnique({
@@ -27,8 +27,8 @@ export class StaffService {
         start_date: true,
         created_at: true,
         updated_at: true,
-        candidate:{
-          select:{
+        candidate: {
+          select: {
             id: true,
             first_name: true,
             last_name: true,
@@ -40,13 +40,13 @@ export class StaffService {
             languages: {
               select: {
                 name: true,
-              }
+              },
             },
             createdAt: true,
-          }
+          },
         },
         hireRequest: {
-          select:{
+          select: {
             id: true,
             title: true,
             description: true,
@@ -59,23 +59,23 @@ export class StaffService {
             salary_range_to: true,
             specialization: true,
             location: true,
-          }
+          },
         },
-        bonus:{
-          select:{
+        bonus: {
+          select: {
             id: true,
             amount: true,
             description: true,
             created_at: true,
             created_by: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
   }
 
   async create(createStaffDto: CreateStaffDto, user: USER) {
-    try{
+    try {
       const statusHandled = staffStatusDictionary[createStaffDto.status];
       const staff = await this.prisma.staff.create({
         data: {
@@ -85,47 +85,50 @@ export class StaffService {
           salary: createStaffDto.salary,
           start_date: createStaffDto.start_date,
           created_by: user.id,
-        }
-      })
-      
-      return await this.findOne(staff.id);
+        },
+      });
 
-    }catch(error){
+      return await this.findOne(staff.id);
+    } catch (error) {
       throw new BadRequestException('Failed to create staff', error.message);
     }
   }
 
-  async addBonus(data: CreateBonusDto, user: USER): Promise <any> {
+  async addBonus(data: CreateBonusDto, user: USER): Promise<any> {
     const staff = await this.prisma.staff.findUnique({
       where: { id: data.staff_id },
       select: {
         id: true,
         candidate_id: true,
         status: true,
-        candidate:{
-          select:{
+        candidate: {
+          select: {
             id: true,
             first_name: true,
             last_name: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
-    if(!staff) throw new NotFoundException('Staff member not found'); 
-    if (staff.status !== 'active') throw new BadRequestException('Cannot add bonus to inactive staff member');
-    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found');
+    if (!staff) throw new NotFoundException('Staff member not found');
+    if (staff.status !== 'active')
+      throw new BadRequestException(
+        'Cannot add bonus to inactive staff member',
+      );
+    if (!user || (user.role.includes('organization') && !user.organization_id))
+      throw new NotFoundException('User not found');
 
     let assignedValidated;
 
-    if (user.role.includes('organization')){
+    if (user.role.includes('organization')) {
       //get the concierge client as assigned user
       const org = await this.prisma.organization.findUnique({
         where: { id: user.organization_id || undefined },
-        select: { admin_id: true }
-      })
-      if(!org) throw new BadRequestException('Organization not found')
+        select: { admin_id: true },
+      });
+      if (!org) throw new BadRequestException('Organization not found');
       assignedValidated = org.admin_id;
-    }else{
+    } else {
       assignedValidated = undefined;
     }
 
@@ -139,51 +142,53 @@ export class StaffService {
         },
       }),
       this.prisma.ticket.create({
-        data:{
-          organization: { connect: { id: user.organization_id || undefined} },
-        type: 'bonus',
-        staff: { connect: { id: data.staff_id } },
-        title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
-        description: data.description,
-        priority: 'medium',
-        user: assignedValidated ? { connect: { id: assignedValidated } } : undefined,
-        }
+        data: {
+          organization: { connect: { id: user.organization_id || undefined } },
+          type: 'bonus',
+          staff: { connect: { id: data.staff_id } },
+          title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
+          description: data.description,
+          priority: 'medium',
+          user: assignedValidated
+            ? { connect: { id: assignedValidated } }
+            : undefined,
+        },
       }),
     ]);
     return await this.findOne(data.staff_id);
   }
 
-  async requestTermination (data: terminateDto, user: USER): Promise<any> {
-
+  async requestTermination(data: terminateDto, user: USER): Promise<any> {
     const staff = await this.prisma.staff.findUnique({
       where: { id: data.staff_id },
       select: {
         id: true,
         candidate_id: true,
         status: true,
-        candidate:{
-          select:{
+        candidate: {
+          select: {
             id: true,
             first_name: true,
             last_name: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
-    if(!staff) throw new NotFoundException('Staff member not found');
-    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found');
+    if (!staff) throw new NotFoundException('Staff member not found');
+    if (!user || (user.role.includes('organization') && !user.organization_id))
+      throw new NotFoundException('User not found');
 
     let assignedValidated;
 
-    if (user.role.includes('organization')){
+    if (user.role.includes('organization')) {
       //get the concierge client as assigned user
       const org = await this.prisma.organization.findUnique({
         where: { id: user.organization_id || undefined },
-        select: { admin_id: true }
-      })
-      if(!org) throw new BadRequestException('Organization not found')
+        select: { admin_id: true },
+      });
+      if (!org) throw new BadRequestException('Organization not found');
       assignedValidated = org.admin_id;
-    }else{
+    } else {
       assignedValidated = undefined;
     }
 
@@ -193,145 +198,150 @@ export class StaffService {
         data: { status: 'termination-requested' },
       }),
       this.prisma.ticket.create({
-        data:{
+        data: {
           organization: { connect: { id: user.organization_id || undefined } },
           staff: { connect: { id: staff.id } },
           type: 'termination',
           title: `Termination Requested: ${staff.candidate.first_name} ${staff.candidate.last_name}`,
           description: data.description,
           priority: 'high',
-          user: assignedValidated ? { connect: { id: assignedValidated } } : undefined,
-        }
-      })
-    ])
+          user: assignedValidated
+            ? { connect: { id: assignedValidated } }
+            : undefined,
+        },
+      }),
+    ]);
 
     return await this.findOne(data.staff_id);
   }
 
-  async findAll(user: USER, page: number, perPage: number, search: string, start_date_from: Date, start_date_to: Date): Promise<Object> { 
-   
+  async findAll(
+    user: USER,
+    page: number,
+    perPage: number,
+    search: string,
+    start_date_from: Date,
+    start_date_to: Date,
+  ): Promise<object> {
+    page = page ? Number(page) : 1;
+    perPage = perPage ? Number(perPage) : 10;
 
-      page = page ? Number(page) : 1;
-      perPage = perPage ? Number(perPage) : 10;
+    const skip = (page - 1) * perPage;
+    const take = perPage;
 
-      const skip =(page - 1) * perPage;
-      const take = perPage;
+    const where: any = {
+      hireRequest: {},
+      candidate: {},
+    };
 
-      const where: any = {
-        hireRequest: {},
-        candidate: {}
-      }
+    if (user.role.includes('organization')) {
+      where.hireRequest.org_id = user.organization_id;
+    }
 
-      if (user.role.includes('organization')) {
-        where.hireRequest.org_id = user.organization_id;
-      }
-  
-      if (search) {
-        where.OR = [
-          {
-            hireRequest: {
-              title: { contains: search, mode: 'insensitive' },
-            },
+    if (search) {
+      where.OR = [
+        {
+          hireRequest: {
+            title: { contains: search, mode: 'insensitive' },
           },
-          {
-            candidate: {
-              first_name: { contains: search, mode: 'insensitive' },
-            },
-          },
-          {
-            candidate: {
-              last_name: { contains: search, mode: 'insensitive' },
-            },
-          },
-        ];
-      }
-      
-      if (start_date_from || start_date_to) {
-        where.start_date = {};
-        if (start_date_from) where.start_date.gte = new Date(start_date_from);
-        if (start_date_to) where.start_date.lte = new Date(start_date_to);
-      }
-
-      const select = {
-        id: true,
-        hirerequest_id: true,
-        status: true,
-        salary: true,
-        start_date: true,
-        created_at: true,
-        updated_at: true,
-        candidate:{
-          select:{
-            id: true,
-            first_name: true,
-            last_name: true,
-            email: true,
-            specialization: true,
-            employment_type: true,
-            country: true,
-            about_me: true,
-            languages: {
-              select: {
-                name: true,
-              }
-            },
-            skills:{
-              select:{
-                skill_name: true,
-              }
-            },
-            createdAt: true,
-          }
         },
-        hireRequest: {
-          select:{
-            id: true,
-            title: true,
-            description: true,
-            status: true,
-            priority: true,
-            availability: true,
-            contract_length: true,
-            expected_start_date: true,
-            salary_range_from: true,
-            salary_range_to: true,
-            specialization: true,
-            location: true,
-          }
+        {
+          candidate: {
+            first_name: { contains: search, mode: 'insensitive' },
+          },
         },
-        bonus:{
-          select:{
-            id: true,
-            amount: true,
-            description: true,
-            created_at: true,
-            created_by: true,
-          }
-        }
-      }
+        {
+          candidate: {
+            last_name: { contains: search, mode: 'insensitive' },
+          },
+        },
+      ];
+    }
 
-      const [staff, total] = await this.prisma.$transaction([
-        this.prisma.staff.findMany({
-          where,
-          skip,
-          take,
-          select,
-        }),
-        this.prisma.staff.count({where})
-      ]);
-     
+    if (start_date_from || start_date_to) {
+      where.start_date = {};
+      if (start_date_from) where.start_date.gte = new Date(start_date_from);
+      if (start_date_to) where.start_date.lte = new Date(start_date_to);
+    }
 
-      return {
-        status: 200,
-        data: staff,
-        meta: {
-          total,
-          page,
-          perPage,
-          totalPages: Math.ceil(Number(total) / perPage)
-        }
-      };
-    
+    const select = {
+      id: true,
+      hirerequest_id: true,
+      status: true,
+      salary: true,
+      start_date: true,
+      created_at: true,
+      updated_at: true,
+      candidate: {
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          specialization: true,
+          employment_type: true,
+          country: true,
+          about_me: true,
+          languages: {
+            select: {
+              name: true,
+            },
+          },
+          skills: {
+            select: {
+              skill_name: true,
+            },
+          },
+          createdAt: true,
+        },
+      },
+      hireRequest: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          availability: true,
+          contract_length: true,
+          expected_start_date: true,
+          salary_range_from: true,
+          salary_range_to: true,
+          specialization: true,
+          location: true,
+        },
+      },
+      bonus: {
+        select: {
+          id: true,
+          amount: true,
+          description: true,
+          created_at: true,
+          created_by: true,
+        },
+      },
+    };
+
+    const [staff, total] = await this.prisma.$transaction([
+      this.prisma.staff.findMany({
+        where,
+        skip,
+        take,
+        select,
+      }),
+      this.prisma.staff.count({ where }),
+    ]);
+
+    return {
+      status: 200,
+      data: staff,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(Number(total) / perPage),
+      },
+    };
   }
 
 }

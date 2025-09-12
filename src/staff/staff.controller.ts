@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query, Search } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { USER } from '@prisma/client';
 
@@ -20,70 +20,132 @@ export class StaffController {
   @Post()
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Create staff', description: 'Create a new staff record. Accessible only by system_super_admin and system_admin roles.' })
+  @ApiOperation({
+    summary: 'Create staff',
+    description:
+      'Create a new staff record. Accessible only by system_super_admin and system_admin roles.',
+  })
   @ApiBody({ type: CreateStaffDto })
-  @ApiResponse({ status: 201, description: 'The staff has been successfully created.' })
+  @ApiResponse({
+    status: 201,
+    description: 'The staff has been successfully created.',
+  })
   @ApiResponse({ status: 400, description: 'Failed to create staff.' })
-  async create(@Body() createStaffDto: CreateStaffDto, @CurrentUser() user: USER) {
+  async create(
+    @Body() createStaffDto: CreateStaffDto,
+    @CurrentUser() user: USER,
+  ) {
     const result = await this.staffService.create(createStaffDto, user);
     return {
       status: 201,
       message: 'Staff created successfully',
-      data: result
-    }
+      data: result,
+    };
   }
 
   @Post('bonus')
   @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Add bonus to staff', description: 'Add bonus to a staff member.' })
+  @ApiOperation({
+    summary: 'Add bonus to staff',
+    description: 'Add bonus to a staff member.',
+  })
   @ApiBody({ type: CreateBonusDto })
-  @ApiResponse({ status: 201, description: 'The bonus has been successfully added' })
+  @ApiResponse({
+    status: 201,
+    description: 'The bonus has been successfully added',
+  })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
-  @ApiResponse({ status: 400, description: 'Cannot add bonus to inactive staff member' })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot add bonus to inactive staff member',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   async addBonus(@Body() data: CreateBonusDto, @CurrentUser() user: USER) {
     const result = await this.staffService.addBonus(data, user);
     return {
       status: 201,
       message: 'The bonus has been successfully added',
-      data: result
-    }
+      data: result,
+    };
   }
 
   @Post('termination')
   @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Termination with the staff member', description: 'terminate the bond with the staff member' })
+  @ApiOperation({
+    summary: 'Termination with the staff member',
+    description: 'terminate the bond with the staff member',
+  })
   @ApiBody({ type: terminateDto })
-  @ApiResponse({ status: 201, description: 'The termination has been successfully created' })
+  @ApiResponse({
+    status: 201,
+    description: 'The termination has been successfully created',
+  })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async requestTermination(@Body() data: terminateDto, @CurrentUser() user: USER) {
+  async requestTermination(
+    @Body() data: terminateDto,
+    @CurrentUser() user: USER,
+  ) {
     const result = await this.staffService.requestTermination(data, user);
     return {
       status: 201,
       message: 'The termination has been successfully created',
-      data: result
-    }
+      data: result,
+    };
   }
-
 
   @Get()
   @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Get all staff records', description: 'Retrieve all staff records. Accessible only by system_super_admin and system_admin roles.' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number for pagination (default is 1)' })
-  @ApiQuery({ name: 'perPage', required: false, type: Number, description: 'Number of records per page for pagination (default is 10)' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Role title' })
-  @ApiQuery({ name: 'start_date_from', required: false, type: Date, description: 'Start Date from' })
-  @ApiQuery({ name: 'start_date_to', required: false, type: Date, description: 'Start Date to' })
+  @ApiOperation({
+    summary: 'Get all staff records',
+    description:
+      'Retrieve all staff records. Accessible only by system_super_admin and system_admin roles.',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number for pagination (default is 1)',
+  })
+  @ApiQuery({
+    name: 'perPage',
+    required: false,
+    type: Number,
+    description: 'Number of records per page for pagination (default is 10)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Role title',
+  })
+  @ApiQuery({
+    name: 'start_date_from',
+    required: false,
+    type: Date,
+    description: 'Start Date from',
+  })
+  @ApiQuery({
+    name: 'start_date_to',
+    required: false,
+    type: Date,
+    description: 'Start Date to',
+  })
   async findAll(
     @Query('page') page: number,
     @Query('perPage') perPage: number,
     @Query('search') search: string,
     @Query('start_date_from') start_date_from: Date,
     @Query('start_date_to') start_date_to: Date,
-    @CurrentUser() user: USER
-    ) {
-    return await this.staffService.findAll(user, page, perPage, search, start_date_from, start_date_to);
+    @CurrentUser() user: USER,
+  ) {
+    return await this.staffService.findAll(
+      user,
+      page,
+      perPage,
+      search,
+      start_date_from,
+      start_date_to,
+    );
   }
-
 }
