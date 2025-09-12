@@ -23,6 +23,10 @@ import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { ConvertToClientDto } from './dto/convertToClient.dto';
 import { GetOrganizationsDto } from './dto/getOrganizations.dto';
 import { PaginatedOrganizationsResponseDto } from './dto/organizationResponse.dto';
+import {
+  GetOrganizationStaffDto,
+  AdminCreateStaffDto,
+} from './dto/admin-staff-management.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -258,4 +262,84 @@ export class OrganizationController {
   //     message: 'Organization deleted successfully',
   //   };
   // }
+
+  // Admin Staff Management Endpoints
+  @Get(':id/staff')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Get staff for a specific organization',
+    description:
+      'Allows system admins to view all staff members for any organization',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization staff retrieved successfully',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'perPage',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 10)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for staff name or hire request title',
+  })
+  @ApiQuery({
+    name: 'start_date_from',
+    required: false,
+    type: Date,
+    description: 'Filter staff by start date from',
+  })
+  @ApiQuery({
+    name: 'start_date_to',
+    required: false,
+    type: Date,
+    description: 'Filter staff by start date to',
+  })
+  async getOrganizationStaff(
+    @Param('id') organizationId: string,
+    @Query() query: GetOrganizationStaffDto,
+    @CurrentUser() user: USER,
+  ) {
+    return await this.organizationService.getOrganizationStaff(
+      organizationId,
+      query,
+      user,
+    );
+  }
+
+  @Post('staff/create')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'Create staff for any organization',
+    description:
+      'Allows system admins to create staff members for any organization',
+  })
+  @ApiBody({ type: AdminCreateStaffDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Staff created successfully for organization',
+  })
+  async createStaffForOrganization(
+    @Body() data: AdminCreateStaffDto,
+    @CurrentUser() user: USER,
+  ) {
+    return await this.organizationService.createStaffForOrganization(
+      data,
+      user,
+    );
+  }
 }

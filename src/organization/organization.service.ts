@@ -21,7 +21,12 @@ import {
   PaginatedOrganizationsResponseDto,
   OrganizationResponseDto,
 } from './dto/organizationResponse.dto';
+import {
+  GetOrganizationStaffDto,
+  AdminCreateStaffDto,
+} from './dto/admin-staff-management.dto';
 import { AuthService } from '../auth/auth.service';
+import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
 
 @Injectable()
 export class OrganizationService {
@@ -661,6 +666,280 @@ export class OrganizationService {
       return true;
     } catch {
       throw new NotFoundException('Organization not found');
+    }
+  }
+
+  // Admin Staff Management Methods
+  async getOrganizationStaff(
+    organizationId: string,
+    query: GetOrganizationStaffDto,
+    _user: USER,
+  ): Promise<any> {
+    try {
+      // Verify organization exists
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      const {
+        page = 1,
+        perPage = 10,
+        search,
+        start_date_from,
+        start_date_to,
+      } = query;
+
+      const skip = (page - 1) * perPage;
+      const take = perPage;
+
+      const where: any = {
+        hireRequest: {
+          org_id: organizationId,
+        },
+        candidate: {},
+      };
+
+      if (search) {
+        where.OR = [
+          {
+            hireRequest: {
+              title: { contains: search, mode: 'insensitive' },
+            },
+          },
+          {
+            candidate: {
+              first_name: { contains: search, mode: 'insensitive' },
+            },
+          },
+          {
+            candidate: {
+              last_name: { contains: search, mode: 'insensitive' },
+            },
+          },
+        ];
+      }
+
+      if (start_date_from || start_date_to) {
+        where.start_date = {};
+        if (start_date_from) where.start_date.gte = new Date(start_date_from);
+        if (start_date_to) where.start_date.lte = new Date(start_date_to);
+      }
+
+      const select = {
+        id: true,
+        hirerequest_id: true,
+        status: true,
+        salary: true,
+        start_date: true,
+        created_at: true,
+        updated_at: true,
+        candidate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            specialization: true,
+            employment_type: true,
+            country: true,
+            about_me: true,
+            languages: {
+              select: {
+                name: true,
+              },
+            },
+            skills: {
+              select: {
+                skill_name: true,
+              },
+            },
+            createdAt: true,
+          },
+        },
+        hireRequest: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            availability: true,
+            contract_length: true,
+            expected_start_date: true,
+            salary_range_from: true,
+            salary_range_to: true,
+            specialization: true,
+            location: true,
+          },
+        },
+        bonus: {
+          select: {
+            id: true,
+            amount: true,
+            description: true,
+            created_at: true,
+            created_by: true,
+          },
+        },
+      };
+
+      const [staff, total] = await this.prisma.$transaction([
+        this.prisma.staff.findMany({
+          where,
+          skip,
+          take,
+          select,
+        }),
+        this.prisma.staff.count({ where }),
+      ]);
+
+      return {
+        status: 200,
+        data: staff,
+        meta: {
+          total,
+          page,
+          perPage,
+          totalPages: Math.ceil(Number(total) / perPage),
+        },
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to fetch organization staff');
+    }
+  }
+
+  async createStaffForOrganization(
+    data: AdminCreateStaffDto,
+    user: USER,
+  ): Promise<any> {
+    try {
+      // Verify organization exists
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: data.organization_id },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      // Verify hire request belongs to the organization
+      const hireRequest = await this.prisma.hireRequest.findFirst({
+        where: {
+          id: data.hirerequest_id,
+          org_id: data.organization_id,
+        },
+      });
+
+      if (!hireRequest) {
+        throw new BadRequestException(
+          'Hire request not found or does not belong to the specified organization',
+        );
+      }
+
+      // Verify candidate exists
+      const candidate = await this.prisma.candidate.findUnique({
+        where: { id: data.candidate_id },
+      });
+
+      if (!candidate) {
+        throw new NotFoundException('Candidate not found');
+      }
+
+      const statusHandled = staffStatusDictionary[data.status];
+
+      const staff = await this.prisma.staff.create({
+        data: {
+          candidate_id: data.candidate_id,
+          hirerequest_id: data.hirerequest_id,
+          status: statusHandled,
+          salary: data.salary,
+          start_date: data.start_date,
+          created_by: user.id,
+        },
+      });
+
+      // Get the created staff with all relations
+      const createdStaff = await this.prisma.staff.findUnique({
+        where: { id: staff.id },
+        select: {
+          id: true,
+          hirerequest_id: true,
+          status: true,
+          salary: true,
+          start_date: true,
+          created_at: true,
+          updated_at: true,
+          candidate: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              specialization: true,
+              employment_type: true,
+              country: true,
+              about_me: true,
+              languages: {
+                select: {
+                  name: true,
+                },
+              },
+              skills: {
+                select: {
+                  skill_name: true,
+                },
+              },
+              createdAt: true,
+            },
+          },
+          hireRequest: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              status: true,
+              priority: true,
+              availability: true,
+              contract_length: true,
+              expected_start_date: true,
+              salary_range_from: true,
+              salary_range_to: true,
+              specialization: true,
+              location: true,
+            },
+          },
+          bonus: {
+            select: {
+              id: true,
+              amount: true,
+              description: true,
+              created_at: true,
+              created_by: true,
+            },
+          },
+        },
+      });
+
+      return {
+        status: 201,
+        message: 'Staff created successfully for organization',
+        data: createdStaff,
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to create staff for organization');
     }
   }
 }
