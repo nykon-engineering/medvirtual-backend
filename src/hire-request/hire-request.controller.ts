@@ -62,6 +62,8 @@ export class HireRequestController {
     }
   }
 
+
+
   @Get(':id')
   @UseGuards(AuthGuard)
   @ApiOperation({ description: 'Get specific requests regarding rules for the current user' })

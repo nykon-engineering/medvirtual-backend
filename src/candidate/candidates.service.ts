@@ -706,4 +706,127 @@ export class CandidatesService {
     return updatedCandidate;
   }
 
+
+  async showMatchHireRequests(user: USER, candidateId: string): Promise<object[]> {
+    if (!user || (user.role.includes("organization") && !user.organization_id)) {
+      throw new NotFoundException("User not found or not part of an organization");
+    }
+  
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: candidateId },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        hourly_pay_rate: true,
+        pipeline_status: true,
+        country: true,
+        specialization: true,
+        employment_type: true,
+        skills: { select: { skill_name: true, proficiency_level: true } },
+      },
+    });
+  
+    if (!candidate) throw new NotFoundException("Candidate not found");
+  
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: {
+        status: 'sourcing',
+      },
+      select: {
+        id: true,
+        title: true,
+        specialization: true,
+        location: true,
+        availability: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        skills: { select: { skill_name: true, required_level: true } },
+      },
+    });
+  
+    const HOURS = Number(process.env.CANDIDATE_HOUR_PER_MONTH ?? 160);
+    const PERCENT = Number(process.env.CANDIDATE_PERCENT ?? 1);
+  
+    const candidateSkills = candidate.skills.map((s) => s.skill_name);
+  
+    const scoredHireRequests = hireRequests.map((hr) => {
+      let score = 0;
+      const matchedCriteria: string[] = [];
+  
+      const hrSpecialization = hr.specialization
+        ? hr.specialization.split(";").map((s) => s.trim())
+        : [];
+      if (
+        hrSpecialization.length > 0 &&
+        candidate.specialization &&
+        hrSpecialization.includes(candidate.specialization)
+      ) {
+        score += 3;
+        matchedCriteria.push(`${candidate.specialization}`);
+      }
+  
+      if (hr.location && candidate.country === hr.location) {
+        score += 2;
+        matchedCriteria.push(`${hr.location}`);
+      }
+  
+      if (hr.availability && candidate.employment_type === hr.availability) {
+        score += 2;
+        matchedCriteria.push(`${hr.availability}`);
+      }
+  
+      const hourly_from = hr.salary_range_from
+        ? Number(hr.salary_range_from) / (HOURS * PERCENT)
+        : undefined;
+  
+      const hourly_to = hr.salary_range_to
+        ? Number(hr.salary_range_to) / (HOURS * PERCENT)
+        : undefined;
+  
+      if (
+        candidate.hourly_pay_rate !== null &&
+        hourly_from !== undefined &&
+        hourly_to !== undefined &&
+        candidate.hourly_pay_rate.toNumber() >= hourly_from &&
+        candidate.hourly_pay_rate.toNumber() <= hourly_to
+      ) {
+        score += 3;
+        matchedCriteria.push(
+          `Salary between range`
+        );
+      }
+  
+      const requiredSkills = hr.skills.map((s) => s.skill_name);
+      const matchedSkills = candidateSkills.filter((skill) =>
+        requiredSkills.includes(skill)
+      );
+  
+      const skillMatchPercent =
+        requiredSkills.length > 0
+          ? matchedSkills.length / requiredSkills.length
+          : 0;
+
+      if (matchedSkills.length > 0) {
+        matchedCriteria.push(...matchedSkills);
+      }
+  
+      score += skillMatchPercent * 10;
+  
+      return {
+        ...hr,
+        matchedSkills,
+        matchedCriteria,
+        score: Math.round(score * 100) / 100,
+      };
+    });
+  
+    scoredHireRequests.sort((a, b) => b.score - a.score);
+    return scoredHireRequests;
+  }
+  
+
 }
+
+

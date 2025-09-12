@@ -154,4 +154,26 @@ export class CandidatesController {
       data: result
     }
   }
+
+  @Get('/show-match-hirerequests/:idCandidate')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ description: 'Show possible hire requests for a specific candidate' })
+  @ApiParam({ name: 'candidateId', required: true, type: String, description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'Data retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'User role not found' })
+  async matchHireRequest(
+    @CurrentUser() user: USER, 
+    @Param('idCandidate') candidateId: string,
+  ) {
+    const result = await this.candidatesService.showMatchHireRequests(user, candidateId);
+    return {
+      status: 200,
+      message: 'Data retrieved successfully',
+      ...result,
+    }
+  }
 }
+
+
