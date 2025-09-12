@@ -1,9 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
 
-import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
+import {  mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
@@ -22,6 +22,7 @@ export class HubspotService {
       private readonly prisma: PrismaService,
       private readonly objectCreation: HandlerObjectCreation,
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
+      @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
         this.hubspotClient = new Client({ 

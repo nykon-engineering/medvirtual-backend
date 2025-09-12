@@ -11,6 +11,7 @@ import { Roles } from '../auth/roles.decorator';
 
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
+import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 
 
 
@@ -174,6 +175,25 @@ export class CandidatesController {
       data: result,
     }
   }
+
+  @Post('endorse-candidate')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Endorse a candidate' })
+  @ApiBody({ type: EndorseCandidateDto })
+  @ApiResponse({ status: 200, description: 'Candidate endorsed successfully' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @ApiResponse({ status: 400, description: 'Hire Request ID is required' })
+  @ApiResponse({ status: 404, description: 'Hire Request not found in candidate panel' })
+  @ApiResponse({ status: 400, description: 'Failed to endorse candidate' })
+
+  async endorseCandidate(@Body() data: EndorseCandidateDto){
+    console.log('Endorsing candidate - controller:', data);
+    const result = await this.candidatesService.endorseCandidate(data);
+    return {
+      status: 200,
+      message: 'Candidate endorsed successfully',
+      data: result
+    }
+  } 
 }
-
-

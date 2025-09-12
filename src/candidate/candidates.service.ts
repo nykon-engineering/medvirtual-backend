@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Injectable, NotFoundException, Query } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, NotFoundException, Query } from '@nestjs/common';
 import { Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 
@@ -12,7 +12,8 @@ import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
 import axios from 'axios';
-import { language } from 'googleapis/build/src/apis/language';
+import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
+import { HubspotService } from '../hubspot/hubspot.service';
 
 @Injectable()
 export class CandidatesService {
@@ -22,7 +23,9 @@ export class CandidatesService {
     private readonly google: GoogledriveService,
     private readonly textract: TextractService,
     private readonly s3: S3Service,
-    private readonly openai: OpenaiService
+    private readonly openai: OpenaiService,
+    @Inject(forwardRef(() => HubspotService))
+    private readonly hubspot: HubspotService
   ){}
 
   async findAll(
@@ -826,6 +829,51 @@ export class CandidatesService {
     return scoredHireRequests;
   }
   
+  async endorseCandidate(data: EndorseCandidateDto): Promise<boolean> {
+    console.log('Endorsing candidate with data:', data);
+
+    if (!data.candidateId) throw new BadRequestException('Candidate ID is required');
+    if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
+
+    const hire_request = await this.prisma.candidatePanel.findFirst({
+      where: { hire_request_id: data.hireRequestId },
+      select: { id: true }
+    })
+    if (!hire_request) throw new NotFoundException('Hire Request not found in candidate panel');
+
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: data.candidateId },
+      select: { hubspot_id: true }
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+
+
+    const newStatus = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === 'endorsed to client')?.[0];
+    console.log('Mapped new status for Endorsed to Client:', newStatus);
+    if (!newStatus) throw new BadRequestException('Invalid status mapping for Endorsed to Client');
+
+    const [endorsement, candidateUpdated] = await this.prisma.$transaction([
+      this.prisma.panelCandidate.create({
+        data:{
+          panel_id: hire_request.id,
+          candidate_id: data.candidateId,
+          status: 'selected',
+        }
+      }),
+    
+      this.prisma.candidate.update({
+        where: { id: data.candidateId },
+        data: { pipeline_status: newStatus } 
+      })
+    ])
+    if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
+    if (!candidateUpdated) throw new BadGatewayException('Failed to update candidate status');
+
+    await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, newStatus);
+
+    return true;
+
+  }
 
 }
 

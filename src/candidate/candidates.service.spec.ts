@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadGatewayException, BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { CandidatesService } from './candidates.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
@@ -47,6 +48,10 @@ const openAIMock = {
   organizeText: jest.fn(),
 }
 
+const hubspotMock = {
+  updateContact: jest.fn(),
+}
+
   describe('CandidatesService', () => {
     let service: CandidatesService;
     let prisma: PrismaService;
@@ -66,6 +71,7 @@ const openAIMock = {
         { provide: S3Service, useValue: s3Mock },
         { provide: GoogledriveService, useValue: googleMock },
         { provide: OpenaiService, useValue: openAIMock },
+        { provide: HubspotService, useValue: hubspotMock },
       ],
     }).compile();
 
