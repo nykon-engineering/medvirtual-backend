@@ -1141,14 +1141,23 @@ export class HireRequestService {
         hireRequest: {
           org_id: user.organization_id || undefined,
         },
-        readable: true,
         OR: [
-          { status: 'decision_pending'},
-          { status: 'decision_made'},
-          { status: 'created'},
-          { status: 'interview_completed' },
-          { status: 'interview_scheduled' },
-        ]
+          {
+            status: 'created',
+            readable: true,
+          },
+          {
+            status: 'interview_scheduled',
+            readable: true,
+          },
+          {
+            status: 'decision_pending',
+          },
+          {
+            status: 'decision_made',
+          },
+        ],
+       
       },
       select: {
         id: true,
