@@ -69,7 +69,7 @@ export class StaffService {
             created_at: true,
             created_by: true,
           },
-          orderBy: { created_at: 'desc' },
+          orderBy: { created_at: 'asc' },
         },
       },
     });
