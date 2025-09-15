@@ -25,6 +25,11 @@ import {
   GetOrganizationStaffDto,
   AdminCreateStaffDto,
 } from './dto/admin-staff-management.dto';
+import {
+  GetCandidatesForAdminDto,
+  GetHireRequestsForAdminDto,
+  AdminCreateStaffWithHireRequestDto,
+} from './dto/admin-staff-selection.dto';
 import { AuthService } from '../auth/auth.service';
 import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
 
@@ -137,20 +142,32 @@ export class OrganizationService {
 
   async getAll(user: USER): Promise<Organization[]> {
     try {
+      const whereClause: any = {
+        status: { not: OrganizationStatus.inactive },
+      };
+
+      // For system_super_admin: return all organizations
+      if (user.role === 'system_super_admin') {
+        // No additional filtering needed - return all active organizations
+      }
+      // For system_admin: return only organizations they are admin or concierge of
+      else if (user.role === 'system_admin') {
+        whereClause.OR = [{ admin_id: user.id }, { concierge_id: user.id }];
+      }
+      // For organization users: return organizations they are associated with
+      else {
+        whereClause.OR = [
+          { admin_id: user.id },
+          { owner_id: user.id },
+          { concierge_id: user.id },
+          {
+            admin_id: user.role.includes('organization') ? user.id : undefined,
+          },
+        ].filter(Boolean);
+      }
+
       return await this.prisma.organization.findMany({
-        where: {
-          OR: [
-            { admin_id: user.id },
-            { owner_id: user.id },
-            { concierge_id: user.id },
-            {
-              admin_id: user.role.includes('organization')
-                ? user.id
-                : undefined,
-            },
-          ].filter(Boolean),
-          status: { not: OrganizationStatus.inactive },
-        },
+        where: whereClause,
         orderBy: {
           name: 'asc',
         },
@@ -187,8 +204,14 @@ export class OrganizationService {
       // Build where clause
       const whereClause: any = {};
 
-      // Add user-specific filtering for non-system admins
-      if (!['system_super_admin', 'system_admin'].includes(user.role)) {
+      // Add user-specific filtering based on role
+      if (user.role === 'system_super_admin') {
+        // No additional filtering needed - return all organizations
+      } else if (user.role === 'system_admin') {
+        // For system_admin: return only organizations they are admin or concierge of
+        whereClause.OR = [{ admin_id: user.id }, { concierge_id: user.id }];
+      } else {
+        // For organization users: return organizations they are associated with
         whereClause.OR = [
           { admin_id: user.id },
           { owner_id: user.id },
@@ -691,6 +714,7 @@ export class OrganizationService {
         search,
         start_date_from,
         start_date_to,
+        status,
       } = query;
 
       const skip = (page - 1) * perPage;
@@ -727,6 +751,14 @@ export class OrganizationService {
         where.start_date = {};
         if (start_date_from) where.start_date.gte = new Date(start_date_from);
         if (start_date_to) where.start_date.lte = new Date(start_date_to);
+      }
+
+      if (status) {
+        // Convert frontend status to database status using the dictionary
+        const dbStatus = staffStatusDictionary[status];
+        if (dbStatus) {
+          where.status = dbStatus;
+        }
       }
 
       const select = {
@@ -864,6 +896,654 @@ export class OrganizationService {
           created_by: user.id,
         },
       });
+
+      // Get the created staff with all relations
+      const createdStaff = await this.prisma.staff.findUnique({
+        where: { id: staff.id },
+        select: {
+          id: true,
+          hirerequest_id: true,
+          status: true,
+          salary: true,
+          start_date: true,
+          created_at: true,
+          updated_at: true,
+          candidate: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              specialization: true,
+              employment_type: true,
+              country: true,
+              about_me: true,
+              languages: {
+                select: {
+                  name: true,
+                },
+              },
+              skills: {
+                select: {
+                  skill_name: true,
+                },
+              },
+              createdAt: true,
+            },
+          },
+          hireRequest: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              status: true,
+              priority: true,
+              availability: true,
+              contract_length: true,
+              expected_start_date: true,
+              salary_range_from: true,
+              salary_range_to: true,
+              specialization: true,
+              location: true,
+            },
+          },
+          bonus: {
+            select: {
+              id: true,
+              amount: true,
+              description: true,
+              created_at: true,
+              created_by: true,
+            },
+          },
+        },
+      });
+
+      return {
+        status: 201,
+        message: 'Staff created successfully for organization',
+        data: createdStaff,
+      };
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to create staff for organization');
+    }
+  }
+
+  // Admin Selection Methods
+  async getCandidatesForHireRequest(
+    hireRequestId: string,
+    query: GetCandidatesForAdminDto,
+  ): Promise<any> {
+    try {
+      // Verify hire request exists
+      const hireRequest = await this.prisma.hireRequest.findUnique({
+        where: { id: hireRequestId },
+        select: { id: true, title: true, org_id: true },
+      });
+
+      if (!hireRequest) {
+        throw new NotFoundException('Hire request not found');
+      }
+
+      const {
+        page = 1,
+        perPage = 20,
+        search,
+        specialization,
+        employment_type,
+        country,
+      } = query;
+
+      const skip = (page - 1) * perPage;
+      const take = perPage;
+
+      // Get candidates attached to this hire request through panels
+      const where: any = {
+        status: 'available',
+        panels: {
+          some: {
+            panel: {
+              hire_request_id: hireRequestId,
+            },
+          },
+        },
+      };
+
+      if (search) {
+        where.OR = [
+          {
+            first_name: { contains: search, mode: 'insensitive' },
+          },
+          {
+            last_name: { contains: search, mode: 'insensitive' },
+          },
+          {
+            email: { contains: search, mode: 'insensitive' },
+          },
+        ];
+      }
+
+      if (specialization) {
+        where.specialization = {
+          contains: specialization,
+          mode: 'insensitive',
+        };
+      }
+
+      if (employment_type) {
+        where.employment_type = employment_type;
+      }
+
+      if (country) {
+        where.country = { contains: country, mode: 'insensitive' };
+      }
+
+      const select = {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        specialization: true,
+        employment_type: true,
+        country: true,
+        about_me: true,
+        languages: {
+          select: {
+            name: true,
+          },
+        },
+        skills: {
+          select: {
+            skill_name: true,
+          },
+        },
+        createdAt: true,
+        panels: {
+          where: {
+            panel: {
+              hire_request_id: hireRequestId,
+            },
+          },
+          select: {
+            status: true,
+            panel: {
+              select: {
+                id: true,
+                status: true,
+                scheduled_date: true,
+              },
+            },
+          },
+        },
+      };
+
+      const [candidates, total] = await this.prisma.$transaction([
+        this.prisma.candidate.findMany({
+          where,
+          skip,
+          take,
+          select,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+        this.prisma.candidate.count({ where }),
+      ]);
+
+      return {
+        status: 200,
+        data: candidates,
+        hireRequest: {
+          id: hireRequest.id,
+          title: hireRequest.title,
+        },
+        meta: {
+          total,
+          page,
+          perPage,
+          totalPages: Math.ceil(Number(total) / perPage),
+        },
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to fetch candidates for hire request');
+    }
+  }
+
+  async getCandidatesForAdmin(query: GetCandidatesForAdminDto): Promise<any> {
+    try {
+      const {
+        page = 1,
+        perPage = 20,
+        search,
+        specialization,
+        employment_type,
+        country,
+      } = query;
+
+      const skip = (page - 1) * perPage;
+      const take = perPage;
+
+      const where: any = {
+        status: 'available', // Only available candidates
+      };
+
+      if (search) {
+        where.OR = [
+          {
+            first_name: { contains: search, mode: 'insensitive' },
+          },
+          {
+            last_name: { contains: search, mode: 'insensitive' },
+          },
+          {
+            email: { contains: search, mode: 'insensitive' },
+          },
+        ];
+      }
+
+      if (specialization) {
+        where.specialization = {
+          contains: specialization,
+          mode: 'insensitive',
+        };
+      }
+
+      if (employment_type) {
+        where.employment_type = employment_type;
+      }
+
+      if (country) {
+        where.country = { contains: country, mode: 'insensitive' };
+      }
+
+      const select = {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        specialization: true,
+        employment_type: true,
+        country: true,
+        about_me: true,
+        languages: {
+          select: {
+            name: true,
+          },
+        },
+        skills: {
+          select: {
+            skill_name: true,
+          },
+        },
+        createdAt: true,
+      };
+
+      const [candidates, total] = await this.prisma.$transaction([
+        this.prisma.candidate.findMany({
+          where,
+          skip,
+          take,
+          select,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+        this.prisma.candidate.count({ where }),
+      ]);
+
+      return {
+        status: 200,
+        data: candidates,
+        meta: {
+          total,
+          page,
+          perPage,
+          totalPages: Math.ceil(Number(total) / perPage),
+        },
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to fetch candidates');
+    }
+  }
+
+  async getHireRequestDetails(hireRequestId: string): Promise<any> {
+    try {
+      // Get hire request with attached candidates
+      const hireRequest = await this.prisma.hireRequest.findUnique({
+        where: { id: hireRequestId },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          specialization: true,
+          location: true,
+          availability: true,
+          contract_length: true,
+          expected_start_date: true,
+          salary_range_from: true,
+          salary_range_to: true,
+          createdAt: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          panels: {
+            select: {
+              id: true,
+              status: true,
+              scheduled_date: true,
+              createdAt: true,
+              panelCandidates: {
+                select: {
+                  id: true,
+                  status: true,
+                  createdAt: true,
+                  candidate: {
+                    select: {
+                      id: true,
+                      first_name: true,
+                      last_name: true,
+                      email: true,
+                      specialization: true,
+                      employment_type: true,
+                      country: true,
+                      about_me: true,
+                      languages: {
+                        select: {
+                          name: true,
+                        },
+                      },
+                      skills: {
+                        select: {
+                          skill_name: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!hireRequest) {
+        throw new NotFoundException('Hire request not found');
+      }
+
+      // Extract all candidates from panels
+      const attachedCandidates = hireRequest.panels.flatMap((panel) =>
+        panel.panelCandidates.map((pc) => ({
+          ...pc.candidate,
+          panelStatus: pc.status,
+          panelId: panel.id,
+          panelScheduledDate: panel.scheduled_date,
+        })),
+      );
+
+      return {
+        status: 200,
+        data: {
+          hireRequest: {
+            id: hireRequest.id,
+            title: hireRequest.title,
+            description: hireRequest.description,
+            status: hireRequest.status,
+            priority: hireRequest.priority,
+            specialization: hireRequest.specialization,
+            location: hireRequest.location,
+            availability: hireRequest.availability,
+            contract_length: hireRequest.contract_length,
+            expected_start_date: hireRequest.expected_start_date,
+            salary_range_from: hireRequest.salary_range_from,
+            salary_range_to: hireRequest.salary_range_to,
+            createdAt: hireRequest.createdAt,
+            organization: hireRequest.organization,
+          },
+          attachedCandidates,
+          hasAttachedCandidates: attachedCandidates.length > 0,
+        },
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to fetch hire request details');
+    }
+  }
+
+  async getHireRequestsForAdmin(
+    query: GetHireRequestsForAdminDto,
+  ): Promise<any> {
+    try {
+      // Verify organization exists
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: query.organization_id },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      const { page = 1, perPage = 20, search, status, specialization } = query;
+
+      const skip = (page - 1) * perPage;
+      const take = perPage;
+
+      const where: any = {
+        org_id: query.organization_id,
+      };
+
+      if (search) {
+        where.title = { contains: search, mode: 'insensitive' };
+      }
+
+      if (status) {
+        where.status = status;
+      }
+
+      if (specialization) {
+        where.specialization = {
+          contains: specialization,
+          mode: 'insensitive',
+        };
+      }
+
+      const select = {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        specialization: true,
+        location: true,
+        availability: true,
+        contract_length: true,
+        expected_start_date: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        createdAt: true,
+      };
+
+      const [hireRequests, total] = await this.prisma.$transaction([
+        this.prisma.hireRequest.findMany({
+          where,
+          skip,
+          take,
+          select,
+          orderBy: {
+            createdAt: 'desc',
+          },
+        }),
+        this.prisma.hireRequest.count({ where }),
+      ]);
+
+      return {
+        status: 200,
+        data: hireRequests,
+        meta: {
+          total,
+          page,
+          perPage,
+          totalPages: Math.ceil(Number(total) / perPage),
+        },
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to fetch hire requests');
+    }
+  }
+
+  async createStaffWithOptionalHireRequest(
+    data: AdminCreateStaffWithHireRequestDto,
+    user: USER,
+  ): Promise<any> {
+    try {
+      // Verify organization exists
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: data.organization_id },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      // Verify candidate exists
+      const candidate = await this.prisma.candidate.findUnique({
+        where: { id: data.candidate_id },
+      });
+
+      if (!candidate) {
+        throw new NotFoundException('Candidate not found');
+      }
+
+      let hireRequestId = data.hirerequest_id;
+
+      // If no hire request ID provided, create a new hire request
+      if (!hireRequestId) {
+        if (!data.hire_request_title) {
+          throw new BadRequestException(
+            'Hire request title is required when creating a new hire request',
+          );
+        }
+
+        const newHireRequest = await this.prisma.hireRequest.create({
+          data: {
+            org_id: data.organization_id,
+            title: data.hire_request_title,
+            description: data.hire_request_description || '',
+            status: 'placement_completed', // Mark as completed since we're creating staff
+            priority: data.hire_request_priority || 'medium',
+            specialization:
+              data.hire_request_specialization ||
+              candidate.specialization ||
+              '',
+            location: data.hire_request_location || '',
+            availability: data.hire_request_availability || 'immediate',
+            contract_length: data.hire_request_contract_length || '',
+            expected_start_date:
+              data.hire_request_expected_start_date || data.start_date,
+            salary_range_from:
+              data.hire_request_salary_range_from || data.salary,
+            salary_range_to: data.hire_request_salary_range_to || data.salary,
+          },
+        });
+
+        hireRequestId = newHireRequest.id;
+      } else {
+        // Verify existing hire request belongs to the organization
+        const existingHireRequest = await this.prisma.hireRequest.findFirst({
+          where: {
+            id: hireRequestId,
+            org_id: data.organization_id,
+          },
+        });
+
+        if (!existingHireRequest) {
+          throw new BadRequestException(
+            'Hire request not found or does not belong to the specified organization',
+          );
+        }
+      }
+
+      const statusHandled = staffStatusDictionary[data.status];
+
+      // Create staff and record candidate as winner in a transaction
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Create the staff record
+        const staff = await tx.staff.create({
+          data: {
+            candidate_id: data.candidate_id,
+            hirerequest_id: hireRequestId,
+            status: statusHandled,
+            salary: data.salary,
+            start_date: data.start_date,
+            created_by: user.id,
+          },
+        });
+
+        // Record candidate as winner for the hire request
+        // First, check if there are any panels for this hire request
+        const panels = await tx.candidatePanel.findMany({
+          where: { hire_request_id: hireRequestId },
+          select: { id: true },
+        });
+
+        if (panels.length > 0) {
+          // Update panel candidates to mark this candidate as winner
+          await tx.panelCandidate.updateMany({
+            where: {
+              panel_id: { in: panels.map((p) => p.id) },
+              candidate_id: data.candidate_id,
+            },
+            data: {
+              status: 'selected_by_client',
+            },
+          });
+
+          // Mark other candidates as returned to pool
+          await tx.panelCandidate.updateMany({
+            where: {
+              panel_id: { in: panels.map((p) => p.id) },
+              candidate_id: { not: data.candidate_id },
+            },
+            data: {
+              status: 'returned_to_pool',
+            },
+          });
+
+          // Update panel status to decision_made
+          await tx.candidatePanel.updateMany({
+            where: { hire_request_id: hireRequestId },
+            data: { status: 'decision_made' },
+          });
+        }
+
+        // Update hire request status to placement_completed
+        await tx.hireRequest.update({
+          where: { id: hireRequestId },
+          data: { status: 'placement_completed' },
+        });
+
+        return staff;
+      });
+
+      const staff = result;
 
       // Get the created staff with all relations
       const createdStaff = await this.prisma.staff.findUnique({

@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, USER, OrganizationRole } from '@prisma/client';
+import { Prisma, USER } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
@@ -187,7 +187,7 @@ export class UserService {
 
       // Filter out undefined values from user fields to avoid Prisma errors
       const filteredUserFields = Object.fromEntries(
-        Object.entries(userFields).filter(([_, value]) => value !== undefined),
+        Object.entries(userFields).filter(([, value]) => value !== undefined),
       );
 
       // Handle organization updates if organization fields are provided
@@ -204,67 +204,85 @@ export class UserService {
         signed_document_url,
       };
 
-      // Check if any organization fields are provided
+      // Check if any organization fields are provided (including null/empty values for clearing)
       const hasOrganizationFields = Object.values(organizationFields).some(
         (value) => value !== undefined,
       );
 
       if (hasOrganizationFields && currentUser.organization_id) {
         // Prepare organization update data
-        const organizationUpdateData: {
-          name?: string;
-          description?: string;
-          website_url?: string;
-          industry?: string;
-          number_of_employees?: number;
-          location?: string;
-          date_founded?: Date;
-          specialties?: string[];
-        } = {};
+        const organizationUpdateData: Prisma.OrganizationUpdateInput = {};
 
         if (organization_name !== undefined) {
-          organizationUpdateData.name = organization_name;
+          if (organization_name.trim() !== '') {
+            organizationUpdateData.name = organization_name;
+          }
         }
         if (organization_description !== undefined) {
-          organizationUpdateData.description = organization_description;
+          organizationUpdateData.description = organization_description || null;
         }
         if (organization_website_url !== undefined) {
-          organizationUpdateData.website_url = organization_website_url;
+          organizationUpdateData.website_url = organization_website_url || null;
         }
         if (organization_industry !== undefined) {
-          organizationUpdateData.industry = organization_industry;
+          organizationUpdateData.industry = organization_industry || null;
         }
         if (organization_number_of_employees !== undefined) {
-          // Ensure it's a valid integer
-          const numEmployees = parseInt(
-            organization_number_of_employees.toString(),
-            10,
-          );
-          if (isNaN(numEmployees) || numEmployees < 1) {
-            throw new BadRequestException(
-              'Number of employees must be a valid positive integer',
+          if (
+            organization_number_of_employees === null ||
+            organization_number_of_employees === 0
+          ) {
+            organizationUpdateData.number_of_employees = null;
+          } else {
+            // Ensure it's a valid integer
+            const numEmployees = parseInt(
+              organization_number_of_employees.toString(),
+              10,
             );
+            if (isNaN(numEmployees) || numEmployees < 1) {
+              throw new BadRequestException(
+                'Number of employees must be a valid positive integer',
+              );
+            }
+            organizationUpdateData.number_of_employees = numEmployees;
           }
-          organizationUpdateData.number_of_employees = numEmployees;
         }
         if (organization_location !== undefined) {
-          organizationUpdateData.location = organization_location;
+          organizationUpdateData.location = organization_location || null;
         }
-        if (
-          organization_date_founded !== undefined &&
-          organization_date_founded !== ''
-        ) {
-          organizationUpdateData.date_founded = new Date(
-            organization_date_founded,
-          );
+        if (organization_date_founded !== undefined) {
+          if (
+            organization_date_founded === null ||
+            organization_date_founded === ''
+          ) {
+            organizationUpdateData.date_founded = null;
+          } else {
+            organizationUpdateData.date_founded = new Date(
+              organization_date_founded,
+            );
+          }
         }
         if (organization_specialties !== undefined) {
-          // Convert comma-separated string to array
-          const specialtiesArray = organization_specialties
-            .split(',')
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0);
-          organizationUpdateData.specialties = specialtiesArray;
+          if (
+            organization_specialties === null ||
+            organization_specialties === ''
+          ) {
+            organizationUpdateData.specialties = { set: [] };
+          } else {
+            // Convert comma-separated string to array
+            const specialtiesArray = organization_specialties
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0);
+            organizationUpdateData.specialties = { set: specialtiesArray };
+          }
+        }
+        if (organization_role !== undefined) {
+          organizationUpdateData.organization_role = organization_role;
+        }
+        if (signed_document_url !== undefined) {
+          organizationUpdateData.signed_document_url =
+            signed_document_url || null;
         }
 
         // Update organization
