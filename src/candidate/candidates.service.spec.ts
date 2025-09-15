@@ -9,6 +9,7 @@ import { S3Service } from '../s3/s3.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { OpenaiService } from '../openai/openai.service';
 import axios from 'axios';
+import { MailService } from '../mail/mail.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -52,6 +53,10 @@ const hubspotMock = {
   updateContact: jest.fn(),
 }
 
+const MailMock ={
+  sendEmail: jest.fn(),
+}
+
   describe('CandidatesService', () => {
     let service: CandidatesService;
     let prisma: PrismaService;
@@ -72,6 +77,7 @@ const hubspotMock = {
         { provide: GoogledriveService, useValue: googleMock },
         { provide: OpenaiService, useValue: openAIMock },
         { provide: HubspotService, useValue: hubspotMock },
+        { provide: MailService, useValue: MailMock },
       ],
     }).compile();
 

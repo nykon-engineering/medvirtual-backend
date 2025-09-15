@@ -14,6 +14,8 @@ import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
 import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { MailService } from '../mail/mail.service';
+import googleDriveFailed from '../common/utils/email-templates/googledrive-failed';
 
 @Injectable()
 export class CandidatesService {
@@ -25,7 +27,8 @@ export class CandidatesService {
     private readonly s3: S3Service,
     private readonly openai: OpenaiService,
     @Inject(forwardRef(() => HubspotService))
-    private readonly hubspot: HubspotService
+    private readonly hubspot: HubspotService,
+    private readonly mailService: MailService,
   ){}
 
   async findAll(
@@ -470,6 +473,20 @@ export class CandidatesService {
       await this.updateStatus(id, 'processing_downloadFile');
       const fileDownloaded = await this.google.downloadFile(idFile, pdfName, downloadDir);
       if (fileDownloaded !== 'Download successful') {
+
+        //=> Send failed via email
+        const candidateName = candidate.first_name ? `${candidate.first_name} ${candidate.last_name}` : `${candidate.name}`;
+        const emailBody = googleDriveFailed(candidateName, fileDownloaded);
+        const mailSent = await this.mailService.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: 'paulo@regenta.ai',
+        subject: 'Google Drive Failed',
+        html: emailBody,
+        });
+        if (!mailSent) {
+          console.error('Failed to send google drive failed email.');
+        }
+
         await this.updateStatus(id, 'failed', `${fileDownloaded}`);
         return false;
       }
