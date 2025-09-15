@@ -475,6 +475,7 @@ export class CandidatesService {
       if (fileDownloaded !== 'Download successful') {
 
         //=> Send failed via email
+        /*
         const candidateName = candidate.first_name ? `${candidate.first_name} ${candidate.last_name}` : `${candidate.name}`;
         const emailBody = googleDriveFailed(candidateName, fileDownloaded);
         const mailSent = await this.mailService.sendMail({
@@ -486,6 +487,7 @@ export class CandidatesService {
         if (!mailSent) {
           console.error('Failed to send google drive failed email.');
         }
+        */
 
         await this.updateStatus(id, 'failed', `${fileDownloaded}`);
         return false;
