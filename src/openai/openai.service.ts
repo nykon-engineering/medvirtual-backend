@@ -1,9 +1,13 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { OpenAI } from 'openai';
+import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class OpenaiService {
-
+    constructor(
+        private readonly mailService: MailService,
+    ) {}
     /* istanbul ignore next */
     async organizeText(text: string, candidate: any): Promise<string> {
 
@@ -105,27 +109,55 @@ export class OpenaiService {
         ----------------
         ${candidateJSON}
         ----------------`
+        try{
+            const response = await openai.chat.completions.create({
+                model: 'gpt-4',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are a resume data extractor. return only the JSON request',
+                    },
+                    {
+                        role: 'user',
+                        content: prompt,
+                    },
+                ],
+                temperature: 0.2,
+            });
+    
+            const message = response.choices?.[0]?.message?.content;
+    
+            if (!message) {
+            throw new BadRequestException('OpenAI did not return a valid message.');
+            }
+            return message;
 
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are a resume data extractor. return only the JSON request',
-                },
-                {
-                    role: 'user',
-                    content: prompt,
-                },
-            ],
-            temperature: 0.2,
-        });
+        }catch (error: any) {
+            if (error?.response?.data?.error?.type === 'insufficient_quota') {
+                console.error('[OpenAI] Insufficient Quota:');
 
-        const message = response.choices?.[0]?.message?.content;
+                // Send insufficient quota via email
+                const emailBody = insufficient_quota();
+                const mailSent = await this.mailService.sendMail({
+                from: 'MedVirtual <noreply@medvirtual.ai>',
+                to: 'paulo@regenta.ai',
+                subject: 'Insufficient Quota from OpenAI',
+                html: emailBody,
+                });
+                if (!mailSent) {
+                  console.error('Failed to send insufficient quota email notification.');
+                }
+                throw new BadRequestException('You dont have credits. Check your plan/billing.');
+            }
 
-        if (!message) {
-        throw new BadRequestException('OpenAI did not return a valid message.');
+            if (error?.response?.data?.error?.type === 'rate_limit_error') {
+                console.error('[OpenAI] Rate Limit Exceeded:');
+                throw new BadRequestException('Rate limit exceeded. Please try again later.');
+            }
+          
+            console.error('[OpenAI] unexpected error:', error);
+            throw new BadRequestException('unexpected error to request OpenAI.');
         }
-        return message;
+        
     }
 }
