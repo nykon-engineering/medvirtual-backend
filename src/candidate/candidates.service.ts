@@ -735,6 +735,12 @@ export class CandidatesService {
     const hireRequests = await this.prisma.hireRequest.findMany({
       where: {
         status: 'sourcing',
+        assigned_user:  user.role === 'system_admin' ?  { is : {id : user.id} } : undefined,
+        panels:{
+          some: {
+            panelCandidates: {}
+          }
+        }
       },
       select: {
         id: true,
@@ -745,7 +751,9 @@ export class CandidatesService {
         availability: true,
         salary_range_from: true,
         salary_range_to: true,
+        organization: { select: { id: true, name: true } },
         skills: { select: { skill_name: true, required_level: true } },
+        panels: { select: { id: true, _count: {select: {panelCandidates: true}} } },
       },
     });
   
@@ -830,7 +838,6 @@ export class CandidatesService {
   }
   
   async endorseCandidate(data: EndorseCandidateDto): Promise<boolean> {
-    console.log('Endorsing candidate with data:', data);
 
     if (!data.candidateId) throw new BadRequestException('Candidate ID is required');
     if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
@@ -849,7 +856,6 @@ export class CandidatesService {
 
 
     const newStatus = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === 'endorsed to client')?.[0];
-    console.log('Mapped new status for Endorsed to Client:', newStatus);
     if (!newStatus) throw new BadRequestException('Invalid status mapping for Endorsed to Client');
 
     const [endorsement, candidateUpdated] = await this.prisma.$transaction([
