@@ -12,10 +12,11 @@ import {
 import {
   ApiBody,
   ApiOperation,
+  ApiParam,
   ApiProperty,
+  ApiQuery,
   ApiResponse,
   ApiTags,
-  ApiQuery,
 } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
@@ -27,6 +28,11 @@ import {
   GetOrganizationStaffDto,
   AdminCreateStaffDto,
 } from './dto/admin-staff-management.dto';
+import {
+  GetCandidatesForAdminDto,
+  GetHireRequestsForAdminDto,
+  AdminCreateStaffWithHireRequestDto,
+} from './dto/admin-staff-selection.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -307,6 +313,12 @@ export class OrganizationController {
     type: Date,
     description: 'Filter staff by start date to',
   })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter staff by status (e.g., Active, Inactive, etc.)',
+  })
   async getOrganizationStaff(
     @Param('id') organizationId: string,
     @Query() query: GetOrganizationStaffDto,
@@ -340,6 +352,225 @@ export class OrganizationController {
     return await this.organizationService.createStaffForOrganization(
       data,
       user,
+    );
+  }
+
+  // Admin Selection Endpoints
+  @Get('candidates')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Get all candidates for admin selection',
+    description:
+      'Allows system admins to view and select candidates for staff creation',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'perPage',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for candidate name or email',
+  })
+  @ApiQuery({
+    name: 'specialization',
+    required: false,
+    type: String,
+    description: 'Filter by specialization',
+  })
+  @ApiQuery({
+    name: 'employment_type',
+    required: false,
+    type: String,
+    description: 'Filter by employment type',
+  })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    type: String,
+    description: 'Filter by country',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidates retrieved successfully',
+  })
+  async getCandidatesForAdmin(@Query() query: GetCandidatesForAdminDto) {
+    return await this.organizationService.getCandidatesForAdmin(query);
+  }
+
+  @Get('hire-requests')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Get hire requests for organization',
+    description:
+      'Allows system admins to view existing hire requests for an organization',
+  })
+  @ApiQuery({
+    name: 'organization_id',
+    required: true,
+    type: String,
+    description: 'Organization ID',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'perPage',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for hire request title',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by status',
+  })
+  @ApiQuery({
+    name: 'specialization',
+    required: false,
+    type: String,
+    description: 'Filter by specialization',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Hire requests retrieved successfully',
+  })
+  async getHireRequestsForAdmin(@Query() query: GetHireRequestsForAdminDto) {
+    return await this.organizationService.getHireRequestsForAdmin(query);
+  }
+
+  @Post('staff/create-with-hire-request')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'Create staff with optional hire request',
+    description:
+      'Allows system admins to create staff with or without existing hire request',
+  })
+  @ApiBody({ type: AdminCreateStaffWithHireRequestDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Staff created successfully for organization',
+  })
+  async createStaffWithOptionalHireRequest(
+    @Body() data: AdminCreateStaffWithHireRequestDto,
+    @CurrentUser() user: USER,
+  ) {
+    return await this.organizationService.createStaffWithOptionalHireRequest(
+      data,
+      user,
+    );
+  }
+
+  @Get('hire-requests/:id/details')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Get hire request details with attached candidates',
+    description:
+      'Allows system admins to view hire request details and attached candidates',
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    type: String,
+    description: 'Hire request ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Hire request details retrieved successfully',
+  })
+  async getHireRequestDetails(@Param('id') id: string) {
+    return await this.organizationService.getHireRequestDetails(id);
+  }
+
+  @Get('hire-requests/:id/candidates')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Get candidates attached to a specific hire request',
+    description:
+      'Allows system admins to view candidates that are attached to a specific hire request',
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    type: String,
+    description: 'Hire request ID',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'perPage',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for candidate name or email',
+  })
+  @ApiQuery({
+    name: 'specialization',
+    required: false,
+    type: String,
+    description: 'Filter by specialization',
+  })
+  @ApiQuery({
+    name: 'employment_type',
+    required: false,
+    type: String,
+    description: 'Filter by employment type',
+  })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    type: String,
+    description: 'Filter by country',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidates for hire request retrieved successfully',
+  })
+  async getCandidatesForHireRequest(
+    @Param('id') id: string,
+    @Query() query: GetCandidatesForAdminDto,
+  ) {
+    return await this.organizationService.getCandidatesForHireRequest(
+      id,
+      query,
     );
   }
 }

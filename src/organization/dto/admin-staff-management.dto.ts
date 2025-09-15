@@ -36,6 +36,19 @@ export class GetOrganizationStaffDto {
   @IsDate()
   @Type(() => Date)
   start_date_to?: Date;
+
+  @ApiProperty({
+    description: 'Filter by staff status',
+    required: false,
+    enum: Object.keys(staffStatusDictionary),
+    example: 'Active',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(Object.keys(staffStatusDictionary), {
+    message: `Status must be one of the following values: ${Object.keys(staffStatusDictionary).join(', ')}`,
+  })
+  status?: string;
 }
 
 export class AdminCreateStaffDto {

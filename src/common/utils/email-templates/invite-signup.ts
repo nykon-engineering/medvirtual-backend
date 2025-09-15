@@ -1,4 +1,4 @@
-import { EmailFooter } from './components';
+import { EmailFooter, EmailHeader } from './components';
 
 export default function InviteSignup(inviteLink: string) {
   return `
@@ -20,9 +20,7 @@ export default function InviteSignup(inviteLink: string) {
 
 <body style="margin:0;padding:0;width:100%!important;min-width:100%;background-color:#f4f4f4;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
   <div style="max-width:600px;margin:0 auto;background-color:#ffffff;">
-    <div style="background:#00B2E2;padding:40px 20px;text-align:center;">
-        <img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" style="max-width: 200px; height: auto;" />
-    </div>
+    ${EmailHeader}
 
     <div style="padding:40px 30px;text-align:center;">
       <p style="color:#333333;font-size:18px;line-height:1.6;margin-bottom:32px;">

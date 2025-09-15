@@ -1,9 +1,25 @@
-import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  UseGuards,
+  Query,
+  Put,
+  Param,
+} from '@nestjs/common';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiParam,
+} from '@nestjs/swagger';
 import { USER } from '@prisma/client';
 
 import { StaffService } from './staff.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { UpdateStaffDto } from './dto/update-staff.dto';
 
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -147,5 +163,39 @@ export class StaffController {
       start_date_from,
       start_date_to,
     );
+  }
+
+  @Put(':id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({
+    summary: 'Update staff member',
+    description:
+      'Update staff member details, candidate information, and skills. Accessible only by system_super_admin and system_admin roles.',
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    type: String,
+    description: 'Staff member ID',
+  })
+  @ApiBody({ type: UpdateStaffDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff member updated successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  @ApiResponse({ status: 400, description: 'Failed to update staff member' })
+  async updateStaff(
+    @Param('id') staffId: string,
+    @Body() updateStaffDto: UpdateStaffDto,
+    @CurrentUser() user: USER,
+  ) {
+    const result = await this.staffService.updateStaff(
+      staffId,
+      updateStaffDto,
+      user,
+    );
+    return result;
   }
 }

@@ -3,8 +3,6 @@ import {
   IsString,
   IsOptional,
   IsBoolean,
-  IsUrl,
-  IsDateString,
   IsEnum,
   IsNumber,
   Min,
@@ -53,52 +51,68 @@ export class UpdateProfileDto {
   // Only available for Organization Admins and Organization Owners
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'Organization name' })
+  @ApiProperty({
+    required: false,
+    description: 'Organization name (send empty string to clear)',
+  })
   organization_name?: string;
 
   @IsOptional()
   @IsString()
   @ApiProperty({
     required: false,
-    description: 'Organization description',
+    description: 'Organization description (send empty string to clear)',
   })
   organization_description?: string;
 
   @IsOptional()
-  @IsUrl()
-  @ApiProperty({ required: false, description: 'Organization website URL' })
+  @IsString()
+  @ApiProperty({
+    required: false,
+    description: 'Organization website URL (send empty string to clear)',
+  })
   organization_website_url?: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'Organization industry' })
+  @ApiProperty({
+    required: false,
+    description: 'Organization industry (send empty string to clear)',
+  })
   organization_industry?: string;
 
   @IsOptional()
   @IsNumber()
-  @Min(1)
+  @Min(0)
   @Max(1000000)
-  @ApiProperty({ required: false, description: 'Number of employees' })
+  @ApiProperty({
+    required: false,
+    description: 'Number of employees (send 0 to clear)',
+  })
   organization_number_of_employees?: number;
 
   @IsOptional()
   @IsString()
   @ApiProperty({
     required: false,
-    description: 'Organization location (country)',
+    description: 'Organization location (send empty string to clear)',
   })
   organization_location?: string;
 
   @IsOptional()
-  @IsDateString()
-  @ApiProperty({ required: false, description: 'Organization date founded' })
+  @IsString()
+  @ApiProperty({
+    required: false,
+    description: 'Organization date founded (send empty string to clear)',
+  })
   organization_date_founded?: string;
 
   @IsOptional()
   @IsString()
   @ApiProperty({
     required: false,
-    description: 'Organization specialties (comma-separated)',
+    description:
+      'Organization specialties (comma-separated, send empty string to clear)',
   })
   organization_specialties?: string;
 
@@ -113,10 +127,11 @@ export class UpdateProfileDto {
   organization_role?: OrganizationRole;
 
   @IsOptional()
-  @IsUrl()
+  @IsString()
   @ApiProperty({
     required: false,
-    description: 'Signed document URL (system admin only)',
+    description:
+      'Signed document URL (system admin only, send empty string to clear)',
   })
   signed_document_url?: string;
 }
