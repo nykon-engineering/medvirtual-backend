@@ -1003,17 +1003,35 @@ export class OrganizationService {
       const skip = (page - 1) * perPage;
       const take = perPage;
 
-      // Get candidates attached to this hire request through panels
+      // First check if there are any candidates attached to this hire request
+      const attachedCandidatesCount = await this.prisma.candidate.count({
+        where: {
+          pipeline_status: 'available',
+          panelCandidates: {
+            some: {
+              panel: {
+                hire_request_id: hireRequestId,
+              },
+            },
+          },
+        },
+      });
+
+      // Build where clause - if no attached candidates, get all available candidates
       const where: any = {
-        status: 'available',
-        panels: {
+        pipeline_status: 'available',
+      };
+
+      // Only filter by panelCandidates if there are attached candidates
+      if (attachedCandidatesCount > 0) {
+        where.panelCandidates = {
           some: {
             panel: {
               hire_request_id: hireRequestId,
             },
           },
-        },
-      };
+        };
+      }
 
       if (search) {
         where.OR = [
@@ -1064,7 +1082,7 @@ export class OrganizationService {
           },
         },
         createdAt: true,
-        panels: {
+        panelCandidates: {
           where: {
             panel: {
               hire_request_id: hireRequestId,
@@ -1103,6 +1121,7 @@ export class OrganizationService {
           id: hireRequest.id,
           title: hireRequest.title,
         },
+        hasAttachedCandidates: attachedCandidatesCount > 0,
         meta: {
           total,
           page,
@@ -1133,7 +1152,7 @@ export class OrganizationService {
       const take = perPage;
 
       const where: any = {
-        status: 'available', // Only available candidates
+        pipeline_status: 'available', // Only available candidates
       };
 
       if (search) {
@@ -1326,12 +1345,13 @@ export class OrganizationService {
   }
 
   async getHireRequestsForAdmin(
+    organizationId: string,
     query: GetHireRequestsForAdminDto,
   ): Promise<any> {
     try {
       // Verify organization exists
       const organization = await this.prisma.organization.findUnique({
-        where: { id: query.organization_id },
+        where: { id: organizationId },
       });
 
       if (!organization) {
@@ -1344,7 +1364,7 @@ export class OrganizationService {
       const take = perPage;
 
       const where: any = {
-        org_id: query.organization_id,
+        org_id: organizationId,
       };
 
       if (search) {

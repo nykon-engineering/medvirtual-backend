@@ -41,10 +41,6 @@ export class GetCandidatesForAdminDto {
 }
 
 export class GetHireRequestsForAdminDto {
-  @ApiProperty({ description: 'Organization ID', required: true })
-  @IsString()
-  organization_id: string;
-
   @ApiProperty({ description: 'Page number', required: false, default: 1 })
   @IsOptional()
   @IsNumber()
