@@ -91,7 +91,7 @@ export class StaffService {
 
       return await this.findOne(staff.id);
     } catch (error) {
-      throw new BadRequestException('Failed to create staff', error.message);
+      throw new BadRequestException('Failed to create staff', error);
     }
   }
 

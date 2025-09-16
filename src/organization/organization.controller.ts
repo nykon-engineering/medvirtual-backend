@@ -409,7 +409,7 @@ export class OrganizationController {
     return await this.organizationService.getCandidatesForAdmin(query);
   }
 
-  @Get('hire-requests')
+  @Get(':id/hire-requests')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
   @HttpCode(200)
@@ -417,12 +417,6 @@ export class OrganizationController {
     summary: 'Get hire requests for organization',
     description:
       'Allows system admins to view existing hire requests for an organization',
-  })
-  @ApiQuery({
-    name: 'organization_id',
-    required: true,
-    type: String,
-    description: 'Organization ID',
   })
   @ApiQuery({
     name: 'page',
@@ -458,8 +452,14 @@ export class OrganizationController {
     status: 200,
     description: 'Hire requests retrieved successfully',
   })
-  async getHireRequestsForAdmin(@Query() query: GetHireRequestsForAdminDto) {
-    return await this.organizationService.getHireRequestsForAdmin(query);
+  async getHireRequestsForAdmin(
+    @Param('id') organizationId: string,
+    @Query() query: GetHireRequestsForAdminDto,
+  ) {
+    return await this.organizationService.getHireRequestsForAdmin(
+      organizationId,
+      query,
+    );
   }
 
   @Post('staff/create-with-hire-request')
