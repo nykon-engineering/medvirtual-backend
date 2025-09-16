@@ -629,6 +629,58 @@ export class HireRequestService {
     } else if (hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
+      await this.prisma.interview.deleteMany({
+        where: {
+          panel_id: panelExists.id,
+        },
+      });
+
+      await this.prisma.panelCandidate.updateMany({
+        where: {
+          panel_id: panelExists.id,
+        },
+        data: {
+          status: 'selected',
+        },
+      });
+
+      const panelCandidates = await this.prisma.panelCandidate.findMany({
+        where: {
+          panel_id: panelExists.id,
+        },
+        select: {
+          candidate: {
+            select: {
+              id: true,
+              hubspot_id: true,
+            },
+          },
+        },
+      });
+
+      if (panelCandidates.length > 0) {
+        const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+          return dbToStageDictionary[key] === 'Endorsed to Client';
+        });
+        if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed to Client`);
+
+        const candidateIds = panelCandidates.map(pc => pc.candidate.id);
+        await this.prisma.candidate.updateMany({
+          where: {
+            id: {
+              in: candidateIds,
+            },
+          },
+          data: {
+            pipeline_status: pipelineStatus,
+          },
+        });
+
+        const candidatesForHubspot = panelCandidates.map(pc => pc.candidate);
+        const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesForHubspot, pipelineStatus);
+        if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
+      }
+
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
@@ -638,6 +690,7 @@ export class HireRequestService {
         },
         data: {
           status: 'created',
+          scheduled_date: null,
         }
       })
       if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
