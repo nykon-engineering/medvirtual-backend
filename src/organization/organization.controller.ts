@@ -125,6 +125,13 @@ export class OrganizationController {
     description: 'Filter by location',
   })
   @ApiQuery({
+    name: 'concierge',
+    required: false,
+    type: String,
+    description:
+      'Filter by concierge ID (only available for system_super_admin)',
+  })
+  @ApiQuery({
     name: 'sortBy',
     required: false,
     enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],

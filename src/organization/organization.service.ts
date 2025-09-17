@@ -195,6 +195,7 @@ export class OrganizationService {
         status,
         industry,
         location,
+        concierge,
         sortBy = 'createdAt',
         sortOrder = 'desc',
       } = query;
@@ -271,6 +272,11 @@ export class OrganizationService {
           contains: location,
           mode: 'insensitive',
         };
+      }
+
+      // Add concierge filter (only for system_super_admin)
+      if (concierge && user.role === 'system_super_admin') {
+        whereClause.concierge_id = concierge;
       }
 
       // Build orderBy clause

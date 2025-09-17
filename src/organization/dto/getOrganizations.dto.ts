@@ -75,6 +75,15 @@ export class GetOrganizationsDto {
 
   @ApiProperty({
     required: false,
+    description:
+      'Filter by concierge ID (only available for system_super_admin)',
+  })
+  @IsOptional()
+  @IsString()
+  concierge?: string;
+
+  @ApiProperty({
+    required: false,
     description: 'Sort field',
     enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],
     default: 'createdAt',
