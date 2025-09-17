@@ -68,6 +68,7 @@ export class OpenaiService {
         - Do not invent or infer values. Only extract what is explicitly present in the input.
         - If a field is not applicable, leave it empty or null as specified.
         - If it is impossible to read a candidate data from hubspot, consider just the textract data.
+        - Do not include the name of the candidate on the bio.
 
 
         #### Bio / Summary
@@ -77,7 +78,7 @@ export class OpenaiService {
         - If relevant details exist in both Textract and HubSpot, combine them.
         - Only include facts actually present in the inputs; do not invent achievements or roles.
         - Length: 2–4 sentences, concise, professional.
-        - Don't include the name of the candidate on the bio.
+        - Do not include the name of the candidate on the bio.
 
         #### Experience
         - Use only literal data from Textract.
