@@ -1023,13 +1023,14 @@ export class HireRequestService {
 
       //update oldcandidates to 'available candidates' on database
         await Promise.all(
-          currentCandidates.map(c => {
+          currentCandidates.map(async c =>  {
             const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatusOldCandidates;
-            this.prisma.candidate.update({
+
+            await this.prisma.candidate.update({
               where: { id: c.candidate.id },
               data: { pipeline_status: pipeline_treated},
             });
-            this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
           }
             
           )
@@ -1718,13 +1719,13 @@ export class HireRequestService {
     const candidateLosers = loserExists.map(c => c.candidate);
     //update losers to 'available candidates' on database
     await Promise.all(
-      candidateLosers.map(c =>{
+      candidateLosers.map(async c =>{
         const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
-        this.prisma.candidate.update({
+        await this.prisma.candidate.update({
           where: { id: c.id },
           data: { pipeline_status: pipeline_treated},
         });
-        this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+        await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
       }
       )
     );

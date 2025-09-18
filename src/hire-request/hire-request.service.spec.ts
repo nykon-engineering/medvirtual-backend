@@ -942,14 +942,6 @@ describe('HireRequestService', () => {
       await expect(service.editPanel(panelData, user)).rejects.toThrow(NotFoundException);
     });
   
-    it('should throw NotFoundException if hubspot update for old candidates fails', async () => {
-      mockPanelFound();
-      mockCurrentCandidates();
-      jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValueOnce(false);
-  
-      await expect(service.editPanel(panelData, user)).rejects.toThrow(NotFoundException);
-    });
-  
     it('should throw BadRequestException if removing old panel candidates fails', async () => {
       mockPanelFound();
       mockCurrentCandidates();
@@ -983,7 +975,6 @@ describe('HireRequestService', () => {
       mockCurrentCandidates();
       mockAddAndUpdateCandidates();
       jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest')
-        .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false); 
   
       await expect(service.editPanel(panelData, user)).rejects.toThrow(NotFoundException);
@@ -993,6 +984,7 @@ describe('HireRequestService', () => {
       mockPanelFound();
       mockCurrentCandidates();
       mockAddAndUpdateCandidates();
+      jest.spyOn(service['hubspot'], 'updateOneCandidateFromHireRequest').mockResolvedValue(true);
       jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
   
       const expectedHireRequest = { id: panelData.hireRequest_id, name: 'Test Request' };
@@ -1010,7 +1002,8 @@ describe('HireRequestService', () => {
         data: panelData.candidates_id.map(id => ({ candidate_id: id, panel_id: 'panel1' })),
       });
       
-      expect(service['hubspot'].updateManyCandidatesFromHireRequest).toHaveBeenCalledTimes(2);
+      expect(service['hubspot'].updateOneCandidateFromHireRequest).toHaveBeenCalled();
+      expect(service['hubspot'].updateManyCandidatesFromHireRequest).toHaveBeenCalledTimes(1);
     });
   });
   
