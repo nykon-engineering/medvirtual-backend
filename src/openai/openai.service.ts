@@ -61,6 +61,10 @@ export class OpenaiService {
         ---
         ### RULES
 
+        ### CRITICAL RULES (HIGHEST PRIORITY)
+        - NEVER include the candidate’s personal name, initials, or any direct identifier in the "bio".  
+        - If a name appears in Textract or HubSpot, IGNORE it completely when writing the bio.  
+
         #### General
         - Do not change the JSON structure or key order.
         - Extract only literal data found in Textract or HubSpot JSON.
@@ -68,17 +72,18 @@ export class OpenaiService {
         - Do not invent or infer values. Only extract what is explicitly present in the input.
         - If a field is not applicable, leave it empty or null as specified.
         - If it is impossible to read a candidate data from hubspot, consider just the textract data.
-        - Do not include the name of the candidate on the bio.
+        - Do not include the person's name on the bio.
 
 
         #### Bio / Summary
+        - Do not include the person's name on the bio.
         - Write a brief description about the professional.
         - Write in a **client-oriented tone**, highlighting why the candidate is valuable to a potential employer.
         - Use **keywords** from the 'specializations' array in the HubSpot JSON.  
         - If relevant details exist in both Textract and HubSpot, combine them.
         - Only include facts actually present in the inputs; do not invent achievements or roles.
         - Length: 2–4 sentences, concise, professional.
-        - Do not include the name of the candidate on the bio.
+        
 
         #### Experience
         - Use only literal data from Textract.

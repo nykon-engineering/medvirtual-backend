@@ -141,6 +141,7 @@ model Candidate {
   hourly_pay_rate        Decimal?
   organization_id        String?
   pipeline_status        String                  @default("available")
+  pipeline_status_origin String?                  
   years_of_experience    Int?
   country                String?
   specialization         String?
