@@ -869,7 +869,10 @@ export class CandidatesService {
 
     const candidate = await this.prisma.candidate.findUnique({
       where: { id: data.candidateId },
-      select: { hubspot_id: true }
+      select: { 
+        hubspot_id: true,
+        pipeline_status: true
+       }
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
 
@@ -888,7 +891,10 @@ export class CandidatesService {
     
       this.prisma.candidate.update({
         where: { id: data.candidateId },
-        data: { pipeline_status: newStatus } 
+        data: { 
+          pipeline_status_origin: candidate.pipeline_status,
+          pipeline_status: newStatus 
+        } 
       })
     ])
     if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
