@@ -434,6 +434,8 @@ export class HireRequestService {
           select: {
             id: true,
             hubspot_id: true,
+            pipeline_status: true,
+            pipeline_status_origin: true
           }
         }
       },
@@ -464,22 +466,19 @@ export class HireRequestService {
           return dbToStageDictionary[key] === 'Available Candidates';
         })
         if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
-        //update candidates pipeline status to 'Available Candidates'
-        const candidatesPipelineUpdated = await this.prisma.candidate.updateMany({
-          where: {
-            id: {
-              in: candidates.map(c => c.candidate.id),
-            },
-          },
-          data: {
-            pipeline_status: pipelineStatus,
-          },
-        });
 
-        //comunicate with hubspot to update status
-        const candidatesHubspot = candidates.map(c => c.candidate);
-        const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesHubspot, pipelineStatus);
-        if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
+        //update candidates for their original status or 'Available Candidates' on database and hubspot
+        await Promise.all(
+          candidates.map(async c =>{
+            const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
+            await this.prisma.candidate.update({
+              where: { id: c.candidate.id },
+              data: { pipeline_status: pipeline_treated},
+            });
+            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+          }
+          )
+        );
       
       }
 
@@ -492,6 +491,7 @@ export class HireRequestService {
       const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
         return dbToStageDictionary[key] === 'Available Candidates';
       })
+      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
 
       //remove all candidates from the panel
       await this.prisma.candidatePanel.deleteMany({
@@ -499,10 +499,21 @@ export class HireRequestService {
           hire_request_id: id,
         },
       })
+
       if ( candidates.length > 0 ) {
-        const candidatesToHubspot = candidates.map(c => c.candidate);
-        const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesToHubspot, pipelineStatus);
-        if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
+        //update candidates for their original status or 'Available Candidates' on database and hubspot
+        await Promise.all(
+          candidates.map(async c =>{
+            const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
+            await this.prisma.candidate.update({
+              where: { id: c.candidate.id },
+              data: { pipeline_status: pipeline_treated},
+            });
+            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+          }
+          )
+        );
+
       }
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
@@ -529,12 +540,7 @@ export class HireRequestService {
     } else if (hireRequest.status == 'new' && data.status === 'sourcing'){
       //verify if there panel created with this hire_request_id
 
-
-      if (panelExists) {
-        const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
-        if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-        return this.findOne(id, user);
-      }else{
+      if (!panelExists) {
         //create Panel with default user_id
         await this.prisma.candidatePanel.create({
           data: {
@@ -542,10 +548,11 @@ export class HireRequestService {
             readable: false,
           }
         })
-        const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
-        if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-        return this.findOne(id, user);
       }
+
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+      return this.findOne(id, user);
     
     } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){
 
@@ -1091,8 +1098,6 @@ export class HireRequestService {
 
     return this.findOne(data.hireRequest_id, user);
   }
-
-
 
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
