@@ -17,6 +17,10 @@ import { S3Module } from './s3/s3.module';
 import { OpenaiModule } from './openai/openai.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CronModule } from './cron/cron.module';
+import { HireRequestModule } from './hire-request/hire-request.module';
+import { GooglesheetModule } from './googlesheet/googlesheet.module';
+import { TicketModule } from './ticket/ticket.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
   imports: [
@@ -36,7 +40,11 @@ import { CronModule } from './cron/cron.module';
     S3Module,
     OpenaiModule,
     DashboardModule,
-    CronModule
+    CronModule,
+    HireRequestModule,
+    GooglesheetModule,
+    TicketModule,
+    StaffModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],

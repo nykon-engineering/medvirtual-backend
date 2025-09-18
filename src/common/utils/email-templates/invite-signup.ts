@@ -1,9 +1,7 @@
-import { EmailHeader, EmailFooter } from "./components"
+import { EmailFooter, EmailHeader } from './components';
 
 export default function InviteSignup(inviteLink: string) {
-
-  return (
-    `
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,6 +46,5 @@ export default function InviteSignup(inviteLink: string) {
   </div>
 </body>
 </html>
-        `
-  )
+        `;
 }

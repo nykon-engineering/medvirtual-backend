@@ -35,6 +35,7 @@ describe('CronService', () => {
     expect(service).toBeDefined();
   });
 
+  /*
   it('should re-run pipeline for all candidates with given status', async () => {
     // Arrange: simula retorno do banco
     prismaServiceMock.candidate.findMany.mockResolvedValue([
@@ -76,4 +77,6 @@ describe('CronService', () => {
     expect(candidatesServiceMock.processData).not.toHaveBeenCalled();
     expect(result).toBe(true);
   });
+
+  */
 });

@@ -4,39 +4,45 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL") //LOCAL_DATABASE_URL | DATABASE_URL
+  provider          = "postgresql"
+  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model USER {
-  id                    String              @id @default(uuid())
-  email                 String              @unique
-  organization_id       String?
-  organization_name     String
-  first_name            String
-  last_name             String
-  phone                 String
-  avatar                String
-  job_title             String
-  role                  String
-  workos_id             String
-  password              String              @db.VarChar(255)
-  authentication_method String
-  status                String
-  verified              Boolean             @default(false)
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  email_invitations     EmailInvitation[]
-  email_verifications   EmailVerification[]
-  sessions              Session[]
-  tickets               Ticket[]
-  organization          Organization?       @relation(fields: [organization_id], references: [id])
+  id                     String              @id @default(uuid())
+  email                  String              @unique
+  organization_id        String?
+  organization_name      String
+  first_name             String
+  last_name              String
+  phone                  String
+  avatar                 String
+  job_title              String
+  role                   String
+  workos_id              String
+  password               String              @db.VarChar(255)
+  authentication_method  String
+  status                 String
+  verified               Boolean             @default(false)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  is_organization_owner  Boolean             @default(false)
+  email_invitations      EmailInvitation[]
+  email_verifications    EmailVerification[]
+  hireRequestsAssigned   HireRequest[]       @relation("AssignedUser")
+  adminOrganizations     Organization[]      @relation("OrganizationAdmin")
+  ownedOrganizations     Organization[]      @relation("OrganizationOwner")
+  conciergeOrganizations Organization[]      @relation("OrganizationConcierge")
+  sessions               Session[]
+  tickets                Ticket[]
+  organization           Organization?       @relation(fields: [organization_id], references: [id])
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
   @@index([organization_id], map: "idx_users_organization_id")
   @@index([status], map: "idx_users_status")
+  @@index([is_organization_owner], map: "idx_users_is_organization_owner")
 }
 
 model Session {
@@ -71,23 +77,52 @@ model EmailInvitation {
 }
 
 model Organization {
-  id                      String                  @id @default(uuid())
-  name                    String
-  email                   String                  @unique
-  type                    String?
-  hubspot_id              String?                 @unique
-  status                  UserStatus              @default(active)
-  address                 String?
-  contact_info            String?
-  specialties             String?
-  createdAt               DateTime                @default(now())
-  hire_requests           HireRequest[]
+  id                   String             @id @default(uuid())
+  name                 String
+  email                String?             @unique
+  phone                String?
+  website_url          String?
+  location             String?
+  description          String?
+  industry             String?
+  organization_role    OrganizationRole   @default(prospect)
+  number_of_employees  Int?
+  date_founded         DateTime?
+  date_joined          DateTime?
+  date_became_client   DateTime?
+  status               OrganizationStatus @default(active)
+  signed_document_url  String?
+  signed_document_date DateTime?
+  hubspot_id           String?            @unique
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  // Relationships
+  owner_id     String? @unique // One owner per organization
+  concierge_id String? // Assigned system admin/super admin
+  admin_id     String? @default("") // Legacy field, consider removing
+
+  // Many-to-many relationships
+  specialties             String[]
+  services                String[]
+  users                   USER[] // All users in the organization
   organization_candidates OrganizationCandidate[]
-  users                   USER[]
+  hire_requests           HireRequest[]
+  tickets                 Ticket[]
+
+  // Relations
+  owner     USER? @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
+  concierge USER? @relation("OrganizationConcierge", fields: [concierge_id], references: [id], onDelete: Restrict)
+  admin     USER? @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
   @@index([name], map: "idx_organizations_name")
+  @@index([admin_id], map: "idx_organizations_admin_id")
+  @@index([owner_id], map: "idx_organizations_owner_id")
+  @@index([concierge_id], map: "idx_organizations_concierge_id")
+  @@index([organization_role], map: "idx_organizations_role")
+  @@index([industry], map: "idx_organizations_industry")
 }
 
 model Candidate {
@@ -96,10 +131,7 @@ model Candidate {
   email                  String
   first_name             String?
   last_name              String?
-  name                   String?
   resume_url             String?
-  specialization         String?
-  country                String?
   about_me               String?
   processed_resume_data  Json?
   processing_status      ProcessingStatus        @default(pending)
@@ -109,23 +141,32 @@ model Candidate {
   hourly_pay_rate        Decimal?
   organization_id        String?
   pipeline_status        String                  @default("available")
+  pipeline_status_origin String?                  
   years_of_experience    Int?
+  country                String?
+  specialization         String?
   employment_type        String?
+  name                   String?
+  medical_tools          String?
+  tools                  String?
+  gender                 String?
   educations             CandidateEducation[]
   experiences            CandidateExperience[]
-  skills                 CandidateSkill[]
   languages              CandidateLanguage[]
+  skills                 CandidateSkill[]
   selectedInInterviews   Interview[]             @relation("SelectedCandidate")
   organizationCandidates OrganizationCandidate[]
   panelCandidates        PanelCandidate[]
+  staff                  Staff[]
+  tickets                Ticket[]
 }
 
 model CandidateLanguage {
-  id                String            @id @default(uuid())
-  candidate_id      String
-  name              String
-  createdAt         DateTime          @default(now())
-  candidate         Candidate         @relation(fields: [candidate_id], references: [id])
+  id           String    @id @default(uuid())
+  candidate_id String
+  name         String
+  createdAt    DateTime  @default(now())
+  candidate    Candidate @relation(fields: [candidate_id], references: [id])
 }
 
 model OrganizationCandidate {
@@ -159,10 +200,10 @@ model CandidateExperience {
   candidate_id     String
   company          String
   position         String
-  start_date       String?
-  end_date         String?
-  responsibilities String?
   createdAt        DateTime  @default(now())
+  responsabilities String?
+  end_date         DateTime?
+  start_date       DateTime?
   candidate        Candidate @relation(fields: [candidate_id], references: [id])
 
   @@index([candidate_id], map: "idx_candidate_experience_candidate_id")
@@ -185,17 +226,26 @@ model CandidateEducation {
 }
 
 model HireRequest {
-  id           String             @id @default(uuid())
-  org_id       String
-  title        String
-  description  String?
-  requirements String?
-  status       HireRequestStatus  @default(new_request)
-  priority     Priority           @default(medium)
-  createdAt    DateTime           @default(now())
-  panels       CandidatePanel[]
-  organization Organization       @relation(fields: [org_id], references: [id])
-  skills       HireRequestSkill[]
+  id                  String             @id @default(uuid())
+  org_id              String
+  title               String
+  description         String?
+  status              HireRequestStatus  @default(new)
+  priority            Priority           @default(medium)
+  createdAt           DateTime           @default(now())
+  availability        String
+  contract_length     String?
+  expected_start_date DateTime?
+  salary_range_from   Decimal?
+  salary_range_to     Decimal?
+  specialization      String
+  location            String?
+  assign_user_id      String?
+  panels              CandidatePanel[]
+  assigned_user       USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
+  organization        Organization       @relation(fields: [org_id], references: [id])
+  skills              HireRequestSkill[]
+  staff               Staff[]
 
   @@index([org_id], map: "idx_hire_requests_org_id")
   @@index([status], map: "idx_hire_requests_status")
@@ -209,7 +259,7 @@ model HireRequestSkill {
   skill_name      String
   required_level  ProficiencyLevel @default(intermediate)
   createdAt       DateTime         @default(now())
-  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id])
+  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
 
   @@unique([hire_request_id, skill_name], name: "idx_hire_request_skills_unique")
   @@index([hire_request_id], map: "idx_hire_request_skills_hire_request_id")
@@ -222,7 +272,8 @@ model CandidatePanel {
   status          PanelStatus      @default(created)
   scheduled_date  DateTime?
   createdAt       DateTime         @default(now())
-  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id])
+  readable        Boolean          @default(false)
+  hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
   panelCandidates PanelCandidate[]
 
@@ -237,8 +288,8 @@ model PanelCandidate {
   candidate_id String
   status       PanelCandidateStatus @default(selected)
   createdAt    DateTime             @default(now())
-  candidate    Candidate            @relation(fields: [candidate_id], references: [id])
-  panel        CandidatePanel       @relation(fields: [panel_id], references: [id])
+  candidate    Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
+  panel        CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
 
   @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
   @@index([panel_id], map: "idx_panel_candidates_panel_id")
@@ -257,7 +308,7 @@ model Interview {
   decision_date         DateTime?
   expires_at            DateTime?
   createdAt             DateTime        @default(now())
-  panel                 CandidatePanel  @relation(fields: [panel_id], references: [id])
+  panel                 CandidatePanel  @relation(fields: [panel_id], references: [id], onDelete: Cascade)
   selectedCandidate     Candidate?      @relation("SelectedCandidate", fields: [selected_candidate_id], references: [id])
 
   @@index([panel_id], map: "idx_interviews_panel_id")
@@ -268,19 +319,27 @@ model Interview {
 }
 
 model Ticket {
-  id          String       @id @default(uuid())
-  user_id     String
-  type        TicketType
-  title       String
-  description String
-  status      TicketStatus @default(open)
-  createdAt   DateTime     @default(now())
-  user        USER         @relation(fields: [user_id], references: [id])
+  id           String       @id @default(uuid())
+  user_id      String?
+  title        String
+  description  String
+  status       TicketStatus @default(new)
+  createdAt    DateTime     @default(now())
+  type         String
+  org_id       String
+  priority     Priority
+  staff_id     String?
+  candidate_id String?
+  organization Organization @relation(fields: [org_id], references: [id])
+  staff        Staff?       @relation(fields: [staff_id], references: [id])
+  user         USER?        @relation(fields: [user_id], references: [id])
+  candidate    Candidate?   @relation(fields: [candidate_id], references: [id])
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
   @@index([status], map: "idx_tickets_status")
   @@index([createdAt], map: "idx_tickets_createdAt")
+  @@index([candidate_id], map: "idx_tickets_candidate_id")
 }
 
 model GoogleToken {
@@ -294,17 +353,55 @@ model GoogleToken {
   updatedAt    DateTime @updatedAt
 }
 
+model Staff {
+  id              String      @id @default(uuid())
+  candidate_id    String
+  hirerequest_id  String
+  status          String
+  salary          Decimal?
+  start_date      DateTime?
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+  created_by      String?
+  terminated_date DateTime?
+  bonus           Bonus[]
+  candidate       Candidate   @relation(fields: [candidate_id], references: [id])
+  hireRequest     HireRequest @relation(fields: [hirerequest_id], references: [id])
+  tickets         Ticket[]
+
+  @@index([candidate_id], map: "idx_staff_candidate_id")
+  @@index([hirerequest_id], map: "idx_staff_hirerequest_id")
+  @@index([status], map: "idx_staff_status")
+}
+
+model Bonus {
+  id          String   @id @default(uuid())
+  staff_id    String
+  amount      Decimal
+  description String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  created_by  String?
+  staff       Staff    @relation(fields: [staff_id], references: [id])
+
+  @@index([staff_id], map: "idx_bonus_staff_id")
+}
+
 enum Role {
-  prospect
-  client
-  admin
-  super_admin
+  organization_admin
+  organization_super_admin
+  system_admin
+  system_super_admin
 }
 
 enum UserStatus {
   incomplete
   active
   inactive
+  deleted
+  prospect
+  pending_verification
+  suspended
 }
 
 enum CandidateStatus {
@@ -338,13 +435,13 @@ enum SkillType {
 }
 
 enum HireRequestStatus {
+  new
   pending_signature
-  new_request
-  in_progress
+  sourcing
   panel_ready
   interview_scheduled
   awaiting_decision
-  placement_complete
+  placement_completed
   cancelled
 }
 
@@ -376,16 +473,19 @@ enum InterviewStatus {
   cancelled
 }
 
-enum TicketType {
-  bonus_request
-  termination_request
-  general_support
-  technical_issue
-}
-
 enum TicketStatus {
-  open
+  new
   in_progress
   resolved
   closed
+}
+
+enum OrganizationRole {
+  prospect
+  client
+}
+
+enum OrganizationStatus {
+  active
+  inactive
 }

@@ -1,7 +1,7 @@
-import { EmailHeader, EmailFooter } from "./components"
+import { EmailHeader, EmailFooter } from './components';
 
 export default function getVerificationCodeTemplate(verificationCode: string) {
-  return (`
+  return `
 <!DOCTYPE html>
 <html lang="en">
 
@@ -52,5 +52,5 @@ export default function getVerificationCodeTemplate(verificationCode: string) {
   </div>
 </body>
 </html>
-`)
+`;
 }

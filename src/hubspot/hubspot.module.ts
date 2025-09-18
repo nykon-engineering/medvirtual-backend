@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { HubspotController } from './hubspot.controller';
 import { HubspotService } from './hubspot.service';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -10,6 +10,7 @@ import { CandidatesModule } from '../candidate/candidates.module';
 @Module({
   controllers: [HubspotController],
   providers: [HubspotService, HandlerObjectCreation, HandlerObjectPropertyChange],
-  imports: [PrismaModule, GoogledriveModule, CandidatesModule],
+  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule)],
+  exports: [HubspotService],
 })
 export class HubspotModule {}

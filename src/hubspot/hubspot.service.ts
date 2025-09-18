@@ -1,19 +1,17 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
-import * as path from 'path';
 
-import { extractDriveFileId, mapHubspotToDb } from '../common/utils/hubspot.util'
+import {  mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
+
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { GoogledriveService } from '../googledrive/googledrive.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { CandidatesService } from '../candidate/candidates.service';
-import { map } from '@hubspot/api-client/lib/codegen/automation/actions/rxjsStub';
 
 
 @Injectable()
@@ -24,9 +22,12 @@ export class HubspotService {
       private readonly prisma: PrismaService,
       private readonly objectCreation: HandlerObjectCreation,
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
+      @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
-        this.hubspotClient = new Client({ accessToken: process.env.HUBSPOT_ACCESS_TOKEN });
+        this.hubspotClient = new Client({ 
+            accessToken: process.env.HUBSPOT_ACCESS_TOKEN,
+        });
     }
 
     async getCandidates(data: GetCandidatesDto): Promise<any> {
@@ -107,13 +108,51 @@ export class HubspotService {
         }
     }
 
+    async updateManyCandidatesFromHireRequest(candidates, pipelineStatus): Promise<boolean> {
+        try{
+            if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
+            await this.hubspotClient.crm.objects.batchApi.update(process.env.HUBSPOT_CUSTOM_OBJECT,
+                {
+                  inputs: candidates.map(c => ({
+                    id: c.hubspot_id,
+                    properties: {
+                      hs_pipeline_stage: pipelineStatus,
+                    },
+                  })),
+                }
+              );
+              return true;
+        }catch (error) {
+            throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
+        }
+    }
+
+    async updateOneCandidateFromHireRequest(hubspot_id: string, pipelineStatus: string): Promise<boolean> {
+        try{
+            if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
+            
+            const updateBody = {
+                properties: {
+                    hs_pipeline_stage: pipelineStatus,
+                },
+            };
+
+            await this.hubspotClient.crm.objects.basicApi.update(
+                process.env.HUBSPOT_CUSTOM_OBJECT,
+                hubspot_id,
+                updateBody, 
+            );
+            return true;
+        }catch (error) {
+            throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
+        }
+    }
 
 
-
-    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot
     async createCandidates(pipeline_stage: string): Promise<string> {
         const virtualAssistant ='p20630393_Virtual_Assistant';
-        const properties = Object.keys(candidadeToDbDictionary).join(',');
+        const properties = Object.keys(candidadeToDbDictionary).join(',')+',career_highlights_relevant_job_experiences,language_spoken';
 
         const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant,{
             filterGroups: [
@@ -144,25 +183,51 @@ export class HubspotService {
                 }
             })
 
+
             if (!user){
                 const candidateData = mapHubspotToDb(result.properties);
-                await this.prisma.candidate.create({
+                const newCandidate = await this.prisma.candidate.create({
                     data: candidateData,
                 })
+
+                //Here, I start to work with the skills
+                if (result.properties.career_highlights_relevant_job_experiences) {
+                    const candidadeSkills = result.properties.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
+
+                    for (const skill of candidadeSkills) {
+                        await this.prisma.candidateSkill.create({
+                            data: {
+                                candidate_id: newCandidate.id,
+                                skill_name: skill,
+                                skill_type: undefined,// This field is not used in the current implementation
+                            }
+                        })
+                    }
+                }
+
+                //here I start to work with the language
+                if (result.properties.language_spoken) {
+                    const languageCandidateSpoken = result.properties.language_spoken.split('&').map((lang: string) => lang.trim());
+
+                    for (const language of languageCandidateSpoken) {
+                        await this.prisma.candidateLanguage.create({
+                            data: {
+                                candidate_id: newCandidate.id,
+                                name: language
+                            }
+                        })
+                    }
+                }
                 console.log('Candidate created:', result.properties.name);
             }
         }
         return 'Candidates created successfully';
     }
-
-
-
-
     
-    ////=> this service is just a example to read candidates on our database and update it with the data from hubspot
+    ////=> this service is just a example to read candidates on our database and UPDATE it with the data from hubspot
     async updateCandidates(pipeline_stage: string): Promise<any> {
         const virtualAssistant ='p20630393_Virtual_Assistant';
-        const properties = Object.keys(candidadeToDbDictionary).join(',');
+        const properties = Object.keys(candidadeToDbDictionary).join(',')+',career_highlights_relevant_job_experiences,language_spoken';
 
         const candidates = await this.prisma.candidate.findMany({
             where: {
@@ -209,12 +274,51 @@ export class HubspotService {
                 },
                 data: candidateData
             })
+
+            console.log('Candidate updated:', response.results[0]);
+            //Here, I start to work with the skills
+            if (response.results[0].properties.career_highlights_relevant_job_experiences) {
+                await this.prisma.candidateSkill.deleteMany({
+                    where: {
+                        candidate_id: candidate.id
+                    }
+                });
+                const candidadeSkills = response.results[0].properties.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
+
+                for (const skill of candidadeSkills) {
+                    console.log('Skill to add:', skill);
+                    await this.prisma.candidateSkill.create({
+                        data: {
+                            candidate_id: candidate.id,
+                            skill_name: skill,
+                            skill_type: undefined,// This field is not used in the current implementation
+                        }
+                    })
+                }
+            }
+
+            //here I start to work with the language
+            if (response.results[0].properties.language_spoken) {
+                await this.prisma.candidateLanguage.deleteMany({
+                    where: {
+                        candidate_id: candidate.id
+                    }
+                });
+                const languageCandidateSpoken = response.results[0].properties.language_spoken.split('&').map((lang: string) => lang.trim());
+
+                for (const language of languageCandidateSpoken) {
+                    await this.prisma.candidateLanguage.create({
+                        data: {
+                            candidate_id: candidate.id,
+                            name: language
+                        }
+                    })
+                }
+            }
             console.log('Candidate updated:', candidate.first_name);
   
         }
     }
-
-
 
 
 

@@ -6,6 +6,11 @@ module.exports = {
   entry: './src/lambda.ts',
   target: 'node',
   mode: 'production',
+  performance: {
+    hints: false,
+    maxEntrypointSize: 512000,
+    maxAssetSize: 512000
+  },
   module: {
     rules: [{ 
       test: /\.ts$/, 

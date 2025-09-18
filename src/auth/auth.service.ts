@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
@@ -6,7 +11,7 @@ import { UserService } from '../user/user.service';
 import { WorkosService } from '../workos/workos.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { generateVerificationCode } from '../common/utils/generateCode.util'
+import { generateVerificationCode } from '../common/utils/generateCode.util';
 import { AuthSignUpReturnDto } from './dto/authSignupReturn.dto';
 import { AuthResendCodeDto } from './dto/authResendCode.dto';
 import { AuthSignInDto } from './dto/authSignIn.dto';
@@ -22,16 +27,14 @@ import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
 import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
 
-
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly workosService: WorkosService,
     private readonly mailService: MailService,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
   ) {}
-
 
   async workOsSignIn(): Promise<string> {
     const authorizationUrl = await this.workosService.getUrl();
@@ -43,84 +46,40 @@ export class AuthService {
   }
 
   async handleUser(code: string): Promise<string> {
-      const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) | 60 * 60 * 100;
-      if (!code) {
-          throw new BadRequestException('Code is required');
-      }
-      const result = await this.workosService.getUserByCode(code);
-      if (!result) {
-          throw new BadRequestException('Failed to retrieve user profile from WorkOS');
-      }
+    const timeToExpires =
+      Number(process.env.TOKEN_TIME_EXPIRED) | (60 * 60 * 100);
+    if (!code) {
+      throw new BadRequestException('Code is required');
+    }
+    const result = await this.workosService.getUserByCode(code);
+    if (!result) {
+      throw new BadRequestException(
+        'Failed to retrieve user profile from WorkOS',
+      );
+    }
 
-      const user = result.user;
-      let userDB = await this.userService.findByEmail(user.email);
+    const user = result.user;
+    let userDB = await this.userService.findByEmail(user.email);
 
-      if (!userDB) {
-        userDB = await this.userService.create({
-          email: user.email,
-          first_name: user.first_name || '',
-          last_name: user.last_name || '',
-          phone: user.phone || '',
-          avatar: user.profile_picture_url || '',
-          job_title: user.jobTitle || '',
-          organization_name: user.companyName || '',
-          role: user.role?.slug || 'user',
-          workos_id: user.id,
-          password: '', // Password is not used for SSO users
-          authentication_method: result.authenticationMethod,
-          status: 'incomplete',
-          verified: user.email_verified || false,
-        });
-      }
-
-      const token = jwt.sign({id: userDB.id}, process.env.JWT_SECRET, {
-        expiresIn: '1h',
+    if (!userDB) {
+      userDB = await this.userService.create({
+        email: user.email,
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        phone: user.phone || '',
+        avatar: user.profile_picture_url || '',
+        job_title: user.jobTitle || '',
+        organization_name: user.companyName || '',
+        role: user.role?.slug || 'user',
+        workos_id: user.id,
+        password: '', // Password is not used for SSO users
+        authentication_method: result.authenticationMethod,
+        status: 'incomplete',
+        verified: user.email_verified || false,
       });
-
-      //revoke previous sessions of this user before I create the new session
-      await this.prisma.session.updateMany({
-        where: { userId: user.id },
-        data: { isRevoked: true },
-      });
-
-      const session = await this.prisma.session.create({
-        data:{
-          userId: userDB.id,
-          token: token,
-          expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
-        }
-      })
-
-      if (!session) {
-        throw new BadRequestException('Failed to create session');
-      }
-      return token;
-  }
-
-
-  async signIn(data: AuthSignInDto): Promise<object> {
-    const timeToExpires= Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000;
-    const authenticationMethod = 'OwnSign'
-    const user = await this.userService.findByEmail(data.email);
-    if (!user) {
-      throw new UnauthorizedException('User not found with this email');
     }
 
-    if (user.authentication_method !== authenticationMethod) {
-      throw new UnauthorizedException('User does not use this authentication method. You need to Sign in with the first method you have used');
-    }
-
-    if (!user.verified) {
-      throw new UnauthorizedException('User not verified');
-    }
-
-    const isMatch = await bcrypt.compare(data.password, user.password);
-    
-    if (!isMatch) {
-      throw new BadRequestException('Invalid password');
-    }
-    
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ id: userDB.id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
 
@@ -131,12 +90,118 @@ export class AuthService {
     });
 
     const session = await this.prisma.session.create({
-      data:{
-        userId: user.id,
+      data: {
+        userId: userDB.id,
         token: token,
         expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
+      },
+    });
+
+    if (!session) {
+      throw new BadRequestException('Failed to create session');
+    }
+    return token;
+  }
+
+  async signIn(data: AuthSignInDto): Promise<object> {
+    const timeToExpires = data.rememberMe
+      ? 7 * 24 * 60 * 60 * 1000
+      : 8 * 60 * 60 * 1000;
+    const authenticationMethod = 'OwnSign';
+    const user = await this.userService.findByEmail(data.email);
+    if (!user) {
+      throw new UnauthorizedException('User not found with this email');
+    }
+    // Check user status - only allow active users to login
+    if (user.status !== 'active') {
+      let errorMessage = 'This user does not have permission to log in.';
+
+      switch (user.status) {
+        case 'deleted':
+          errorMessage =
+            'This account has been deleted. Please contact support.';
+          break;
+        case 'inactive':
+          errorMessage =
+            'Your account is inactive. Please contact your administrator to reactivate your account.';
+          break;
+        case 'suspended':
+          errorMessage =
+            'Your account has been suspended. Please contact support for assistance.';
+          break;
+        case 'pending_verification':
+          errorMessage =
+            'Your account is pending verification. Please check your email and verify your account.';
+          break;
+        case 'prospect':
+          errorMessage =
+            'Your account is not yet activated. Please contact support.';
+          break;
+        case 'incomplete':
+          errorMessage =
+            'Your account setup is incomplete. Please contact support.';
+          break;
+        default:
+          errorMessage = 'This user does not have permission to log in.';
       }
-    })
+
+      throw new UnauthorizedException(errorMessage);
+    }
+    // System admins don't need to belong to an organization
+    if (
+      !user.organization_id &&
+      !['system_super_admin', 'system_admin'].includes(user.role)
+    ) {
+      throw new UnauthorizedException(
+        'User does not belong to any organization. Please contact support.',
+      );
+    }
+
+    // Only check organization status for users who belong to an organization
+    if (user.organization_id) {
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: user.organization_id },
+        select: { status: true },
+      });
+      if (!organization || organization.status === 'inactive')
+        throw new UnauthorizedException(
+          'User organization not found or inactive. Please contact support.',
+        );
+    }
+
+    if (user.authentication_method !== authenticationMethod) {
+      throw new UnauthorizedException(
+        'User does not use this authentication method. You need to Sign in with the first method you have used',
+      );
+    }
+
+    if (!user.verified) {
+      throw new UnauthorizedException('User not verified');
+    }
+
+    const isMatch = await bcrypt.compare(data.password, user.password);
+
+    if (!isMatch) {
+      throw new BadRequestException('Invalid password');
+    }
+
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: data.rememberMe ? '7d' : '8h',
+    });
+
+    //revoke previous sessions of this user before I create the new session
+    await this.prisma.session.updateMany({
+      where: { userId: user.id },
+      data: { isRevoked: true },
+    });
+
+    const session = await this.prisma.session.create({
+      data: {
+        userId: user.id,
+        token: token,
+        expiresAt: new Date(Date.now() + timeToExpires),
+      },
+    });
 
     if (!session) {
       throw new BadRequestException('Failed to create session');
@@ -150,14 +215,15 @@ export class AuthService {
         lastName: user.last_name,
         email: user.email,
         role: user.role,
+        clientId: user.organization_id,
       },
     };
   }
 
   async signUp(data: AuthSignUpDto): Promise<AuthSignUpReturnDto> {
-    const authenticationMethod = 'OwnSign'
+    const authenticationMethod = 'OwnSign';
     const user = await this.userService.findByEmail(data.email);
-  
+
     if (user) {
       throw new BadRequestException('User already exists with this email');
     }
@@ -167,9 +233,12 @@ export class AuthService {
       data: {
         name: data.companyName || 'Default Organization',
         email: data.email,
-        
+        status: 'active',
+        admin: {
+          connect: { id: data.organizationId }, // Connect to the user who is signing up
+        },
       },
-    })
+    });
 
     const newUser = await this.userService.create({
       email: data.email,
@@ -186,39 +255,38 @@ export class AuthService {
       authentication_method: authenticationMethod,
       status: 'active',
       verified: false, // Initially set to false until the user verifies their email
-    })
+    });
     if (!newUser) {
       throw new BadRequestException('Failed to create user');
     }
-    
+
     const code = generateVerificationCode(6);
-    if (!code){
+    if (!code) {
       throw new BadRequestException('Failed to generate verification code');
     }
 
     // Send verification code via email
     const emailBody = getVerificationCodeTemplate(code);
-    const mailSent = await this.mailService.sendMail(
-    {
+    const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,
       subject: 'Verification Code',
       html: emailBody,
     });
-   
-    if(!mailSent) { 
+
+    if (!mailSent) {
       throw new BadRequestException('Failed to send verification email');
     }
-    
+
     // Store the verification code in the database with an expiration time
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
     const storeCode = await this.prisma.emailVerification.create({
-        data: {
-          userId: newUser.id,
-          code: code,
-          expiresAt: codeExpiresAt,
-        }
-      });
+      data: {
+        userId: newUser.id,
+        code: code,
+        expiresAt: codeExpiresAt,
+      },
+    });
     if (!storeCode) {
       throw new BadRequestException('Failed to store verification code');
     }
@@ -228,7 +296,7 @@ export class AuthService {
     });
 
     return {
-      token:token,
+      token: token,
     };
   }
 
@@ -238,7 +306,7 @@ export class AuthService {
     }
 
     //Verify if the token is valid
-    let decodedToken; 
+    let decodedToken;
     try {
       decodedToken = jwt.verify(data.token, process.env.JWT_SECRET);
     } catch (error) {
@@ -275,13 +343,13 @@ export class AuthService {
 
     //Update user verified to true
     await this.prisma.uSER.update({
-      where:{
+      where: {
         id: user.id,
       },
       data: {
         verified: true,
-      }
-    })
+      },
+    });
 
     //Create a new JWT for keep the user logged in
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
@@ -295,12 +363,14 @@ export class AuthService {
     });
 
     const session = await this.prisma.session.create({
-      data:{
+      data: {
         userId: user.id,
         token: token,
-        expiresAt: new Date(Date.now() +  Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000), 
-      }
-    })
+        expiresAt: new Date(
+          Date.now() + Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000,
+        ),
+      },
+    });
 
     if (!session) {
       throw new BadRequestException('Failed to create session');
@@ -313,7 +383,7 @@ export class AuthService {
       throw new BadRequestException('Token are required');
     }
     //Verify if the token is valid
-    let decodedToken; 
+    let decodedToken;
     try {
       decodedToken = jwt.verify(data.token, process.env.JWT_SECRET);
     } catch (error) {
@@ -324,69 +394,68 @@ export class AuthService {
     if (!user) {
       throw new BadRequestException('User not found');
     }
-    
+
     //here I need to hash the userId
     const invalidateCode = await this.prisma.emailVerification.updateMany({
       where: {
         userId: user.id,
       },
-      data: { 
-        verified: true // Mark as verified to invalidate
-      }, 
+      data: {
+        verified: true, // Mark as verified to invalidate
+      },
     });
     if (!invalidateCode) {
-      throw new BadRequestException('Failed to invalidate previous verification code');
+      throw new BadRequestException(
+        'Failed to invalidate previous verification code',
+      );
     }
 
     //generate new code
     const code = generateVerificationCode(6);
-    if (!code){
+    if (!code) {
       throw new BadRequestException('Failed to generate verification code');
     }
 
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
     const storeCode = await this.prisma.emailVerification.create({
-        data: {
-          userId: user.id,
-          code: code,
-          expiresAt: codeExpiresAt,
-        }
-      });
+      data: {
+        userId: user.id,
+        code: code,
+        expiresAt: codeExpiresAt,
+      },
+    });
     if (!storeCode) {
       throw new BadRequestException('Failed to store verification code');
     }
 
     // Send verification code via email
     const emailBody = getVerificationCodeTemplate(code);
-    const mailSent = await this.mailService.sendMail(
-    {
+    const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: user.email,
       subject: 'Verification Code',
       html: emailBody,
     });
-   
-    if(!mailSent) { 
+
+    if (!mailSent) {
       throw new BadRequestException('Failed to send verification email');
     }
-    
 
     const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
       expiresIn: '1h',
     });
 
     return {
-      token:token,
+      token: token,
     };
-
   }
 
-  async logout (data: AuthLogoutDto): Promise<boolean> {
-    const {token} = data;
+  async logout(data: AuthLogoutDto): Promise<boolean> {
+    const { token } = data;
     if (!token) {
       throw new BadRequestException('Token is required');
     }
-    
+
     const revodeToken = await this.prisma.session.updateMany({
       where: { token },
       data: { isRevoked: true },
@@ -399,78 +468,76 @@ export class AuthService {
     return true;
   }
 
-  async inviteUser(data: AuthInviteUserDto): Promise<string>{
-    const authenticationMethod = 'OwnSign'
+  async inviteUser(data: AuthInviteUserDto): Promise<string> {
+    const authenticationMethod = 'OwnSign';
     const user = await this.userService.findByEmail(data.email);
     if (user) {
       throw new BadRequestException('User already exists');
     }
 
-
     const newUser = await this.userService.create({
       email: data.email,
-      organization: { connect: { id: data.organizationId } }, 
-      first_name: '',
-      last_name: '',
-      phone: '',
+      organization: { connect: { id: data.organizationId } },
+      first_name: data.first_name || '',
+      last_name: data.last_name || '',
+      phone: data.phone || '',
       avatar: '',
-      job_title: '',
+      job_title: data.job_title || '',
       organization_name: data.companyName,
-      role: data.role || 'user',
+      role: data.role || 'organization_admin',
       workos_id: '',
       password: '', // Password is not used for SSO users
       authentication_method: authenticationMethod,
       status: 'invited',
       verified: false, // Initially set to false until the user verifies their email
-    })
+    });
 
     const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
       expiresIn: '24h',
     });
 
-    if (!code){
+    if (!code) {
       throw new BadRequestException('Failed to generate invite code');
     }
 
     // Send signup link via email
     const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
     const emailBody = InviteSignup(inviteLink);
-    const mailSent = await this.mailService.sendMail(
-    {
+    const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,
       subject: 'MedVirtual Invitation',
       html: emailBody,
     });
-   
-    if(!mailSent) { 
+
+    if (!mailSent) {
       throw new BadRequestException('Failed to send invitation email');
     }
 
     // Store the verification code in the database with an expiration time
     const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours - same time as JWT
     const storeCode = await this.prisma.emailInvitation.create({
-        data: {
-          userId: newUser.id,
-          email_from: data.email,
-          code: code,
-          expiresAt: codeExpiresAt,
-        }
-      });
+      data: {
+        userId: newUser.id,
+        email_from: data.email,
+        code: code,
+        expiresAt: codeExpiresAt,
+      },
+    });
     if (!storeCode) {
       throw new BadRequestException('Failed to store invite code');
     }
 
     return `Invitation sent successfully to ${data.email}`;
-  } 
+  }
 
   async getUser(data: AuthGetInviteDto): Promise<any> {
-    const {token} = data;
-    if (!token){
+    const { token } = data;
+    if (!token) {
       throw new BadRequestException('Token is required');
     }
 
-    let decodedToken; 
+    let decodedToken;
     try {
       decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     } catch (error) {
@@ -479,22 +546,22 @@ export class AuthService {
 
     const emailInvitation = await this.prisma.emailInvitation.findFirst({
       where: {
-        userId : decodedToken.id,
-        code: token
+        userId: decodedToken.id,
+        code: token,
       },
-    })
+    });
 
-    if (!emailInvitation){
-      throw new NotFoundException('Token not found!')
+    if (!emailInvitation) {
+      throw new NotFoundException('Token not found!');
     }
 
     const user = await this.prisma.uSER.findFirst({
       where: {
-        id: decodedToken.id
-      }
-    })
+        id: decodedToken.id,
+      },
+    });
 
-    if(!user){
+    if (!user) {
       throw new NotFoundException('User not found!');
     }
 
@@ -505,51 +572,70 @@ export class AuthService {
     };
   }
 
-
-  async invitedUserSignup(data: AuthinvitedUserSignupDto): Promise<string>{
-    let decodedToken; 
+  async invitedUserSignup(data: AuthinvitedUserSignupDto): Promise<string> {
+    let decodedToken;
     try {
       decodedToken = jwt.verify(data.token, process.env.JWT_SECRET);
     } catch (error) {
       throw new UnauthorizedException('Invalid token');
     }
-    //verify again if this token exists in our database: 
+    //verify again if this token exists in our database:
     const emailInvitation = await this.prisma.emailInvitation.findFirst({
       where: {
-        userId : decodedToken.id,
-        code: data.token
+        userId: decodedToken.id,
+        code: data.token,
       },
-    })
-    if (!emailInvitation){
-      throw new NotFoundException('Token not found!')
+    });
+    if (!emailInvitation) {
+      throw new NotFoundException('Token not found!');
     }
 
     //find user in our database
     const user = await this.prisma.uSER.findFirst({
       where: {
-        id: decodedToken.id
-      }
-    })
-    if(!user){
+        id: decodedToken.id,
+      },
+    });
+    if (!user) {
       throw new NotFoundException('User not found');
     }
 
     const passwordCript = await bcrypt.hash(data.password, 10);
     //set password and update status to prospect
-    const updatePass = await this.prisma.uSER.update({
-      data: { 
-        first_name: data.firstName,
-        last_name: data.lastName,
-        job_title: data.jobTitle,
-        password: passwordCript,
-        status: data.status,
-        verified: true, // Set verified to true after signup
-      },
-      where: {id: decodedToken.id}
-    })
+    const updateData: {
+      password: string;
+      verified: boolean;
+      first_name?: string;
+      last_name?: string;
+      job_title?: string;
+      status?: string;
+    } = {
+      password: passwordCript,
+      verified: true, // Set verified to true after signup
+      status: 'active',
+    };
 
-    if (!updatePass){
-      throw new BadRequestException('Error in set user password')
+    // Only update fields that are provided
+    if (data.firstName !== undefined) {
+      updateData.first_name = data.firstName;
+    }
+    if (data.lastName !== undefined) {
+      updateData.last_name = data.lastName;
+    }
+    if (data.jobTitle !== undefined) {
+      updateData.job_title = data.jobTitle;
+    }
+    if (data.status !== undefined) {
+      updateData.status = data.status;
+    }
+
+    const updatePass = await this.prisma.uSER.update({
+      data: updateData,
+      where: { id: decodedToken.id },
+    });
+
+    if (!updatePass) {
+      throw new BadRequestException('Error in set user password');
     }
 
     //Create a new JWT for keep the user logged in
@@ -564,30 +650,33 @@ export class AuthService {
     });
 
     const session = await this.prisma.session.create({
-      data:{
+      data: {
         userId: user.id,
         token: token,
-        expiresAt: new Date(Date.now() +  Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000), 
-      }
-    })
+        expiresAt: new Date(
+          Date.now() + Number(process.env.TOKEN_TIME_EXPIRED) || 60 * 60 * 1000,
+        ),
+      },
+    });
 
     if (!session) {
       throw new BadRequestException('Failed to create session');
     }
     return token;
-
   }
 
-  async updatePassword(data: AuthUpdatePasswordDto, user):Promise<boolean>{
+  async updatePassword(data: AuthUpdatePasswordDto, user): Promise<boolean> {
     const { oldPassword, password } = data;
     if (!oldPassword || !password) {
-      throw new BadRequestException('Old password and new password are required');
+      throw new BadRequestException(
+        'Old password and new password are required',
+      );
     }
 
     const userDB = await this.prisma.uSER.findUnique({
       where: { id: user.id },
-    })
-    if(!userDB) throw new NotFoundException('User not found');
+    });
+    if (!userDB) throw new NotFoundException('User not found');
 
     const isMatch = await bcrypt.compare(oldPassword, userDB.password);
     if (!isMatch) throw new BadRequestException('Invalid old password');
