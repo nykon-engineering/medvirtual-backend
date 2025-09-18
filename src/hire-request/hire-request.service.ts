@@ -1655,6 +1655,7 @@ export class HireRequestService {
           select: {
             id: true,
             hubspot_id: true,
+            pipeline_status_origin: true
           },
         },
       },
@@ -1710,8 +1711,18 @@ export class HireRequestService {
     });
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
 
-    //comunicate with hubspot to update status
+    
     const candidateLosers = loserExists.map(c => c.candidate);
+    //update losers to 'available candidates' on database
+    await Promise.all(
+      candidateLosers.map(c =>
+        this.prisma.candidate.update({
+          where: { id: c.id },
+          data: { pipeline_status: c.pipeline_status_origin || pipelineStatusLosers},
+        })
+      )
+    );
+    //comunicate with hubspot to update status
     const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidateLosers, pipelineStatusLosers);
     if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
     
