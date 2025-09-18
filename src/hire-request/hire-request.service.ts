@@ -1018,17 +1018,20 @@ export class HireRequestService {
       const pipelineStatusOldCandidates = Object.keys(dbToStageDictionary).find(key => {
         return dbToStageDictionary[key] === 'Available Candidates';
       })
-      const oldCandidates = currentCandidates.map(c => c.candidate);
-      const updateHubspotOldCandidates = await this.hubspot.updateManyCandidatesFromHireRequest(oldCandidates, pipelineStatusOldCandidates);
-      if (!updateHubspotOldCandidates) throw new NotFoundException(`Candidates not updated on the hubspot`);
+      if (!pipelineStatusOldCandidates) throw new NotFoundException(`Pipeline status mapping not found for Available Candidates`);
+
 
       //update oldcandidates to 'available candidates' on database
         await Promise.all(
-          currentCandidates.map(c =>
+          currentCandidates.map(c => {
+            const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatusOldCandidates;
             this.prisma.candidate.update({
               where: { id: c.candidate.id },
-              data: { pipeline_status: c.candidate.pipeline_status_origin || pipelineStatusOldCandidates},
-            })
+              data: { pipeline_status: pipeline_treated},
+            });
+            this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+          }
+            
           )
         );
       //finish update oldcandidates to 'available candidates' on database 
@@ -1715,16 +1718,16 @@ export class HireRequestService {
     const candidateLosers = loserExists.map(c => c.candidate);
     //update losers to 'available candidates' on database
     await Promise.all(
-      candidateLosers.map(c =>
+      candidateLosers.map(c =>{
+        const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
         this.prisma.candidate.update({
           where: { id: c.id },
-          data: { pipeline_status: c.pipeline_status_origin || pipelineStatusLosers},
-        })
+          data: { pipeline_status: pipeline_treated},
+        });
+        this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+      }
       )
     );
-    //comunicate with hubspot to update status
-    const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidateLosers, pipelineStatusLosers);
-    if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
     
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
     const candidateUpdated = await this.prisma.candidate.update({
