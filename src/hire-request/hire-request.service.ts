@@ -685,7 +685,7 @@ export class HireRequestService {
 
       if (panelCandidates.length > 0) {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-          return dbToStageDictionary[key] === 'Endorsed to Client';
+          return dbToStageDictionary[key] === 'Endorsed via Platform';
         });
         if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed to Client`);
 
@@ -952,9 +952,9 @@ export class HireRequestService {
     if (!panelUpdated) throw new BadRequestException(`Panel not confirmed`);
 
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-      return dbToStageDictionary[key] === 'Endorsed to Client';
+      return dbToStageDictionary[key] === 'Endorsed via Platform';
     })
-    //update candidates with pipelinestatus = 'Endorsed to Client'
+    //update candidates with pipelinestatus = 'Endorsed via Platform'
     const candidatesUpdated = await this.prisma.candidate.updateMany({
       where: {
         id: {
@@ -1015,7 +1015,7 @@ export class HireRequestService {
       currentPanel = panelExists;
     }
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-      return dbToStageDictionary[key] === 'Endorsed to Client';
+      return dbToStageDictionary[key] === 'Endorsed via Platform';
     })
     if (!pipelineStatus) throw new BadRequestException(`Pipeline status mapping not found`);
 
@@ -1095,7 +1095,7 @@ export class HireRequestService {
     });
     if( !candidates) throw new NotFoundException(`Candidates not found`);
 
-    //update candidates with pipelinestatus = 'Endorsed to Client'
+    //update candidates with pipelinestatus = 'Endorsed via Platform'
     await Promise.all(
       candidates.map(c =>
         this.prisma.candidate.update({
