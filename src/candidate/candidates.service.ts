@@ -605,6 +605,9 @@ export class CandidatesService {
                   in: ['1087596819', '261075105'],
                 },
               },
+              skill_name: {
+                not: 'N/A',
+              },
             },
             select: {
               skill_name: true,
@@ -653,6 +656,11 @@ export class CandidatesService {
                   [field]: {
                     not: null
                   }
+                },
+                {
+                  [field]: {
+                    not: 'N/A'
+                  }
                 }
               ] 
             },
@@ -667,7 +675,7 @@ export class CandidatesService {
           result[field] = [
             ...new Set(
               returned.flatMap(item =>
-                item.specialization.split(';').map(s => s.trim())
+                item.specialization.split(';').map(s => s.trim()).filter(s => s !== 'N/A')
               )
             )
           ];

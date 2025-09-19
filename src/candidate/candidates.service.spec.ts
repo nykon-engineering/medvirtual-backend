@@ -255,6 +255,9 @@ const MailMock ={
               in: ['1087596819', '261075105'],
             },
           },
+          skill_name: {
+            not: 'N/A',
+          },
         },
         select: { skill_name: true },
         distinct: ['skill_name'],
@@ -278,6 +281,11 @@ const MailMock ={
             {
               country: {
                 not: null
+              }
+            },
+            {
+              country: {
+                not: 'N/A'
               }
             }
           ] 
