@@ -132,9 +132,29 @@ export class HireRequestService {
     }
     if(!user.role) throw new NotFoundException('User role not found');
 
-    const baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
+    let baseWhere = {};
+    switch (user.role) {
+      case 'organization_super_admin':
+      case 'organization_admin':
+        baseWhere = { organization: { id: user.organization_id } };
+        break
+      case 'system_admin':
+        baseWhere={ OR: [
+          { organization: { admin_id: user.id }},
+          { assigned_user: {id: user.id}}
+        ]}
+        break;
+      case 'system_super_admin':
+        baseWhere = {};
+        break;
+        
+    }
+    console.log('baseWhere', baseWhere);
+
+    //this code was updated for the switch above
+    // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search ? { title: { contains: search, mode: 'insensitive' as const } } : {};
-    const whereClause = user.role.includes('organization') ? { ...baseWhere, ...searchWhere } : searchWhere;
+    const whereClause =  { ...baseWhere, ...searchWhere } ;
 
     const skip = (page - 1) * perPage;
     const take = perPage;
