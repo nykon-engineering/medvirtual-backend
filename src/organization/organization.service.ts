@@ -40,6 +40,11 @@ export class OrganizationService {
     private readonly auth: AuthService,
   ) {}
 
+  
+  async delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  };
+
   async getOwnerNameById(ownerId) {
     try {
       const response = await axios.get(
@@ -63,6 +68,46 @@ export class OrganizationService {
     }
   }
 
+  async getDealsByCompanyId(companyId) {
+    try {
+      await this.delay(1000);
+        const result = await axios.post(
+          'https://api.hubapi.com/crm/v3/objects/deals/search',
+          {
+            filterGroups: [
+              {
+                filters: [
+                  {
+                    propertyName: 'hs_primary_associated_company',
+                    operator: 'EQ',
+                    value: `${companyId}`,
+                  },
+                ],
+              },
+            ],
+            properties: [
+              'amount',
+              //'business_unit',
+              'actual_pairing_date',
+              'dealname',
+            ],
+            limit: 10,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+  
+        return result.data.results;
+    } catch (error) {
+      console.error('Error fetching companies from HubSpot:', error);
+      throw new Error('Failed to fetch companies from HubSpot');
+    }
+  }
+
   async formatCompany(company) {
     const ownerIds = company.properties.hs_all_owner_ids;
 
@@ -70,20 +115,24 @@ export class OrganizationService {
       return company;
     }
 
-    // Pode haver múltiplos IDs separados por `;`
+    // It can have multiples Ids separated by `;`
     const ownerIdList = ownerIds.split(';');
 
-    // Busca os nomes de todos os proprietários
+    // Get the name of all owners
     const ownerNames = await Promise.all(
       ownerIdList.map((id) => this.getOwnerNameById(id)),
     );
 
-    // Substitui no objeto
+    // Get all deals associated with this company
+    const deals = await this.getDealsByCompanyId(company.properties.hs_object_id);
+
+    // Replace the object
     return {
       ...company,
+      staff: deals,  
       properties: {
         ...company.properties,
-        hs_all_owner_names: ownerNames.filter(Boolean), // novo campo com nomes
+        hs_all_owner_names: ownerNames.filter(Boolean), // new field with name
       },
     };
   }
@@ -103,6 +152,16 @@ export class OrganizationService {
                   operator: 'EQ',
                   value: 'MedVirtual',
                 },
+                {
+                propertyName: 'num_associated_deals',
+                operator: 'GT',
+                value: '0',
+                },
+                {
+                  propertyName: 'hs_object_id',
+                  operator: 'EQ',
+                  value: '8304831771',
+                  },
               ],
             },
           ],
@@ -117,6 +176,9 @@ export class OrganizationService {
             'hs_all_accessible_team_ids',
             'hs_all_owner_ids',
             'hs_all_team_ids',
+            'hs_num_open_deals',
+            'hs_total_deal_value',
+            'num_associated_deals'
           ],
           limit: 100,
         },
@@ -195,6 +257,7 @@ export class OrganizationService {
         status,
         industry,
         location,
+        concierge,
         sortBy = 'createdAt',
         sortOrder = 'desc',
       } = query;
@@ -271,6 +334,11 @@ export class OrganizationService {
           contains: location,
           mode: 'insensitive',
         };
+      }
+
+      // Add concierge filter (only for system_super_admin)
+      if (concierge && user.role === 'system_super_admin') {
+        whereClause.concierge_id = concierge;
       }
 
       // Build orderBy clause
