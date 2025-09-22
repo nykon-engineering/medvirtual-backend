@@ -166,7 +166,7 @@ describe('TicketService', () => {
     it('should return all tickets without filters', async () => {
       mockPrisma.ticket.findMany.mockResolvedValue(mockTickets);
   
-      const result = await service.findAll(undefined, undefined, undefined, undefined);
+      const result = await service.findAll(userfake, undefined, undefined, undefined, undefined);
   
       expect(result).toEqual(mockTickets);
       
@@ -223,7 +223,7 @@ describe('TicketService', () => {
     it('should apply type filter', async () => {
       mockPrisma.ticket.findMany.mockResolvedValue(mockTickets);
   
-      await service.findAll('bug', undefined, undefined, undefined);
+      await service.findAll(userfake, 'bug', undefined, undefined, undefined);
   
       expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -235,7 +235,7 @@ describe('TicketService', () => {
     it('should apply priority filter', async () => {
       mockPrisma.ticket.findMany.mockResolvedValue(mockTickets);
   
-      await service.findAll(undefined, 'high', undefined, undefined);
+      await service.findAll(userfake, undefined, 'high', undefined, undefined);
   
       expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -247,7 +247,7 @@ describe('TicketService', () => {
     it('should apply assigned_user_id filter', async () => {
       mockPrisma.ticket.findMany.mockResolvedValue(mockTickets);
   
-      await service.findAll(undefined, undefined, 'user-123', undefined);
+      await service.findAll(userfake, undefined, undefined, 'user-123', undefined);
   
       expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -261,7 +261,7 @@ describe('TicketService', () => {
     it('should apply search filter to organization and title', async () => {
       mockPrisma.ticket.findMany.mockResolvedValue(mockTickets);
   
-      await service.findAll(undefined, undefined, undefined, 'test');
+      await service.findAll(userfake, undefined, undefined, undefined, 'test');
   
       expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -279,7 +279,7 @@ describe('TicketService', () => {
       mockPrisma.ticket.findMany.mockResolvedValue(null);
   
       await expect(
-        service.findAll(undefined, undefined, undefined, undefined),
+        service.findAll(userfake, undefined, undefined, undefined, undefined),
       ).rejects.toThrow(BadRequestException);
     });
   
@@ -287,7 +287,7 @@ describe('TicketService', () => {
       mockPrisma.ticket.findMany.mockRejectedValue(new Error('DB error'));
   
       await expect(
-        service.findAll(undefined, undefined, undefined, undefined),
+        service.findAll(userfake, undefined, undefined, undefined, undefined),
       ).rejects.toThrow(BadRequestException);
     });
   });
