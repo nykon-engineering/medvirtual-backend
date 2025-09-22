@@ -169,12 +169,24 @@ describe('TicketService', () => {
       const result = await service.findAll(undefined, undefined, undefined, undefined);
   
       expect(result).toEqual(mockTickets);
+      
+      // Calculate expected 30 days ago date for comparison
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
       expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
         where: {
           type: undefined,
           priority: undefined,
           user: undefined,
           OR: undefined,
+          // Exclude tickets that are closed and were last updated more than 30 days ago
+          NOT: {
+            AND: [
+              { status: 'closed' },
+              { updatedAt: { lt: expect.any(Date) } }
+            ]
+          }
         },
         select:{
           id: true,
