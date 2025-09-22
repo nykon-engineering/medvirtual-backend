@@ -77,6 +77,7 @@ export class HubspotService {
                 case 'object.propertyChange':
                     return await this.objectPropertyChange.execute(event);
                 case 'object.creation':
+                case 'object.restore':
                     return await this.objectCreation.execute(event);
                 case 'object.deletion':
                     return await this.objectDeletion.execute(event);
