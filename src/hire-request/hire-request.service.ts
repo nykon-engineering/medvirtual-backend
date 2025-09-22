@@ -15,7 +15,7 @@ import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
-import { findHourlySalary } from '../common/utils/salary.util';
+import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
 
 @Injectable()
 export class HireRequestService {
@@ -254,7 +254,14 @@ export class HireRequestService {
       panels: hr.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
-        interviews: undefined
+        interviews: undefined,
+        panelCandidates: panel.panelCandidates.map(pc => ({
+          ...pc,
+          candidate:{
+            ...pc.candidate,
+            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+          }
+        }))
       }))
     }));
 
@@ -1322,6 +1329,13 @@ export class HireRequestService {
       ...panel,
       interview_date: panel.interviews[0]?.scheduled_date || null,
       interviews: undefined,
+      panelCandidates: panel.panelCandidates.map(pc => ({
+        ...pc,
+        candidate: {
+          ...pc.candidate,
+          salary: findMonthlySalary(pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0),
+        }
+      }))
       
     }));
     

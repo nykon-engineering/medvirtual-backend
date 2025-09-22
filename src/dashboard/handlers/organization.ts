@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { count } from 'console';
+import { findMonthlySalary } from '../../common/utils/salary.util';
 
 @Injectable()
 export class HandlerOrganization {
@@ -246,6 +246,11 @@ export class HandlerOrganization {
       select,
       take: 8,
     });
+
+    const otherTalentsSalary = otherTalents.map((talent) => ({
+      ...talent,
+      salary: findMonthlySalary(Number(talent?.hourly_pay_rate))
+    }))
     result.otherTalents = otherTalents;
 
     return result;
