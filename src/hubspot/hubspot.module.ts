@@ -6,10 +6,11 @@ import { GoogledriveModule } from '../googledrive/googledrive.module';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { CandidatesModule } from '../candidate/candidates.module';
+import { HandlerObjectDeletion } from './handlers/objectDeletion';
 
 @Module({
   controllers: [HubspotController],
-  providers: [HubspotService, HandlerObjectCreation, HandlerObjectPropertyChange],
+  providers: [HubspotService, HandlerObjectCreation, HandlerObjectPropertyChange, HandlerObjectDeletion],
   imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule)],
   exports: [HubspotService],
 })
