@@ -86,8 +86,35 @@ export class UserService {
   }
 
   async findUsersByOrganizationByCurrentUser(user: USER): Promise<any> {
+    let whereClause: any = {};
+
+    // If user is system_admin, only return users from organizations they admin
+    if (user.role === 'system_admin') {
+      // Find organizations where this user is the admin
+      const adminOrganizations = await this.prisma.organization.findMany({
+        where: { admin_id: user.id },
+        select: { id: true },
+      });
+
+      const organizationIds = adminOrganizations.map((org) => org.id);
+
+      if (organizationIds.length === 0) {
+        throw new NotFoundException(
+          `No organizations found where you are the admin.`,
+        );
+      }
+
+      whereClause = { organization_id: { in: organizationIds } };
+    } else if (user.role === 'system_super_admin') {
+      // system_super_admin can see all users from all organizations
+      whereClause = { organization_id: { not: null } };
+    } else {
+      // Fallback to original behavior for other roles
+      whereClause = { organization_id: user.organization_id };
+    }
+
     const users = await this.prisma.uSER.findMany({
-      where: { organization_id: user.organization_id },
+      where: whereClause,
       select: {
         id: true,
         email: true,
@@ -101,8 +128,11 @@ export class UserService {
         createdAt: true,
       },
     });
+
     if (!users || users.length === 0) {
-      throw new NotFoundException(`No users found in this organization.`);
+      throw new NotFoundException(
+        `No users found in the accessible organizations.`,
+      );
     }
 
     return users;

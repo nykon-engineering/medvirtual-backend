@@ -332,6 +332,7 @@ model Ticket {
   description  String
   status       TicketStatus @default(new)
   createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   type         String
   org_id       String
   priority     Priority
@@ -346,6 +347,7 @@ model Ticket {
   @@index([type], map: "idx_tickets_type")
   @@index([status], map: "idx_tickets_status")
   @@index([createdAt], map: "idx_tickets_createdAt")
+  @@index([updatedAt], map: "idx_tickets_updatedAt")
   @@index([candidate_id], map: "idx_tickets_candidate_id")
 }
 

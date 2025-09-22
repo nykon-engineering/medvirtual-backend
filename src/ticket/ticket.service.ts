@@ -129,6 +129,10 @@ export class TicketService {
     search?: string,
     ): Promise<Object> {
     try{
+      // Calculate date 30 days ago
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
       const tickets = await this.prisma.ticket.findMany({
         where:{
           type: type ? type : undefined,
@@ -137,7 +141,14 @@ export class TicketService {
           OR: search ? [
             { organization: { name: { contains: search, mode: 'insensitive' } } },
             { title: { contains: search, mode: 'insensitive' } }
-          ] : undefined
+          ] : undefined,
+          // Exclude tickets that are closed and were last updated more than 30 days ago
+          NOT: {
+            AND: [
+              { status: 'closed' },
+              { updatedAt: { lt: thirtyDaysAgo } }
+            ]
+          }
         },
         select:{
           id: true,
