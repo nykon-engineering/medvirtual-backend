@@ -147,9 +147,7 @@ export class HireRequestService {
       case 'system_super_admin':
         baseWhere = {};
         break;
-        
     }
-    console.log('baseWhere', baseWhere);
 
     //this code was updated for the switch above
     // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};

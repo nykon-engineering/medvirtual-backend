@@ -47,9 +47,10 @@ export class TicketController {
     @Query('type') type: string, 
     @Query('priority') priority: string,
     @Query('assign_user_id') assign_user_id: string,
-    @Query('search') search: string
+    @Query('search') search: string,
+    @CurrentUser() user: USER
   ): Promise<Object> {
-    const result = await this.ticketService.findAll(type, priority, assign_user_id, search);
+    const result = await this.ticketService.findAll(user, type, priority, assign_user_id, search);
     return {
       status: 200, 
       message: 'List of tickets retrieved successfully',
