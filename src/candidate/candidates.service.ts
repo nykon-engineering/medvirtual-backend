@@ -641,7 +641,9 @@ export class CandidatesService {
           });
           returned = {
             min: min._min.hourly_pay_rate || 0,
+            salary_min: findMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
             max: max._max.hourly_pay_rate || 0,
+            salary_max: findMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
           };
           
           result[field]=returned;
