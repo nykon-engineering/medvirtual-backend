@@ -29,6 +29,16 @@ export class HandlerObjectDeletion {
                     candidate_id: candidateExists.id
                 }
             });
+            await this.prisma.candidateEducation.deleteMany({
+                where: {
+                    candidate_id: candidateExists.id
+                }
+            });
+            await this.prisma.candidateExperience.deleteMany({
+                where: {
+                    candidate_id: candidateExists.id
+                }
+            });
     
             //Then, delete the candidate
             await this.prisma.candidate.delete({
