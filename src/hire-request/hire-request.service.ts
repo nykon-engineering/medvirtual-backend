@@ -15,6 +15,7 @@ import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { findHourlySalary } from '../common/utils/salary.util';
 
 @Injectable()
 export class HireRequestService {
@@ -816,11 +817,11 @@ export class HireRequestService {
     const requiredSkills = hireRequest.skills.map(s => s.skill_name);
   
     const hourly_from = hireRequest.salary_range_from
-      ? Number(hireRequest.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+      ? findHourlySalary(Number(hireRequest.salary_range_from))
       : undefined;
       
     const hourly_to = hireRequest.salary_range_to
-      ? Number(hireRequest.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+      ? findHourlySalary(Number(hireRequest.salary_range_to))
       : undefined;
   
     const candidates = await this.prisma.candidate.findMany({
@@ -1886,10 +1887,10 @@ export class HireRequestService {
       if (hr.availability && candidate.employment_type === hr.availability) score += 1;
   
       const hourly_from = hr.salary_range_from
-        ? Number(hr.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+        ? findHourlySalary(Number(hr.salary_range_from))
         : undefined;
       const hourly_to = hr.salary_range_to
-        ? Number(hr.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+        ? findHourlySalary(Number(hr.salary_range_to))
         : undefined;
   
       if (
