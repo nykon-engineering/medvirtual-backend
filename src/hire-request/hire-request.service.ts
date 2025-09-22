@@ -1491,7 +1491,6 @@ export class HireRequestService {
     });
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
     const updatedDate = new Date(`${data.date_time}`);
-    console.log(updatedDate, data.date_time, 'updatedDate');
 
     const interviewScheduled = await this.prisma.interview.create({
       data: {
