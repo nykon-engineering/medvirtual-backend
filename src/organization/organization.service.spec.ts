@@ -26,6 +26,8 @@ const userfake = {
   verified: false,
   createdAt: new Date(),
   updatedAt: new Date(),
+  createdByMethod: 'self_signup',
+  createdByUserId: null,
 }
 
 describe('OrganizationService', () => {
@@ -277,9 +279,9 @@ describe('OrganizationService', () => {
     });
   });
 
-  describe('assignConcierge', () => {
-    it('should assign concierge successfully', async () => {
-      const concierge = {
+  describe('assignAdmin', () => {
+    it('should assign admin successfully', async () => {
+      const admin = {
         id: 'admin1',
         role: 'system_admin',
         status: 'active'
@@ -288,22 +290,22 @@ describe('OrganizationService', () => {
       const org = {
         id: '1',
         name: 'Test Org',
-        concierge_id: null
+        admin_id: null
       };
 
       const updatedOrg = {
         ...org,
-        concierge_id: 'admin1'
+        admin_id: 'admin1'
       };
 
-      mockPrismaService.uSER.findUnique.mockResolvedValue(concierge);
+      mockPrismaService.uSER.findUnique.mockResolvedValue(admin);
       mockPrismaService.organization.update.mockResolvedValue(updatedOrg);
 
-      const result = await service.assignConcierge('1', 'admin1');
-      expect(result.concierge_id).toBe('admin1');
+      const result = await service.assignAdmin('1', 'admin1');
+      expect(result.admin_id).toBe('admin1');
     });
 
-    it('should throw BadRequestException if concierge is not a system admin', async () => {
+    it('should throw BadRequestException if admin is not a system admin', async () => {
       const user = {
         id: 'user1',
         role: 'organization_admin',
@@ -312,7 +314,7 @@ describe('OrganizationService', () => {
 
       mockPrismaService.uSER.findUnique.mockResolvedValue(user);
 
-      await expect(service.assignConcierge('1', 'user1')).rejects.toThrow(BadRequestException);
+      await expect(service.assignAdmin('1', 'user1')).rejects.toThrow(BadRequestException);
     });
   });
 

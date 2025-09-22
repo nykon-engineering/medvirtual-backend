@@ -79,8 +79,8 @@ export class OrganizationResponseDto {
   @ApiProperty({ description: 'Owner ID', required: false })
   owner_id?: string;
 
-  @ApiProperty({ description: 'Concierge ID', required: false })
-  concierge_id?: string;
+  @ApiProperty({ description: 'Admin ID', required: false })
+  admin_id?: string;
 
   @ApiProperty({ description: 'Organization creation date' })
   createdAt: Date;
@@ -98,8 +98,8 @@ export class OrganizationResponseDto {
     phone?: string;
   };
 
-  @ApiProperty({ description: 'Concierge information', required: false })
-  concierge?: {
+  @ApiProperty({ description: 'Admin information', required: false })
+  admin?: {
     id: string;
     email: string;
     first_name: string;
