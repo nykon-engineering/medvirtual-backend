@@ -133,6 +133,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: PrismaService, useValue: prismaMock},
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
+        {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
         {provide: CandidatesService, useValue: candidateMock}
       ]
     }).compile();
