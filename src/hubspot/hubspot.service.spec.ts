@@ -5,7 +5,9 @@ import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
+import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { CandidatesService } from '../candidate/candidates.service';
+
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -54,6 +56,10 @@ const handlerObjectPropertyChangeMock = {
   execute: jest.fn(),
 };
 
+const handlerObjectDeletionmock = {
+  execute: jest.fn(),
+}
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -79,6 +85,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: PrismaService, useValue: prismaMock},
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
+        {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
         {provide: CandidatesService, useValue: candidateMock}
       ],
     }).compile();
