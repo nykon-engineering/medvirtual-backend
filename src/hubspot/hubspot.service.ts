@@ -11,7 +11,10 @@ import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
+import { HandlerObjectDeletion } from './handlers/objectDeletion';
+
 import { CandidatesService } from '../candidate/candidates.service';
+
 
 
 @Injectable()
@@ -22,6 +25,7 @@ export class HubspotService {
       private readonly prisma: PrismaService,
       private readonly objectCreation: HandlerObjectCreation,
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
+      private readonly objectDeletion: HandlerObjectDeletion,
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -75,8 +79,7 @@ export class HubspotService {
                 case 'object.creation':
                     return await this.objectCreation.execute(event);
                 case 'object.deletion':
-    
-    
+                    return await this.objectDeletion.execute(event);
             }
         }
 
@@ -128,6 +131,7 @@ export class HubspotService {
     }
 
     async updateOneCandidateFromHireRequest(hubspot_id: string, pipelineStatus: string): Promise<boolean> {
+        console.log('Updating candidate in HubSpot with ID:', hubspot_id, 'to pipeline status:', pipelineStatus);
         try{
             if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
             

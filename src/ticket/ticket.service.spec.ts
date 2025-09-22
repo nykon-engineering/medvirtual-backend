@@ -249,7 +249,7 @@ describe('TicketService', () => {
   
       await service.findAll(userfake, undefined, undefined, 'user-123', undefined);
   
-      expect(mockPrisma.ticket.findMany).toHaveBeenCalled()
+      expect(mockPrisma.ticket.findMany).toHaveBeenCalled();
     });
   
     it('should apply search filter to organization and title', async () => {

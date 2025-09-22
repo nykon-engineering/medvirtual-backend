@@ -1053,13 +1053,15 @@ export class HireRequestService {
               where: { id: c.candidate.id },
               data: { pipeline_status: pipeline_treated},
             });
-            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+            const test = await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+            console.log(test);
+            console.log(`Candidate ${c.candidate.hubspot_id} updated to ${pipeline_treated} on database and hubspot`);
           }
             
           )
         );
       //finish update oldcandidates to 'available candidates' on database 
-
+        console.log('All old candidates updated to Available Candidates on database and hubspot');
       
       const removeCandidates = await this.prisma.panelCandidate.deleteMany({
         where: {
