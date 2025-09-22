@@ -214,14 +214,14 @@ export class OrganizationService {
       }
       // For system_admin: return only organizations they are admin or concierge of
       else if (user.role === 'system_admin') {
-        whereClause.OR = [{ admin_id: user.id }, { concierge_id: user.id }];
+        whereClause.OR = [{ admin_id: user.id }];
       }
       // For organization users: return organizations they are associated with
       else {
         whereClause.OR = [
           { admin_id: user.id },
           { owner_id: user.id },
-          { concierge_id: user.id },
+          { admin_id: user.id },
           {
             admin_id: user.role.includes('organization') ? user.id : undefined,
           },
@@ -235,7 +235,7 @@ export class OrganizationService {
         },
         include: {
           owner: true,
-          concierge: true,
+          admin: true,
           users: true,
         },
       });
@@ -257,7 +257,7 @@ export class OrganizationService {
         status,
         industry,
         location,
-        concierge,
+        admin,
         sortBy = 'createdAt',
         sortOrder = 'desc',
       } = query;
@@ -272,13 +272,13 @@ export class OrganizationService {
         // No additional filtering needed - return all organizations
       } else if (user.role === 'system_admin') {
         // For system_admin: return only organizations they are admin or concierge of
-        whereClause.OR = [{ admin_id: user.id }, { concierge_id: user.id }];
+        whereClause.OR = [{ admin_id: user.id }];
       } else {
         // For organization users: return organizations they are associated with
         whereClause.OR = [
           { admin_id: user.id },
           { owner_id: user.id },
-          { concierge_id: user.id },
+          { admin_id: user.id },
           {
             admin_id: user.role.includes('organization') ? user.id : undefined,
           },
@@ -336,9 +336,9 @@ export class OrganizationService {
         };
       }
 
-      // Add concierge filter (only for system_super_admin)
-      if (concierge && user.role === 'system_super_admin') {
-        whereClause.concierge_id = concierge;
+      // Add admin filter (only for system_super_admin)
+      if (admin && user.role === 'system_super_admin') {
+        whereClause.admin_id = admin;
       }
 
       // Build orderBy clause
@@ -367,7 +367,7 @@ export class OrganizationService {
               phone: true,
             },
           },
-          concierge: {
+          admin: {
             select: {
               id: true,
               email: true,
@@ -406,11 +406,11 @@ export class OrganizationService {
         specialties: org.specialties || undefined,
         services: org.services || undefined,
         owner_id: org.owner_id || undefined,
-        concierge_id: org.concierge_id || undefined,
+        admin_id: org.admin_id || undefined,
         createdAt: org.createdAt,
         updatedAt: org.updatedAt,
         owner: org.owner || undefined,
-        concierge: org.concierge || undefined,
+        admin: org.admin || undefined,
         userCount: org.users.length,
       }));
 
@@ -441,7 +441,7 @@ export class OrganizationService {
         where: { id },
         include: {
           owner: true,
-          concierge: true,
+          admin: true,
           users: true,
         },
       });
@@ -513,22 +513,22 @@ export class OrganizationService {
         );
       }
 
-      // Assign a random concierge if not specified
-      let conciergeId: string | undefined = data.concierge_id;
-      if (!conciergeId) {
-        const availableConcierges = await this.prisma.uSER.findMany({
+      // Assign a random admin if not specified
+      let adminId: string | undefined = data.admin_id;
+      if (!adminId) {
+        const availableAdmins = await this.prisma.uSER.findMany({
           where: {
             role: { in: ['system_admin', 'system_super_admin'] },
             status: 'active',
           },
         });
 
-        if (availableConcierges.length > 0) {
+        if (availableAdmins.length > 0) {
           // Simple round-robin assignment - could be enhanced with load balancing
           const randomIndex = Math.floor(
-            Math.random() * availableConcierges.length,
+            Math.random() * availableAdmins.length,
           );
-          conciergeId = availableConcierges[randomIndex].id;
+          adminId = availableAdmins[randomIndex].id;
         }
       }
 
@@ -554,8 +554,7 @@ export class OrganizationService {
           specialties: data.specialties || [],
           services: data.services || [],
           owner_id: ownerId,
-          concierge_id: conciergeId,
-          admin_id: user.id, // Legacy field
+          admin_id: adminId,
         },
       });
 
@@ -629,8 +628,8 @@ export class OrganizationService {
       if (data.specialties !== undefined)
         updateData.specialties = data.specialties;
       if (data.services !== undefined) updateData.services = data.services;
-      if (data.concierge_id !== undefined)
-        updateData.concierge_id = data.concierge_id;
+      if (data.admin_id !== undefined)
+        updateData.admin_id = data.admin_id;
 
       // Handle organization_role update
       if (data.organization_role !== undefined) {
@@ -649,7 +648,7 @@ export class OrganizationService {
         data: updateData,
         include: {
           owner: true,
-          concierge: true,
+          admin: true,
           users: true,
         },
       });
@@ -690,7 +689,7 @@ export class OrganizationService {
         },
         include: {
           owner: true,
-          concierge: true,
+          admin: true,
           users: true,
         },
       });
@@ -705,31 +704,31 @@ export class OrganizationService {
     }
   }
 
-  async assignConcierge(
+  async assignAdmin(
     id: string,
-    conciergeId: string,
+    adminId: string,
   ): Promise<Organization> {
     try {
-      // Verify the concierge is a system admin or super admin
-      const concierge = await this.prisma.uSER.findUnique({
-        where: { id: conciergeId },
+      // Verify the admin is a system admin or super admin
+      const admin = await this.prisma.uSER.findUnique({
+        where: { id: adminId },
       });
 
       if (
-        !concierge ||
-        !['system_admin', 'system_super_admin'].includes(concierge.role)
+        !admin ||
+        !['system_admin', 'system_super_admin'].includes(admin.role)
       ) {
         throw new BadRequestException(
-          'Invalid concierge. Must be a system admin or super admin.',
+          'Invalid admin. Must be a system admin or super admin.',
         );
       }
 
       return await this.prisma.organization.update({
         where: { id },
-        data: { concierge_id: conciergeId },
+        data: { admin_id: adminId },
         include: {
           owner: true,
-          concierge: true,
+          admin: true,
           users: true,
         },
       });
@@ -737,7 +736,7 @@ export class OrganizationService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Failed to assign concierge');
+      throw new BadRequestException('Failed to assign admin');
     }
   }
 
@@ -1201,7 +1200,9 @@ export class OrganizationService {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      throw new BadRequestException('Failed to fetch candidates for hire request');
+      throw new BadRequestException(
+        'Failed to fetch candidates for hire request',
+      );
     }
   }
 

@@ -281,7 +281,7 @@ export class UserController {
     return this.userService.inviteUserToOrganization(
       organizationId,
       inviteData,
-      // user,
+      user,
     );
   }
 

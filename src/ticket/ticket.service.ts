@@ -86,12 +86,12 @@ export class TicketService {
       const org = await this.prisma.organization.findUnique({
         where: { id: user.organization_id ||  undefined},
         select: { 
-          concierge_id: true,
+          admin_id: true,
           id: true
         }
       })
       if(!org) throw new BadRequestException('Organization not found')
-        assignedValidatedUser = org.concierge_id;
+        assignedValidatedUser = org.admin_id;
         assignedValidatedOrg = org.id;
       }else{
         assignedValidatedUser = createTicketDto.assigned_user_id;

@@ -170,9 +170,9 @@ export class CreateOrganizationDto {
 
   @ApiProperty({
     required: false,
-    description: 'ID of the assigned concierge (system admin)',
+    description: 'ID of the assigned admin (system admin)',
   })
   @IsOptional()
   @IsString()
-  concierge_id?: string;
+  admin_id?: string;
 }

@@ -242,7 +242,7 @@ export class AuthService {
 
     const newUser = await this.userService.create({
       email: data.email,
-      organization: { connect: { id: organization.id } },
+      organization_id: organization.id,
       first_name: data.firstName,
       last_name: data.lastName,
       phone: '',
@@ -255,6 +255,8 @@ export class AuthService {
       authentication_method: authenticationMethod,
       status: 'active',
       verified: false, // Initially set to false until the user verifies their email
+      createdByMethod: 'self_signup',
+      createdByUserId: null,
     });
     if (!newUser) {
       throw new BadRequestException('Failed to create user');
@@ -477,7 +479,7 @@ export class AuthService {
 
     const newUser = await this.userService.create({
       email: data.email,
-      organization: { connect: { id: data.organizationId } },
+      organization_id: data.organizationId,
       first_name: data.first_name || '',
       last_name: data.last_name || '',
       phone: data.phone || '',
@@ -490,6 +492,8 @@ export class AuthService {
       authentication_method: authenticationMethod,
       status: 'invited',
       verified: false, // Initially set to false until the user verifies their email
+      createdByMethod: 'admin_invite',
+      createdByUserId: data.createdByUserId || null,
     });
 
     const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {

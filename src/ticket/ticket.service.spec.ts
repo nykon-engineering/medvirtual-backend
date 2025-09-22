@@ -24,6 +24,8 @@ const userfake = {
   verified: false,
   createdAt: new Date(),
   updatedAt: new Date(),
+  createdByMethod: 'self_signup',
+  createdByUserId: null,
 }
 
 describe('TicketService', () => {

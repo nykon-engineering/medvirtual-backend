@@ -28,21 +28,31 @@ model USER {
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
   is_organization_owner  Boolean             @default(false)
+  
+  // User creation tracking fields
+  createdByMethod        String              @default("self_signup") // "self_signup", "admin_invite", "system_created"
+  createdByUserId        String?             // ID of the user who created this account (if created by admin)
+  
   email_invitations      EmailInvitation[]
   email_verifications    EmailVerification[]
   hireRequestsAssigned   HireRequest[]       @relation("AssignedUser")
   adminOrganizations     Organization[]      @relation("OrganizationAdmin")
   ownedOrganizations     Organization[]      @relation("OrganizationOwner")
-  conciergeOrganizations Organization[]      @relation("OrganizationConcierge")
   sessions               Session[]
   tickets                Ticket[]
   organization           Organization?       @relation(fields: [organization_id], references: [id])
+  
+  // Self-referential relationship for createdByUserId
+  createdBy              USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
+  createdUsers           USER[]              @relation("UserCreatedBy")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
   @@index([organization_id], map: "idx_users_organization_id")
   @@index([status], map: "idx_users_status")
   @@index([is_organization_owner], map: "idx_users_is_organization_owner")
+  @@index([createdByMethod], map: "idx_users_created_by_method")
+  @@index([createdByUserId], map: "idx_users_created_by_user_id")
 }
 
 model Session {
@@ -98,9 +108,8 @@ model Organization {
   updatedAt            DateTime           @updatedAt
 
   // Relationships
-  owner_id     String? @unique // One owner per organization
-  concierge_id String? // Assigned system admin/super admin
-  admin_id     String? @default("") // Legacy field, consider removing
+  owner_id String? @unique // One owner per organization
+  admin_id String? // Assigned system admin/super admin (consolidated from concierge)
 
   // Many-to-many relationships
   specialties             String[]
@@ -111,16 +120,14 @@ model Organization {
   tickets                 Ticket[]
 
   // Relations
-  owner     USER? @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
-  concierge USER? @relation("OrganizationConcierge", fields: [concierge_id], references: [id], onDelete: Restrict)
-  admin     USER? @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
+  owner USER? @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
+  admin USER? @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
   @@index([name], map: "idx_organizations_name")
   @@index([admin_id], map: "idx_organizations_admin_id")
   @@index([owner_id], map: "idx_organizations_owner_id")
-  @@index([concierge_id], map: "idx_organizations_concierge_id")
   @@index([organization_role], map: "idx_organizations_role")
   @@index([industry], map: "idx_organizations_industry")
 }

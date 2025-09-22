@@ -22,13 +22,16 @@ export class UserService {
     private readonly mailService: MailService,
   ) {}
 
-  async create(userData: Prisma.USERCreateInput): Promise<USER> {
+  async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
     const { password, ...rest } = userData;
     const hash = await bcrypt.hash(password, 10);
 
     const newUserData = {
       ...rest,
       password: hash,
+      // Set default creation tracking if not provided
+      createdByMethod: rest.createdByMethod || 'self_signup',
+      createdByUserId: rest.createdByUserId || null,
     };
 
     const newUser = await this.prisma.uSER.create({
@@ -440,10 +443,10 @@ export class UserService {
           data: { owner_id: null },
         });
 
-        // Update organizations where this user is concierge_id
+        // Update organizations where this user is admin_id
         await tx.organization.updateMany({
-          where: { concierge_id: id },
-          data: { concierge_id: null },
+          where: { admin_id: id },
+          data: { admin_id: null },
         });
 
         // 5. Update hire requests where this user is assigned (has SET NULL constraint)
@@ -693,7 +696,7 @@ export class UserService {
   async inviteUserToOrganization(
     organizationId: string,
     inviteData: InviteUserToOrganizationDto,
-    // currentUser: USER,
+    currentUser: USER,
   ): Promise<string> {
     try {
       // Check if user already exists
@@ -731,6 +734,8 @@ export class UserService {
           status: 'invited',
           verified: false,
           avatar: '',
+          createdByMethod: 'admin_invite',
+          createdByUserId: currentUser.id,
         },
       });
 
