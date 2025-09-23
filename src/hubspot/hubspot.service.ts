@@ -94,6 +94,13 @@ export class HubspotService {
                     await this.objectDeletion.execute(event);
                     break;
 
+                case 'owners.creation':
+                case 'owners.restore':
+
+                case 'owners.deletion':
+
+                case 'owners.propertyChange':
+
                 case 'company.creation':
                 case 'company.restore':
                     await this.organizationCreation.execute(event);
