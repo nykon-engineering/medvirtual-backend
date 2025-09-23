@@ -2,20 +2,21 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
 
 import { organizationToDbDictionary } from "../../common/dictionaries/organization-dictionary";
-import { mapOrganizationToDb } from "src/common/utils/hubspot.util";
+import { mapOrganizationToDb } from "../../common/utils/hubspot.util";
 import { OrganizationRole, OrganizationStatus } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { OrganizationService } from "../../organization/organization.service";
 
 
 @Injectable()
 
 export class HandlerOrganizationCreation {
     constructor(
-        private readonly prisma: PrismaService
+        private readonly prisma: PrismaService,
+        private readonly organizationService: OrganizationService
     ) {}
 
     async execute(event){
-        console.log("Handling organization creation event:", event);
 
         const properties = Object.keys(organizationToDbDictionary).join(',');
         try{
@@ -25,19 +26,14 @@ export class HandlerOrganizationCreation {
                 {
                 filters: [
                     {
-                    propertyName: 'business_unit',
-                    operator: 'EQ',
-                    value: 'MedVirtual',
-                    },
-                    {
                     propertyName: 'hs_object_id',
                     operator: 'EQ',
-                    value: event.objectId,
+                    value: `${event.objectId}`,
                     },
                 ],
                 },
             ],
-            properties,
+            properties: properties.split(','),
             limit: 100,
             },
             {
@@ -51,10 +47,12 @@ export class HandlerOrganizationCreation {
             if (!getObject) {
                 throw new BadRequestException('No object data found');
             }
-
-            const organizationData = mapOrganizationToDb(getObject.data.properties);
+            const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
             organizationData.organization_role=OrganizationRole.client;
             organizationData.status=OrganizationStatus.active;
+            organizationData.email = organizationData.email ?? undefined;
+
+            console.log('Fetched Organization Data from HubSpot:', organizationData);
 
 
             const organizationExists = await this.prisma.organization.findUnique({
@@ -64,9 +62,7 @@ export class HandlerOrganizationCreation {
             })
             if(organizationExists) throw new BadRequestException('Organization already exists on the database');
 
-            const createOrganization = await this.prisma.organization.create({
-                data: organizationData,
-            })
+            const createOrganization = await this.organizationService.create(organizationData)
             if (!createOrganization) {
                 throw new BadRequestException('Error creating organization in the database');
             }

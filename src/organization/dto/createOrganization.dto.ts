@@ -177,4 +177,13 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsString()
   admin_id?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'hubspot ID',
+  })
+  @IsOptional()
+  @IsString()
+  hubspot_id?: string;
+  
 }

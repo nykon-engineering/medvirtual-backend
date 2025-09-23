@@ -17,6 +17,7 @@ import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
+import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
 
 
 
@@ -31,6 +32,7 @@ export class HubspotService {
       private readonly objectDeletion: HandlerObjectDeletion,
       private readonly organizationCreation: HandlerOrganizationCreation,
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
+      private readonly organizationDeletion : HandlerOrganizationDeletion,
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -96,6 +98,7 @@ export class HubspotService {
                     return await this.organizationPropertyChange.execute(event);
                 
                 case 'company.deletion':
+                    return await this.organizationDeletion.execute(event);
 
                 case 'company.associationChange': 
                 /*

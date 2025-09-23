@@ -456,7 +456,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto, user: USER): Promise<Organization> {
+  async create(data: CreateOrganizationDto): Promise<Organization> {
     try {
       // // Check if the organization already exists
       // const existingOrganization = await this.prisma.organization.findUnique({
@@ -555,6 +555,7 @@ export class OrganizationService {
           services: data.services || [],
           owner_id: ownerId,
           admin_id: adminId,
+          hubspot_id: data.hubspot_id || undefined,
         },
       });
 

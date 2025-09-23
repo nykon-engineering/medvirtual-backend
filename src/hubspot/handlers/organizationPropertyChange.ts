@@ -18,6 +18,8 @@ export class HandlerOrganizationPropertyChange {
                 hubspot_id: String(event.objectId)
             }
         })
+        console.log('Organization Property Change Event:', event);
+        console.log('Matched Organization:', organization);
 
         if(!organization) return await this.organizationCreation.execute(event);
 
@@ -26,7 +28,7 @@ export class HandlerOrganizationPropertyChange {
 
             const fieldUpdated = organizationToDbDictionary[event.propertyName];
             
-            await this.prisma.candidate.update({
+            await this.prisma.organization.update({
                 where: {
                     id: organization.id
                 },
