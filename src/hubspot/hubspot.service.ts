@@ -84,21 +84,28 @@ export class HubspotService {
                
                 case 'object.creation':
                 case 'object.restore':
-                    return await this.objectCreation.execute(event);
+                    await this.objectCreation.execute(event);
+                    break;
                 case 'object.propertyChange':
-                    return await this.objectPropertyChange.execute(event);
+                    await this.objectPropertyChange.execute(event);
+                    break;
+
                 case 'object.deletion':
-                    return await this.objectDeletion.execute(event);
+                    await this.objectDeletion.execute(event);
+                    break;
 
                 case 'company.creation':
                 case 'company.restore':
-                    return await this.organizationCreation.execute(event);
+                    await this.organizationCreation.execute(event);
+                    break;
 
                 case 'company.propertyChange':
-                    return await this.organizationPropertyChange.execute(event);
+                    await this.organizationPropertyChange.execute(event);
+                    break;
                 
                 case 'company.deletion':
-                    return await this.organizationDeletion.execute(event);
+                    await this.organizationDeletion.execute(event);
+                    break;
 
                 case 'company.associationChange': 
                 /*
