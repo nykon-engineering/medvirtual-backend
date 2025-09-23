@@ -6,14 +6,16 @@ import axios from 'axios';
 import {  mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 
+import { CandidatesService } from '../candidate/candidates.service';
+
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
+
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { HandlerObjectDeletion } from './handlers/objectDeletion';
-
-import { CandidatesService } from '../candidate/candidates.service';
+import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 
 
 
@@ -26,6 +28,7 @@ export class HubspotService {
       private readonly objectCreation: HandlerObjectCreation,
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
       private readonly objectDeletion: HandlerObjectDeletion,
+      private readonly organizationCreation: HandlerOrganizationCreation,
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -74,13 +77,24 @@ export class HubspotService {
 
         for (const event of orderedData){
             switch (event.subscriptionType) {
-                case 'object.propertyChange':
-                    return await this.objectPropertyChange.execute(event);
+               
                 case 'object.creation':
                 case 'object.restore':
                     return await this.objectCreation.execute(event);
+                case 'object.propertyChange':
+                    return await this.objectPropertyChange.execute(event);
                 case 'object.deletion':
                     return await this.objectDeletion.execute(event);
+
+                case 'company.creation':
+                case 'company.restore':
+                    return await this.organizationCreation.execute(event);
+
+                case 'company.propertyChange':
+                
+                case 'company.deletion':
+
+                case 'company.associationChange':
             }
         }
 

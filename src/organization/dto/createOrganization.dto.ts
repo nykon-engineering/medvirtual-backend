@@ -11,6 +11,8 @@ import {
 } from 'class-validator';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
+
+
 export class CreateOrganizationDto {
   @ApiProperty({ required: true, description: 'Name of the organization' })
   @IsString()
