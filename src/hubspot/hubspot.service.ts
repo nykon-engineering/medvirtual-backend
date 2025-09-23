@@ -16,6 +16,7 @@ import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
+import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 
 
 
@@ -29,6 +30,7 @@ export class HubspotService {
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
       private readonly objectDeletion: HandlerObjectDeletion,
       private readonly organizationCreation: HandlerOrganizationCreation,
+      private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -91,10 +93,31 @@ export class HubspotService {
                     return await this.organizationCreation.execute(event);
 
                 case 'company.propertyChange':
+                    return await this.organizationPropertyChange.execute(event);
                 
                 case 'company.deletion':
 
-                case 'company.associationChange':
+                case 'company.associationChange': 
+                /*
+                [
+                {
+                    eventId: 872635545,
+                    subscriptionId: 4328151,
+                    portalId: 20630393,
+                    appId: 17008354,
+                    occurredAt: 1758637869029,
+                    subscriptionType: 'company.associationChange',
+                    attemptNumber: 0,
+                    changeSource: 'USER',
+                    associationType: 'COMPANY_TO_DEAL', //COMPANY_TO_CONTACT
+                    fromObjectId: 39895238437,
+                    toObjectId: 44166736144,
+                    associationRemoved: false,
+                    isPrimaryAssociation: false,
+                    sourceId: 'userId:69965733'
+                }
+                ]
+                */
             }
         }
 

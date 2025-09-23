@@ -1,7 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { candidadeToDbDictionary, dbToCandidateDictionary } from "../dictionaries/candidate-dictionary";
+import { organizationToDbDictionary } from "../dictionaries/organization-dictionary";
 
 interface candidateData {
+    [key: string]: any;
+}
+
+interface organizationData {
     [key: string]: any;
 }
 
@@ -33,4 +38,17 @@ export function mapDbToHubspot(data: Record<string, any>): Record<string, any> {
         }
     }
     return mappedData;
+}
+
+export function mapOrganizationToDb(hubspotData: organizationData): Prisma.OrganizationCreateInput {
+    const result: Partial<Prisma.OrganizationCreateInput> = {};
+
+    for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
+        
+        if (hubspotData[hubspotKey] !== undefined) {
+          result[dbKey] = hubspotData[hubspotKey];
+        }
+        
+      }
+    return result as Prisma.OrganizationCreateInput;
 }
