@@ -20,6 +20,7 @@ import { HandlerOrganizationPropertyChange } from './handlers/organizationProper
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
+import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 
 
 
@@ -38,6 +39,7 @@ export class HubspotService {
 
       private readonly ownerCreation: HandlerOwnerCreation,
       private readonly ownerDeletion: HandlerOwnerDeletion,
+      private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -109,6 +111,8 @@ export class HubspotService {
                     break;
 
                 case 'owners.propertyChange':
+                    await this.ownerPropertyChange.execute(event);
+                    break;
 
                 case 'company.creation':
                 case 'company.restore':
