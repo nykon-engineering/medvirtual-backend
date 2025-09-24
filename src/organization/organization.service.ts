@@ -543,7 +543,7 @@ export class OrganizationService {
           industry: data.industry,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
-          number_of_employees: data.number_of_employees,
+          number_of_employees: Number(data.number_of_employees),
           date_founded: data.date_founded
             ? new Date(data.date_founded)
             : undefined,

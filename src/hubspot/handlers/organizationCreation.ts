@@ -44,14 +44,12 @@ export class HandlerOrganizationCreation {
             }
             );
 
-            if (!getObject) {
-                throw new BadRequestException('No object data found');
-            }
+            if (!getObject) throw new BadRequestException('No object data found');
+
             const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
             organizationData.organization_role=OrganizationRole.client;
             organizationData.status=OrganizationStatus.active;
             organizationData.email = organizationData.email ?? undefined;
-
 
             const organizationExists = await this.prisma.organization.findUnique({
                 where: {
@@ -64,11 +62,11 @@ export class HandlerOrganizationCreation {
             if (!createOrganization) {
                 throw new BadRequestException('Error creating organization in the database');
             }
-
             return true;
 
         }catch (error) {
             throw new BadRequestException(`Error fetching object creation organization: ${error.message}`);
         }
+            
     }
 }
