@@ -28,6 +28,7 @@ model USER {
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
   is_organization_owner  Boolean             @default(false)
+  hubspot_id             String?             @unique
   
   // User creation tracking fields
   createdByMethod        String              @default("self_signup") // "self_signup", "admin_invite", "system_created"

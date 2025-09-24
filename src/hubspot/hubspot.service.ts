@@ -96,6 +96,7 @@ export class HubspotService {
 
                 case 'owners.creation':
                 case 'owners.restore':
+                    
 
                 case 'owners.deletion':
 

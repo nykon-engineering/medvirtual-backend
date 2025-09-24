@@ -52,8 +52,6 @@ export class HandlerOrganizationCreation {
             organizationData.status=OrganizationStatus.active;
             organizationData.email = organizationData.email ?? undefined;
 
-            console.log('Fetched Organization Data from HubSpot:', organizationData);
-
 
             const organizationExists = await this.prisma.organization.findUnique({
                 where: {
@@ -66,8 +64,6 @@ export class HandlerOrganizationCreation {
             if (!createOrganization) {
                 throw new BadRequestException('Error creating organization in the database');
             }
-            
-            console.log(`Organization created with ID: ${createOrganization.id}, Name: ${createOrganization.name}`);
 
             return true;
 

@@ -2,12 +2,17 @@ import { Prisma } from "@prisma/client";
 import { candidadeToDbDictionary, dbToCandidateDictionary } from "../dictionaries/candidate-dictionary";
 import { organizationToDbDictionary } from "../dictionaries/organization-dictionary";
 import { CreateOrganizationDto } from "../../organization/dto/createOrganization.dto";
+import { ownerToDbDictionary } from "../dictionaries/owner-dictionary";
 
 interface candidateData {
     [key: string]: any;
 }
 
 interface organizationData {
+    [key: string]: any;
+}
+
+interface ownerData {
     [key: string]: any;
 }
 
@@ -52,4 +57,17 @@ export function mapOrganizationToDb(hubspotData: organizationData): CreateOrgani
         
       }
     return result as CreateOrganizationDto;
+}
+
+export function mapOwnerToDb(hubspotData: ownerData): any {
+    const result: Partial<any> = {};
+
+    for (const [hubspotKey, dbKey] of Object.entries(ownerToDbDictionary)) {
+        
+        if (hubspotData[hubspotKey] !== undefined) {
+          result[dbKey] = hubspotData[hubspotKey];
+        }
+        
+      }
+    return result as any;
 }
