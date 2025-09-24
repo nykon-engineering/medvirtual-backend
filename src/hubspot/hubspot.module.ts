@@ -13,6 +13,9 @@ import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOwnerCreation } from './handlers/ownerCreation';
+import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
+import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 
 
 
@@ -24,7 +27,10 @@ import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
     HandlerObjectDeletion, 
     HandlerOrganizationCreation, 
     HandlerOrganizationPropertyChange,
-    HandlerOrganizationDeletion
+    HandlerOrganizationDeletion,
+    HandlerOwnerCreation,
+    HandlerOwnerDeletion,
+    HandlerOwnerPropertyChange
   ],
   imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), OrganizationModule],
   exports: [HubspotService],
