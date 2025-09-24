@@ -117,6 +117,7 @@ describe('HireRequestService', () => {
       updatedAt: new Date(),
       createdByMethod: 'self_signup',
       createdByUserId: null,
+      hubspot_id: null,
     } ;
   });
 

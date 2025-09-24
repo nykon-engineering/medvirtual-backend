@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerOwnerCreation } from "./ownerCreation";
-import { ownerToDbDictionary } from "src/common/dictionaries/owner-dictionary";
+import { ownerToDbDictionary } from "../../common/dictionaries/owner-dictionary";
 
 @Injectable()
 

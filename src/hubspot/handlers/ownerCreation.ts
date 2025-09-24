@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
-import { ownerToDbDictionary } from "src/common/dictionaries/owner-dictionary";
+import { ownerToDbDictionary } from "../../common/dictionaries/owner-dictionary";
 import { mapOwnerToDb } from "../../common/utils/hubspot.util";
 import { PrismaService } from "../../prisma/prisma.service";
 
