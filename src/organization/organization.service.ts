@@ -518,6 +518,7 @@ export class OrganizationService {
       if (!adminId) {
         const availableAdmins = await this.prisma.uSER.findMany({
           where: {
+            id: '111a7e30-e5e7-4ac6-a75e-41e70853bd04', // Added one 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
             role: { in: ['system_admin', 'system_super_admin'] },
             status: 'active',
           },
