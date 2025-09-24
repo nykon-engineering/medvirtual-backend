@@ -37,9 +37,9 @@ export class HubspotService {
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
 
-      private readonly ownerCreation: HandlerOwnerCreation,
-      private readonly ownerDeletion: HandlerOwnerDeletion,
-      private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
+      //private readonly ownerCreation: HandlerOwnerCreation,
+      //private readonly ownerDeletion: HandlerOwnerDeletion,
+      //private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -101,19 +101,24 @@ export class HubspotService {
                     await this.objectDeletion.execute(event);
                     break;
 
+                /*
                 case 'owners.creation':
                 case 'owners.restore':
+                case 'contact.creation':
+                case 'contact.restore':
                     await this.ownerCreation.execute(event);
                     break;
 
                 case 'owners.deletion':
+                case 'contact.deletion':
                     await this.ownerDeletion.execute(event);
                     break;
 
                 case 'owners.propertyChange':
+                case 'contact.propertyChange':
                     await this.ownerPropertyChange.execute(event);
                     break;
-
+                */
                 case 'company.creation':
                 case 'company.restore':
                     await this.organizationCreation.execute(event);
@@ -129,8 +134,7 @@ export class HubspotService {
 
                 case 'company.associationChange': 
                 /*
-                [
-                {
+                [{
                     eventId: 872635545,
                     subscriptionId: 4328151,
                     portalId: 20630393,
@@ -145,8 +149,7 @@ export class HubspotService {
                     associationRemoved: false,
                     isPrimaryAssociation: false,
                     sourceId: 'userId:69965733'
-                }
-                ]
+                }]
                 */
             }
         }
