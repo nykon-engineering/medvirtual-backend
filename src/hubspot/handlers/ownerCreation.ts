@@ -7,7 +7,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 
 @Injectable()
 
-export class OwnerCreationHandler {
+export class HandlerOwnerCreation {
     constructor(
         private readonly prisma: PrismaService
     ){}
