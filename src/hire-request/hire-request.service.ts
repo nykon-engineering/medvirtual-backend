@@ -1125,6 +1125,7 @@ export class HireRequestService {
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
+    
     const panel = await this.prisma.candidatePanel.findFirst({
       where: {
         hire_request_id: data.hireRequest_id,
@@ -1142,8 +1143,38 @@ export class HireRequestService {
       throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
     }
 
+    await this.prisma.interview.deleteMany({
+      where: {
+        panel_id: panel.id,
+      },
+    });
 
-    //update hire request with status = 'panel_ready'
+    const candidateIds = panel.panelCandidates.map(pc => pc.candidate_id);
+    
+    await this.prisma.ticket.updateMany({
+      where: {
+        type: 'interview',
+        candidate_id: {
+          in: candidateIds,
+        },
+        status: {
+          in: ['new', 'in_progress'],
+        },
+      },
+      data: {
+        status: 'resolved',
+      },
+    });
+
+    await this.prisma.panelCandidate.updateMany({
+      where: {
+        panel_id: panel.id,
+      },
+      data: {
+        status: 'selected',
+      },
+    });
+
     const hireRequest = await this.prisma.hireRequest.update({
       where: {
         id: data.hireRequest_id,
@@ -1154,17 +1185,17 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new BadRequestException(`Hire request not updated to panel ready`);
 
-    //update panel with readable = true
     const panelUpdated = await this.prisma.candidatePanel.updateMany({
       where: {
         hire_request_id: data.hireRequest_id,
       },
       data: {
         readable: data.readable,
+        scheduled_date: null,
+        status: 'created',
       },
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
-
 
     return this.findOne(data.hireRequest_id, user);
   }
