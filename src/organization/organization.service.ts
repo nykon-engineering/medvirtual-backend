@@ -1383,6 +1383,41 @@ export class OrganizationService {
         })),
       );
 
+      const candidates = await this.prisma.candidate.findMany({
+        where: {
+          pipeline_status: {
+            in: ['261075105', '1087596819'],
+          },
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          specialization: true,
+          employment_type: true,
+          country: true,
+          about_me: true,
+          languages: {
+            select: { name: true },
+          },
+          skills: {
+            select: { skill_name: true },
+          },
+        },
+      });
+
+      const mappedPipelineCandidates = candidates.map((c) => ({
+        ...c,
+        panelStatus: null, //just for align with the preious structure
+        panelId: null,
+        panelScheduledDate: null,
+      }));
+      
+      //just for merge candidates and return all candidates
+      const allCandidates = [...attachedCandidates, ...mappedPipelineCandidates];
+
+
       return {
         status: 200,
         data: {
@@ -1402,7 +1437,7 @@ export class OrganizationService {
             createdAt: hireRequest.createdAt,
             organization: hireRequest.organization,
           },
-          attachedCandidates,
+          attachedCandidates: allCandidates,
           hasAttachedCandidates: attachedCandidates.length > 0,
         },
       };
