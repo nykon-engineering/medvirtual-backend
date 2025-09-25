@@ -216,6 +216,40 @@ export class StaffService {
     return await this.findOne(data.staff_id);
   }
 
+  async getStaffForTickets(user: USER): Promise<object> {
+    const where: any = {
+      hireRequest: {},
+    };
+
+    if (user.role.includes('organization')) {
+      where.hireRequest.org_id = user.organization_id;
+    }
+
+    const staff = await this.prisma.staff.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        candidate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+          },
+        },
+        hireRequest: {
+          select: {
+            title: true,
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return staff;
+  }
+
   async findAll(
     user: USER,
     page: number,

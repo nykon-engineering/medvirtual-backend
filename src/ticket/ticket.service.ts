@@ -9,16 +9,12 @@ import { reassignTicketDto } from './dto/reassign-ticket.dto';
 
 @Injectable()
 export class TicketService {
-
-  constructor(
-    private readonly prisma: PrismaService
-  ){}
+  constructor(private readonly prisma: PrismaService) {}
 
   private async findOne(id: string): Promise<any> {
-
     const ticket = await this.prisma.ticket.findUnique({
       where: { id },
-      select:{
+      select: {
         id: true,
         type: true,
         title: true,
@@ -33,7 +29,7 @@ export class TicketService {
             email: true,
             status: true,
             admin_id: true,
-          }
+          },
         },
         user: {
           select: {
@@ -44,7 +40,7 @@ export class TicketService {
             role: true,
             status: true,
             email: true,
-          }
+          },
         },
         candidate: {
           select: {
@@ -53,72 +49,120 @@ export class TicketService {
             last_name: true,
             email: true,
             name: true,
-          }
-        }
-      }
-    })
+          },
+        },
+      },
+    });
 
     return ticket;
   }
 
-
-  async create(createTicketDto: CreateTicketDto, user: USER): Promise<Object> {
+  async create(createTicketDto: CreateTicketDto, user: USER): Promise<object> {
     const typeBE = ticketTypeDictionary[createTicketDto.type] ?? null;
-    
-    if (createTicketDto.type === 'Interview Request' && !createTicketDto.candidate_id) {
-      throw new BadRequestException('Candidate ID is required for Interview Request tickets');
+
+    if (
+      createTicketDto.type === 'Interview Request' &&
+      !createTicketDto.candidate_id
+    ) {
+      throw new BadRequestException(
+        'Candidate ID is required for Interview Request tickets',
+      );
     }
-    
+
+    if (
+      (createTicketDto.type === 'Bonus' ||
+        createTicketDto.type === 'Termination') &&
+      !createTicketDto.staff_id
+    ) {
+      throw new BadRequestException(
+        'Staff ID is required for Bonus and Termination tickets',
+      );
+    }
+
     if (createTicketDto.candidate_id) {
       const candidate = await this.prisma.candidate.findUnique({
-        where: { id: createTicketDto.candidate_id }
+        where: { id: createTicketDto.candidate_id },
       });
       if (!candidate) {
         throw new BadRequestException('Candidate not found');
       }
     }
 
+    if (createTicketDto.staff_id) {
+      const staff = await this.prisma.staff.findUnique({
+        where: { id: createTicketDto.staff_id },
+        include: {
+          hireRequest: {
+            select: {
+              org_id: true,
+            },
+          },
+        },
+      });
+      if (!staff) {
+        throw new BadRequestException(
+          `Staff member with ID ${createTicketDto.staff_id} not found`,
+        );
+      }
+
+      // Verify staff belongs to the organization making the request
+      if (
+        user.role.includes('organization') &&
+        staff.hireRequest.org_id !== user.organization_id
+      ) {
+        throw new BadRequestException(
+          'Staff member does not belong to your organization',
+        );
+      }
+    }
+
     let assignedValidatedUser;
     let assignedValidatedOrg;
-    if (!user || user.role.includes("organization") && !user.organization_id) throw new BadRequestException('User organization not found');
-    if (user.role.includes('organization')){
+    if (!user || (user.role.includes('organization') && !user.organization_id))
+      throw new BadRequestException('User organization not found');
+    if (user.role.includes('organization')) {
       //get the concierge client as assigned user
       const org = await this.prisma.organization.findUnique({
-        where: { id: user.organization_id ||  undefined},
-        select: { 
+        where: { id: user.organization_id || undefined },
+        select: {
           admin_id: true,
-          id: true
-        }
-      })
-      if(!org) throw new BadRequestException('Organization not found')
-        assignedValidatedUser = org.admin_id;
-        assignedValidatedOrg = org.id;
-      }else{
-        assignedValidatedUser = createTicketDto.assigned_user_id;
-        assignedValidatedOrg = createTicketDto.client_id;
-      }
-    
-    try{
+          id: true,
+        },
+      });
+      if (!org) throw new BadRequestException('Organization not found');
+      assignedValidatedUser = org.admin_id;
+      assignedValidatedOrg = org.id;
+    } else {
+      assignedValidatedUser = createTicketDto.assigned_user_id;
+      assignedValidatedOrg = createTicketDto.client_id;
+    }
+
+    try {
       const ticket = await this.prisma.ticket.create({
         data: {
           organization: { connect: { id: assignedValidatedOrg } },
           type: typeBE,
           title: createTicketDto.title,
           description: createTicketDto.description,
-          priority: createTicketDto.priority as Priority,
-          user: { connect: { id: assignedValidatedUser } } ,
-          candidate: createTicketDto.candidate_id ? { connect: { id: createTicketDto.candidate_id } } : undefined,
-        }
-      })
-      if(!ticket) throw new BadRequestException('Failed to create ticket')
-      
-      const ticketFull = await this.findOne(ticket.id)
-      if (!ticketFull) throw new BadRequestException('Failed to retrieve full ticket');
+          priority: createTicketDto.priority,
+          user: { connect: { id: assignedValidatedUser } },
+          candidate: createTicketDto.candidate_id
+            ? { connect: { id: createTicketDto.candidate_id } }
+            : undefined,
+          staff: createTicketDto.staff_id
+            ? { connect: { id: createTicketDto.staff_id } }
+            : undefined,
+        },
+      });
+      if (!ticket) throw new BadRequestException('Failed to create ticket');
+
+      const ticketFull = await this.findOne(ticket.id);
+      if (!ticketFull)
+        throw new BadRequestException('Failed to retrieve full ticket');
 
       return ticketFull;
-
-    }catch(error){
-      throw new BadRequestException('Error creating ticket', error.message)
+    } catch (error) {
+      throw new BadRequestException('Error creating ticket', error.message);
     }
   }
 
@@ -127,30 +171,33 @@ export class TicketService {
     priority?: string,
     assigned_user_id?: string,
     search?: string,
-    ): Promise<Object> {
-    try{
+  ): Promise<object> {
+    try {
       // Calculate date 30 days ago
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const tickets = await this.prisma.ticket.findMany({
-        where:{
+        where: {
           type: type ? type : undefined,
-          priority: priority ? priority as Priority : undefined,
-          user: assigned_user_id ? { is : { id: assigned_user_id}} : undefined,
-          OR: search ? [
-            { organization: { name: { contains: search, mode: 'insensitive' } } },
-            { title: { contains: search, mode: 'insensitive' } }
-          ] : undefined,
+          priority: priority ? (priority as Priority) : undefined,
+          user: assigned_user_id ? { is: { id: assigned_user_id } } : undefined,
+          OR: search
+            ? [
+                {
+                  organization: {
+                    name: { contains: search, mode: 'insensitive' },
+                  },
+                },
+                { title: { contains: search, mode: 'insensitive' } },
+              ]
+            : undefined,
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
-            AND: [
-              { status: 'closed' },
-              { updatedAt: { lt: thirtyDaysAgo } }
-            ]
-          }
+            AND: [{ status: 'closed' }, { updatedAt: { lt: thirtyDaysAgo } }],
+          },
         },
-        select:{
+        select: {
           id: true,
           type: true,
           title: true,
@@ -165,7 +212,7 @@ export class TicketService {
               email: true,
               status: true,
               admin_id: true,
-            }
+            },
           },
           user: {
             select: {
@@ -176,98 +223,125 @@ export class TicketService {
               role: true,
               status: true,
               email: true,
-            }
-          }
-        }
-        
-      })
-      if(!tickets) throw new BadRequestException('Failed to fetch tickets')
+            },
+          },
+        },
+      });
+      if (!tickets) throw new BadRequestException('Failed to fetch tickets');
       return tickets;
-    }catch(error){
-      throw new BadRequestException('Error fetching tickets')
+    } catch (error) {
+      throw new BadRequestException('Error fetching tickets');
     }
   }
 
-  async reassing(id: string, data: reassignTicketDto): Promise<Object> {
-
-    try{
+  async reassing(id: string, data: reassignTicketDto): Promise<object> {
+    try {
       const currentTicket = await this.prisma.ticket.findUnique({
         where: { id },
-        select: { 
+        select: {
           status: true,
-        }
-      })
-      if(!currentTicket) throw new BadRequestException('Ticket not found')
-      if(currentTicket.status !== 'new' && !data.assigned_user_id) throw new BadRequestException('Reassigning to unassigned is only allowed for NEW tickets');
-      
+        },
+      });
+      if (!currentTicket) throw new BadRequestException('Ticket not found');
+      if (currentTicket.status !== 'new' && !data.assigned_user_id)
+        throw new BadRequestException(
+          'Reassigning to unassigned is only allowed for NEW tickets',
+        );
+
       const ticketUpdated = await this.prisma.ticket.update({
         where: { id },
         data: {
-          user: data.assigned_user_id ?  { connect: { id: data.assigned_user_id } } : { disconnect: true },
-        }
-      })
-      if(!ticketUpdated) throw new BadRequestException('Failed to reassign ticket')
+          user: data.assigned_user_id
+            ? { connect: { id: data.assigned_user_id } }
+            : { disconnect: true },
+        },
+      });
+      if (!ticketUpdated)
+        throw new BadRequestException('Failed to reassign ticket');
 
-      const ticket = await this.findOne(id)
-      if(!ticket) throw new BadRequestException('Failed to fetch reassigned ticket')
+      const ticket = await this.findOne(id);
+      if (!ticket)
+        throw new BadRequestException('Failed to fetch reassigned ticket');
       return ticket;
-
-    }catch(error){
-      throw new BadRequestException('Error reassigning ticket', error.message)
+    } catch (error) {
+      throw new BadRequestException('Error reassigning ticket', error.message);
     }
   }
-  
-  async updateStatus(id: string, data: { status: string }): Promise<Object> {
+
+  async updateStatus(id: string, data: { status: string }): Promise<object> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id },
-      select: { 
+      select: {
         status: true,
         type: true,
-        staff:{
-          select:{
+        staff: {
+          select: {
             id: true,
-          }
+          },
         },
-        user: { 
-          select: { 
-            id: true 
-          } 
-        }
-      }
-    })
-    if(!ticket) throw new BadRequestException('Ticket not found')
-    if(ticket.status === data.status) throw new BadRequestException(`Ticket is already in status: ${data.status}`)
+        user: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+    if (!ticket) throw new BadRequestException('Ticket not found');
+    if (ticket.status === data.status)
+      throw new BadRequestException(
+        `Ticket is already in status: ${data.status}`,
+      );
 
-    if(ticket.status === 'closed' && data.status=== 'resolved') throw new BadRequestException('Cannot change status from CLOSED to RESOLVED')
-    if(ticket.status === 'new' && data.status=== 'in_progress' && !ticket.user?.id ||  ticket.status === 'new' && data.status=== 'resolved' && !ticket.user?.id) throw new BadRequestException(`Status ${data.status.replace("_"," ").toUpperCase()} requires an assigned user`)
-    if (data.status === 'resolved' && ticket.type === 'termination' && ticket.staff?.id) {
+    if (ticket.status === 'closed' && data.status === 'resolved')
+      throw new BadRequestException(
+        'Cannot change status from CLOSED to RESOLVED',
+      );
+    if (
+      (ticket.status === 'new' &&
+        data.status === 'in_progress' &&
+        !ticket.user?.id) ||
+      (ticket.status === 'new' &&
+        data.status === 'resolved' &&
+        !ticket.user?.id)
+    )
+      throw new BadRequestException(
+        `Status ${data.status.replace('_', ' ').toUpperCase()} requires an assigned user`,
+      );
+    if (
+      data.status === 'resolved' &&
+      ticket.type === 'termination' &&
+      ticket.staff?.id
+    ) {
       //terminate the staff => update staff status to terminated and terminated staff
       await this.prisma.staff.update({
-        where:{
+        where: {
           id: ticket.staff.id,
         },
-        data:{
+        data: {
           status: 'terminated',
-          terminated_date: new Date()
-        }
-      })
-
+          terminated_date: new Date(),
+        },
+      });
     }
-    try{
+    try {
       const ticketUpdated = await this.prisma.ticket.update({
         where: { id },
         data: {
-          status: data.status as TicketStatus
-        }
-      })
-      if(!ticketUpdated) throw new BadRequestException('Failed to update ticket status')
+          status: data.status as TicketStatus,
+        },
+      });
+      if (!ticketUpdated)
+        throw new BadRequestException('Failed to update ticket status');
 
-      const ticket = await this.findOne(id)
-      if(!ticket) throw new BadRequestException('Failed to fetch reassigned ticket')
+      const ticket = await this.findOne(id);
+      if (!ticket)
+        throw new BadRequestException('Failed to fetch reassigned ticket');
       return ticket;
-    }catch(error){
-      throw new BadRequestException('Error updating ticket status', error.message)
+    } catch (error) {
+      throw new BadRequestException(
+        'Error updating ticket status',
+        error.message,
+      );
     }
   }
- 
 }
