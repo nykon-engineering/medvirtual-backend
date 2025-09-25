@@ -379,6 +379,22 @@ model Staff {
   hireRequest     HireRequest @relation(fields: [hirerequest_id], references: [id])
   tickets         Ticket[]
 
+  //info from hubspot
+  hubspot_id      String?     @unique
+  hubspot_client_name String?
+  hubspot_close_date DateTime?
+  hubspot_company_name String?
+  hubspot_contract_sign_date DateTime?
+  hubspot_conversion_type String?
+  hubspot_csm_deal_stage String?
+  hubspot_deal_name String?
+  hubspot_pipeline String?
+  hubspot_dealstage String?
+  hubspot_dealtype String?
+  hubspot_deployment_type String?
+  hubspot_description String?
+  hubspot_hs_acv String?
+
   @@index([candidate_id], map: "idx_staff_candidate_id")
   @@index([hirerequest_id], map: "idx_staff_hirerequest_id")
   @@index([status], map: "idx_staff_status")

@@ -36,7 +36,7 @@ export class HandlerOwnerCreation {
 
             const ownerExists = await this.prisma.uSER.findUnique({
                 where: {
-                    hubspot_id: String(event.objectId)
+                    hubspot_id: String(event.id)
                 }
             })
             if(ownerExists) throw new BadRequestException('Owner already exists on the database');

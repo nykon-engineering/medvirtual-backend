@@ -133,6 +133,21 @@ export class HubspotService {
                     break;
 
                 case 'company.associationChange': 
+
+                    break;
+                
+                case 'deal.creation':
+                case 'deal.restore':
+
+                    break;
+
+                case 'deal.propertyChange':
+
+                    break;
+
+                case 'deal.deletion':
+
+                    break;
                 /*
                 [{
                     eventId: 872635545,

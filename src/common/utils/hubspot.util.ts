@@ -3,6 +3,7 @@ import { candidadeToDbDictionary, dbToCandidateDictionary } from "../dictionarie
 import { organizationToDbDictionary } from "../dictionaries/organization-dictionary";
 import { CreateOrganizationDto } from "../../organization/dto/createOrganization.dto";
 import { ownerToDbDictionary } from "../dictionaries/owner-dictionary";
+import { dealToDbDictionary } from "../dictionaries/deal-dictionary";
 
 interface candidateData {
     [key: string]: any;
@@ -14,6 +15,10 @@ interface organizationData {
 
 interface ownerData {
     [key: string]: any;
+}
+
+interface dealData {
+  [key: string]: any;
 }
 
 export function extractDriveFileId(url: string): string | null {
@@ -71,3 +76,18 @@ export function mapOwnerToDb(hubspotData: ownerData): any {
       }
     return result as any;
 }
+
+export function mapDealToDb(hubspotData: dealData): any {
+  const result: Partial<any> = {};
+
+  for (const [hubspotKey, dbKey] of Object.entries(dealToDbDictionary)) {
+      
+      if (hubspotData[hubspotKey] !== undefined) {
+        result[dbKey] = hubspotData[hubspotKey];
+      }
+      
+    }
+  return result as any;
+}
+
+
