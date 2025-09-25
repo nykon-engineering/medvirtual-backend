@@ -110,6 +110,25 @@ export class StaffController {
     };
   }
 
+  @Get('for-tickets')
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary: 'Get staff members for ticket creation',
+    description: 'Get a simplified list of staff members for creating tickets',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Staff members retrieved successfully',
+  })
+  async getStaffForTickets(@CurrentUser() user: USER) {
+    const result = await this.staffService.getStaffForTickets(user);
+    return {
+      status: 200,
+      message: 'Staff members retrieved successfully',
+      data: result,
+    };
+  }
+
   @Get()
   @UseGuards(AuthGuard)
   @ApiOperation({
