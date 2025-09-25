@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { HireRequestStatus, USER } from '@prisma/client';
+import { HireRequestStatus, OrganizationRole, USER } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
@@ -77,15 +77,17 @@ export class HireRequestService {
       where: whereCondition,
       select:{
         status: true,
+        organization_role: true,
         admin_id: true,
       }
     });
     if (!organizationSQL) throw new NotFoundException(`Organization from client not found`);
 
+    console.log('organizationSQL.status', organizationSQL);
     const hireRequest = {
       ...hireRequestData,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
-      status: organizationSQL.status !== 'active' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+      status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
     };
 

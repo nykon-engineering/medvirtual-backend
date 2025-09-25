@@ -14,6 +14,7 @@ import {
   USER,
   OrganizationRole,
   OrganizationStatus,
+  HireRequestStatus,
 } from '@prisma/client';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
@@ -673,7 +674,7 @@ export class OrganizationService {
   async convertToClient(
     id: string,
     data: ConvertToClientDto,
-  ): Promise<Organization> {
+  ): Promise<any> {
     try {
       const organization = await this.prisma.organization.findUnique({
         where: { id },
@@ -687,30 +688,55 @@ export class OrganizationService {
         throw new BadRequestException('Organization is already a client');
       }
 
-      return await this.prisma.organization.update({
+      //transaction to handle the updates
+      const updates = await this.prisma.$transaction(async (up) => {
+        await up.organization.update({
+          where: { id },
+          data: {
+            organization_role: OrganizationRole.client,
+            date_became_client: new Date(),
+            signed_document_url: data.signed_document_url,
+            signed_document_date: data.signed_document_date
+              ? new Date(data.signed_document_date)
+              : new Date(),
+          },
+          include: {
+            owner: true,
+            admin: true,
+            users: true,
+          },
+        }),
+
+        await up.hireRequest.updateMany({
+          where: {
+            org_id: id,
+            status: HireRequestStatus.pending_signature,
+          },
+          data: {
+            status: HireRequestStatus.new
+          },
+        })
+
+      })
+
+      return await this.prisma.organization.findUnique({
         where: { id },
-        data: {
-          organization_role: OrganizationRole.client,
-          date_became_client: new Date(),
-          signed_document_url: data.signed_document_url,
-          signed_document_date: data.signed_document_date
-            ? new Date(data.signed_document_date)
-            : new Date(),
-        },
         include: {
           owner: true,
           admin: true,
           users: true,
         },
-      });
+      })
+
     } catch (error) {
+      console.log(error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
       ) {
         throw error;
       }
-      throw new BadRequestException('Failed to convert organization to client');
+      throw new BadRequestException('Failed to convert organization to client', error);
     }
   }
 
@@ -1628,7 +1654,7 @@ export class OrganizationService {
       })
       if (!pipelineStatusLosers) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
 
-      
+
 
       // Create staff and record candidate as winner in a transaction
       const result = await this.prisma.$transaction(async (tx) => {

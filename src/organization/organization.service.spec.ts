@@ -239,53 +239,76 @@ describe('OrganizationService', () => {
     });
   });
 
+
   describe('convertToClient', () => {
     it('should convert prospect to client successfully', async () => {
       const prospectOrg = {
         id: '1',
         name: 'Prospect Org',
         organization_role: OrganizationRole.prospect,
-        status: OrganizationStatus.active
+        status: OrganizationStatus.active,
       };
-
+  
       const clientOrg = {
         ...prospectOrg,
         organization_role: OrganizationRole.client,
         date_became_client: new Date(),
         signed_document_url: 'https://example.com/doc.pdf',
-        signed_document_date: new Date()
+        signed_document_date: new Date(),
+        owner: {},
+        admin: {},
+        users: [],
       };
-
+  
       mockPrismaService.organization.findUnique.mockResolvedValue(prospectOrg);
-      mockPrismaService.organization.update.mockResolvedValue(clientOrg);
-
+  
+      // 👈 mock simples do $transaction
+      mockPrismaService.$transaction.mockResolvedValue([clientOrg]);
+  
       const convertDto = {
         signed_document_url: 'https://example.com/doc.pdf',
-        signed_document_date: new Date().toISOString()
+        signed_document_date: new Date().toISOString(),
       };
-
+  
       const result = await service.convertToClient('1', convertDto);
+  
       expect(result.organization_role).toBe(OrganizationRole.client);
       expect(result.signed_document_url).toBe(convertDto.signed_document_url);
     });
-
+  
     it('should throw BadRequestException if organization is already a client', async () => {
       const clientOrg = {
         id: '1',
         name: 'Client Org',
         organization_role: OrganizationRole.client,
-        status: OrganizationStatus.active
+        status: OrganizationStatus.active,
       };
-
+  
       mockPrismaService.organization.findUnique.mockResolvedValue(clientOrg);
-
+  
       const convertDto = {
-        signed_document_url: 'https://example.com/doc.pdf'
+        signed_document_url: 'https://example.com/doc.pdf',
       };
-
-      await expect(service.convertToClient('1', convertDto)).rejects.toThrow(BadRequestException);
+  
+      await expect(service.convertToClient('1', convertDto)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  
+    it('should throw NotFoundException if organization does not exist', async () => {
+      mockPrismaService.organization.findUnique.mockResolvedValue(null);
+  
+      const convertDto = {
+        signed_document_url: 'https://example.com/doc.pdf',
+      };
+  
+      await expect(service.convertToClient('99', convertDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
+  
+  
 
   describe('assignAdmin', () => {
     it('should assign admin successfully', async () => {
