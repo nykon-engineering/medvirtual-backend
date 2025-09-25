@@ -15,7 +15,7 @@ import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
-import googleDriveFailed from '../common/utils/email-templates/googledrive-failed';
+import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
 
 @Injectable()
 export class CandidatesService {
@@ -59,8 +59,8 @@ export class CandidatesService {
 
     const {organization_id} = user;
 
-    const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
-    const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
+    const hourly_from = monthly_compensation_from ? findHourlySalary(Number(monthly_compensation_from)) : undefined; 
+    const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined; 
 
     const combinedFilters: Record<string, any>[] = [];
 
@@ -255,6 +255,7 @@ export class CandidatesService {
           const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
           candidate.pipeline_status = stageName || 'Unknown Stage';
         }
+        
       });
 
       const candidateIds = candidates.map(candidate => candidate.id);
@@ -283,7 +284,8 @@ export class CandidatesService {
         ...candidate,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
-        selectedInInterviews: undefined
+        selectedInInterviews: undefined,
+        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0)
       }));
 
       return {
@@ -639,7 +641,9 @@ export class CandidatesService {
           });
           returned = {
             min: min._min.hourly_pay_rate || 0,
+            salary_min: findMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
             max: max._max.hourly_pay_rate || 0,
+            salary_max: findMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
           };
           
           result[field]=returned;
@@ -784,7 +788,7 @@ export class CandidatesService {
       },
     });
   
-    const HOURS = Number(process.env.CANDIDATE_HOUR_PER_MONTH ?? 160);
+    const HOURS = Number(process.env.CANDIDATE_HOUR_PER_MONTH ?? 176);
     const PERCENT = Number(process.env.CANDIDATE_PERCENT ?? 1);
   
     const candidateSkills = candidate.skills.map((s) => s.skill_name);
@@ -816,11 +820,11 @@ export class CandidatesService {
       }
   
       const hourly_from = hr.salary_range_from
-        ? Number(hr.salary_range_from) / (HOURS * PERCENT)
+        ? findHourlySalary(Number(hr.salary_range_from))
         : undefined;
   
       const hourly_to = hr.salary_range_to
-        ? Number(hr.salary_range_to) / (HOURS * PERCENT)
+        ? findHourlySalary(Number(hr.salary_range_to))
         : undefined;
   
       if (

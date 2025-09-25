@@ -456,7 +456,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto, user: USER): Promise<Organization> {
+  async create(data: CreateOrganizationDto): Promise<Organization> {
     try {
       // // Check if the organization already exists
       // const existingOrganization = await this.prisma.organization.findUnique({
@@ -518,6 +518,7 @@ export class OrganizationService {
       if (!adminId) {
         const availableAdmins = await this.prisma.uSER.findMany({
           where: {
+            id: '111a7e30-e5e7-4ac6-a75e-41e70853bd04', // Added one 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
             role: { in: ['system_admin', 'system_super_admin'] },
             status: 'active',
           },
@@ -543,7 +544,7 @@ export class OrganizationService {
           industry: data.industry,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
-          number_of_employees: data.number_of_employees,
+          number_of_employees: Number(data.number_of_employees),
           date_founded: data.date_founded
             ? new Date(data.date_founded)
             : undefined,
@@ -555,6 +556,7 @@ export class OrganizationService {
           services: data.services || [],
           owner_id: ownerId,
           admin_id: adminId,
+          hubspot_id: data.hubspot_id || undefined,
         },
       });
 
@@ -1382,6 +1384,41 @@ export class OrganizationService {
         })),
       );
 
+      const candidates = await this.prisma.candidate.findMany({
+        where: {
+          pipeline_status: {
+            in: ['261075105', '1087596819'],
+          },
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          specialization: true,
+          employment_type: true,
+          country: true,
+          about_me: true,
+          languages: {
+            select: { name: true },
+          },
+          skills: {
+            select: { skill_name: true },
+          },
+        },
+      });
+
+      const mappedPipelineCandidates = candidates.map((c) => ({
+        ...c,
+        panelStatus: null, //just for align with the preious structure
+        panelId: null,
+        panelScheduledDate: null,
+      }));
+      
+      //just for merge candidates and return all candidates
+      const allCandidates = [...attachedCandidates, ...mappedPipelineCandidates];
+
+
       return {
         status: 200,
         data: {
@@ -1401,7 +1438,7 @@ export class OrganizationService {
             createdAt: hireRequest.createdAt,
             organization: hireRequest.organization,
           },
-          attachedCandidates,
+          attachedCandidates: allCandidates,
           hasAttachedCandidates: attachedCandidates.length > 0,
         },
       };

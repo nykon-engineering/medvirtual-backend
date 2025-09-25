@@ -5,7 +5,15 @@ import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
+import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { CandidatesService } from '../candidate/candidates.service';
+import { HandlerOrganizationCreation } from './handlers/organizationCreation';
+import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
+import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOwnerCreation } from './handlers/ownerCreation';
+import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
+import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
+
 
 jest.mock('axios', () => ({
   __esModule: true,
@@ -54,6 +62,34 @@ const handlerObjectPropertyChangeMock = {
   execute: jest.fn(),
 };
 
+const handlerObjectDeletionmock = {
+  execute: jest.fn(),
+}
+
+const HandlerOrganizationCreationMock = {
+  execute: jest.fn(),
+}
+
+const HandlerOrganizationPropertyChangeMock = {
+  execute: jest.fn(),
+}
+
+const HandlerObjectDeletionMock = {
+  execute: jest.fn(),
+}
+
+const HandlerOwnerCreationMock = {
+  execute: jest.fn(),
+}
+
+const HandlerOwnerPropertyChangeMock = {
+  execute: jest.fn(),
+}
+
+const HandlerOwnerDeletionMock = {
+  execute: jest.fn(),
+}
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -79,6 +115,13 @@ describe('HubspotService => GetCandidates', () => {
         {provide: PrismaService, useValue: prismaMock},
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
+        {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
+        {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
+        {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
+        {provide: HandlerOrganizationDeletion, useValue: HandlerObjectDeletionMock},
+        {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
+        {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
+        {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
         {provide: CandidatesService, useValue: candidateMock}
       ],
     }).compile();
@@ -126,6 +169,13 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: PrismaService, useValue: prismaMock},
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
+        {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
+        {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
+        {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
+        {provide: HandlerOrganizationDeletion, useValue: HandlerObjectDeletionMock},
+        {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
+        {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
+        {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
         {provide: CandidatesService, useValue: candidateMock}
       ]
     }).compile();

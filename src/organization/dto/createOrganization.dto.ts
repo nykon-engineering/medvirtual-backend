@@ -11,6 +11,8 @@ import {
 } from 'class-validator';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
+
+
 export class CreateOrganizationDto {
   @ApiProperty({ required: true, description: 'Name of the organization' })
   @IsString()
@@ -175,4 +177,13 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsString()
   admin_id?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'hubspot ID',
+  })
+  @IsOptional()
+  @IsString()
+  hubspot_id?: string;
+  
 }

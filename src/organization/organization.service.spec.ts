@@ -28,6 +28,7 @@ const userfake = {
   updatedAt: new Date(),
   createdByMethod: 'self_signup',
   createdByUserId: null,
+  hubspot_id: null,
 }
 
 describe('OrganizationService', () => {
@@ -176,7 +177,7 @@ describe('OrganizationService', () => {
 
       mockAuthService.inviteUser.mockResolvedValue(true);
 
-      const result = await service.create(dto, userfake);
+      const result = await service.create(dto);
       expect(result).toEqual(created);
     });
 
@@ -190,7 +191,7 @@ describe('OrganizationService', () => {
 
       mockPrismaService.organization.findUnique.mockResolvedValue({ id: '1', name: 'Existing Org' });
 
-      await expect(service.create(dto, userfake)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException if creation fails', async () => {
@@ -202,7 +203,7 @@ describe('OrganizationService', () => {
         phone: '123', 
         email: 'org1@example.com', 
         owner_email: 'admin@admin.com' 
-      }, userfake)).rejects.toThrow(BadRequestException);
+      })).rejects.toThrow(BadRequestException);
     });
   });
 

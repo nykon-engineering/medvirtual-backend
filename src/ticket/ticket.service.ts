@@ -167,6 +167,7 @@ export class TicketService {
   }
 
   async findAll(
+    user: USER,
     type?: string,
     priority?: string,
     assigned_user_id?: string,
@@ -180,18 +181,13 @@ export class TicketService {
       const tickets = await this.prisma.ticket.findMany({
         where: {
           type: type ? type : undefined,
-          priority: priority ? (priority as Priority) : undefined,
-          user: assigned_user_id ? { is: { id: assigned_user_id } } : undefined,
-          OR: search
-            ? [
-                {
-                  organization: {
-                    name: { contains: search, mode: 'insensitive' },
-                  },
-                },
-                { title: { contains: search, mode: 'insensitive' } },
-              ]
-            : undefined,
+          priority: priority ? priority as Priority : undefined,
+          user: user.role === 'system_admin' ? { is : { id: user.id}} : undefined,
+          OR: search ? [
+            { organization: { name: { contains: search, mode: 'insensitive' } } },
+            { title: { contains: search, mode: 'insensitive' } }
+          ] : undefined,
+          
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
             AND: [{ status: 'closed' }, { updatedAt: { lt: thirtyDaysAgo } }],

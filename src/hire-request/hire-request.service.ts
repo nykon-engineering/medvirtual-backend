@@ -15,6 +15,7 @@ import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
 
 @Injectable()
 export class HireRequestService {
@@ -132,9 +133,27 @@ export class HireRequestService {
     }
     if(!user.role) throw new NotFoundException('User role not found');
 
-    const baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
+    let baseWhere = {};
+    switch (user.role) {
+      case 'organization_super_admin':
+      case 'organization_admin':
+        baseWhere = { organization: { id: user.organization_id } };
+        break
+      case 'system_admin':
+        baseWhere={ OR: [
+          { organization: { admin_id: user.id }},
+          { assigned_user: {id: user.id}}
+        ]}
+        break;
+      case 'system_super_admin':
+        baseWhere = {};
+        break;
+    }
+
+    //this code was updated for the switch above
+    // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search ? { title: { contains: search, mode: 'insensitive' as const } } : {};
-    const whereClause = user.role.includes('organization') ? { ...baseWhere, ...searchWhere } : searchWhere;
+    const whereClause =  { ...baseWhere, ...searchWhere } ;
 
     const skip = (page - 1) * perPage;
     const take = perPage;
@@ -235,7 +254,14 @@ export class HireRequestService {
       panels: hr.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
-        interviews: undefined
+        interviews: undefined,
+        panelCandidates: panel.panelCandidates.map(pc => ({
+          ...pc,
+          candidate:{
+            ...pc.candidate,
+            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+          }
+        }))
       }))
     }));
 
@@ -667,7 +693,7 @@ export class HireRequestService {
 
       if (panelCandidates.length > 0) {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-          return dbToStageDictionary[key] === 'Endorsed to Client';
+          return dbToStageDictionary[key] === 'Endorsed via Platform';
         });
         if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed to Client`);
 
@@ -798,11 +824,11 @@ export class HireRequestService {
     const requiredSkills = hireRequest.skills.map(s => s.skill_name);
   
     const hourly_from = hireRequest.salary_range_from
-      ? Number(hireRequest.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+      ? findHourlySalary(Number(hireRequest.salary_range_from))
       : undefined;
       
     const hourly_to = hireRequest.salary_range_to
-      ? Number(hireRequest.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+      ? findHourlySalary(Number(hireRequest.salary_range_to))
       : undefined;
   
     const candidates = await this.prisma.candidate.findMany({
@@ -934,9 +960,9 @@ export class HireRequestService {
     if (!panelUpdated) throw new BadRequestException(`Panel not confirmed`);
 
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-      return dbToStageDictionary[key] === 'Endorsed to Client';
+      return dbToStageDictionary[key] === 'Endorsed via Platform';
     })
-    //update candidates with pipelinestatus = 'Endorsed to Client'
+    //update candidates with pipelinestatus = 'Endorsed via Platform'
     const candidatesUpdated = await this.prisma.candidate.updateMany({
       where: {
         id: {
@@ -997,7 +1023,7 @@ export class HireRequestService {
       currentPanel = panelExists;
     }
     const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-      return dbToStageDictionary[key] === 'Endorsed to Client';
+      return dbToStageDictionary[key] === 'Endorsed via Platform';
     })
     if (!pipelineStatus) throw new BadRequestException(`Pipeline status mapping not found`);
 
@@ -1035,13 +1061,12 @@ export class HireRequestService {
               where: { id: c.candidate.id },
               data: { pipeline_status: pipeline_treated},
             });
-            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+            const test = await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
           }
             
           )
         );
       //finish update oldcandidates to 'available candidates' on database 
-
       
       const removeCandidates = await this.prisma.panelCandidate.deleteMany({
         where: {
@@ -1077,7 +1102,7 @@ export class HireRequestService {
     });
     if( !candidates) throw new NotFoundException(`Candidates not found`);
 
-    //update candidates with pipelinestatus = 'Endorsed to Client'
+    //update candidates with pipelinestatus = 'Endorsed via Platform'
     await Promise.all(
       candidates.map(c =>
         this.prisma.candidate.update({
@@ -1100,6 +1125,7 @@ export class HireRequestService {
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
+    
     const panel = await this.prisma.candidatePanel.findFirst({
       where: {
         hire_request_id: data.hireRequest_id,
@@ -1117,8 +1143,38 @@ export class HireRequestService {
       throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
     }
 
+    await this.prisma.interview.deleteMany({
+      where: {
+        panel_id: panel.id,
+      },
+    });
 
-    //update hire request with status = 'panel_ready'
+    const candidateIds = panel.panelCandidates.map(pc => pc.candidate_id);
+    
+    await this.prisma.ticket.updateMany({
+      where: {
+        type: 'interview',
+        candidate_id: {
+          in: candidateIds,
+        },
+        status: {
+          in: ['new', 'in_progress'],
+        },
+      },
+      data: {
+        status: 'resolved',
+      },
+    });
+
+    await this.prisma.panelCandidate.updateMany({
+      where: {
+        panel_id: panel.id,
+      },
+      data: {
+        status: 'selected',
+      },
+    });
+
     const hireRequest = await this.prisma.hireRequest.update({
       where: {
         id: data.hireRequest_id,
@@ -1129,17 +1185,17 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new BadRequestException(`Hire request not updated to panel ready`);
 
-    //update panel with readable = true
     const panelUpdated = await this.prisma.candidatePanel.updateMany({
       where: {
         hire_request_id: data.hireRequest_id,
       },
       data: {
         readable: data.readable,
+        scheduled_date: null,
+        status: 'created',
       },
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
-
 
     return this.findOne(data.hireRequest_id, user);
   }
@@ -1304,6 +1360,13 @@ export class HireRequestService {
       ...panel,
       interview_date: panel.interviews[0]?.scheduled_date || null,
       interviews: undefined,
+      panelCandidates: panel.panelCandidates.map(pc => ({
+        ...pc,
+        candidate: {
+          ...pc.candidate,
+          salary: findMonthlySalary(pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0),
+        }
+      }))
       
     }));
     
@@ -1473,7 +1536,6 @@ export class HireRequestService {
     });
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
     const updatedDate = new Date(`${data.date_time}`);
-    console.log(updatedDate, data.date_time, 'updatedDate');
 
     const interviewScheduled = await this.prisma.interview.create({
       data: {
@@ -1870,10 +1932,10 @@ export class HireRequestService {
       if (hr.availability && candidate.employment_type === hr.availability) score += 1;
   
       const hourly_from = hr.salary_range_from
-        ? Number(hr.salary_range_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+        ? findHourlySalary(Number(hr.salary_range_from))
         : undefined;
       const hourly_to = hr.salary_range_to
-        ? Number(hr.salary_range_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT))
+        ? findHourlySalary(Number(hr.salary_range_to))
         : undefined;
   
       if (

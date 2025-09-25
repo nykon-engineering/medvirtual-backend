@@ -117,6 +117,7 @@ describe('HireRequestService', () => {
       updatedAt: new Date(),
       createdByMethod: 'self_signup',
       createdByUserId: null,
+      hubspot_id: null,
     } ;
   });
 
@@ -684,8 +685,9 @@ describe('HireRequestService', () => {
   describe.skip('showMatchCandidates', () => {
     beforeEach(() => {
       jest.clearAllMocks();
-      process.env.CANDIDATE_HOUR_PER_MONTH = '160'; 
+      process.env.CANDIDATE_HOUR_PER_MONTH = '176'; 
       process.env.CANDIDATE_PERCENT = '1'; 
+      process.env.CANDIDATE_COST_PER_HOUR='3.29';
     });
   
     it('should return scored candidates sorted by score', async () => {

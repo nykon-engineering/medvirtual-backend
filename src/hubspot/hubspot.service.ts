@@ -6,12 +6,22 @@ import axios from 'axios';
 import {  mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 
+import { CandidatesService } from '../candidate/candidates.service';
+
 import { changeDataToHubspotDto } from './dto/change-data-hubspot.dto';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
+
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
-import { CandidatesService } from '../candidate/candidates.service';
+import { HandlerObjectDeletion } from './handlers/objectDeletion';
+import { HandlerOrganizationCreation } from './handlers/organizationCreation';
+import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
+import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOwnerCreation } from './handlers/ownerCreation';
+import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
+import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
+
 
 
 @Injectable()
@@ -22,6 +32,14 @@ export class HubspotService {
       private readonly prisma: PrismaService,
       private readonly objectCreation: HandlerObjectCreation,
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
+      private readonly objectDeletion: HandlerObjectDeletion,
+      private readonly organizationCreation: HandlerOrganizationCreation,
+      private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
+      private readonly organizationDeletion : HandlerOrganizationDeletion,
+
+      //private readonly ownerCreation: HandlerOwnerCreation,
+      //private readonly ownerDeletion: HandlerOwnerDeletion,
+      //private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -70,13 +88,69 @@ export class HubspotService {
 
         for (const event of orderedData){
             switch (event.subscriptionType) {
-                case 'object.propertyChange':
-                    return await this.objectPropertyChange.execute(event);
+               
                 case 'object.creation':
-                    return await this.objectCreation.execute(event);
+                case 'object.restore':
+                    await this.objectCreation.execute(event);
+                    break;
+                case 'object.propertyChange':
+                    await this.objectPropertyChange.execute(event);
+                    break;
+
                 case 'object.deletion':
-    
-    
+                    await this.objectDeletion.execute(event);
+                    break;
+
+                /*
+                case 'owners.creation':
+                case 'owners.restore':
+                case 'contact.creation':
+                case 'contact.restore':
+                    await this.ownerCreation.execute(event);
+                    break;
+
+                case 'owners.deletion':
+                case 'contact.deletion':
+                    await this.ownerDeletion.execute(event);
+                    break;
+
+                case 'owners.propertyChange':
+                case 'contact.propertyChange':
+                    await this.ownerPropertyChange.execute(event);
+                    break;
+                */
+                case 'company.creation':
+                case 'company.restore':
+                    await this.organizationCreation.execute(event);
+                    break;
+
+                case 'company.propertyChange':
+                    await this.organizationPropertyChange.execute(event);
+                    break;
+                
+                case 'company.deletion':
+                    await this.organizationDeletion.execute(event);
+                    break;
+
+                case 'company.associationChange': 
+                /*
+                [{
+                    eventId: 872635545,
+                    subscriptionId: 4328151,
+                    portalId: 20630393,
+                    appId: 17008354,
+                    occurredAt: 1758637869029,
+                    subscriptionType: 'company.associationChange',
+                    attemptNumber: 0,
+                    changeSource: 'USER',
+                    associationType: 'COMPANY_TO_DEAL', //COMPANY_TO_CONTACT
+                    fromObjectId: 39895238437,
+                    toObjectId: 44166736144,
+                    associationRemoved: false,
+                    isPrimaryAssociation: false,
+                    sourceId: 'userId:69965733'
+                }]
+                */
             }
         }
 
@@ -128,6 +202,7 @@ export class HubspotService {
     }
 
     async updateOneCandidateFromHireRequest(hubspot_id: string, pipelineStatus: string): Promise<boolean> {
+        console.log('Updating candidate in HubSpot with ID:', hubspot_id, 'to pipeline status:', pipelineStatus);
         try{
             if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
             
