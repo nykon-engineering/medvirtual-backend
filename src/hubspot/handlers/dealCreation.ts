@@ -40,6 +40,9 @@ export class HandlerDealCreation {
             if(dealExists) throw new BadRequestException('Deal already exists on the database');
 
             //Here I need to check if we alreadey have an organization and candidate before we proceed with the deal Creation
+            //endpoint to associoations:  or 
+            //  -https://api.hubapi.com/crm/v3/objects/deals/${deal}/associations/companies
+            //  -https://api.hubapi.com/crm/v3/objects/deals/${deal}/associations/p20630393_Virtual_Assistant
 
             const dealCreated = await this.prisma.staff.create(dealData)
             if (!dealCreated) {

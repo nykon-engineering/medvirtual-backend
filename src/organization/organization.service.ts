@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   Body,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import axios from 'axios';
 
@@ -31,13 +33,19 @@ import {
   AdminCreateStaffWithHireRequestDto,
 } from './dto/admin-staff-selection.dto';
 import { AuthService } from '../auth/auth.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
+import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+
 
 @Injectable()
 export class OrganizationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
+    @Inject(forwardRef (() => HubspotService))
+    private readonly hubspot: HubspotService
+    
   ) {}
 
   
@@ -1609,6 +1617,19 @@ export class OrganizationService {
 
       const statusHandled = staffStatusDictionary[data.status];
 
+      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Hired';
+      })
+      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
+      await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, pipelineStatus);
+
+      const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Available Candidates';
+      })
+      if (!pipelineStatusLosers) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
+
+      
+
       // Create staff and record candidate as winner in a transaction
       const result = await this.prisma.$transaction(async (tx) => {
         // Create the staff record
@@ -1629,9 +1650,10 @@ export class OrganizationService {
           where: { hire_request_id: hireRequestId },
           select: { id: true },
         });
-
+        console.log('panels', panels);
         if (panels.length > 0) {
-          // Update panel candidates to mark this candidate as winner
+          
+          // Update panel candidates to mark this candidate as winnee
           await tx.panelCandidate.updateMany({
             where: {
               panel_id: { in: panels.map((p) => p.id) },
@@ -1641,7 +1663,17 @@ export class OrganizationService {
               status: 'selected_by_client',
             },
           });
+          await tx.candidate.update({
+            where: { id: candidate.id },
+            data: { pipeline_status: pipelineStatus },
+          })
+          
 
+
+
+          
+          
+          
           // Mark other candidates as returned to pool
           await tx.panelCandidate.updateMany({
             where: {
@@ -1652,6 +1684,44 @@ export class OrganizationService {
               status: 'returned_to_pool',
             },
           });
+
+          
+      
+          const loserExists = await tx.panelCandidate.findMany({
+            where: {
+              panel_id: { in: panels.map((p) => p.id) },
+              NOT: {
+                candidate_id: candidate.id,
+              },
+            },
+            select: {
+              id: true,
+              candidate:{
+                select: {
+                  id: true,
+                  hubspot_id: true,
+                  pipeline_status_origin: true
+                },
+              },
+            },
+          });
+          console.log('loserExists', loserExists);
+          const candidateLosers = loserExists.map(c => c.candidate);
+          await Promise.all(
+            candidateLosers.map(async c =>{
+              const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
+              await this.prisma.candidate.update({
+                where: { id: c.id },
+                data: { pipeline_status: pipeline_treated},
+              });
+              await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+            }
+            )
+          );
+
+         
+
+
 
           // Update panel status to decision_made
           await tx.candidatePanel.updateMany({
@@ -1668,6 +1738,9 @@ export class OrganizationService {
 
         return staff;
       });
+      
+      
+
 
       const staff = result;
 
@@ -1739,6 +1812,7 @@ export class OrganizationService {
         data: createdStaff,
       };
     } catch (error) {
+      console.log('error', error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException

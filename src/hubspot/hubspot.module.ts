@@ -32,7 +32,7 @@ import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
     HandlerOwnerDeletion,
     HandlerOwnerPropertyChange
   ],
-  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), OrganizationModule],
+  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule)],
   exports: [HubspotService],
 })
 export class HubspotModule {}

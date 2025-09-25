@@ -4,8 +4,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { OrganizationService } from './organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
+
 
 const userfake = { 
   id: '1',
@@ -51,6 +53,10 @@ describe('OrganizationService', () => {
     },
   };
 
+  const mockHubspotService = {
+    createOrUpdateCompany: jest.fn(),
+  };
+
   const mockAuthService = {
     inviteUser: jest.fn(),
   };
@@ -64,6 +70,7 @@ describe('OrganizationService', () => {
           useValue: mockPrismaService,
         },
         { provide: AuthService, useValue: mockAuthService },
+        { provide: HubspotService, useValue: mockHubspotService },
       ],
     }).compile();
 
