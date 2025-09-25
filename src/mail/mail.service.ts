@@ -18,6 +18,7 @@ export class MailService {
     const result= await resend.emails.send({
       from: options.from,
       to: options.to,
+      cc: options.cc,
       subject: options.subject,
       html: options.html,
     });

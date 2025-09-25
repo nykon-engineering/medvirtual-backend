@@ -139,29 +139,32 @@ export class OpenaiService {
             return message;
 
         }catch (error: any) {
-            if (error?.response?.data?.error?.type === 'insufficient_quota') {
+            
+            console.log('status/type :', error?.status, error?.type);
+            if (error?.type === 'insufficient_quota') {
                 console.error('[OpenAI] Insufficient Quota:');
 
                 // Send insufficient quota via email
                 const emailBody = insufficient_quota();
                 const mailSent = await this.mailService.sendMail({
                 from: 'MedVirtual <noreply@medvirtual.ai>',
-                to: 'paulo@regenta.ai',
+                to: 'shayan@regenta.ai',
+                cc: 'paulo@regenta.ai',
                 subject: 'Insufficient Quota from OpenAI',
                 html: emailBody,
                 });
                 if (!mailSent) {
-                  console.error('Failed to send insufficient quota email notification.');
+                  console.log('Failed to send insufficient quota email notification.');
                 }
                 throw new BadRequestException('You dont have credits. Check your plan/billing.');
             }
 
-            if (error?.response?.data?.error?.type === 'rate_limit_error') {
-                console.error('[OpenAI] Rate Limit Exceeded:');
+            if (error?.type === 'rate_limit_error') {
+                console.log('[OpenAI] Rate Limit Exceeded:');
                 throw new BadRequestException('Rate limit exceeded. Please try again later.');
             }
           
-            console.error('[OpenAI] unexpected error:', error);
+            console.log('[OpenAI] unexpected error:', error);
             throw new BadRequestException('unexpected error to request OpenAI.');
         }
         
