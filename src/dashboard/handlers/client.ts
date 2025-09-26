@@ -4,12 +4,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TicketStatus } from '@prisma/client';
+import { HireRequestService } from '../../hire-request/hire-request.service';
 
 @Injectable()
 export class HandlerClient {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hireRequestService: HireRequestService,
+  ) {}
 
-  async execute(user: any): Promise<object> {
+  async execute(user: any, page: number = 1, perPage: number = 10): Promise<object> {
     const result: any = {};
     if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new Error('User or organization not found!!');
@@ -47,50 +51,14 @@ export class HandlerClient {
     });
     result.openTickets = openTicketsCount;
 
-    const hireRequest = await this.prisma.hireRequest.findMany({
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        createdAt: true,
-        organization: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        panels: {
-          select: {
-            id: true,
-            status: true,
-            scheduled_date: true,
-            createdAt: true,
-            panelCandidates: {
-              select: {
-                id: true,
-                candidate: {
-                  select: {
-                    id: true,
-                    first_name: true,
-                    last_name: true,
-                    email: true,
-                    hourly_pay_rate: true,
-                    organization_id: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 10,
-    });
-    result.hireRequests = hireRequest;
+    // Unified format with /hire-request, includes specialization and skills
+    const hireRequestsResult = await this.hireRequestService.findAll(
+      user,
+      undefined,
+      page,
+      perPage,
+    );
+    result.hireRequests = hireRequestsResult; // { data, meta }
 
     return result;
   }
