@@ -892,6 +892,7 @@ export class OrganizationService {
         start_date: true,
         created_at: true,
         updated_at: true,
+        hubspot_id: true,
         candidate: {
           select: {
             id: true,
