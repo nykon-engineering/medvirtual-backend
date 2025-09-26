@@ -18,7 +18,7 @@ export class HandlerOrganizationCreation {
 
     async execute(event){
 
-        const properties = Object.keys(organizationToDbDictionary).join(',');
+        const properties = Object.keys(organizationToDbDictionary).join(',')+ ',business_unit';
         try{
             const getObject = await axios.post('https://api.hubapi.com/crm/v3/objects/companies/search',
             {
@@ -45,6 +45,8 @@ export class HandlerOrganizationCreation {
             );
 
             if (!getObject) throw new BadRequestException('No object data found');
+            if(getObject.data.results[0].properties.business_unit !== 'MedVirtual') throw new BadRequestException('Organization is not a client of MedVirtual');
+
 
             const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
             organizationData.organization_role=OrganizationRole.client;
