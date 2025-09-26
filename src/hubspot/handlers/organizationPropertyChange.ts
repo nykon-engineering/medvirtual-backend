@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerOrganizationCreation } from "./organizationCreation";
 import { organizationToDbDictionary } from "../../common/dictionaries/organization-dictionary";
+import { HandlerOrganizationDeletion } from "./organizationDeletion";
 
 @Injectable()
 
@@ -10,6 +11,7 @@ export class HandlerOrganizationPropertyChange {
     constructor(
         private readonly prisma: PrismaService,
         private readonly organizationCreation: HandlerOrganizationCreation,
+        private readonly organizationDeletion: HandlerOrganizationDeletion
     ){}
 
     async execute(event){
@@ -19,7 +21,11 @@ export class HandlerOrganizationPropertyChange {
             }
         })
 
-        if(!organization) return await this.organizationCreation.execute(event);
+        //Here I dont need to check if the organization is a client of MedVirtual, because inside the organizationCreation handler it already does that
+        if(!organization ) return await this.organizationCreation.execute(event);
+
+        //Here I need to delete the organization if the business_unit property is changed to a value different than MedVirtual
+        if(organization && event.propertyName === 'business_unit' && event.propertyValue !== 'MedVirtual') return await this.organizationDeletion.execute(event);
 
             const fieldExists = Object.keys(organizationToDbDictionary).includes(event.propertyName);
             if(!fieldExists) return;

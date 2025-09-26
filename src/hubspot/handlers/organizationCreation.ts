@@ -18,8 +18,8 @@ export class HandlerOrganizationCreation {
 
     async execute(event){
 
-        const properties = Object.keys(organizationToDbDictionary).join(',');
-        try{
+        const properties = Object.keys(organizationToDbDictionary).join(',')+ ',business_unit';
+        //try{
             const getObject = await axios.post('https://api.hubapi.com/crm/v3/objects/companies/search',
             {
             filterGroups: [
@@ -40,16 +40,19 @@ export class HandlerOrganizationCreation {
             headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
                 'Content-Type': 'application/json',
-            },
+                },
             }
             );
-
+            console.log(getObject.data);
             if (!getObject) throw new BadRequestException('No object data found');
+            if(getObject.data.results[0].properties.business_unit !== 'MedVirtual') throw new BadRequestException('Organization is not a client of MedVirtual');
 
             const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
             organizationData.organization_role=OrganizationRole.client;
             organizationData.status=OrganizationStatus.active;
             organizationData.email = organizationData.email ?? undefined;
+
+            console.log(organizationData);
 
             const organizationExists = await this.prisma.organization.findUnique({
                 where: {
@@ -64,9 +67,11 @@ export class HandlerOrganizationCreation {
             }
             return true;
 
+        /*
         }catch (error) {
             throw new BadRequestException(`Error fetching object creation organization: ${error.message}`);
         }
+            */
             
     }
 }

@@ -25,6 +25,9 @@ export class OrganizationResponseDto {
   @ApiProperty({ description: 'Organization ID' })
   id: string;
 
+  @ApiProperty({ description: 'ID from hubspot' })
+  hubspot_id?: string;
+
   @ApiProperty({ description: 'Organization name' })
   name: string;
 
