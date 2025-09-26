@@ -44,7 +44,39 @@ export class CreateOrganizationDto {
 
   @ApiProperty({
     required: false,
-    description: 'Location/address of the organization',
+    description: 'address of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'City of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'State/Region of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Zip code of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  zip?: string;
+  
+  @ApiProperty({
+    required: false,
+    description: 'Location/country of the organization',
   })
   @IsOptional()
   @IsString()

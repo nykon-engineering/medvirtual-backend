@@ -94,6 +94,10 @@ model Organization {
   phone                String?
   website_url          String?
   location             String?
+  address              String?
+  city                 String?
+  state                String?
+  postal_code          String?
   description          String?
   industry             String?
   organization_role    OrganizationRole   @default(prospect)

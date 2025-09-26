@@ -2,6 +2,10 @@ export const organizationToDbDictionary : Record<string, string> = {
     hs_object_id: 'hubspot_id',
     name: 'name',
     about_us: 'description',
+    address: 'address',
+    city: 'city',
+    state: 'state',
+    zip: 'postal_code',
     country: 'location',
     domain: 'website_url',
     description: 'description',
@@ -13,17 +17,6 @@ export const organizationToDbDictionary : Record<string, string> = {
     phone: 'phone',
     referral_email: 'email',
     specialty: 'specialties',
-    //annualrevenue: '',
-    //city: '',
-    //closedate: '',
-    //hs_country_code: '',
-    //hs_csm_sentiment: '',
-    //hs_linkedin_handle: '',
-    //lifecyclestage: '',
-    //address: '',
-    //address2: '',
-    //company_address: '',
-    //hubspot_owner_id: '',
 };
 
 export const dbToOrganizationDictionary : Record<string, string> = Object.fromEntries(  

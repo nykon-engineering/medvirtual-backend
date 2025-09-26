@@ -43,7 +43,7 @@ export class HandlerOrganizationCreation {
                 },
             }
             );
-            console.log(getObject.data);
+            
             if (!getObject) throw new BadRequestException('No object data found');
             if(getObject.data.results[0].properties.business_unit !== 'MedVirtual') throw new BadRequestException('Organization is not a client of MedVirtual');
 
@@ -52,7 +52,7 @@ export class HandlerOrganizationCreation {
             organizationData.status=OrganizationStatus.active;
             organizationData.email = organizationData.email ?? undefined;
 
-            console.log(organizationData);
+            console.log('OrganizedData: ',organizationData);
 
             const organizationExists = await this.prisma.organization.findUnique({
                 where: {
