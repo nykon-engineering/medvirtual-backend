@@ -4,8 +4,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { OrganizationService } from './organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
+
 
 const userfake = { 
   id: '1',
@@ -28,6 +30,7 @@ const userfake = {
   updatedAt: new Date(),
   createdByMethod: 'self_signup',
   createdByUserId: null,
+  hubspot_id: null,
 }
 
 describe('OrganizationService', () => {
@@ -48,6 +51,13 @@ describe('OrganizationService', () => {
       findMany: jest.fn(),
       updateMany: jest.fn(),
     },
+    hireRequest: {
+      updateMany: jest.fn(),
+    }
+  };
+
+  const mockHubspotService = {
+    createOrUpdateCompany: jest.fn(),
   };
 
   const mockAuthService = {
@@ -63,6 +73,7 @@ describe('OrganizationService', () => {
           useValue: mockPrismaService,
         },
         { provide: AuthService, useValue: mockAuthService },
+        { provide: HubspotService, useValue: mockHubspotService },
       ],
     }).compile();
 
@@ -176,7 +187,7 @@ describe('OrganizationService', () => {
 
       mockAuthService.inviteUser.mockResolvedValue(true);
 
-      const result = await service.create(dto, userfake);
+      const result = await service.create(dto);
       expect(result).toEqual(created);
     });
 
@@ -190,7 +201,7 @@ describe('OrganizationService', () => {
 
       mockPrismaService.organization.findUnique.mockResolvedValue({ id: '1', name: 'Existing Org' });
 
-      await expect(service.create(dto, userfake)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException if creation fails', async () => {
@@ -202,7 +213,7 @@ describe('OrganizationService', () => {
         phone: '123', 
         email: 'org1@example.com', 
         owner_email: 'admin@admin.com' 
-      }, userfake)).rejects.toThrow(BadRequestException);
+      })).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -231,53 +242,83 @@ describe('OrganizationService', () => {
     });
   });
 
+
   describe('convertToClient', () => {
     it('should convert prospect to client successfully', async () => {
       const prospectOrg = {
         id: '1',
         name: 'Prospect Org',
         organization_role: OrganizationRole.prospect,
-        status: OrganizationStatus.active
+        status: OrganizationStatus.active,
       };
-
+  
       const clientOrg = {
         ...prospectOrg,
         organization_role: OrganizationRole.client,
         date_became_client: new Date(),
         signed_document_url: 'https://example.com/doc.pdf',
-        signed_document_date: new Date()
+        signed_document_date: new Date(),
+        owner: {},
+        admin: {},
+        users: [],
       };
+  
+      mockPrismaService.organization.findUnique
+      .mockResolvedValueOnce(prospectOrg)
+      .mockResolvedValueOnce(clientOrg);
 
-      mockPrismaService.organization.findUnique.mockResolvedValue(prospectOrg);
-      mockPrismaService.organization.update.mockResolvedValue(clientOrg);
+      mockPrismaService.organization.update = jest.fn().mockResolvedValue(clientOrg);
 
+      mockPrismaService.hireRequest.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+  
+      mockPrismaService.$transaction.mockImplementation(async (cb) => {
+        return cb(mockPrismaService);
+      });
+  
       const convertDto = {
         signed_document_url: 'https://example.com/doc.pdf',
-        signed_document_date: new Date().toISOString()
+        signed_document_date: new Date().toISOString(),
       };
-
+  
       const result = await service.convertToClient('1', convertDto);
+  
       expect(result.organization_role).toBe(OrganizationRole.client);
       expect(result.signed_document_url).toBe(convertDto.signed_document_url);
     });
-
+  
     it('should throw BadRequestException if organization is already a client', async () => {
       const clientOrg = {
         id: '1',
         name: 'Client Org',
         organization_role: OrganizationRole.client,
-        status: OrganizationStatus.active
+        status: OrganizationStatus.active,
       };
-
+  
       mockPrismaService.organization.findUnique.mockResolvedValue(clientOrg);
-
+  
       const convertDto = {
-        signed_document_url: 'https://example.com/doc.pdf'
+        signed_document_url: 'https://example.com/doc.pdf',
       };
-
-      await expect(service.convertToClient('1', convertDto)).rejects.toThrow(BadRequestException);
+  
+      await expect(service.convertToClient('1', convertDto)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  
+    it('should throw NotFoundException if organization does not exist', async () => {
+      mockPrismaService.organization.findUnique.mockResolvedValue(null);
+  
+      const convertDto = {
+        signed_document_url: 'https://example.com/doc.pdf',
+      };
+  
+      await expect(service.convertToClient('99', convertDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
+  
+  
 
   describe('assignAdmin', () => {
     it('should assign admin successfully', async () => {

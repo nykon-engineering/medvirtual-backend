@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   Body,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import axios from 'axios';
 
@@ -12,6 +14,7 @@ import {
   USER,
   OrganizationRole,
   OrganizationStatus,
+  HireRequestStatus,
 } from '@prisma/client';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
@@ -31,13 +34,19 @@ import {
   AdminCreateStaffWithHireRequestDto,
 } from './dto/admin-staff-selection.dto';
 import { AuthService } from '../auth/auth.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
+import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+
 
 @Injectable()
 export class OrganizationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
+    @Inject(forwardRef (() => HubspotService))
+    private readonly hubspot: HubspotService
+    
   ) {}
 
   
@@ -388,10 +397,15 @@ export class OrganizationService {
       // Transform data
       const data: OrganizationResponseDto[] = organizations.map((org) => ({
         id: org.id,
+        hubspot_id: org.hubspot_id || undefined,
         name: org.name,
         email: org.email || undefined,
         phone: org.phone || undefined,
         website_url: org.website_url || undefined,
+        address: org.address || undefined,
+        city: org.city || undefined,
+        state: org.state || undefined,
+        postal_code: org.postal_code || undefined,
         location: org.location || undefined,
         description: org.description || undefined,
         industry: org.industry || undefined,
@@ -456,7 +470,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto, user: USER): Promise<Organization> {
+  async create(data: CreateOrganizationDto): Promise<Organization> {
     try {
       // // Check if the organization already exists
       // const existingOrganization = await this.prisma.organization.findUnique({
@@ -518,6 +532,7 @@ export class OrganizationService {
       if (!adminId) {
         const availableAdmins = await this.prisma.uSER.findMany({
           where: {
+            id: '111a7e30-e5e7-4ac6-a75e-41e70853bd04', // Added one 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
             role: { in: ['system_admin', 'system_super_admin'] },
             status: 'active',
           },
@@ -531,6 +546,24 @@ export class OrganizationService {
           adminId = availableAdmins[randomIndex].id;
         }
       }
+      let specialtiesArray: string[] = [];
+      let servicesArray: string[] = [];
+      if(typeof data.specialties === 'string'){
+        specialtiesArray = data.specialties.split(',').map(s => s.trim());
+      }else if (Array.isArray(data.specialties)) {
+        specialtiesArray = data.specialties;
+      }else{
+        specialtiesArray = [];
+      }
+
+      if(typeof data.services === 'string'){
+        servicesArray = data.services.split(',').map(s => s.trim());
+      }else if (Array.isArray(data.services)) {
+        servicesArray = data.services;
+      }else{
+        servicesArray = [];
+      }
+
 
       const organization = await this.prisma.organization.create({
         data: {
@@ -538,12 +571,16 @@ export class OrganizationService {
           email: data.email,
           phone: data.phone,
           website_url: data.website_url,
+          address: data.address,
+          city: data.city,
+          state: data.state,
+          postal_code: data.zip,
           location: data.location,
           description: data.description,
           industry: data.industry,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
-          number_of_employees: data.number_of_employees,
+          number_of_employees: Number(data.number_of_employees),
           date_founded: data.date_founded
             ? new Date(data.date_founded)
             : undefined,
@@ -551,10 +588,11 @@ export class OrganizationService {
             ? new Date(data.date_joined)
             : new Date(),
           status: data.status || OrganizationStatus.active,
-          specialties: data.specialties || [],
-          services: data.services || [],
+          specialties: specialtiesArray,
+          services: servicesArray,
           owner_id: ownerId,
           admin_id: adminId,
+          hubspot_id: data.hubspot_id || undefined,
         },
       });
 
@@ -587,6 +625,7 @@ export class OrganizationService {
 
       return organization;
     } catch (error) {
+      console.log('Failed to create a organization: ', error);
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -663,7 +702,7 @@ export class OrganizationService {
   async convertToClient(
     id: string,
     data: ConvertToClientDto,
-  ): Promise<Organization> {
+  ): Promise<any> {
     try {
       const organization = await this.prisma.organization.findUnique({
         where: { id },
@@ -677,30 +716,55 @@ export class OrganizationService {
         throw new BadRequestException('Organization is already a client');
       }
 
-      return await this.prisma.organization.update({
+      //transaction to handle the updates
+      const updates = await this.prisma.$transaction(async (up) => {
+        await up.organization.update({
+          where: { id },
+          data: {
+            organization_role: OrganizationRole.client,
+            date_became_client: new Date(),
+            signed_document_url: data.signed_document_url,
+            signed_document_date: data.signed_document_date
+              ? new Date(data.signed_document_date)
+              : new Date(),
+          },
+          include: {
+            owner: true,
+            admin: true,
+            users: true,
+          },
+        }),
+
+        await up.hireRequest.updateMany({
+          where: {
+            org_id: id,
+            status: HireRequestStatus.pending_signature,
+          },
+          data: {
+            status: HireRequestStatus.new
+          },
+        })
+
+      })
+
+      return await this.prisma.organization.findUnique({
         where: { id },
-        data: {
-          organization_role: OrganizationRole.client,
-          date_became_client: new Date(),
-          signed_document_url: data.signed_document_url,
-          signed_document_date: data.signed_document_date
-            ? new Date(data.signed_document_date)
-            : new Date(),
-        },
         include: {
           owner: true,
           admin: true,
           users: true,
         },
-      });
+      })
+
     } catch (error) {
+      console.log(error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
       ) {
         throw error;
       }
-      throw new BadRequestException('Failed to convert organization to client');
+      throw new BadRequestException('Failed to convert organization to client', error);
     }
   }
 
@@ -836,6 +900,7 @@ export class OrganizationService {
         start_date: true,
         created_at: true,
         updated_at: true,
+        hubspot_id: true,
         candidate: {
           select: {
             id: true,
@@ -1382,6 +1447,41 @@ export class OrganizationService {
         })),
       );
 
+      const candidates = await this.prisma.candidate.findMany({
+        where: {
+          pipeline_status: {
+            in: ['261075105', '1087596819'],
+          },
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          specialization: true,
+          employment_type: true,
+          country: true,
+          about_me: true,
+          languages: {
+            select: { name: true },
+          },
+          skills: {
+            select: { skill_name: true },
+          },
+        },
+      });
+
+      const mappedPipelineCandidates = candidates.map((c) => ({
+        ...c,
+        panelStatus: null, //just for align with the preious structure
+        panelId: null,
+        panelScheduledDate: null,
+      }));
+      
+      //just for merge candidates and return all candidates
+      const allCandidates = [...attachedCandidates, ...mappedPipelineCandidates];
+
+
       return {
         status: 200,
         data: {
@@ -1401,7 +1501,7 @@ export class OrganizationService {
             createdAt: hireRequest.createdAt,
             organization: hireRequest.organization,
           },
-          attachedCandidates,
+          attachedCandidates: allCandidates,
           hasAttachedCandidates: attachedCandidates.length > 0,
         },
       };
@@ -1572,6 +1672,19 @@ export class OrganizationService {
 
       const statusHandled = staffStatusDictionary[data.status];
 
+      const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Hired';
+      })
+      if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
+      await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, pipelineStatus);
+
+      const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
+        return dbToStageDictionary[key] === 'Available Candidates';
+      })
+      if (!pipelineStatusLosers) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
+
+
+
       // Create staff and record candidate as winner in a transaction
       const result = await this.prisma.$transaction(async (tx) => {
         // Create the staff record
@@ -1592,9 +1705,10 @@ export class OrganizationService {
           where: { hire_request_id: hireRequestId },
           select: { id: true },
         });
-
+        console.log('panels', panels);
         if (panels.length > 0) {
-          // Update panel candidates to mark this candidate as winner
+          
+          // Update panel candidates to mark this candidate as winnee
           await tx.panelCandidate.updateMany({
             where: {
               panel_id: { in: panels.map((p) => p.id) },
@@ -1604,7 +1718,17 @@ export class OrganizationService {
               status: 'selected_by_client',
             },
           });
+          await tx.candidate.update({
+            where: { id: candidate.id },
+            data: { pipeline_status: pipelineStatus },
+          })
+          
 
+
+
+          
+          
+          
           // Mark other candidates as returned to pool
           await tx.panelCandidate.updateMany({
             where: {
@@ -1615,6 +1739,44 @@ export class OrganizationService {
               status: 'returned_to_pool',
             },
           });
+
+          
+      
+          const loserExists = await tx.panelCandidate.findMany({
+            where: {
+              panel_id: { in: panels.map((p) => p.id) },
+              NOT: {
+                candidate_id: candidate.id,
+              },
+            },
+            select: {
+              id: true,
+              candidate:{
+                select: {
+                  id: true,
+                  hubspot_id: true,
+                  pipeline_status_origin: true
+                },
+              },
+            },
+          });
+          console.log('loserExists', loserExists);
+          const candidateLosers = loserExists.map(c => c.candidate);
+          await Promise.all(
+            candidateLosers.map(async c =>{
+              const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
+              await this.prisma.candidate.update({
+                where: { id: c.id },
+                data: { pipeline_status: pipeline_treated},
+              });
+              await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+            }
+            )
+          );
+
+         
+
+
 
           // Update panel status to decision_made
           await tx.candidatePanel.updateMany({
@@ -1631,6 +1793,9 @@ export class OrganizationService {
 
         return staff;
       });
+      
+      
+
 
       const staff = result;
 
@@ -1702,6 +1867,7 @@ export class OrganizationService {
         data: createdStaff,
       };
     } catch (error) {
+      console.log('error', error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException

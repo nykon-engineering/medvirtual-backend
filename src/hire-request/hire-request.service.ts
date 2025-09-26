@@ -1,5 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { HireRequestStatus, USER } from '@prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { HireRequestStatus, OrganizationRole, USER } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
@@ -15,19 +19,20 @@ import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
-import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import {
+  findHourlySalary,
+  findMonthlySalary,
+} from '../common/utils/salary.util';
 
 @Injectable()
 export class HireRequestService {
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly hubspot: HubspotService
+    private readonly hubspot: HubspotService,
   ) {}
 
-  private async verifyAssignUser (statusTo, hireRequest_id): Promise<boolean> {
-
-      const hireRequest = await this.prisma.hireRequest.findUnique({
+  private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
+    const hireRequest = await this.prisma.hireRequest.findUnique({
         where: { id: hireRequest_id },
         select: {
           assign_user_id: true,
@@ -77,6 +82,7 @@ export class HireRequestService {
       where: whereCondition,
       select:{
         status: true,
+        organization_role: true,
         admin_id: true,
       }
     });
@@ -85,7 +91,7 @@ export class HireRequestService {
     const hireRequest = {
       ...hireRequestData,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
-      status: organizationSQL.status !== 'active' ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+      status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
     };
 
@@ -1125,6 +1131,7 @@ export class HireRequestService {
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
+    
     const panel = await this.prisma.candidatePanel.findFirst({
       where: {
         hire_request_id: data.hireRequest_id,
@@ -1142,8 +1149,38 @@ export class HireRequestService {
       throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
     }
 
+    await this.prisma.interview.deleteMany({
+      where: {
+        panel_id: panel.id,
+      },
+    });
 
-    //update hire request with status = 'panel_ready'
+    const candidateIds = panel.panelCandidates.map(pc => pc.candidate_id);
+    
+    await this.prisma.ticket.updateMany({
+      where: {
+        type: 'interview',
+        candidate_id: {
+          in: candidateIds,
+        },
+        status: {
+          in: ['new', 'in_progress'],
+        },
+      },
+      data: {
+        status: 'resolved',
+      },
+    });
+
+    await this.prisma.panelCandidate.updateMany({
+      where: {
+        panel_id: panel.id,
+      },
+      data: {
+        status: 'selected',
+      },
+    });
+
     const hireRequest = await this.prisma.hireRequest.update({
       where: {
         id: data.hireRequest_id,
@@ -1154,17 +1191,17 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new BadRequestException(`Hire request not updated to panel ready`);
 
-    //update panel with readable = true
     const panelUpdated = await this.prisma.candidatePanel.updateMany({
       where: {
         hire_request_id: data.hireRequest_id,
       },
       data: {
         readable: data.readable,
+        scheduled_date: null,
+        status: 'created',
       },
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
-
 
     return this.findOne(data.hireRequest_id, user);
   }
@@ -1928,5 +1965,87 @@ export class HireRequestService {
 
     scoredHireRequests.sort((a, b) => b.score - a.score);
     return scoredHireRequests ;
+  }
+
+  async getAvailableCandidatesForSelection(hireRequestId: string, user: USER): Promise<any> {
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        org_id: true,
+        assign_user_id: true,
+      },
+    });
+
+    if (!hireRequest) {
+      throw new NotFoundException('Hire request not found');
+    }
+
+    if (user.role.includes('organization')) {
+      if (!user.organization_id || user.organization_id !== hireRequest.org_id) {
+        throw new NotFoundException('Hire request not found');
+      }
+    } else if (user.role.includes('system')) {
+    } else {
+      throw new NotFoundException('Hire request not found');
+    }
+
+    const panel = await this.prisma.candidatePanel.findFirst({
+      where: { hire_request_id: hireRequestId },
+      include: {
+        panelCandidates: {
+          include: {
+            candidate: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+                specialization: true,
+                employment_type: true,
+                country: true,
+                about_me: true,
+                pipeline_status: true,
+                hourly_pay_rate: true,
+                years_of_experience: true,
+                languages: {
+                  select: { name: true },
+                },
+                skills: {
+                  select: { skill_name: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!panel) {
+      throw new NotFoundException('Panel for this hire request not found');
+    }
+
+    const panelCandidates = panel.panelCandidates;
+
+    const availableCandidates = panelCandidates.filter(pc => 
+      pc.candidate.pipeline_status === '261075105' || pc.candidate.pipeline_status === '1087596819'
+    );
+
+    const selectedCandidate = panelCandidates.find(pc => pc.status === 'selected_by_client');
+
+    if (availableCandidates.length === 1 && selectedCandidate && 
+        availableCandidates[0].candidate.id === selectedCandidate.candidate_id) {
+      return [];
+    }
+    const mappedCandidates = availableCandidates.map(pc => ({
+      ...pc.candidate,
+      panelStatus: pc.status,
+      panelId: panel.id,
+      panelScheduledDate: panel.scheduled_date,
+      isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
+      salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(pc.candidate.hourly_pay_rate.toNumber()) : null,
+    }));
+
+    return mappedCandidates;
   }
 }

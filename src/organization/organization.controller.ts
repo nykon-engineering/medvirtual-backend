@@ -178,8 +178,8 @@ export class OrganizationController {
     status: 201,
     description: 'Organization created successfully',
   })
-  async create(@Body() data: CreateOrganizationDto, @CurrentUser() user: any) {
-    const org = await this.organizationService.create(data, user);
+  async create(@Body() data: CreateOrganizationDto) {
+    const org = await this.organizationService.create(data);
     return {
       status: 201,
       message: 'Organization created successfully',

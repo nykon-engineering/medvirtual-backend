@@ -35,4 +35,9 @@ export class CreateTicketDto {
     @IsString()
     @IsOptional()
     candidate_id?: string;
+
+    @ApiProperty({ description: 'ID of the staff member (required for Bonus and Termination tickets)', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    staff_id?: string;
 }

@@ -1,12 +1,14 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { OrganizationController } from './organization.controller';
 import { OrganizationService } from './organization.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
+import { HubspotModule } from '../hubspot/hubspot.module';
 
 @Module({
   controllers: [OrganizationController],
   providers: [OrganizationService],
-  imports: [PrismaModule, AuthModule],
+  imports: [PrismaModule, AuthModule, forwardRef(() => HubspotModule)],
+  exports: [OrganizationService],
 })
 export class OrganizationModule {}

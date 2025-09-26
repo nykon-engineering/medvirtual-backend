@@ -1,8 +1,24 @@
 import { Prisma } from "@prisma/client";
 import { candidadeToDbDictionary, dbToCandidateDictionary } from "../dictionaries/candidate-dictionary";
+import { organizationToDbDictionary } from "../dictionaries/organization-dictionary";
+import { CreateOrganizationDto } from "../../organization/dto/createOrganization.dto";
+import { ownerToDbDictionary } from "../dictionaries/owner-dictionary";
+import { dealToDbDictionary } from "../dictionaries/deal-dictionary";
 
 interface candidateData {
     [key: string]: any;
+}
+
+interface organizationData {
+    [key: string]: any;
+}
+
+interface ownerData {
+    [key: string]: any;
+}
+
+interface dealData {
+  [key: string]: any;
 }
 
 export function extractDriveFileId(url: string): string | null {
@@ -34,3 +50,44 @@ export function mapDbToHubspot(data: Record<string, any>): Record<string, any> {
     }
     return mappedData;
 }
+
+export function mapOrganizationToDb(hubspotData: organizationData): CreateOrganizationDto {
+    const result: Partial<CreateOrganizationDto> = {};
+
+    for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
+        
+        if (hubspotData[hubspotKey] !== undefined) {
+          result[dbKey] = hubspotData[hubspotKey];
+        }
+        
+      }
+    return result as CreateOrganizationDto;
+}
+
+export function mapOwnerToDb(hubspotData: ownerData): any {
+    const result: Partial<any> = {};
+
+    for (const [hubspotKey, dbKey] of Object.entries(ownerToDbDictionary)) {
+        
+        if (hubspotData[hubspotKey] !== undefined) {
+          result[dbKey] = hubspotData[hubspotKey];
+        }
+        
+      }
+    return result as any;
+}
+
+export function mapDealToDb(hubspotData: dealData): any {
+  const result: Partial<any> = {};
+
+  for (const [hubspotKey, dbKey] of Object.entries(dealToDbDictionary)) {
+      
+      if (hubspotData[hubspotKey] !== undefined) {
+        result[dbKey] = hubspotData[hubspotKey];
+      }
+      
+    }
+  return result as any;
+}
+
+
