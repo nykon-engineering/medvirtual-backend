@@ -63,6 +63,23 @@ export class HireRequestController {
   }
 
 
+  @Get('available-candidates-panel')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ 
+    description: 'Get available candidates for hire request candidate selection change. Returns candidates assigned to the hire request panel who are still available for hiring (not hired or in other hire requests). If only the current selected candidate is available, returns empty array to indicate no change is possible.' 
+  })
+  @ApiQuery({ name: 'hireRequestId', required: true, description: 'ID of the hire request' })
+  @ApiResponse({ status: 200, description: 'Available candidates retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
+  async getAvailableCandidatesForSelection(@Query('hireRequestId') hireRequestId: string, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.getAvailableCandidatesForSelection(hireRequestId, user);
+    return {
+      status: 200,
+      message: 'Available candidates retrieved successfully',
+      data: result,
+    }
+  }
 
   @Get(':id')
   @UseGuards(AuthGuard)
@@ -378,5 +395,7 @@ export class HireRequestController {
       data: result
     }
   }
+
+
 
 }
