@@ -541,6 +541,24 @@ export class OrganizationService {
           adminId = availableAdmins[randomIndex].id;
         }
       }
+      let specialtiesArray: string[] = [];
+      let servicesArray: string[] = [];
+      if(typeof data.specialties === 'string'){
+        specialtiesArray = data.specialties.split(',').map(s => s.trim());
+      }else if (Array.isArray(data.specialties)) {
+        specialtiesArray = data.specialties;
+      }else{
+        specialtiesArray = [];
+      }
+
+      if(typeof data.services === 'string'){
+        servicesArray = data.services.split(',').map(s => s.trim());
+      }else if (Array.isArray(data.services)) {
+        servicesArray = data.services;
+      }else{
+        servicesArray = [];
+      }
+
 
       const organization = await this.prisma.organization.create({
         data: {
@@ -561,8 +579,8 @@ export class OrganizationService {
             ? new Date(data.date_joined)
             : new Date(),
           status: data.status || OrganizationStatus.active,
-          specialties: data.specialties || [],
-          services: data.services || [],
+          specialties: specialtiesArray,
+          services: servicesArray,
           owner_id: ownerId,
           admin_id: adminId,
           hubspot_id: data.hubspot_id || undefined,
@@ -598,6 +616,7 @@ export class OrganizationService {
 
       return organization;
     } catch (error) {
+      console.log('Failed to create a organization: ', error);
       if (error instanceof BadRequestException) {
         throw error;
       }

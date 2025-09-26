@@ -94,13 +94,13 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  specialties?: string[];
+  specialties?: string | string[];
 
   @ApiProperty({ required: false, description: 'List of services' })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  services?: string[];
+  services?: string | string[];
 
   @ApiProperty({
     required: false,
