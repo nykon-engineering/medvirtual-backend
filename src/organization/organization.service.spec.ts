@@ -51,6 +51,9 @@ describe('OrganizationService', () => {
       findMany: jest.fn(),
       updateMany: jest.fn(),
     },
+    hireRequest: {
+      updateMany: jest.fn(),
+    }
   };
 
   const mockHubspotService = {
@@ -260,10 +263,17 @@ describe('OrganizationService', () => {
         users: [],
       };
   
-      mockPrismaService.organization.findUnique.mockResolvedValue(prospectOrg);
+      mockPrismaService.organization.findUnique
+      .mockResolvedValueOnce(prospectOrg)
+      .mockResolvedValueOnce(clientOrg);
+
+      mockPrismaService.organization.update = jest.fn().mockResolvedValue(clientOrg);
+
+      mockPrismaService.hireRequest.updateMany = jest.fn().mockResolvedValue({ count: 1 });
   
-      // 👈 mock simples do $transaction
-      mockPrismaService.$transaction.mockResolvedValue([clientOrg]);
+      mockPrismaService.$transaction.mockImplementation(async (cb) => {
+        return cb(mockPrismaService);
+      });
   
       const convertDto = {
         signed_document_url: 'https://example.com/doc.pdf',

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { USER } from '@prisma/client';
+import { OrganizationRole, USER } from '@prisma/client';
 
 import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -214,7 +214,9 @@ describe('HireRequestService', () => {
     });
   
     it('should set status as new if organization is active', async () => {
-      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active',
+        organization_role: OrganizationRole.client,
+        admin_id: 'user1', });
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1', skills: [] });

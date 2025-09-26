@@ -413,6 +413,12 @@ model Bonus {
   @@index([staff_id], map: "idx_bonus_staff_id")
 }
 
+model Mail_Settings {
+  id                String   @id @default(uuid())
+  title             String
+  created_at        DateTime @default(now())
+}
+
 enum Role {
   organization_admin
   organization_super_admin

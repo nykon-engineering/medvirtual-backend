@@ -2,11 +2,13 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { OpenAI } from 'openai';
 import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
 import { MailService } from '../mail/mail.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class OpenaiService {
     constructor(
         private readonly mailService: MailService,
+        private readonly prisma: PrismaService
     ) {}
     /* istanbul ignore next */
     async organizeText(text: string, candidate: any): Promise<string> {
@@ -140,22 +142,42 @@ export class OpenaiService {
 
         }catch (error: any) {
             
-            console.log('status/type :', error?.status, error?.type);
             if (error?.type === 'insufficient_quota') {
                 console.error('[OpenAI] Insufficient Quota:');
 
-                // Send insufficient quota via email
-                const emailBody = insufficient_quota();
-                const mailSent = await this.mailService.sendMail({
-                from: 'MedVirtual <noreply@medvirtual.ai>',
-                to: 'shayan@regenta.ai',
-                cc: 'paulo@regenta.ai',
-                subject: 'Insufficient Quota from OpenAI',
-                html: emailBody,
+                const today = new Date();
+                const existingMail = await this.prisma.mail_Settings.findFirst({
+                where: {
+                    title: 'insufficient_quota',
+                    created_at: {
+                    gte: new Date(today.setHours(0, 0, 0, 0)),
+                    lt: new Date(today.setHours(23, 59, 59, 999)), 
+                    },
+                },
                 });
-                if (!mailSent) {
-                  console.log('Failed to send insufficient quota email notification.');
+                if (!existingMail) {
+                    // Send insufficient quota via email
+                    const emailBody = insufficient_quota();
+                    const mailSent = await this.mailService.sendMail({
+                    from: 'MedVirtual <noreply@medvirtual.ai>',
+                    to: 'shayan@regenta.ai',
+                    cc: 'paulo@regenta.ai',
+                    subject: 'Insufficient Quota from OpenAI',
+                    html: emailBody,
+                    });
+                    if (!mailSent) {
+                        console.log('Failed to send insufficient quota email notification.');
+                    }
+                    //Here I save in the database that I sent the email
+                    await this.prisma.mail_Settings.create({
+                        data: {
+                          title: 'insufficient_quota',
+                        },
+                    });
                 }
+
+                
+                
                 throw new BadRequestException('You dont have credits. Check your plan/billing.');
             }
 
@@ -165,7 +187,7 @@ export class OpenaiService {
             }
           
             console.log('[OpenAI] unexpected error:', error);
-            throw new BadRequestException('unexpected error to request OpenAI.');
+            throw new BadRequestException('unexpected error to request OpenAI.', error);
         }
         
     }
