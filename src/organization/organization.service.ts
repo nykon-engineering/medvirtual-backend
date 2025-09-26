@@ -397,6 +397,7 @@ export class OrganizationService {
       // Transform data
       const data: OrganizationResponseDto[] = organizations.map((org) => ({
         id: org.id,
+        hubspot_id: org.hubspot_id || undefined,
         name: org.name,
         email: org.email || undefined,
         phone: org.phone || undefined,
