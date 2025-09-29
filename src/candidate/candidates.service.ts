@@ -64,6 +64,10 @@ export class CandidatesService {
 
     const combinedFilters: Record<string, any>[] = [];
 
+    const availabilityArray = avaliability
+      ? avaliability.split(',').map((a) => a.trim()).filter(Boolean)
+      : [];
+
     const languagesArray = languages ?
     languages.split(',').map(l => l.trim()).filter(Boolean)
     : [];
@@ -134,7 +138,7 @@ export class CandidatesService {
       OR:[
         {
           country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
+          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -147,7 +151,7 @@ export class CandidatesService {
         },
         {
           country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
+          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -160,7 +164,7 @@ export class CandidatesService {
         },
         {
           country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
+          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
@@ -173,7 +177,7 @@ export class CandidatesService {
         },
         {
           country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
+          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
           hourly_pay_rate: {
             gte: hourly_from ? hourly_from : undefined,
             lte: hourly_to ? hourly_to : undefined
