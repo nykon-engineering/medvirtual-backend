@@ -8,5 +8,6 @@ import { HubspotModule } from '../hubspot/hubspot.module';
   controllers: [HireRequestController],
   providers: [HireRequestService],
   imports: [PrismaModule, HubspotModule],
+  exports: [HireRequestService],
 })
 export class HireRequestModule {}
