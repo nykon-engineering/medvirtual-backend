@@ -3,6 +3,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerOrganizationCreation } from "./organizationCreation";
 import { organizationToDbDictionary } from "../../common/dictionaries/organization-dictionary";
 import { HandlerOrganizationDeletion } from "./organizationDeletion";
+import { OrganizationRole } from "@prisma/client";
 
 @Injectable()
 
@@ -31,13 +32,21 @@ export class HandlerOrganizationPropertyChange {
             if(!fieldExists) return;
 
             const fieldUpdated = organizationToDbDictionary[event.propertyName];
+            let value = event.propertyValue;
+            if (fieldUpdated === 'organization_role') {
+                if (event.propertyValue === 'Prospect'){
+                    value = OrganizationRole.prospect;
+                }else{
+                    value = OrganizationRole.client;
+                }
+            }
             
             await this.prisma.organization.update({
                 where: {
                     id: organization.id
                 },
                 data: {
-                    [fieldUpdated]: event.propertyValue
+                    [fieldUpdated]: value
                 }
             })
             
