@@ -15,7 +15,7 @@ import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
-import googleDriveFailed from '../common/utils/email-templates/googledrive-failed';
+import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
 
 @Injectable()
 export class CandidatesService {
@@ -34,7 +34,7 @@ export class CandidatesService {
   async findAll(
     user: USER, 
     country?: string, 
-    avaliability?: string, 
+    availability?: string, 
     monthly_compensation_from?: string, 
     monthly_compensation_to?: string, 
     years_of_experience?: string,
@@ -59,10 +59,14 @@ export class CandidatesService {
 
     const {organization_id} = user;
 
-    const hourly_from = monthly_compensation_from ? Number(monthly_compensation_from) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
-    const hourly_to = monthly_compensation_to ? Number(monthly_compensation_to) / (Number(process.env.CANDIDATE_HOUR_PER_MONTH) * Number(process.env.CANDIDATE_PERCENT)) : undefined; 
+    const hourly_from = monthly_compensation_from ? findHourlySalary(Number(monthly_compensation_from)) : undefined; 
+    const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined; 
 
     const combinedFilters: Record<string, any>[] = [];
+
+    const availabilityArray = availability
+      ? availability.split(',').map((a) => a.trim()).filter(Boolean)
+      : [];
 
     const languagesArray = languages ?
     languages.split(',').map(l => l.trim()).filter(Boolean)
@@ -131,56 +135,64 @@ export class CandidatesService {
 
 
     const where = {
-      OR:[
+      OR: [
         {
-          country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          country: country ? country : undefined,
-          employment_type: avaliability ? avaliability : undefined,
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         }
@@ -255,6 +267,7 @@ export class CandidatesService {
           const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
           candidate.pipeline_status = stageName || 'Unknown Stage';
         }
+        
       });
 
       const candidateIds = candidates.map(candidate => candidate.id);
@@ -283,7 +296,8 @@ export class CandidatesService {
         ...candidate,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
-        selectedInInterviews: undefined
+        selectedInInterviews: undefined,
+        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0)
       }));
 
       return {
@@ -605,6 +619,9 @@ export class CandidatesService {
                   in: ['1087596819', '261075105'],
                 },
               },
+              skill_name: {
+                not: 'N/A',
+              },
             },
             select: {
               skill_name: true,
@@ -636,7 +653,9 @@ export class CandidatesService {
           });
           returned = {
             min: min._min.hourly_pay_rate || 0,
+            salary_min: findMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
             max: max._max.hourly_pay_rate || 0,
+            salary_max: findMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
           };
           
           result[field]=returned;
@@ -653,6 +672,11 @@ export class CandidatesService {
                   [field]: {
                     not: null
                   }
+                },
+                {
+                  [field]: {
+                    not: 'N/A'
+                  }
                 }
               ] 
             },
@@ -667,7 +691,7 @@ export class CandidatesService {
           result[field] = [
             ...new Set(
               returned.flatMap(item =>
-                item.specialization.split(';').map(s => s.trim())
+                item.specialization.split(';').map(s => s.trim()).filter(s => s !== 'N/A')
               )
             )
           ];
@@ -776,7 +800,7 @@ export class CandidatesService {
       },
     });
   
-    const HOURS = Number(process.env.CANDIDATE_HOUR_PER_MONTH ?? 160);
+    const HOURS = Number(process.env.CANDIDATE_HOUR_PER_MONTH ?? 176);
     const PERCENT = Number(process.env.CANDIDATE_PERCENT ?? 1);
   
     const candidateSkills = candidate.skills.map((s) => s.skill_name);
@@ -808,11 +832,11 @@ export class CandidatesService {
       }
   
       const hourly_from = hr.salary_range_from
-        ? Number(hr.salary_range_from) / (HOURS * PERCENT)
+        ? findHourlySalary(Number(hr.salary_range_from))
         : undefined;
   
       const hourly_to = hr.salary_range_to
-        ? Number(hr.salary_range_to) / (HOURS * PERCENT)
+        ? findHourlySalary(Number(hr.salary_range_to))
         : undefined;
   
       if (

@@ -1,4 +1,11 @@
-import { PrismaClient, OrganizationRole, OrganizationStatus, HireRequestStatus, TicketStatus, Priority } from '@prisma/client';
+import {
+  PrismaClient,
+  OrganizationRole,
+  OrganizationStatus,
+  HireRequestStatus,
+  TicketStatus,
+  Priority,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -22,7 +29,10 @@ async function main() {
   const hashedPasswords = {
     anthony: await bcrypt.hash('Iddk1234$#', 10),
     lnardon: await bcrypt.hash('Storeroom3-Flatfoot9-Yelp2-Askew1-Tasty0@', 10),
-    lucas: await bcrypt.hash('Paternal7-Rasping6-Stapling3-Playback8-Tadpole6@', 10),
+    lucas: await bcrypt.hash(
+      'Paternal7-Rasping6-Stapling3-Playback8-Tadpole6@',
+      10,
+    ),
   };
 
   console.log('🔐 Passwords hashed successfully');
@@ -44,6 +54,8 @@ async function main() {
       status: 'active',
       is_organization_owner: false,
       verified: true,
+      createdByMethod: 'system_created',
+      createdByUserId: null,
     },
   });
 
@@ -66,6 +78,8 @@ async function main() {
       status: 'active',
       is_organization_owner: true,
       verified: true,
+      createdByMethod: 'system_created',
+      createdByUserId: null,
     },
   });
 
@@ -88,12 +102,14 @@ async function main() {
       status: 'active',
       is_organization_owner: true,
       verified: true,
+      createdByMethod: 'system_created',
+      createdByUserId: null,
     },
   });
 
   console.log('👤 Organization Admin created:', orgAdmin.email);
 
-  // Create additional system admins for concierge assignment
+  // Create additional system admins for admin assignment
   const systemAdmin1 = await prisma.uSER.create({
     data: {
       email: 'admin1@medvirtual.com',
@@ -110,6 +126,8 @@ async function main() {
       status: 'active',
       is_organization_owner: false,
       verified: true,
+      createdByMethod: 'system_created',
+      createdByUserId: null,
     },
   });
 
@@ -129,6 +147,8 @@ async function main() {
       status: 'active',
       is_organization_owner: false,
       verified: true,
+      createdByMethod: 'system_created',
+      createdByUserId: null,
     },
   });
 
@@ -142,7 +162,8 @@ async function main() {
       phone: '+1-555-0201',
       website_url: 'https://medtechsolutions.com',
       location: 'San Francisco, CA',
-      description: 'Leading provider of medical technology solutions for healthcare providers.',
+      description:
+        'Leading provider of medical technology solutions for healthcare providers.',
       industry: 'Healthcare Technology',
       organization_role: OrganizationRole.client,
       number_of_employees: 150,
@@ -150,13 +171,22 @@ async function main() {
       date_joined: new Date('2023-01-15'),
       date_became_client: new Date('2023-02-01'),
       status: OrganizationStatus.active,
-      signed_document_url: 'https://docs.medvirtual.com/contracts/medtech-solutions-signed.pdf',
+      signed_document_url:
+        'https://docs.medvirtual.com/contracts/medtech-solutions-signed.pdf',
       signed_document_date: new Date('2023-02-01'),
-      specialties: ['Medical Software', 'Healthcare Analytics', 'Patient Management Systems'],
-      services: ['Software Development', 'System Integration', 'Technical Support', 'Training'],
+      specialties: [
+        'Medical Software',
+        'Healthcare Analytics',
+        'Patient Management Systems',
+      ],
+      services: [
+        'Software Development',
+        'System Integration',
+        'Technical Support',
+        'Training',
+      ],
       owner_id: orgSuperAdmin.id,
-      concierge_id: systemAdmin1.id,
-      admin_id: systemSuperAdmin.id,
+      admin_id: systemAdmin1.id,
     },
   });
 
@@ -176,18 +206,22 @@ async function main() {
       phone: '+1-555-0202',
       website_url: 'https://regentamedical.com',
       location: 'Boston, MA',
-      description: 'Innovative medical device company specializing in diagnostic equipment.',
+      description:
+        'Innovative medical device company specializing in diagnostic equipment.',
       industry: 'Medical Devices',
       organization_role: OrganizationRole.prospect,
       number_of_employees: 75,
       date_founded: new Date('2020-07-20'),
       date_joined: new Date('2024-01-10'),
       status: OrganizationStatus.active,
-      specialties: ['Diagnostic Equipment', 'Medical Imaging', 'Laboratory Systems'],
+      specialties: [
+        'Diagnostic Equipment',
+        'Medical Imaging',
+        'Laboratory Systems',
+      ],
       services: ['Equipment Sales', 'Installation', 'Maintenance', 'Training'],
       owner_id: orgAdmin.id,
-      concierge_id: systemAdmin2.id,
-      admin_id: systemSuperAdmin.id,
+      admin_id: systemAdmin2.id,
     },
   });
 
@@ -215,12 +249,12 @@ async function main() {
       date_joined: new Date('2023-06-01'),
       date_became_client: new Date('2023-07-15'),
       status: OrganizationStatus.active,
-      signed_document_url: 'https://docs.medvirtual.com/contracts/healthcare-plus-signed.pdf',
+      signed_document_url:
+        'https://docs.medvirtual.com/contracts/healthcare-plus-signed.pdf',
       signed_document_date: new Date('2023-07-15'),
       specialties: ['Primary Care', 'Specialty Services', 'Emergency Care'],
       services: ['Medical Services', 'Diagnostic Testing', 'Preventive Care'],
-      concierge_id: systemAdmin1.id,
-      admin_id: systemSuperAdmin.id,
+      admin_id: systemAdmin1.id,
     },
   });
 
@@ -240,8 +274,7 @@ async function main() {
       status: OrganizationStatus.active,
       specialties: ['Drug Development', 'Clinical Research', 'Biotechnology'],
       services: ['Research & Development', 'Manufacturing', 'Distribution'],
-      concierge_id: systemAdmin2.id,
-      admin_id: systemSuperAdmin.id,
+      admin_id: systemAdmin2.id,
     },
   });
 
@@ -355,7 +388,8 @@ async function main() {
   const hireRequests = [
     {
       title: 'Senior Software Engineer',
-      description: 'Looking for an experienced software engineer to join our development team.',
+      description:
+        'Looking for an experienced software engineer to join our development team.',
       org_id: organization1.id,
     },
     {
@@ -420,12 +454,14 @@ async function main() {
   console.log(`- Candidates created: ${await prisma.candidate.count()}`);
   console.log(`- Hire requests created: ${await prisma.hireRequest.count()}`);
   console.log(`- Tickets created: ${await prisma.ticket.count()}`);
-  
+
   console.log('\n🔑 Login Credentials:');
   console.log('System Super Admin: lnardon@proton.me');
   console.log('Organization Super Admin: anthony16604@gmail.com');
   console.log('Organization Admin: lucas+22@regenta.ai');
-  console.log('\nPasswords are the ones you provided and are properly encrypted.');
+  console.log(
+    '\nPasswords are the ones you provided and are properly encrypted.',
+  );
 }
 
 main()

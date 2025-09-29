@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { USER } from '@prisma/client';
+import { OrganizationRole, USER } from '@prisma/client';
 
 import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -115,6 +115,9 @@ describe('HireRequestService', () => {
       verified: false,
       createdAt: new Date(),
       updatedAt: new Date(),
+      createdByMethod: 'self_signup',
+      createdByUserId: null,
+      hubspot_id: null,
     } ;
   });
 
@@ -211,7 +214,9 @@ describe('HireRequestService', () => {
     });
   
     it('should set status as new if organization is active', async () => {
-      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active',
+        organization_role: OrganizationRole.client,
+        admin_id: 'user1', });
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1', skills: [] });
@@ -682,8 +687,9 @@ describe('HireRequestService', () => {
   describe.skip('showMatchCandidates', () => {
     beforeEach(() => {
       jest.clearAllMocks();
-      process.env.CANDIDATE_HOUR_PER_MONTH = '160'; 
+      process.env.CANDIDATE_HOUR_PER_MONTH = '176'; 
       process.env.CANDIDATE_PERCENT = '1'; 
+      process.env.CANDIDATE_COST_PER_HOUR='3.29';
     });
   
     it('should return scored candidates sorted by score', async () => {

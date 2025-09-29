@@ -76,11 +76,11 @@ export class GetOrganizationsDto {
   @ApiProperty({
     required: false,
     description:
-      'Filter by concierge ID (only available for system_super_admin)',
+      'Filter by admin ID (only available for system_super_admin)',
   })
   @IsOptional()
   @IsString()
-  concierge?: string;
+  admin?: string;
 
   @ApiProperty({
     required: false,

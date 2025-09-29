@@ -12,15 +12,15 @@ export class DashboardService {
     ) {}
               
 
-    async getDashboardData(user: USER): Promise<any> {
+    async getDashboardData(user: USER, page: number = 1, perPage: number = 10): Promise<any> {
 
         switch (user.role) {
             case 'organization_super_admin':
             case 'organization_admin':
-                return await this.organization.execute(user);
+                return await this.organization.execute(user, page, perPage);
             case 'system_super_admin':
             case 'system_admin':
-                return await this.client.execute(user);
+                return await this.client.execute(user, page, perPage);
             default:
                 throw new BadRequestException('Invalid currentUser role');
         }

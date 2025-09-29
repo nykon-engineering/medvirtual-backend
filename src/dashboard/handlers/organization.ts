@@ -3,13 +3,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { count } from 'console';
+import { findMonthlySalary } from '../../common/utils/salary.util';
+import { HireRequestService } from '../../hire-request/hire-request.service';
 
 @Injectable()
 export class HandlerOrganization {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly hireRequestService: HireRequestService) {}
 
-  async execute(user): Promise<object> {
+  async execute(user, page: number = 1, perPage: number = 10): Promise<object> {
     const result: any = {};
     //this variable will be used to otherTalents
     const select = {
@@ -130,44 +131,9 @@ export class HandlerOrganization {
 
     result.hiredStaff = hiredStaff;
     
-    const hireRequest = await this.prisma.hireRequest.findMany({
-      where: {
-        org_id: user.organization_id,
-        status: 'awaiting_decision',
-      },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        createdAt: true,
-        panels: {
-          select: {
-            id: true,
-            status: true,
-            scheduled_date: true,
-            createdAt: true,
-            panelCandidates: {
-              select: {
-                id: true,
-                candidate: {
-                  select: {
-                    id: true,
-                    first_name: true,
-                    last_name: true,
-                    email: true,
-                    hourly_pay_rate: true,
-                    organization_id: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    result.hireRequest = hireRequest;
+    // New: use HireRequestService to bring the same shape as /hire-request (includes specialization and skills)
+    const hireRequestsResult = await this.hireRequestService.findAll(user, undefined, page, perPage);
+    result.hireRequests = hireRequestsResult;
 
     const awaitingDecision = await this.prisma.candidatePanel.findMany({
       where: {
@@ -246,6 +212,11 @@ export class HandlerOrganization {
       select,
       take: 8,
     });
+
+    const otherTalentsSalary = otherTalents.map((talent) => ({
+      ...talent,
+      salary: findMonthlySalary(Number(talent?.hourly_pay_rate))
+    }))
     result.otherTalents = otherTalents;
 
     return result;

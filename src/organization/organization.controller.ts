@@ -125,11 +125,11 @@ export class OrganizationController {
     description: 'Filter by location',
   })
   @ApiQuery({
-    name: 'concierge',
+    name: 'admin',
     required: false,
     type: String,
     description:
-      'Filter by concierge ID (only available for system_super_admin)',
+      'Filter by admin ID (only available for system_super_admin)',
   })
   @ApiQuery({
     name: 'sortBy',
@@ -178,8 +178,8 @@ export class OrganizationController {
     status: 201,
     description: 'Organization created successfully',
   })
-  async create(@Body() data: CreateOrganizationDto, @CurrentUser() user: any) {
-    const org = await this.organizationService.create(data, user);
+  async create(@Body() data: CreateOrganizationDto) {
+    const org = await this.organizationService.create(data);
     return {
       status: 201,
       message: 'Organization created successfully',
@@ -238,23 +238,23 @@ export class OrganizationController {
     };
   }
 
-  @Put('assign-concierge/:id')
+  @Put('assign-admin/:id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_admin', 'system_super_admin')
+  @Roles('system_super_admin')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Assign a concierge to an organization' })
+  @ApiOperation({ summary: 'Assign an admin to an organization' })
   @ApiResponse({
     status: 200,
-    description: 'Concierge assigned successfully',
+    description: 'Admin assigned successfully',
   })
-  async assignConcierge(
+  async assignAdmin(
     @Param('id') id: string,
-    @Body('concierge_id') conciergeId: string,
+    @Body('admin_id') adminId: string,
   ) {
-    const org = await this.organizationService.assignConcierge(id, conciergeId);
+    const org = await this.organizationService.assignAdmin(id, adminId);
     return {
       status: 200,
-      message: 'Concierge assigned successfully',
+      message: 'Admin assigned successfully',
       organization: org,
     };
   }

@@ -281,14 +281,16 @@ export class UserController {
     return this.userService.inviteUserToOrganization(
       organizationId,
       inviteData,
-      // user,
+      user,
     );
   }
 
   @Get('organization/users/by-current-user')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin')
-  @ApiOperation({ summary: 'Get all users of the organization from current User' })
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({
+    summary: 'Get all users of the organization from current User',
+  })
   @ApiResponse({ status: 200, description: 'Users found successfully.' })
   @ApiResponse({
     status: 404,

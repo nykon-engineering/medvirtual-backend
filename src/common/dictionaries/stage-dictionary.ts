@@ -8,6 +8,7 @@ export const dbToStageDictionary: Record<number, string> = {
     261075105: 'Available Candidates',
     1087596819: 'Available Candidates - Part Time',
     1087596820: 'Endorsed to Client - Part Time',
+    1172847191: 'Endorsed via Platform',    
     261137285: 'Endorsed to Client',
     261173426: 'Pairing Booked',
     261214844: 'Hired',

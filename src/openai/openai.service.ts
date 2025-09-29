@@ -2,11 +2,13 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { OpenAI } from 'openai';
 import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
 import { MailService } from '../mail/mail.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class OpenaiService {
     constructor(
         private readonly mailService: MailService,
+        private readonly prisma: PrismaService
     ) {}
     /* istanbul ignore next */
     async organizeText(text: string, candidate: any): Promise<string> {
@@ -44,7 +46,8 @@ export class OpenaiService {
             "role": "",
             "start_date": null,
             "end_date": null,
-            "description": ""
+            "description": "",
+            "bullet_points": "",
             }
         ],
         "education": [
@@ -64,6 +67,8 @@ export class OpenaiService {
         ### CRITICAL RULES (HIGHEST PRIORITY)
         - NEVER include the candidate’s personal name, initials, or any direct identifier in the "bio".  
         - If a name appears in Textract or HubSpot, IGNORE it completely when writing the bio.  
+        - When write the experience, each description phrase must be between 120 and 160 characters. Adjust as needed using only existing details.
+        - When write the experience, in each bullet point, ensure the length is between 120 and 160 characters. Rewrite only for clarity and brevity if needed, but do not add information not present in Textract.
 
         #### General
         - Do not change the JSON structure or key order.
@@ -87,8 +92,16 @@ export class OpenaiService {
 
         #### Experience
         - Use only literal data from Textract.
-        - 'description': short paragraph summarizing the role. organizated text with each phrase finalized with ;. each phrase should have between 120 and 160 characters.
+        - "description": MUST be composed of **phrases separated by semicolons (;) and each phrase MUST be between 120 and 160 characters.** Do not return shorter or longer sentences. 
+            - If any description sentence is shorter than 120 characters, expand it using ONLY existing details.  
+            - If any description sentence is longer than 160 characters, split it into multiple phrase, each between 120 and 160 characters.
+            - You MUST ensure all phrase are inside this range. This is mandatory.
+            - Example of correct description phrase:  "Developed scalable web applications using React and Node.js, improving user engagement and reducing page load times significantly;"  
         - Return only the JSON. No explanations or preamble.
+        -  bullet_points:  
+            - Array of individual task/achievement statements from the experience.  
+            - Rewrite only for clarity and brevity if needed, but do not add information not present in Textract.  
+            - Each bullet point must be between 120 and 160 characters.
         - On the start_date and end_date fields, return the date in the format YYYY-MM-DD.
         - if the date is not found, return null.
         - If the end_date is not found, return null.
@@ -139,30 +152,53 @@ export class OpenaiService {
             return message;
 
         }catch (error: any) {
-            if (error?.response?.data?.error?.type === 'insufficient_quota') {
+            
+            if (error?.type === 'insufficient_quota') {
                 console.error('[OpenAI] Insufficient Quota:');
 
-                // Send insufficient quota via email
-                const emailBody = insufficient_quota();
-                const mailSent = await this.mailService.sendMail({
-                from: 'MedVirtual <noreply@medvirtual.ai>',
-                to: 'paulo@regenta.ai',
-                subject: 'Insufficient Quota from OpenAI',
-                html: emailBody,
+                const today = new Date();
+                const existingMail = await this.prisma.mail_Settings.findFirst({
+                where: {
+                    title: 'insufficient_quota',
+                    created_at: {
+                    gte: new Date(today.setHours(0, 0, 0, 0)),
+                    lt: new Date(today.setHours(23, 59, 59, 999)), 
+                    },
+                },
                 });
-                if (!mailSent) {
-                  console.error('Failed to send insufficient quota email notification.');
+                if (!existingMail) {
+                    // Send insufficient quota via email
+                    const emailBody = insufficient_quota();
+                    const mailSent = await this.mailService.sendMail({
+                    from: 'MedVirtual <noreply@medvirtual.ai>',
+                    to: 'shayan@regenta.ai',
+                    cc: 'paulo@regenta.ai',
+                    subject: 'Insufficient Quota from OpenAI',
+                    html: emailBody,
+                    });
+                    if (!mailSent) {
+                        console.log('Failed to send insufficient quota email notification.');
+                    }
+                    //Here I save in the database that I sent the email
+                    await this.prisma.mail_Settings.create({
+                        data: {
+                          title: 'insufficient_quota',
+                        },
+                    });
                 }
+
+                
+                
                 throw new BadRequestException('You dont have credits. Check your plan/billing.');
             }
 
-            if (error?.response?.data?.error?.type === 'rate_limit_error') {
-                console.error('[OpenAI] Rate Limit Exceeded:');
+            if (error?.type === 'rate_limit_error') {
+                console.log('[OpenAI] Rate Limit Exceeded:');
                 throw new BadRequestException('Rate limit exceeded. Please try again later.');
             }
           
-            console.error('[OpenAI] unexpected error:', error);
-            throw new BadRequestException('unexpected error to request OpenAI.');
+            console.log('[OpenAI] unexpected error:', error);
+            throw new BadRequestException('unexpected error to request OpenAI.', error);
         }
         
     }

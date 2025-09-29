@@ -11,6 +11,8 @@ import {
 } from 'class-validator';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
+
+
 export class CreateOrganizationDto {
   @ApiProperty({ required: true, description: 'Name of the organization' })
   @IsString()
@@ -42,7 +44,39 @@ export class CreateOrganizationDto {
 
   @ApiProperty({
     required: false,
-    description: 'Location/address of the organization',
+    description: 'address of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'City of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'State/Region of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Zip code of the organization',
+  })
+  @IsOptional()
+  @IsString()
+  zip?: string;
+  
+  @ApiProperty({
+    required: false,
+    description: 'Location/country of the organization',
   })
   @IsOptional()
   @IsString()
@@ -92,13 +126,13 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  specialties?: string[];
+  specialties?: string | string[];
 
   @ApiProperty({ required: false, description: 'List of services' })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  services?: string[];
+  services?: string | string[];
 
   @ApiProperty({
     required: false,
@@ -170,9 +204,18 @@ export class CreateOrganizationDto {
 
   @ApiProperty({
     required: false,
-    description: 'ID of the assigned concierge (system admin)',
+    description: 'ID of the assigned admin (system admin)',
   })
   @IsOptional()
   @IsString()
-  concierge_id?: string;
+  admin_id?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'hubspot ID',
+  })
+  @IsOptional()
+  @IsString()
+  hubspot_id?: string;
+  
 }

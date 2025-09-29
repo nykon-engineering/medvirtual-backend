@@ -39,7 +39,7 @@ describe('DashboardService', () => {
 
     const result = await service.getDashboardData(user);
 
-    expect(handlerOrganization.execute).toHaveBeenCalledWith(user);
+    expect(handlerOrganization.execute).toHaveBeenCalledWith(user, 1, 10);
     expect(handlerOrganization.execute).toHaveBeenCalledTimes(1);
     expect(result).toBe('org data');
   });
@@ -50,7 +50,7 @@ describe('DashboardService', () => {
 
     const result = await service.getDashboardData(user);
 
-    expect(handlerOrganization.execute).toHaveBeenCalledWith(user);
+    expect(handlerOrganization.execute).toHaveBeenCalledWith(user, 1, 10);
     expect(result).toBe('org admin data');
   });
 
@@ -60,7 +60,7 @@ describe('DashboardService', () => {
 
     const result = await service.getDashboardData(user);
 
-    expect(handlerClient.execute).toHaveBeenCalledWith(user);
+    expect(handlerClient.execute).toHaveBeenCalledWith(user, 1, 10);
     expect(result).toBe('client data');
   });
 
@@ -70,7 +70,7 @@ describe('DashboardService', () => {
 
     const result = await service.getDashboardData(user);
 
-    expect(handlerClient.execute).toHaveBeenCalledWith(user);
+    expect(handlerClient.execute).toHaveBeenCalledWith(user, 1, 10);
     expect(result).toBe('client admin data');
   });
 
