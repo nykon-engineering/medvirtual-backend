@@ -34,7 +34,7 @@ export class CandidatesService {
   async findAll(
     user: USER, 
     country?: string, 
-    avaliability?: string, 
+    availability?: string, 
     monthly_compensation_from?: string, 
     monthly_compensation_to?: string, 
     years_of_experience?: string,
@@ -64,8 +64,8 @@ export class CandidatesService {
 
     const combinedFilters: Record<string, any>[] = [];
 
-    const availabilityArray = avaliability
-      ? avaliability.split(',').map((a) => a.trim()).filter(Boolean)
+    const availabilityArray = availability
+      ? availability.split(',').map((a) => a.trim()).filter(Boolean)
       : [];
 
     const languagesArray = languages ?
@@ -135,56 +135,64 @@ export class CandidatesService {
 
 
     const where = {
-      OR:[
+      OR: [
         {
-          country: country ? country : undefined,
-          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          country: country ? country : undefined,
-          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          country: country ? country : undefined,
-          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          country: country ? country : undefined,
-          employment_type: availabilityArray.length > 0 ? { in: availabilityArray } : (avaliability ? avaliability : undefined),
-          hourly_pay_rate: {
-            gte: hourly_from ? hourly_from : undefined,
-            lte: hourly_to ? hourly_to : undefined
-          },
+          ...(country && { country }),
+          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(hourly_from !== undefined || hourly_to !== undefined ? {
+            hourly_pay_rate: {
+              ...(hourly_from !== undefined && { gte: hourly_from }),
+              ...(hourly_to !== undefined && { lte: hourly_to })
+            }
+          } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
-          AND: combinedFilters,
+          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
           ...experienceFilter,
           ...searchFilter,
         }

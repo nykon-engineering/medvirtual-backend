@@ -35,7 +35,7 @@ export class CandidatesController {
   async findAll(
     @CurrentUser() user: USER, 
     @Query('country') country: string, 
-    @Query('availiability') avaliability: string, 
+    @Query('availability') availability: string, 
     @Query('monthly_compensation_from') monthly_compensation_from: string, 
     @Query('monthly_compensation_to') monthly_compensation_to: string, 
     @Query('years_of_experience') years_of_experience: string,
@@ -49,7 +49,7 @@ export class CandidatesController {
     const result = await this.candidatesService.findAll(
       user, 
       country, 
-      avaliability, 
+      availability, 
       monthly_compensation_from, 
       monthly_compensation_to, 
       years_of_experience,
