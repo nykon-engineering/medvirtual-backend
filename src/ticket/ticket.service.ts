@@ -340,4 +340,48 @@ export class TicketService {
       );
     }
   }
+
+  async delete(id: string, user: USER): Promise<object> {
+    if (
+      !user.role.includes('system_admin') &&
+      !user.role.includes('system_super_admin')
+    ) {
+      throw new BadRequestException(
+        'Insufficient permissions to delete tickets',
+      );
+    }
+
+    try {
+      const ticket = await this.prisma.ticket.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          status: true,
+          type: true,
+        },
+      });
+
+      if (!ticket) {
+        throw new BadRequestException('Ticket not found');
+      }
+
+      await this.prisma.ticket.delete({
+        where: { id },
+      });
+
+      return {
+        message: 'Ticket deleted successfully',
+        deletedTicket: {
+          id: ticket.id,
+          type: ticket.type,
+          status: ticket.status,
+        },
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Error deleting ticket', error.message);
+    }
+  }
 }
