@@ -856,6 +856,11 @@ export class HireRequestService {
         country: true,
         specialization: true,
         employment_type : true,
+        languages: {
+          select: {
+            name: true,
+          },
+        },
         skills: {
           select: {
             skill_name: true,
