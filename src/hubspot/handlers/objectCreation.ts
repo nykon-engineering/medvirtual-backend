@@ -34,13 +34,20 @@ export class HandlerObjectCreation {
             const candidateData = mapHubspotToDb(getObject.data.properties);//this variable doenst have the language,because languages went setup on dictionary
             candidateData.processing_status='pending';
 
+            candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as unknown as string)
+            .split(';')
+            .map(s => s.trim());
+            
+
             const candidateExists = await this.prisma.candidate.findUnique({
                 where: {
                     hubspot_id: String(event.objectId)
                 }
             })
+            console.log(candidateExists);
             if(candidateExists) throw new BadRequestException('Candidate already exists on the database');
 
+            
             const createCandidate = await this.prisma.candidate.create({
                 data: candidateData,
             })
