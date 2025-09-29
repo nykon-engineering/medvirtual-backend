@@ -1154,9 +1154,10 @@ export class HireRequestService {
       throw new NotFoundException(`Panel for this hire request not found`);
     }
 
-    if (panel.panelCandidates.length < 3) {
-      throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
-    }
+    //Pauli asked to remove this rule: https://regenta-company.monday.com/boards/9328303960/pulses/18070949162?notification=6971131519
+    //if (panel.panelCandidates.length < 3) {
+    //  throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
+    //}
 
     await this.prisma.interview.deleteMany({
       where: {
