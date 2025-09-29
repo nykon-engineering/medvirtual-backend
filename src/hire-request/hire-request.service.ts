@@ -591,9 +591,11 @@ export class HireRequestService {
     } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){
 
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
-      if (panelExists.panelCandidates.length < 3) {
-        throw new BadRequestException(`Panel must have at least 3 candidates`);
-      }
+      
+      //Pauli asked to remove this rule: https://regenta-company.monday.com/boards/9328303960/pulses/18070949162?notification=6971131519
+      //if (panelExists.panelCandidates.length < 3) {
+      //  throw new BadRequestException(`Panel must have at least 3 candidates`);
+      //}
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return this.findOne(id, user);
