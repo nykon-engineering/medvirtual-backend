@@ -45,7 +45,9 @@ export class HandlerOrganizationCreation {
             );
             
             if (!getObject) throw new BadRequestException('No object data found');
-            if(getObject.data.results[0].properties.business_unit !== 'MedVirtual') throw new BadRequestException('Organization is not a client of MedVirtual');
+            if(getObject.data.results[0].properties.business_unit !== 'MedVirtual' && 
+                getObject.data.results[0].properties.business_unit !== 'Berry Virtual') 
+                throw new BadRequestException('Organization is not a client of MedVirtual');
 
             const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
 

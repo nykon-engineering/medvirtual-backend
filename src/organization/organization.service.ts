@@ -173,6 +173,25 @@ export class OrganizationService {
                   },
               ],
             },
+            {
+              filters: [
+                {
+                  propertyName: 'business_unit',
+                  operator: 'EQ',
+                  value: 'Berry Virtual',
+                },
+                {
+                propertyName: 'num_associated_deals',
+                operator: 'GT',
+                value: '0',
+                },
+                {
+                  propertyName: 'hs_object_id',
+                  operator: 'EQ',
+                  value: '8304831771',
+                  },
+              ],
+            },
           ],
           properties: [
             'agent_status',
