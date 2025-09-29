@@ -171,6 +171,7 @@ model Candidate {
   panelCandidates        PanelCandidate[]
   staff                  Staff[]
   tickets                Ticket[]
+  approved_positions_pairing     String[]         
 }
 
 model CandidateLanguage {
