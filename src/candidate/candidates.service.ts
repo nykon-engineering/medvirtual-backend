@@ -901,8 +901,8 @@ export class CandidatesService {
     if (!candidate) throw new NotFoundException('Candidate not found');
 
 
-    const newStatus = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === 'endorsed to client')?.[0];
-    if (!newStatus) throw new BadRequestException('Invalid status mapping for Endorsed to Client');
+    const newStatus = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === 'Endorsed via Platform')?.[0];
+    if (!newStatus) throw new BadRequestException('Invalid status mapping for Endorsed via platform');
 
     const [endorsement, candidateUpdated] = await this.prisma.$transaction([
       this.prisma.panelCandidate.create({

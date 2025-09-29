@@ -361,7 +361,7 @@ export class HireRequestController {
   @ApiBody({ type: changeWinnerDTO })
   @ApiResponse({ status: 200, description: 'Winner changed successfully and the candidate was moved to endorsed stage on the hubspot' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
-  @ApiResponse({ status: 404, description: 'Pipeline status not found for Endorsed to Clien' })
+  @ApiResponse({ status: 404, description: 'Pipeline status not found for Endorsed via client' })
   @ApiResponse({ status: 404, description: 'Hire request not found' })
   @ApiResponse({ status: 404, description: 'Panel for this hire request not found' })
   @ApiResponse({ status: 400, description: 'Winner candidate not found in the panel' })

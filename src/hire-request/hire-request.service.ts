@@ -701,7 +701,7 @@ export class HireRequestService {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
           return dbToStageDictionary[key] === 'Endorsed via Platform';
         });
-        if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed to Client`);
+        if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed via platform`);
 
         const candidateIds = panelCandidates.map(pc => pc.candidate.id);
         await this.prisma.candidate.updateMany({
