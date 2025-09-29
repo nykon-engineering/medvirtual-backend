@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { OrganizationRole, Prisma } from "@prisma/client";
 import { candidadeToDbDictionary, dbToCandidateDictionary } from "../dictionaries/candidate-dictionary";
 import { organizationToDbDictionary } from "../dictionaries/organization-dictionary";
 import { CreateOrganizationDto } from "../../organization/dto/createOrganization.dto";
@@ -59,7 +59,7 @@ export function mapOrganizationToDb(hubspotData: organizationData): CreateOrgani
         if (value === undefined) continue;
 
         if (hubspotKey === "type") {
-          result[dbKey] = value === "Prospect" ? "prospect" : "client";
+          result[dbKey] = value.toUpperCase() === "PROSPECT" ? OrganizationRole.prospect : OrganizationRole.client;
         } else {
           result[dbKey] = value;
         }
