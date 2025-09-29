@@ -2034,9 +2034,25 @@ export class HireRequestService {
 
     const panelCandidates = panel.panelCandidates;
 
-    const availableCandidates = panelCandidates.filter(pc => 
-      pc.candidate.pipeline_status === '261075105' || pc.candidate.pipeline_status === '1087596819'
-    );
+    //Here I cant filter this because this specific candidate got 'Endorsed via platform' when they were added to the panel
+    //const availableCandidates = panelCandidates.filter(pc => 
+    //  pc.candidate.pipeline_status === '261075105' || pc.candidate.pipeline_status === '1087596819'
+    //);
+    const availableCandidates = (
+      await Promise.all(
+        panelCandidates.map(async (pc) => {
+          const existInOtherPanel = await this.prisma.panelCandidate.findFirst({
+            where: {
+              candidate_id: pc.candidate.id,
+              panel_id: { not: pc.panel_id },
+            },
+          });
+    
+          return existInOtherPanel ? null : pc;
+        })
+      )
+    ).filter((pc) => pc !== null);
+
 
     const selectedCandidate = panelCandidates.find(pc => pc.status === 'selected_by_client');
 
