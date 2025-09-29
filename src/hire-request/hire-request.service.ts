@@ -593,9 +593,9 @@ export class HireRequestService {
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       
       //Pauli asked to remove this rule: https://regenta-company.monday.com/boards/9328303960/pulses/18070949162?notification=6971131519
-      //if (panelExists.panelCandidates.length < 3) {
-      //  throw new BadRequestException(`Panel must have at least 3 candidates`);
-      //}
+      if (panelExists.panelCandidates.length < 1) {
+        throw new BadRequestException(`Panel must have at least 1 candidates`);
+      }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return this.findOne(id, user);
@@ -1155,9 +1155,9 @@ export class HireRequestService {
     }
 
     //Pauli asked to remove this rule: https://regenta-company.monday.com/boards/9328303960/pulses/18070949162?notification=6971131519
-    //if (panel.panelCandidates.length < 3) {
-    //  throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
-    //}
+    if (panel.panelCandidates.length < 1) {
+      throw new BadRequestException(`Panel must have at least 1 candidates to be marked as ready`);
+    }
 
     await this.prisma.interview.deleteMany({
       where: {
