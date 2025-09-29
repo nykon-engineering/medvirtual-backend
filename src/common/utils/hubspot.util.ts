@@ -55,9 +55,13 @@ export function mapOrganizationToDb(hubspotData: organizationData): CreateOrgani
     const result: Partial<CreateOrganizationDto> = {};
 
     for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
-        
-        if (hubspotData[hubspotKey] !== undefined) {
-          result[dbKey] = hubspotData[hubspotKey];
+      const value = hubspotData[hubspotKey];
+        if (value === undefined) continue;
+
+        if (hubspotKey === "type") {
+          result[dbKey] = value === "Prospect" ? "prospect" : "client";
+        } else {
+          result[dbKey] = value;
         }
         
       }

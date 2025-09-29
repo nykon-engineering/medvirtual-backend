@@ -52,7 +52,7 @@ export class HandlerOrganizationCreation {
             organizationData.status=OrganizationStatus.active;
             organizationData.email = organizationData.email ?? undefined;
 
-            console.log('OrganizedData: ',organizationData);
+            //console.log('OrganizedData: ',organizationData);
 
             const organizationExists = await this.prisma.organization.findUnique({
                 where: {
