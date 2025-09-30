@@ -1665,8 +1665,6 @@ describe('HireRequestService', () => {
   
 
   describe('showMatchHireRequests', () => {
-   
-  
     it('should throw NotFoundException if candidate does not exist', async () => {
       prismaMock.candidate.findUnique.mockResolvedValue(null);
   
