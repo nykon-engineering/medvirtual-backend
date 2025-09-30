@@ -47,7 +47,6 @@ export class OpenaiService {
             "start_date": null,
             "end_date": null,
             "description": "",
-            "bullet_points": "",
             }
         ],
         "education": [
@@ -67,7 +66,6 @@ export class OpenaiService {
         ### CRITICAL RULES (HIGHEST PRIORITY)
         - NEVER include the candidate’s personal name, initials, or any direct identifier in the "bio".  
         - If a name appears in Textract or HubSpot, IGNORE it completely when writing the bio.  
-        - When write the experience, each description sentence must be between 100 and 120 characters. Adjust as needed using only existing details.
 
         ### RULES
         #### General
@@ -93,10 +91,6 @@ export class OpenaiService {
         #### Experience
         - Use only literal data from Textract.
         - "description": MUST be composed of **sentence separated by semicolons (;) and each sentence MUST be between 100 and 120 characters.** Do not return shorter or longer sentences. 
-            - If any description sentence is shorter than 100 characters, expand it using ONLY existing details.  
-            - If any description sentence is longer than 120 characters, split it into multiple sentence, each between 120 and 160 characters.
-            - You MUST ensure all sentence are inside this range. This is mandatory.
-            - Example of correct description sentence:  "Developed scalable web applications using React and Node.js, improving user engagement and reducing page load times significantly;"  
         - Return only the JSON. No explanations or preamble.
         - On the start_date and end_date fields, return the date in the format YYYY-MM-DD.
         - if the date is not found, return null.
