@@ -431,6 +431,7 @@ export class OrganizationService {
         location: org.location || undefined,
         description: org.description || undefined,
         industry: org.industry || undefined,
+        business_unit: org.business_unit || undefined,
         organization_role: org.organization_role,
         number_of_employees: org.number_of_employees || undefined,
         date_founded: org.date_founded || undefined,
