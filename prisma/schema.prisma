@@ -257,7 +257,7 @@ model HireRequest {
   assign_user_id      String?
   panels              CandidatePanel[]
   assigned_user       USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
-  organization        Organization       @relation(fields: [org_id], references: [id])
+  organization        Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
   skills              HireRequestSkill[]
   staff               Staff[]
 
@@ -345,7 +345,7 @@ model Ticket {
   priority     Priority
   staff_id     String?
   candidate_id String?
-  organization Organization @relation(fields: [org_id], references: [id])
+  organization Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff        Staff?       @relation(fields: [staff_id], references: [id])
   user         USER?        @relation(fields: [user_id], references: [id])
   candidate    Candidate?   @relation(fields: [candidate_id], references: [id])
