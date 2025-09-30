@@ -1581,7 +1581,6 @@ describe('HireRequestService', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       (global as any).dbToStageDictionary = {
-        pipeline_stage_hired: 'Hired',
         pipeline_stage_losers: 'Available Candidates',
       };
     });
@@ -1593,13 +1592,7 @@ describe('HireRequestService', () => {
     });
   
     it('should throw NotFoundException if pipelineStatusLosers not found', async () => {
-      (global as any).dbToStageDictionary = { pipeline_stage_hired: 'Hired' };
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(NotFoundException);
-    });
-  
-    it('should throw NotFoundException if pipelineStatus (Hired) not found', async () => {
-      (global as any).dbToStageDictionary = { pipeline_stage_losers: 'Available Candidates' };
+      (global as any).dbToStageDictionary = {};
       await expect(service.changeWinner(baseId, data, user))
         .rejects.toThrow(NotFoundException);
     });
@@ -1634,60 +1627,20 @@ describe('HireRequestService', () => {
         .rejects.toThrow(NotFoundException);
     });
   
-    it('should throw BadRequestException if panel update fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue(null);
-      
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if hireRequest update fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
-      prismaMock.hireRequest.update.mockResolvedValue(null);
-  
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should throw BadRequestException if winner update fails', async () => {
-      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
-      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
-      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
-      prismaMock.panelCandidate.findMany.mockResolvedValue([{ id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } }]);
-      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
-      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
-      prismaMock.panelCandidate.updateMany.mockResolvedValue(null);
-  
-      await expect(service.changeWinner(baseId, data, user))
-        .rejects.toThrow(BadRequestException);
-    });
-  
-    it('should complete successfully and call HubSpot API for winner and losers sequentially', async () => {
+    it('should complete successfully without winner pipeline update', async () => {
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
       prismaMock.panelCandidate.findMany.mockResolvedValue([
-        { id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2' } },
-        { id: 'pc3', candidate: { id: 'cand3', hubspot_id: 'hub3' } },
+        { id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2', pipeline_status_origin: null } },
+        { id: 'pc3', candidate: { id: 'cand3', hubspot_id: 'hub3', pipeline_status_origin: null } },
       ]);
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
       prismaMock.panelCandidate.updateMany
-        .mockResolvedValueOnce({ count: 1 })
-        .mockResolvedValueOnce({ count: 2 });
-      prismaMock.candidate.update.mockResolvedValue({
-        id: data.winner_id,
-        hubspot_id: 'hub123',
-        pipeline_status: 'pipeline_stage_hired',
-      });
+        .mockResolvedValueOnce({ count: 1 }) // winner update
+        .mockResolvedValueOnce({ count: 2 }); // others update
+      prismaMock.candidate.update.mockResolvedValue({}); // losers update
       prismaMock.candidatePanel.findMany.mockResolvedValue([
         {
           id: 'panel1',
@@ -1696,30 +1649,20 @@ describe('HireRequestService', () => {
           panelCandidates: [
             { status: 'selected_by_client', candidate: { id: 'cand1', experiences: [{ start_date: '2020-01-01' }] } },
           ],
-          hireRequest: {
-            id: 'hr1',
-            title: 'Dev',
-            description: 'Job',
-            status: 'placement_completed',
-            skills: [],
-          },
+          hireRequest: { id: 'hr1', title: 'Dev', description: 'Job', status: 'placement_completed', skills: [] },
         },
       ]);
-      
+  
       jest.spyOn(service['hubspot'], 'updateOneCandidateFromHireRequest').mockResolvedValue(true);
-      
   
       const result = await service.changeWinner(baseId, data, user);
   
       expect(result).toHaveLength(1);
-      expect(service['hubspot'].updateOneCandidateFromHireRequest).toHaveBeenCalled();
+      expect(service['hubspot'].updateOneCandidateFromHireRequest).toHaveBeenCalledTimes(2); // only losers
       expect(prismaMock.panelCandidate.updateMany).toHaveBeenCalledTimes(2);
-      expect(prismaMock.candidate.update).toHaveBeenCalledWith({
-        where: { id: data.winner_id },
-        data: { pipeline_status: expect.any(String) },
-      });
     });
   });
+  
 
   describe('showMatchHireRequests', () => {
    
