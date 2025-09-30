@@ -1684,14 +1684,18 @@ export class HireRequestService {
   async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<any> {
     if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+    //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
+    /*const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Hired';
     })
+    if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
+    */
+
     const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Available Candidates';
     })
     if (!pipelineStatusLosers) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
-    if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
+    
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
@@ -1811,8 +1815,10 @@ export class HireRequestService {
       )
     );
     
+    
+    //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
-    const candidateUpdated = await this.prisma.candidate.update({
+    /*const candidateUpdated = await this.prisma.candidate.update({
       where: {
         id: data.winner_id,
       },
@@ -1821,6 +1827,7 @@ export class HireRequestService {
       },
     });
     if (!candidateUpdated) throw new BadRequestException(`Candidate not updated to endorsed`);
+    
 
     
     try{
@@ -1831,6 +1838,7 @@ export class HireRequestService {
       console.error('Error updating candidate in HubSpot:', error);
       throw new BadRequestException(`Error updating candidate in HubSpot`);
     }
+    */
     
 
 
