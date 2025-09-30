@@ -580,4 +580,10 @@ export class OrganizationController {
       query,
     );
   }
+
+  @Get('populate-db/from-hubspot')
+  @ApiProperty({ description: 'Populate DB with organizations from hubspot' })
+  async populateDbFromHubspot() {
+    return await this.organizationService.populateDbFromHubspot();
+  }
 }

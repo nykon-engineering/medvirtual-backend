@@ -49,6 +49,9 @@ export class OrganizationResponseDto {
   @ApiProperty({ description: 'Organization industry', required: false })
   industry?: string;
 
+  @ApiProperty({ description: 'Business Unit', required: false })
+  business_unit?: string;
+
   @ApiProperty({ description: 'Organization role', enum: OrganizationRole })
   organization_role: OrganizationRole;
 

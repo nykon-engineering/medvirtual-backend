@@ -1,9 +1,9 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, forwardRef, Inject, Injectable } from "@nestjs/common";
 import axios from "axios";
 
 import { organizationToDbDictionary } from "../../common/dictionaries/organization-dictionary";
 import { mapOrganizationToDb } from "../../common/utils/hubspot.util";
-import { OrganizationRole, OrganizationStatus } from "@prisma/client";
+import { OrganizationStatus } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OrganizationService } from "../../organization/organization.service";
 
@@ -13,12 +13,13 @@ import { OrganizationService } from "../../organization/organization.service";
 export class HandlerOrganizationCreation {
     constructor(
         private readonly prisma: PrismaService,
+        @Inject(forwardRef (() => OrganizationService))
         private readonly organizationService: OrganizationService
     ) {}
 
     async execute(event){
 
-        const properties = Object.keys(organizationToDbDictionary).join(',')+ ',business_unit';
+        const properties = Object.keys(organizationToDbDictionary).join(',');
         try{
             const getObject = await axios.post('https://api.hubapi.com/crm/v3/objects/companies/search',
             {
@@ -50,6 +51,8 @@ export class HandlerOrganizationCreation {
                 throw new BadRequestException('Organization is not a client of MedVirtual');
 
             const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
+
+            console.log('Mapped organization data:', organizationData);
 
             organizationData.status=OrganizationStatus.active;
             organizationData.email = organizationData.email ?? undefined;

@@ -37,6 +37,7 @@ import { AuthService } from '../auth/auth.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 
 
 @Injectable()
@@ -44,6 +45,8 @@ export class OrganizationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
+    @Inject(forwardRef (() => HandlerOrganizationCreation))
+    private readonly organizationCreation: HandlerOrganizationCreation,
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService
     
@@ -597,6 +600,7 @@ export class OrganizationService {
           location: data.location,
           description: data.description,
           industry: data.industry,
+          business_unit: data.business_unit,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
           number_of_employees: Number(data.number_of_employees),
@@ -1895,5 +1899,76 @@ export class OrganizationService {
       }
       throw new BadRequestException('Failed to create staff for organization');
     }
+  }
+
+  async populateDbFromHubspot(): Promise<any> {
+    const result = await axios.post(
+      'https://api.hubapi.com/crm/v3/objects/companies/search',
+      {
+        filterGroups: [
+          {
+            filters: [
+              {
+                propertyName: 'business_unit',
+                operator: 'EQ',
+                value: 'MedVirtual',
+              },
+            ],
+          },
+          {
+            filters: [
+              {
+                propertyName: 'business_unit',
+                operator: 'EQ',
+                value: 'Berry Virtual',
+              }
+            ],
+          },
+        ],
+        properties: [
+          'agent_status',
+          'business_unit',
+          'address',
+          'name',
+          'hs_all_assigned_business_unit_ids',
+          'description',
+          'domain',
+          'hs_all_accessible_team_ids',
+          'hs_all_owner_ids',
+          'hs_all_team_ids',
+          'hs_num_open_deals',
+          'hs_total_deal_value',
+          'num_associated_deals'
+        ],
+        limit: 100,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    await this.prisma.organization.deleteMany({
+      where:{
+        hubspot_id: { not: null }
+      }
+    })
+
+    const dataMapped = result.data.results.map( (org: any) =>{
+      
+      return {
+        ...org.properties,
+        objectId: org.id,
+      }
+    })
+
+    for (const org of dataMapped) {
+      await this.organizationCreation.execute(org);
+    }
+
+
+    return 'db populated from hubspot successfully';
   }
 }

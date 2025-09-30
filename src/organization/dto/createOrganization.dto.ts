@@ -95,6 +95,11 @@ export class CreateOrganizationDto {
   @IsString()
   industry?: string;
 
+  @ApiProperty({ required: false, description: 'Business_unit from hubspot' })
+  @IsOptional()
+  @IsString()
+  business_unit?: string;
+
   @ApiProperty({
     required: false,
     description: 'Number of employees',
