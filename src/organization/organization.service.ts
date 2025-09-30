@@ -289,6 +289,7 @@ export class OrganizationService {
         industry,
         location,
         admin,
+        business_unit,
         sortBy = 'createdAt',
         sortOrder = 'desc',
       } = query;
@@ -370,6 +371,10 @@ export class OrganizationService {
       // Add admin filter (only for system_super_admin)
       if (admin && user.role === 'system_super_admin') {
         whereClause.admin_id = admin;
+      }
+
+      if (business_unit) {
+        whereClause.business_unit = business_unit;
       }
 
       // Build orderBy clause

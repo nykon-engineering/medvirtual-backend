@@ -84,6 +84,15 @@ export class GetOrganizationsDto {
 
   @ApiProperty({
     required: false,
+    description:
+      'Filter by Business Unit',
+  })
+  @IsOptional()
+  @IsString()
+  business_unit?: string;
+
+  @ApiProperty({
+    required: false,
     description: 'Sort field',
     enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],
     default: 'createdAt',
