@@ -770,7 +770,7 @@ export class HireRequestService {
       return this.findOne(id, user);
 
     
-    } else if (hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'awaiting_decision' || hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
       
       if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
