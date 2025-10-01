@@ -394,7 +394,7 @@ export class HireRequestService {
             ...pc.candidate,
             salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
           }
-        })
+        }))
       }))
     };
 
