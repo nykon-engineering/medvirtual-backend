@@ -235,7 +235,6 @@ export class OrganizationService {
   }
 
   async getAll(status: string, user: USER): Promise<Organization[]> {
-    console.log('Fetching organizations with status:', status);
     
     try {
       
@@ -660,7 +659,6 @@ export class OrganizationService {
 
       return organization;
     } catch (error) {
-      console.log('Failed to create a organization: ', error);
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -792,7 +790,6 @@ export class OrganizationService {
       })
 
     } catch (error) {
-      console.log(error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException
