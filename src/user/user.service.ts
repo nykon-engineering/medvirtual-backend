@@ -106,8 +106,8 @@ export class UserService {
 
       whereClause = { organization_id: { in: organizationIds } };
     } else if (user.role === 'system_super_admin') {
-      // system_super_admin can see all users from all organizations
-      whereClause = { organization_id: { not: null } };
+      // system_super_admin can see all users from all organizations | here I need to retrieve just users without organization it means 'system super admins'
+      whereClause = { organization_id: null };
     } else {
       // Fallback to original behavior for other roles
       whereClause = { organization_id: user.organization_id };
