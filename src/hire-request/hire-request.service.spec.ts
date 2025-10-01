@@ -1637,30 +1637,37 @@ describe('HireRequestService', () => {
       ]);
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
+    
       prismaMock.panelCandidate.updateMany
-        .mockResolvedValueOnce({ count: 1 }) // winner update
-        .mockResolvedValueOnce({ count: 2 }); // others update
-      prismaMock.candidate.update.mockResolvedValue({}); // losers update
-      prismaMock.candidatePanel.findMany.mockResolvedValue([
-        {
-          id: 'panel1',
-          scheduled_date: new Date(),
-          status: 'decision_made',
-          panelCandidates: [
-            { status: 'selected_by_client', candidate: { id: 'cand1', experiences: [{ start_date: '2020-01-01' }] } },
-          ],
-          hireRequest: { id: 'hr1', title: 'Dev', description: 'Job', status: 'placement_completed', skills: [] },
-        },
-      ]);
-  
+        .mockResolvedValueOnce({ count: 1 }) 
+        .mockResolvedValueOnce({ count: 2 });
+    
+      prismaMock.candidate.update.mockResolvedValue({});
+    
       jest.spyOn(service['hubspot'], 'updateOneCandidateFromHireRequest').mockResolvedValue(true);
-  
+    
+      const findOneMockResult = {
+        id: baseId,
+        title: 'Dev',
+        description: 'Job',
+        status: 'placement_completed',
+        panel: { status: 'decision_made' },
+      };
+    
+      const findOneSpy = jest.spyOn(service, 'findOne').mockResolvedValue(findOneMockResult);
+    
       const result = await service.changeWinner(baseId, data, user);
-  
-      expect(result).toHaveLength(1);
-      expect(service['hubspot'].updateOneCandidateFromHireRequest).toHaveBeenCalledTimes(2); // only losers
+    
+      expect(result).toEqual(findOneMockResult);
+    
+      expect(service['hubspot'].updateOneCandidateFromHireRequest).toHaveBeenCalledTimes(2);
+    
       expect(prismaMock.panelCandidate.updateMany).toHaveBeenCalledTimes(2);
+    
+      expect(findOneSpy).toHaveBeenCalledWith(baseId, user);
     });
+    
+
   });
   
 
