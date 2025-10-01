@@ -446,7 +446,7 @@ export class HireRequestService {
       });
       result.skills = newSkills;
     }
-    return result;
+    return this.findOne(id, user);
   }
 
   async updateStatus(id: string, data: changeStatusHireRequesDTO, user: USER): Promise<boolean> {
@@ -1772,7 +1772,8 @@ export class HireRequestService {
         },
       },
     });
-    if(!loserExists || loserExists.length === 0) throw new NotFoundException(`No other candidates found in the panel`);
+    //removed asked by Pauli because right now we can have just one candidate in the panel
+    //if(!loserExists || loserExists.length === 0) throw new NotFoundException(`No other candidates found in the panel`);
 
     //change Panel status
     const panelUpdated = await this.prisma.candidatePanel.update({
@@ -1824,19 +1825,22 @@ export class HireRequestService {
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
 
     
-    const candidateLosers = loserExists.map(c => c.candidate);
-    //update losers to 'available candidates' on database
-    await Promise.all(
-      candidateLosers.map(async c =>{
-        const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
-        await this.prisma.candidate.update({
-          where: { id: c.id },
-          data: { pipeline_status: pipeline_treated},
-        });
-        await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
-      }
-      )
-    );
+    if (loserExists){
+      const candidateLosers = loserExists.map(c => c.candidate);
+      //update losers to 'available candidates' on database
+      await Promise.all(
+        candidateLosers.map(async c =>{
+          const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
+          await this.prisma.candidate.update({
+            where: { id: c.id },
+            data: { pipeline_status: pipeline_treated},
+          });
+          await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+        }
+        )
+      );
+    }
+    
     
     
     //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
