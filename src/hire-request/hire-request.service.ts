@@ -91,7 +91,9 @@ export class HireRequestService {
     const hireRequest = {
       ...hireRequestData,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
-      status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+      //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
+      //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
+      status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
     };
 
@@ -379,12 +381,27 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
+    //Add salary with automatic calculation
     const formatted = {
       ...hireRequest,
       panels: hireRequest.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
         interviews: undefined,
+        panelCandidates: panel.panelCandidates.map(pc => {
+          const startDate = pc.candidate.experiences[0]?.start_date;
+          const years_of_experience = startDate
+          ? new Date().getFullYear() - new Date(startDate).getFullYear()
+          : 0;
+          return {
+            ...pc,
+            candidate:{
+              ...pc.candidate,
+              salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+              years_of_experience: years_of_experience
+              
+            }}
+        })
       }))
     };
 
@@ -589,14 +606,18 @@ export class HireRequestService {
     } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){
 
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
-      if (panelExists.panelCandidates.length < 3) {
-        throw new BadRequestException(`Panel must have at least 3 candidates`);
+      
+      //Pauli asked to remove this rule: https://regenta-company.monday.com/boards/9328303960/pulses/18070949162?notification=6971131519
+      if (panelExists.panelCandidates.length < 1) {
+        throw new BadRequestException(`Panel must have at least 1 candidates`);
       }
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return this.findOne(id, user);
     
-    } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' 
+      || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed'
+      || hireRequest.status == 'awaiting_decision' && data.status === 'placement_completed' ){
       
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       const winnerCandidate = panelExists.panelCandidates.find(pc => pc.status === 'selected_by_client');
@@ -701,7 +722,7 @@ export class HireRequestService {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
           return dbToStageDictionary[key] === 'Endorsed via Platform';
         });
-        if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed to Client`);
+        if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Endorsed via platform`);
 
         const candidateIds = panelCandidates.map(pc => pc.candidate.id);
         await this.prisma.candidate.updateMany({
@@ -758,7 +779,7 @@ export class HireRequestService {
       return this.findOne(id, user);
 
     
-    } else if (hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'awaiting_decision' || hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
       
       if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
@@ -928,8 +949,14 @@ export class HireRequestService {
   
     //order because I need to delivery the best candidates first
     scoredCandidates.sort((a, b) => b.score - a.score);
+
+    //Add salary with automatic calculation
+    const candidatesWithSalary = scoredCandidates.map(c => ({
+      ...c,
+      salary: findMonthlySalary(c.hourly_pay_rate?.toNumber() || 0),
+    }))
   
-    return scoredCandidates;
+    return candidatesWithSalary;
   }
   
   async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
@@ -1150,8 +1177,9 @@ export class HireRequestService {
       throw new NotFoundException(`Panel for this hire request not found`);
     }
 
-    if (panel.panelCandidates.length < 3) {
-      throw new BadRequestException(`Panel must have at least 3 candidates to be marked as ready`);
+    //Pauli asked to remove this rule: https://regenta-company.monday.com/boards/9328303960/pulses/18070949162?notification=6971131519
+    if (panel.panelCandidates.length < 1) {
+      throw new BadRequestException(`Panel must have at least 1 candidates to be marked as ready`);
     }
 
     await this.prisma.interview.deleteMany({
@@ -1679,14 +1707,18 @@ export class HireRequestService {
   async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<any> {
     if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+    //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
+    /*const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Hired';
     })
+    if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
+    */
+
     const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Available Candidates';
     })
     if (!pipelineStatusLosers) throw new NotFoundException(`Pipeline status not found for Available Candidates`);
-    if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
+    
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
@@ -1806,8 +1838,10 @@ export class HireRequestService {
       )
     );
     
+    
+    //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
-    const candidateUpdated = await this.prisma.candidate.update({
+    /*const candidateUpdated = await this.prisma.candidate.update({
       where: {
         id: data.winner_id,
       },
@@ -1816,6 +1850,7 @@ export class HireRequestService {
       },
     });
     if (!candidateUpdated) throw new BadRequestException(`Candidate not updated to endorsed`);
+    
 
     
     try{
@@ -1826,6 +1861,7 @@ export class HireRequestService {
       console.error('Error updating candidate in HubSpot:', error);
       throw new BadRequestException(`Error updating candidate in HubSpot`);
     }
+    */
     
 
 
@@ -1906,6 +1942,7 @@ export class HireRequestService {
     }));
 
     return result;
+    
   }
 
   async showMatchHireRequests(candidateId: string): Promise<any> {
@@ -2005,6 +2042,7 @@ export class HireRequestService {
                 id: true,
                 first_name: true,
                 last_name: true,
+                name: true,
                 email: true,
                 specialization: true,
                 employment_type: true,
@@ -2032,9 +2070,26 @@ export class HireRequestService {
 
     const panelCandidates = panel.panelCandidates;
 
-    const availableCandidates = panelCandidates.filter(pc => 
-      pc.candidate.pipeline_status === '261075105' || pc.candidate.pipeline_status === '1087596819'
-    );
+    //Here I cant filter this because this specific candidate got 'Endorsed via platform' when they were added to the panel
+    //const availableCandidates = panelCandidates.filter(pc => 
+    //  pc.candidate.pipeline_status === '261075105' || pc.candidate.pipeline_status === '1087596819'
+    //);
+    const availableCandidates = (
+      await Promise.all(
+        panelCandidates.map(async (pc) => {
+          const existInOtherPanel = await this.prisma.panelCandidate.findFirst({
+            where: {
+              candidate_id: pc.candidate.id,
+              panel_id: { not: pc.panel_id },
+              status: {not: 'returned_to_pool'}
+            },
+          });
+    
+          return existInOtherPanel ? null : pc;
+        })
+      )
+    ).filter((pc) => pc !== null);
+
 
     const selectedCandidate = panelCandidates.find(pc => pc.status === 'selected_by_client');
 

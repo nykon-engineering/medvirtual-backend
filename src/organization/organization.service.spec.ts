@@ -7,6 +7,7 @@ import { AuthService } from '../auth/auth.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
+import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 
 
 const userfake = { 
@@ -64,6 +65,10 @@ describe('OrganizationService', () => {
     inviteUser: jest.fn(),
   };
 
+  const handlerObjectCreationMock = {
+    execute: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -74,6 +79,7 @@ describe('OrganizationService', () => {
         },
         { provide: AuthService, useValue: mockAuthService },
         { provide: HubspotService, useValue: mockHubspotService },
+        { provide: HandlerOrganizationCreation , useValue: handlerObjectCreationMock },
       ],
     }).compile();
 
@@ -121,7 +127,7 @@ describe('OrganizationService', () => {
 
       mockPrismaService.organization.findMany.mockResolvedValue(organizations);
 
-      const result = await service.getAll(userfake);
+      const result = await service.getAll('active', userfake);
       expect(result).toEqual(organizations);
       expect(prisma.organization.findMany).toHaveBeenCalled();
     });
@@ -129,7 +135,7 @@ describe('OrganizationService', () => {
     it('should throw NotFoundException if an error occurs', async () => {
       mockPrismaService.organization.findMany.mockRejectedValue(new Error());
 
-      await expect(service.getAll(userfake)).rejects.toThrow(NotFoundException);
+      await expect(service.getAll('active', userfake)).rejects.toThrow(NotFoundException);
     });
   });
 

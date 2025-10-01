@@ -18,6 +18,7 @@ export const organizationToDbDictionary : Record<string, string> = {
     referral_email: 'email',
     specialty: 'specialties',
     type:'organization_role',
+    business_unit: 'business_unit',
 };
 
 export const dbToOrganizationDictionary : Record<string, string> = Object.fromEntries(  
