@@ -446,7 +446,7 @@ export class HireRequestService {
       });
       result.skills = newSkills;
     }
-    return result;
+    return this.findOne(id, user);
   }
 
   async updateStatus(id: string, data: changeStatusHireRequesDTO, user: USER): Promise<boolean> {
