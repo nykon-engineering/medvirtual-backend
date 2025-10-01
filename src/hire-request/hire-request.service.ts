@@ -615,7 +615,9 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return this.findOne(id, user);
     
-    } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' 
+      || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed'
+      || hireRequest.status == 'awaiting_decision' && data.status === 'placement_completed' ){
       
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       const winnerCandidate = panelExists.panelCandidates.find(pc => pc.status === 'selected_by_client');
