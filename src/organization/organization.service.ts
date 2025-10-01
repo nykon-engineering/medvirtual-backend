@@ -234,11 +234,20 @@ export class OrganizationService {
     }
   }
 
-  async getAll(user: USER): Promise<Organization[]> {
+  async getAll(status: string, user: USER): Promise<Organization[]> {
+    console.log('Fetching organizations with status:', status);
+    
     try {
+      
       const whereClause: any = {
-        status: { not: OrganizationStatus.inactive },
+        status: status
+        ? { equals: status as OrganizationStatus }
+        : undefined
       };
+
+      console.log('status: ', status);
+      console.log('whereClause: ', whereClause);
+      
 
       // For system_super_admin: return all organizations
       if (user.role === 'system_super_admin') {

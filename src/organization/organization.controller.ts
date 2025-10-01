@@ -57,12 +57,13 @@ export class OrganizationController {
   @Roles('system_super_admin', 'system_admin')
   @HttpCode(200)
   @ApiOperation({ summary: 'Get all organizations' })
+  @ApiQuery({ name: 'status', required: false, type: String })
   @ApiResponse({
     status: 200,
     description: 'List of organizations retrieved successfully',
   })
-  async getAll(@CurrentUser() user: USER) {
-    return await this.organizationService.getAll(user);
+  async getAll(@Query('status') status: string, @CurrentUser() user: USER) {
+    return await this.organizationService.getAll(status, user);
   }
 
   @Get('paginated')
