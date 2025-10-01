@@ -388,13 +388,20 @@ export class HireRequestService {
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
         interviews: undefined,
-        panelCandidates: panel.panelCandidates.map(pc => ({
-          ...pc,
-          candidate:{
-            ...pc.candidate,
-            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
-          }
-        }))
+        panelCandidates: panel.panelCandidates.map(pc => {
+          const startDate = pc.candidate.experiences[0]?.start_date;
+          const years_of_experience = startDate
+          ? new Date().getFullYear() - new Date(startDate).getFullYear()
+          : 0;
+          return {
+            ...pc,
+            candidate:{
+              ...pc.candidate,
+              salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+              years_of_experience: years_of_experience
+              
+            }}
+        })
       }))
     };
 
@@ -1858,6 +1865,7 @@ export class HireRequestService {
 
     // =========== return object requested by Lucas
 
+    /*
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         id: panelExists.id,
@@ -1933,6 +1941,9 @@ export class HireRequestService {
     }));
 
     return result;
+    */
+
+    return this.findOne(hireRequest.id, user);
   }
 
   async showMatchHireRequests(candidateId: string): Promise<any> {
