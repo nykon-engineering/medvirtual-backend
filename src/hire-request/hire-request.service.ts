@@ -1865,7 +1865,7 @@ export class HireRequestService {
 
     // =========== return object requested by Lucas
 
-    /*
+    
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         id: panelExists.id,
@@ -1941,9 +1941,9 @@ export class HireRequestService {
     }));
 
     return result;
-    */
+    
 
-    return this.findOne(hireRequest.id, user);
+    //return this.findOne(hireRequest.id, user);
   }
 
   async showMatchHireRequests(candidateId: string): Promise<any> {

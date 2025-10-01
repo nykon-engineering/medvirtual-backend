@@ -1637,6 +1637,43 @@ describe('HireRequestService', () => {
       ]);
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
+      prismaMock.panelCandidate.updateMany
+        .mockResolvedValueOnce({ count: 1 }) // winner update
+        .mockResolvedValueOnce({ count: 2 }); // others update
+      prismaMock.candidate.update.mockResolvedValue({}); // losers update
+      prismaMock.candidatePanel.findMany.mockResolvedValue([
+        {
+          id: 'panel1',
+          scheduled_date: new Date(),
+          status: 'decision_made',
+          panelCandidates: [
+            { status: 'selected_by_client', candidate: { id: 'cand1', experiences: [{ start_date: '2020-01-01' }] } },
+          ],
+          hireRequest: { id: 'hr1', title: 'Dev', description: 'Job', status: 'placement_completed', skills: [] },
+        },
+      ]);
+  
+      jest.spyOn(service['hubspot'], 'updateOneCandidateFromHireRequest').mockResolvedValue(true);
+  
+      const result = await service.changeWinner(baseId, data, user);
+  
+      expect(result).toHaveLength(1);
+      expect(service['hubspot'].updateOneCandidateFromHireRequest).toHaveBeenCalledTimes(2); // only losers
+      expect(prismaMock.panelCandidate.updateMany).toHaveBeenCalledTimes(2);
+    });
+
+    /*
+    Block to use when we use the findone to return
+    it('should complete successfully without winner pipeline update', async () => {
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
+      prismaMock.panelCandidate.findFirst.mockResolvedValue({ id: 'pc1' });
+      prismaMock.panelCandidate.findMany.mockResolvedValue([
+        { id: 'pc2', candidate: { id: 'cand2', hubspot_id: 'hub2', pipeline_status_origin: null } },
+        { id: 'pc3', candidate: { id: 'cand3', hubspot_id: 'hub3', pipeline_status_origin: null } },
+      ]);
+      prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
     
       prismaMock.panelCandidate.updateMany
         .mockResolvedValueOnce({ count: 1 }) 
@@ -1666,8 +1703,8 @@ describe('HireRequestService', () => {
     
       expect(findOneSpy).toHaveBeenCalledWith(baseId, user);
     });
+    */
     
-
   });
   
 
