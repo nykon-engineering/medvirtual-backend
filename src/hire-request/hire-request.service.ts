@@ -2081,6 +2081,7 @@ export class HireRequestService {
             where: {
               candidate_id: pc.candidate.id,
               panel_id: { not: pc.panel_id },
+              status: {not: 'returned_to_pool'}
             },
           });
     
