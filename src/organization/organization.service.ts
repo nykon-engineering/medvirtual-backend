@@ -38,6 +38,7 @@ import { HubspotService } from '../hubspot/hubspot.service';
 import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
+import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 
 
 @Injectable()
@@ -1907,7 +1908,7 @@ export class OrganizationService {
     }
   }
 
-  async populateDbFromHubspot(): Promise<any> {
+  async populateDbFromHubspotX(): Promise<any> {
     const result = await axios.post(
       'https://api.hubapi.com/crm/v3/objects/companies/search',
       {
@@ -1977,4 +1978,123 @@ export class OrganizationService {
 
     return 'db populated from hubspot successfully';
   }
+
+
+  async populateDbFromHubspot(): Promise<any> {
+    const BATCH_SIZE = 100; // HubSpot limita geralmente até 100 por request
+    let hasMore = true;
+    let after: string | undefined = undefined;
+    const allOrganizations: any[] = [];
+  
+    // 1. Buscar todos os registros com paginação
+    while (hasMore) {
+      const body: any = {
+        filterGroups: [
+          {
+            filters: [
+              { propertyName: 'business_unit', operator: 'EQ', value: 'MedVirtual' },
+            ],
+          },
+          {
+            filters: [
+              { propertyName: 'business_unit', operator: 'EQ', value: 'Berry Virtual' },
+            ],
+          },
+        ],
+        properties: [
+          'agent_status',
+          'business_unit',
+          'address',
+          'name',
+          'hs_all_assigned_business_unit_ids',
+          'description',
+          'domain',
+          'hs_all_accessible_team_ids',
+          'hs_all_owner_ids',
+          'hs_all_team_ids',
+          'hs_num_open_deals',
+          'hs_total_deal_value',
+          'num_associated_deals',
+        ],
+        limit: BATCH_SIZE,
+      };
+  
+      if (after) body.after = after;
+  
+      const result = await axios.post(
+        'https://api.hubapi.com/crm/v3/objects/companies/search',
+        body,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+  
+      allOrganizations.push(...result.data.results);
+      if (result.data.paging?.next?.after) {
+        after = result.data.paging.next.after;
+      } else {
+        hasMore = false;
+      }
+    }
+  
+    // 2. Limpar registros antigos do HubSpot
+    //await this.prisma.organization.deleteMany({
+    //  where: { hubspot_id: { not: null } },
+    //});
+    
+    const validColumns = [
+      'id', 'name', 'email', 'phone', 'website_url', 'location', 'address', 'city', 
+      'state', 'postal_code', 'description', 'industry', 'organization_role', 
+      'number_of_employees', 'date_founded', 'date_joined', 'date_became_client', 
+      'status', 'signed_document_url', 'signed_document_date', 'hubspot_id', 
+      'business_unit', 'createdAt', 'updatedAt', 'owner_id', 'admin_id', 
+      'specialties', 'services'
+    ];
+
+    // 3. Mapear campos para seu schema
+    const mappedOrganizations = allOrganizations.map(org => {
+      const mapped: any = { hubspot_id: org.id };
+      for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
+        if (validColumns.includes(dbKey)) {
+          let value = org.properties[hubspotKey] ?? null;
+
+
+          if (['specialties', 'services'].includes(dbKey)) {
+            if (!Array.isArray(value)) value = [];
+          }
+
+          if (dbKey === 'organization_role' && !value) {
+            value = 'prospect'; // default definido no schema
+          }
+          
+          mapped[dbKey] = value;
+
+        }
+      }
+      return mapped;
+    });
+    
+    //remover do banco organizations com hubspot_id nulo
+    await this.prisma.organization.deleteMany({
+      where: { hubspot_id: { not: null } },
+    });
+    
+    // 4. Inserir tudo de uma vez (bulk insert)
+    // Atenção: Prisma tem limite de parâmetros por insert (Postgres: 65535), então podemos dividir em chunks
+    const CHUNK_SIZE = 500; // Ajuste conforme necessidade
+    for (let i = 0; i < mappedOrganizations.length; i += CHUNK_SIZE) {
+      const chunk = mappedOrganizations.slice(i, i + CHUNK_SIZE);
+      await this.prisma.organization.createMany({
+        data: chunk,
+        skipDuplicates: true,
+      });
+    }
+  
+    return `DB populated from HubSpot successfully with ${mappedOrganizations.length} organizations`;
+  }
+  
+
 }

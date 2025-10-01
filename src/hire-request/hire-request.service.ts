@@ -381,12 +381,20 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
+    //Add salary with automatic calculation
     const formatted = {
       ...hireRequest,
       panels: hireRequest.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
         interviews: undefined,
+        panelCandidates: panel.panelCandidates.map(pc => ({
+          ...pc,
+          candidate:{
+            ...pc.candidate,
+            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+          }
+        })
       }))
     };
 
@@ -932,8 +940,14 @@ export class HireRequestService {
   
     //order because I need to delivery the best candidates first
     scoredCandidates.sort((a, b) => b.score - a.score);
+
+    //Add salary with automatic calculation
+    const candidatesWithSalary = scoredCandidates.map(c => ({
+      ...c,
+      salary: findMonthlySalary(c.hourly_pay_rate?.toNumber() || 0),
+    }))
   
-    return scoredCandidates;
+    return candidatesWithSalary;
   }
   
   async confirmPanel(data: ConfirmPanelHireRequestDto, user:USER) : Promise<boolean> {
