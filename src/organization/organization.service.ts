@@ -245,10 +245,6 @@ export class OrganizationService {
         : undefined
       };
 
-      console.log('status: ', status);
-      console.log('whereClause: ', whereClause);
-      
-
       // For system_super_admin: return all organizations
       if (user.role === 'system_super_admin') {
         // No additional filtering needed - return all active organizations
