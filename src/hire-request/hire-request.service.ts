@@ -2032,6 +2032,7 @@ export class HireRequestService {
                 id: true,
                 first_name: true,
                 last_name: true,
+                name: true,
                 email: true,
                 specialization: true,
                 employment_type: true,
