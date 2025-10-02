@@ -235,7 +235,6 @@ export class OrganizationService {
   }
 
   async getAll(status: string, user: USER): Promise<Organization[]> {
-    console.log('Fetching organizations with status:', status);
     
     try {
       
@@ -244,10 +243,6 @@ export class OrganizationService {
         ? { equals: status as OrganizationStatus }
         : undefined
       };
-
-      console.log('status: ', status);
-      console.log('whereClause: ', whereClause);
-      
 
       // For system_super_admin: return all organizations
       if (user.role === 'system_super_admin') {
@@ -664,7 +659,6 @@ export class OrganizationService {
 
       return organization;
     } catch (error) {
-      console.log('Failed to create a organization: ', error);
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -796,7 +790,6 @@ export class OrganizationService {
       })
 
     } catch (error) {
-      console.log(error);
       if (
         error instanceof NotFoundException ||
         error instanceof BadRequestException

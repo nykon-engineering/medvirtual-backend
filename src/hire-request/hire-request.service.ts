@@ -456,7 +456,7 @@ export class HireRequestService {
       console.warn('[notifications] hire-request-edited email failed', err?.message || err);
     }
 
-    return result;
+    return this.findOne(id, user);
   }
 
   async updateStatus(id: string, data: changeStatusHireRequesDTO, user: USER): Promise<boolean> {
@@ -633,7 +633,9 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return this.findOne(id, user);
     
-    } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' 
+      || hireRequest.status == 'interview_scheduled' && data.status === 'placement_completed'
+      || hireRequest.status == 'awaiting_decision' && data.status === 'placement_completed' ){
       
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       const winnerCandidate = panelExists.panelCandidates.find(pc => pc.status === 'selected_by_client');
@@ -1788,7 +1790,8 @@ export class HireRequestService {
         },
       },
     });
-    if(!loserExists || loserExists.length === 0) throw new NotFoundException(`No other candidates found in the panel`);
+    //removed asked by Pauli because right now we can have just one candidate in the panel
+    //if(!loserExists || loserExists.length === 0) throw new NotFoundException(`No other candidates found in the panel`);
 
     //change Panel status
     const panelUpdated = await this.prisma.candidatePanel.update({
@@ -1847,19 +1850,22 @@ export class HireRequestService {
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
 
     
-    const candidateLosers = loserExists.map(c => c.candidate);
-    //update losers to 'available candidates' on database
-    await Promise.all(
-      candidateLosers.map(async c =>{
-        const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
-        await this.prisma.candidate.update({
-          where: { id: c.id },
-          data: { pipeline_status: pipeline_treated},
-        });
-        await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
-      }
-      )
-    );
+    if (loserExists){
+      const candidateLosers = loserExists.map(c => c.candidate);
+      //update losers to 'available candidates' on database
+      await Promise.all(
+        candidateLosers.map(async c =>{
+          const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
+          await this.prisma.candidate.update({
+            where: { id: c.id },
+            data: { pipeline_status: pipeline_treated},
+          });
+          await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+        }
+        )
+      );
+    }
+    
     
     
     //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
@@ -1890,7 +1896,6 @@ export class HireRequestService {
 
     // =========== return object requested by Lucas
 
-    
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         id: panelExists.id,
@@ -1967,8 +1972,6 @@ export class HireRequestService {
 
     return result;
     
-
-    //return this.findOne(hireRequest.id, user);
   }
 
   async showMatchHireRequests(candidateId: string): Promise<any> {
@@ -2107,6 +2110,7 @@ export class HireRequestService {
             where: {
               candidate_id: pc.candidate.id,
               panel_id: { not: pc.panel_id },
+              status: {not: 'returned_to_pool'}
             },
           });
     
