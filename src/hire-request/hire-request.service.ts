@@ -7,6 +7,7 @@ import { HireRequestStatus, OrganizationRole, USER } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 import { CreateHireRequestDto } from './dto/create-hire-request.dto';
 import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
@@ -29,6 +30,7 @@ export class HireRequestService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hubspot: HubspotService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
@@ -446,6 +448,14 @@ export class HireRequestService {
       });
       result.skills = newSkills;
     }
+
+    // Notify assignee via email when hire request is edited (non-blocking)
+    try {
+      await this.notifications.notifyHireRequestClientChange(id, 'edited');
+    } catch (err) {
+      console.warn('[notifications] hire-request-edited email failed', err?.message || err);
+    }
+
     return result;
   }
 
@@ -533,6 +543,14 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      // Notify assignee via email when hire request is canceled (non-blocking)
+      try {
+        await this.notifications.notifyHireRequestClientChange(id, 'canceled');
+      } catch (err) {
+        console.warn('[notifications] hire-request-canceled email failed', err?.message || err);
+      }
+
       return this.findOne(id, user);
       
     }else if (hireRequest.status == 'sourcing' && data.status === 'new' || hireRequest.status == 'cancelled' && data.status === 'new' || hireRequest.status == 'placement_completed' && data.status === 'new'){
@@ -1793,6 +1811,13 @@ export class HireRequestService {
       },
     });
     if( !hireRequestUpdated) throw new BadRequestException(`Hire request not updated to placement completed`);
+
+    // Fire placement completed notification (non-blocking)
+    try {
+      await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id);
+    } catch (err) {
+      console.warn('[notifications] placement-completed email failed', err?.message || err);
+    }
 
     //update the winner candidate as selected_by_client
     const winner = await this.prisma.panelCandidate.updateMany({

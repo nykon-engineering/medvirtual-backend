@@ -21,6 +21,7 @@ import { HireRequestModule } from './hire-request/hire-request.module';
 import { GooglesheetModule } from './googlesheet/googlesheet.module';
 import { TicketModule } from './ticket/ticket.module';
 import { StaffModule } from './staff/staff.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -44,7 +45,8 @@ import { StaffModule } from './staff/staff.module';
     HireRequestModule,
     GooglesheetModule,
     TicketModule,
-    StaffModule
+    StaffModule,
+    NotificationsModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],
