@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TicketService } from './ticket.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { BadRequestException } from '@nestjs/common';
 import { Priority } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
@@ -48,10 +49,19 @@ describe('TicketService', () => {
     }
   }
 
+  const mockNotificationsService = {
+    sendNotification: jest.fn(),
+    createNotification: jest.fn(),
+    getNotifications: jest.fn(),
+    markAsRead: jest.fn(),
+    deleteNotification: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [TicketService,
-        {provide: PrismaService, useValue: mockPrisma}
+        {provide: PrismaService, useValue: mockPrisma},
+        {provide: NotificationsService, useValue: mockNotificationsService}
       ],
     }).compile();
 

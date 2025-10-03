@@ -5,6 +5,7 @@ import { OrganizationRole, USER } from '@prisma/client';
 
 import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
@@ -80,6 +81,14 @@ const hubspotServiceMock = {
   updateOneCandidateFromHireRequest: jest.fn(),
 };
 
+const notificationsServiceMock = {
+  sendNotification: jest.fn(),
+  createNotification: jest.fn(),
+  getNotifications: jest.fn(),
+  markAsRead: jest.fn(),
+  deleteNotification: jest.fn(),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
@@ -91,7 +100,8 @@ describe('HireRequestService', () => {
       providers: [
         HireRequestService,
         { provide: PrismaService, useValue: prismaMock },
-        {provide: HubspotService, useValue: hubspotServiceMock }
+        { provide: HubspotService, useValue: hubspotServiceMock },
+        { provide: NotificationsService, useValue: notificationsServiceMock }
       ],
     }).compile();
 
