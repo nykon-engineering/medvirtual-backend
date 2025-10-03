@@ -17,7 +17,7 @@ export const organizationToDbDictionary : Record<string, string> = {
     phone: 'phone',
     referral_email: 'email',
     specialty: 'specialties',
-    type:'organization_role',
+    type: 'organization_role',
     business_unit: 'business_unit',
 };
 

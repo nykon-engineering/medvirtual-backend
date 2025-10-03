@@ -59,7 +59,7 @@ export function mapOrganizationToDb(hubspotData: organizationData): CreateOrgani
         if (value === undefined) continue;
 
         if (hubspotKey === "type") {
-          result[dbKey] = value === "Prospect" ? OrganizationRole.prospect : OrganizationRole.client;
+          result[dbKey] = value === "PROSPECT" ? OrganizationRole.prospect : OrganizationRole.client;
         } else {
           result[dbKey] = value;
         }
