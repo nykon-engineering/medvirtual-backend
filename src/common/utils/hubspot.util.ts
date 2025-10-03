@@ -100,4 +100,8 @@ export function mapDealToDb(hubspotData: dealData): any {
   return result as any;
 }
 
+export function changeLabelAvailability(label: string): string {
+    return label === "Available Candidates - Part Time" ? "Part Time" : "Full Time";
+}
+
 
