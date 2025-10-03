@@ -103,6 +103,20 @@ export class HireRequestService {
       data: hireRequest,
     })
     if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
+    
+    // Notify assigned user via email (non-blocking)
+    if (newHireRequest.assign_user_id) {
+      console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
+      try {
+        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        console.log(`[notifications] Hire request created notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] hire-request-created email failed', err?.message || err);
+      }
+    } else {
+      console.log(`[notifications] No assigned user for hire request ${newHireRequest.id}, skipping notification`);
+    }
+    
     if (skills && skills.length > 0) {
       const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
         data: skills.map(skill => ({
@@ -838,6 +852,19 @@ export class HireRequestService {
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    // Notify newly assigned user via email (non-blocking)
+    if (data.user_id) {
+      console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user ${data.user_id}`);
+      try {
+        const result = await this.notifications.notifyHireRequestCreated(id);
+        console.log(`[notifications] Hire request reassigned notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] hire-request-reassigned email failed', err?.message || err);
+      }
+    } else {
+      console.log(`[notifications] No user_id provided for hire request reassignment ${id}, skipping notification`);
+    }
 
     return this.findOne(id, user);
   }
