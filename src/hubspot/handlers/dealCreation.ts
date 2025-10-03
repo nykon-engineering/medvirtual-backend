@@ -3,7 +3,7 @@ import axios from "axios";
 import { ownerToDbDictionary } from "../../common/dictionaries/owner-dictionary";
 import { mapOwnerToDb } from "../../common/utils/hubspot.util";
 import { PrismaService } from "../../prisma/prisma.service";
-import { dealToDbDictionary } from "src/common/dictionaries/deal-dictionary";
+import { dealToDbDictionary } from "../../common/dictionaries/deal-dictionary";
 
 
 @Injectable()
@@ -15,9 +15,10 @@ export class HandlerDealCreation {
 
 
     async execute(event){
-        const properties = Object.keys(dealToDbDictionary).join(',');
+        
         try{
-            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/deals/${event.objectId}`,
+            const properties = Object.keys(dealToDbDictionary).join(',');
+            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/deals/${event.objectId}?properties=${properties}`,
             {
             headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -39,10 +40,31 @@ export class HandlerDealCreation {
             })
             if(dealExists) throw new BadRequestException('Deal already exists on the database');
 
-            //Here I need to check if we alreadey have an organization and candidate before we proceed with the deal Creation
-            //endpoint to associoations:  or 
-            //  -https://api.hubapi.com/crm/v3/objects/deals/${deal}/associations/companies
-            //  -https://api.hubapi.com/crm/v3/objects/deals/${deal}/associations/p20630393_Virtual_Assistant
+            //Here I need to check if we alreadey have an candidate (VirtualAssistant) before we proceed with the deal Creation
+            const getObjectVA = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/${process.env.HUBSPOT_CUSTOM_OBJECT}`,
+            {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+                },
+            });
+
+            if (getObjectVA) {
+                dealData.hubspot_candidate_id = getObject.data.results[0].id
+            }
+                
+            const getObjectCompany = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/companies`,
+            {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+                },
+            });
+
+            if (getObjectCompany) {
+                dealData.hubspot_organization_id = getObject.data.results[0].id
+            }
+                    
 
             const dealCreated = await this.prisma.staff.create(dealData)
             if (!dealCreated) {

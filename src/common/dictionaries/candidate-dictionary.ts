@@ -1,16 +1,17 @@
-export const candidadeToDbDictionary : Record<string, string> = {
+export const candidadeToDbDictionary : Record<string, string | string[]> = {
 
     hs_object_id: 'hubspot_id',
     email: 'email',
     first_name: 'first_name',
     last_name: 'last_name',
     name: 'name',
-    hs_pipeline_stage: 'pipeline_status',
+    hs_pipeline_stage: ['pipeline_status', 'employment_type'],
     agreed_hourly_pay_rate: 'hourly_pay_rate',
     resume_link: 'resume_url',
     practice_area_experience: 'specialization',
     country__residence_: 'country',
-    employment_type: 'employment_type',
+    //changed on 10-03-2025 asked by Pauli
+    //employment_type: 'employment_type',
     tools: 'tools',
     medical_tools: 'medical_tools',
     gender: 'gender',

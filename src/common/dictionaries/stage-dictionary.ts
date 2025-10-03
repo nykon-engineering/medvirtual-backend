@@ -15,3 +15,9 @@ export const dbToStageDictionary: Record<number, string> = {
     261173427: 'For Endorsement to VS',
     261173428: 'Lost'
 }
+
+export const stageToDbDictionary: Record<string, number> = Object.entries(dbToStageDictionary)
+  .reduce((acc, [num, label]) => {
+    acc[label] = Number(num);
+    return acc;
+  }, {} as Record<string, number>);

@@ -1,10 +1,10 @@
-import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, NotFoundException, Query } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 
-import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
-import { extractDriveFileId } from '../common/utils/hubspot.util';
+import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
@@ -67,6 +67,8 @@ export class CandidatesService {
     const availabilityArray = availability
       ? availability.split(',').map((a) => a.trim()).filter(Boolean)
       : [];
+    const availabilityNumbers = availabilityArray.map(a => stageToDbDictionary[a]).filter(Boolean).map(av => String(av));
+
 
     const languagesArray = languages ?
     languages.split(',').map(l => l.trim()).filter(Boolean)
@@ -101,10 +103,6 @@ export class CandidatesService {
       );
     }
 
-    
-    
-    
-
     // Calculate limit date
     let experienceFilter = {};
     if (years_of_experience) {
@@ -138,7 +136,7 @@ export class CandidatesService {
       OR: [
         {
           ...(country && { country }),
-          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
               ...(hourly_from !== undefined && { gte: hourly_from }),
@@ -153,7 +151,7 @@ export class CandidatesService {
         },
         {
           ...(country && { country }),
-          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
               ...(hourly_from !== undefined && { gte: hourly_from }),
@@ -168,7 +166,7 @@ export class CandidatesService {
         },
         {
           ...(country && { country }),
-          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
               ...(hourly_from !== undefined && { gte: hourly_from }),
@@ -183,7 +181,7 @@ export class CandidatesService {
         },
         {
           ...(country && { country }),
-          ...(availabilityArray.length > 0 ? { employment_type: { in: availabilityArray } } : (availability ? { employment_type: availability } : {})),
+          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
               ...(hourly_from !== undefined && { gte: hourly_from }),
@@ -294,6 +292,7 @@ export class CandidatesService {
 
       const candidatesWithScheduledInterview = candidates.map(candidate => ({
         ...candidate,
+        employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
@@ -380,6 +379,8 @@ export class CandidatesService {
       const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
       candidate.pipeline_status = stageName || 'Unknown Stage';
     }
+    candidate.employment_type = changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type;
+
     return candidate;
     
   }

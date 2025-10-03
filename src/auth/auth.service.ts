@@ -479,7 +479,7 @@ export class AuthService {
 
     const newUser = await this.userService.create({
       email: data.email,
-      organization_id: data.organizationId,
+      organization_id: data.organizationId || null,
       first_name: data.first_name || '',
       last_name: data.last_name || '',
       phone: data.phone || '',

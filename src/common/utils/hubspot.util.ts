@@ -30,12 +30,18 @@ export function mapHubspotToDb(hubspotData: candidateData): Prisma.CandidateCrea
     const result: Partial<Prisma.CandidateCreateInput> = {};
 
     for (const [hubspotKey, dbKey] of Object.entries(candidadeToDbDictionary)) {
+      const value = hubspotData[hubspotKey];
         
-        if (hubspotData[hubspotKey] !== undefined) {
-          result[dbKey] = hubspotData[hubspotKey];
+      if (value !== undefined) {
+        if (Array.isArray(dbKey)) {
+          for (const key of dbKey) {
+            result[key] = value;
+          }
+        } else {
+          result[dbKey] = value;
         }
-        
-      }
+      }    
+    }
     return result as Prisma.CandidateCreateInput;
 }
 
@@ -59,7 +65,7 @@ export function mapOrganizationToDb(hubspotData: organizationData): CreateOrgani
         if (value === undefined) continue;
 
         if (hubspotKey === "type") {
-          result[dbKey] = value === "Prospect" ? OrganizationRole.prospect : OrganizationRole.client;
+          result[dbKey] = value === "PROSPECT" ? OrganizationRole.prospect : OrganizationRole.client;
         } else {
           result[dbKey] = value;
         }
@@ -92,6 +98,10 @@ export function mapDealToDb(hubspotData: dealData): any {
       
     }
   return result as any;
+}
+
+export function changeLabelAvailability(label: string): string {
+    return label === "Available Candidates - Part Time" ? "Part Time" : "Full Time";
 }
 
 

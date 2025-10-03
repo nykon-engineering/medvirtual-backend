@@ -1,7 +1,7 @@
 export const dealToDbDictionary:Record<string,string> = {
     hs_object_id: 'hubspot_id', //The unique ID of the deal. This ID is set automatically by HubSpot when the deal is created.
     amount: 'salary',
-    business_unit: '',
+    business_unit: 'hubspot_business_unit', //The business unit associated with the deal.
     client_name: 'hubspot_client_name',
     closedate: 'hubspot_close_date',  //Date the deal was closed. This property is set automatically by HubSpot.
     company_name: 'hubspot_company_name',
