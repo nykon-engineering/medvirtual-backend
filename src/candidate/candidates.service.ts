@@ -68,7 +68,7 @@ export class CandidatesService {
       ? availability.split(',').map((a) => a.trim()).filter(Boolean)
       : [];
     const availabilityNumbers = availabilityArray.map(a => stageToDbDictionary[a]).filter(Boolean).map(av => String(av));
-    console.log('availabilityNumbers:', availabilityNumbers);
+
 
     const languagesArray = languages ?
     languages.split(',').map(l => l.trim()).filter(Boolean)

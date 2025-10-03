@@ -926,7 +926,11 @@ export class HireRequestService {
   
       if (hireRequest.location && candidate.country === hireRequest.location) score += 1;
   
-      if (hireRequest.availability && candidate.employment_type === hireRequest.availability) score += 1;
+      //if (hireRequest.availability && candidate.employment_type === hireRequest.availability) score += 1;
+      if (hireRequest.availability){
+        if (hireRequest.availability === 'full-time' && candidate.employment_type === '261075105') score += 1;
+        if (hireRequest.availability === 'part-time' && candidate.employment_type === '1087596819') score += 1;
+      }
   
       if (
         candidate.hourly_pay_rate !== null &&
