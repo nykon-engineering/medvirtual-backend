@@ -13,6 +13,7 @@ import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
+import { HandlerDealCreation } from './handlers/dealCreation';
 
 
 jest.mock('axios', () => ({
@@ -90,6 +91,11 @@ const HandlerOwnerDeletionMock = {
   execute: jest.fn(),
 }
 
+const HandlerDealCreationMock = {
+  execute: jest.fn(),
+}
+
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -122,7 +128,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
         {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
-        {provide: CandidatesService, useValue: candidateMock}
+        {provide: CandidatesService, useValue: candidateMock},
+        {provide: HandlerDealCreation, useValue: HandlerDealCreationMock}
       ],
     }).compile();
 
@@ -176,7 +183,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
         {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
-        {provide: CandidatesService, useValue: candidateMock}
+        {provide: CandidatesService, useValue: candidateMock},
+        {provide: HandlerDealCreation, useValue: HandlerDealCreationMock}
       ]
     }).compile();
 

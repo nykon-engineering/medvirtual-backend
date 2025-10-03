@@ -21,7 +21,7 @@ export class HandlerObjectPropertyChange {
             }
         })
 
-        if(!candidate) return await this.objectCreation.execute(event); // here, I need to refactor to allow create a new candidate if its not exists
+        if(!candidate) return await this.objectCreation.execute(event); 
 
         if(event.propertyName === 'language_spoken'){
             await this.prisma.candidateLanguage.deleteMany({
@@ -61,7 +61,22 @@ export class HandlerObjectPropertyChange {
         }
         }else{
             
+            const fieldUpdated = candidadeToDbDictionary[event.propertyName];
+            if (!fieldUpdated) return;
 
+            const fields = Array.isArray(fieldUpdated) ? fieldUpdated : [fieldUpdated];
+
+            const updateData = fields.reduce((acc, field) => {
+            acc[field] = event.propertyValue;
+            return acc;
+            }, {} as Record<string, any>);
+
+            await this.prisma.candidate.update({
+            where: { id: candidate.id },
+            data: updateData,
+            });
+            
+            /* => removed when we added the pipeline status field
             const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
             if(!fieldExists) return;
 
@@ -75,6 +90,7 @@ export class HandlerObjectPropertyChange {
                     [fieldUpdated]: event.propertyValue
                 }
             })
+            */
 
             // Re-run the resume pipeline if this chnge is related to the resume
             if(event.propertyName === 'resume_link') await this.candidateService.processData(candidate.id);
