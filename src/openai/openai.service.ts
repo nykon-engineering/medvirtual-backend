@@ -124,7 +124,7 @@ export class OpenaiService {
         ----------------`
         try{
             const response = await openai.chat.completions.create({
-                model: 'GPT-5-nano',
+                model: 'gpt-3.5-turbo',
                 messages: [
                     {
                         role: 'system',
