@@ -57,7 +57,8 @@ export class OpenaiService {
             "end_date": null,
             "description": ""
             }
-        ]
+        ],
+        "cost": ""
         }
 
         ---
@@ -101,6 +102,9 @@ export class OpenaiService {
 
         #### Education
         - Same as experience.
+
+        #### Cost
+        - Cost spend on OpenAi to process the request in USD.
 
         #### Ordering
         - Sort experience by most recent start_year (descending) if available; otherwise preserve source order.
