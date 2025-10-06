@@ -5,6 +5,7 @@ import { mapHubspotToDb } from "../../common/utils/hubspot.util";
 import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dictionary";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CandidatesService } from "../../candidate/candidates.service";
+import { Prisma } from "@prisma/client";
 
 
 @Injectable()
@@ -30,13 +31,38 @@ export class HandlerObjectCreation {
             if (!getObject) {
                 throw new BadRequestException('No object data found');
             }
+            const rawProperties = getObject.data.properties;
 
-            const candidateData = mapHubspotToDb(getObject.data.properties);//this variable doenst have the language,because languages went setup on dictionary
+            const candidateData: Record<string, any> = {};
+            for (const [hubspotKey, dbField] of Object.entries(candidadeToDbDictionary)) {
+                const value = rawProperties[hubspotKey];
+                if (value === undefined) continue;
+
+                if (Array.isArray(dbField)) {
+                    // Se dbField é array, espalhar valor para todos os campos
+                    dbField.forEach(field => {
+                    candidateData[field] = value;
+                    });
+                } else {
+                    candidateData[dbField] = value;
+                }
+            }
+            if (candidateData.pipeline_status) {
+                candidateData.pipeline_status = String(candidateData.pipeline_status).split(';')[0].trim();
+            }
+            if (candidateData.employment_type) {
+                candidateData.employment_type = String(candidateData.employment_type).split(';')[0].trim();
+            }
+            
             candidateData.processing_status='pending';
 
-            candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as unknown as string)
-            .split(';')
-            .map(s => s.trim());
+            if (candidateData.approved_positions_pairing) {
+                candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as string)
+                .split(';')
+                .map(s => s.trim());
+            } else {
+                candidateData.approved_positions_pairing = [];
+            }
             
 
             const candidateExists = await this.prisma.candidate.findUnique({
@@ -44,20 +70,19 @@ export class HandlerObjectCreation {
                     hubspot_id: String(event.objectId)
                 }
             })
-            console.log(candidateExists);
             if(candidateExists) throw new BadRequestException('Candidate already exists on the database');
 
             
             const createCandidate = await this.prisma.candidate.create({
-                data: candidateData,
+                data: candidateData as Prisma.CandidateCreateInput,
             })
             if (!createCandidate) {
                 throw new BadRequestException('Error creating candidate in the database');
             }
             
             //Here, I start to work with the skills
-            if (getObject.data.properties.career_highlights_relevant_job_experiences) {
-                const candidadeSkills = getObject.data.properties.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
+            if (rawProperties.career_highlights_relevant_job_experiences) {
+                const candidadeSkills = rawProperties.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
 
                 for (const skill of candidadeSkills) {
                     await this.prisma.candidateSkill.create({
@@ -71,8 +96,8 @@ export class HandlerObjectCreation {
             }
 
             //here I start to work with the language
-            if (getObject.data.properties.language_spoken) {
-                const languageCandidateSpoken = getObject.data.properties.language_spoken.split('&').map((lang: string) => lang.trim());
+            if (rawProperties.language_spoken) {
+                const languageCandidateSpoken = rawProperties.language_spoken.split('&').map((lang: string) => lang.trim());
 
                 for (const language of languageCandidateSpoken) {
                     await this.prisma.candidateLanguage.create({

@@ -22,6 +22,7 @@ import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
+import { Prisma } from '@prisma/client';
 
 
 
@@ -356,10 +357,28 @@ export class HubspotService {
             limit: 100
             })
             if (!response || !response.results || response.results.length === 0) {
-                throw new BadRequestException('No candidates data found');
+                //throw new BadRequestException('No candidates data found');
+                console.log('No candidate data found in Hubspot for candidate ID:', candidate.id, 'with Hubspot ID:', candidate.hubspot_id);
+                continue;
             }
-            console.log('Candidate found in Hubspot:', response.results[0].properties.name);
-            const candidateData = mapHubspotToDb(response.results[0].properties);
+
+            const hubspotProps = response.results[0].properties;
+            console.log('Candidate found in Hubspot:', hubspotProps.name);
+
+            
+
+
+            const candidateData : Prisma.CandidateUpdateInput = mapHubspotToDb(hubspotProps);
+
+            if (candidateData.approved_positions_pairing) {
+                candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as string)
+                .split(';')
+                .map(s => s.trim())
+                .filter(Boolean);
+            }else {
+                candidateData.approved_positions_pairing = []; 
+              }
+              
             
             await this.prisma.candidate.update({
                 where: {
@@ -370,13 +389,13 @@ export class HubspotService {
 
             console.log('Candidate updated:', response.results[0]);
             //Here, I start to work with the skills
-            if (response.results[0].properties.career_highlights_relevant_job_experiences) {
+            if (hubspotProps.career_highlights_relevant_job_experiences) {
                 await this.prisma.candidateSkill.deleteMany({
                     where: {
                         candidate_id: candidate.id
                     }
                 });
-                const candidadeSkills = response.results[0].properties.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
+                const candidadeSkills = hubspotProps.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
 
                 for (const skill of candidadeSkills) {
                     console.log('Skill to add:', skill);
@@ -391,13 +410,13 @@ export class HubspotService {
             }
 
             //here I start to work with the language
-            if (response.results[0].properties.language_spoken) {
+            if (hubspotProps.language_spoken) {
                 await this.prisma.candidateLanguage.deleteMany({
                     where: {
                         candidate_id: candidate.id
                     }
                 });
-                const languageCandidateSpoken = response.results[0].properties.language_spoken.split('&').map((lang: string) => lang.trim());
+                const languageCandidateSpoken = hubspotProps.language_spoken.split('&').map((lang: string) => lang.trim());
 
                 for (const language of languageCandidateSpoken) {
                     await this.prisma.candidateLanguage.create({
