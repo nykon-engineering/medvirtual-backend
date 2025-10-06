@@ -147,7 +147,7 @@ export class StaffService {
           organization: { connect: { id: user.organization_id || undefined } },
           type: 'bonus',
           staff: { connect: { id: data.staff_id } },
-          title: `Bonus Added: $${data.bonus} to ${staff.candidate.first_name} ${staff.candidate.last_name}`,
+          title: `Bonus Added: $${data.bonus} to ${staff?.candidate?.first_name} ${staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'medium',
           user: assignedValidated
@@ -203,7 +203,7 @@ export class StaffService {
           organization: { connect: { id: user.organization_id || undefined } },
           staff: { connect: { id: staff.id } },
           type: 'termination',
-          title: `Termination Requested: ${staff.candidate.first_name} ${staff.candidate.last_name}`,
+          title: `Termination Requested: ${staff?.candidate?.first_name} ${staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'high',
           user: assignedValidated
@@ -458,6 +458,9 @@ export class StaffService {
           data: staffUpdateData,
         });
 
+        if (!existingStaff.candidate_id) {
+          throw new NotFoundException('Staff member not found during update');
+        }
         // Update candidate record
         const updatedCandidate = await tx.candidate.update({
           where: { id: existingStaff.candidate_id },

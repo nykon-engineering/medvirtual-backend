@@ -124,6 +124,7 @@ model Organization {
   organization_candidates OrganizationCandidate[]
   hire_requests           HireRequest[]
   tickets                 Ticket[]
+  staff                   Staff[]
 
   // Relations
   owner USER? @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
@@ -371,8 +372,9 @@ model GoogleToken {
 
 model Staff {
   id              String      @id @default(uuid())
-  candidate_id    String
-  hirerequest_id  String
+  candidate_id    String?
+  hirerequest_id  String?
+  organization_id String?
   status          String
   salary          Decimal?
   start_date      DateTime?
@@ -381,8 +383,9 @@ model Staff {
   created_by      String?
   terminated_date DateTime?
   bonus           Bonus[]
-  candidate       Candidate   @relation(fields: [candidate_id], references: [id])
-  hireRequest     HireRequest @relation(fields: [hirerequest_id], references: [id])
+  candidate       Candidate?   @relation(fields: [candidate_id], references: [id])
+  hireRequest     HireRequest? @relation(fields: [hirerequest_id], references: [id])
+  organization    Organization? @relation(fields: [organization_id], references: [id])
   tickets         Ticket[]
 
   //info from hubspot

@@ -124,7 +124,7 @@ export class OpenaiService {
         ----------------`
         try{
             const response = await openai.chat.completions.create({
-                model: 'gpt-4',
+                model: 'gpt-4-mini',
                 messages: [
                     {
                         role: 'system',

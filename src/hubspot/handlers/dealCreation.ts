@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
 import { ownerToDbDictionary } from "../../common/dictionaries/owner-dictionary";
-import { mapOwnerToDb } from "../../common/utils/hubspot.util";
+import { mapDealToDb, mapOwnerToDb } from "../../common/utils/hubspot.util";
 import { PrismaService } from "../../prisma/prisma.service";
 import { dealToDbDictionary } from "../../common/dictionaries/deal-dictionary";
 
@@ -16,9 +16,9 @@ export class HandlerDealCreation {
 
     async execute(event){
         
-        try{
+        //try{
             const properties = Object.keys(dealToDbDictionary).join(',');
-            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/deals/${event.objectId}?properties=${properties}`,
+            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}?properties=${properties}`,
             {
             headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -30,7 +30,11 @@ export class HandlerDealCreation {
                 throw new BadRequestException('No object data found');
             }
             
-            const dealData = mapOwnerToDb(getObject.data.results[0].properties);
+            const dealData = mapDealToDb(getObject.data.properties);
+            dealData.status = 'active';
+            //console.log('dealData before date conversion: ', dealData);
+            dealData.hubspot_contract_sign_date = dealData.hubspot_contract_sign_date ? new Date(dealData.hubspot_contract_sign_date) : null;
+            dealData.hubspot_close_date = dealData.hubspot_close_date ? new Date(dealData.hubspot_close_date) : null;
             
 
             const dealExists = await this.prisma.staff.findUnique({
@@ -48,9 +52,20 @@ export class HandlerDealCreation {
                 'Content-Type': 'application/json',
                 },
             });
+            //console.log('getObjectVA: ', getObjectVA.data);
 
-            if (getObjectVA) {
-                dealData.hubspot_candidate_id = getObject.data.results[0].id
+            if (getObjectVA?.data?.results?.length > 0) {
+                dealData.hubspot_candidate_id = getObjectVA.data.results[0].id
+
+                const candidateExists = await this.prisma.candidate.findUnique({
+                    where: {
+                        hubspot_id: String(dealData.hubspot_candidate_id)
+                    },
+                    select: {
+                        id: true,
+                    }
+                })
+                if (candidateExists) dealData.candidate_id = candidateExists.id
             }
                 
             const getObjectCompany = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/companies`,
@@ -60,21 +75,32 @@ export class HandlerDealCreation {
                 'Content-Type': 'application/json',
                 },
             });
-
-            if (getObjectCompany) {
-                dealData.hubspot_organization_id = getObject.data.results[0].id
+            //console.log('getObjectCompany: ', getObjectCompany.data);
+            if (getObjectCompany?.data?.results?.length > 0) {
+                dealData.hubspot_organization_id = getObjectCompany.data.results[0].id
+                const organizationExists = await this.prisma.organization.findUnique({
+                    where: {
+                        hubspot_id: String(dealData.hubspot_organization_id)
+                    },
+                    select: {
+                        id: true,
+                    }
+                })
+                if (organizationExists) dealData.organization_id = organizationExists.id
             }
-                    
+            console.log('dealData after date conversion and associations: ', dealData);
 
-            const dealCreated = await this.prisma.staff.create(dealData)
+            const dealCreated = await this.prisma.staff.create({
+                data: dealData
+            })
             if (!dealCreated) {
                 throw new BadRequestException('Error creating Deal in the database');
             }
 
             return true;
 
-        }catch (error) {
+        /*}catch (error) {
             throw new BadRequestException(`Error fetching object creation Deal: ${error.message}`);
-        }
+        }*/
     }
 }

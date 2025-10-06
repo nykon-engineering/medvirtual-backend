@@ -112,7 +112,7 @@ export class TicketService {
       // Verify staff belongs to the organization making the request
       if (
         user.role.includes('organization') &&
-        staff.hireRequest.org_id !== user.organization_id
+        staff?.hireRequest?.org_id !== user.organization_id
       ) {
         throw new BadRequestException(
           'Staff member does not belong to your organization',
