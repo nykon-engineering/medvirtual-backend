@@ -40,6 +40,13 @@ export class HandlerOrganizationPropertyChange {
                     value = OrganizationRole.client;
                 }
             }
+
+            if (fieldUpdated === 'specialties') {
+                value = event.propertyValue
+                  ?.split(',')
+                  .map((item: string) => item.trim())
+                  .filter((item: string) => item.length > 0);
+            }
             
             await this.prisma.organization.update({
                 where: {
