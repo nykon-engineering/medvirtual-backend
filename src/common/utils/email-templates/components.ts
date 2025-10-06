@@ -1,7 +1,7 @@
 const logo = `${process.env.FRONTEND_URL}/logo.png`;
 
 export const EmailHeader = `
-    <div style="background:#00B2E2;padding:40px 20px;text-align:center;">
+    <div style="background:#01546B;padding:40px 20px;text-align:center;">
         <img src="${logo}" alt="MedVirtual Logo" style="max-width: 200px; height: auto;" />
     </div>
 `;
