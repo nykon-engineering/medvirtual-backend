@@ -441,13 +441,15 @@ export class HireRequestService {
 
     result = requestUpdated;
 
-    if( skills && skills.length > 0) {
-      await this.prisma.hireRequestSkill.deleteMany({
-        where: {
-          hire_request_id: id,
-        },
-      });
+    //delete all skills independently if the array is empty or not
+    await this.prisma.hireRequestSkill.deleteMany({
+      where: {
+        hire_request_id: id,
+      },
+    });
 
+    if( skills && skills.length > 0) {
+      
       const skillsUpdated = await this.prisma.hireRequestSkill.createMany({
         data: skills.map(skill => ({
           skill_name: skill.name,
