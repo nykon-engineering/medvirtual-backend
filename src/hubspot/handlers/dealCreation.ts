@@ -88,7 +88,7 @@ export class HandlerDealCreation {
                 })
                 if (organizationExists) dealData.organization_id = organizationExists.id
             }
-            console.log('dealData after date conversion and associations: ', dealData);
+            //console.log('dealData after date conversion and associations: ', dealData);
 
             const dealCreated = await this.prisma.staff.create({
                 data: dealData

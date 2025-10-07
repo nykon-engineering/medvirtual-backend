@@ -28,6 +28,13 @@ export class HandlerDealPropertyChange {
         const fieldUpdated = dealToDbDictionary[event.propertyName];
         let value = event.propertyValue;
 
+        if (fieldUpdated === 'hubspot_close_date') {
+            const timestamp = Number(event.propertyValue);
+            if (!isNaN(timestamp)) {
+              value = new Date(timestamp).toISOString();
+            }
+          }
+
         
         await this.prisma.staff.update({
             where: {
