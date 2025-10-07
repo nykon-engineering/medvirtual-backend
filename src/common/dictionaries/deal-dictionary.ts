@@ -8,7 +8,6 @@ export const dealToDbDictionary:Record<string,string> = {
     contract_sign_date: 'hubspot_contract_sign_date',
     conversion_date: 'start_date',
     conversion_type: 'hubspot_conversion_type', //Full-time or Part-Time
-    csm_deal_stage: 'hubspot_csm_deal_stage', //Sales Pipeline, For Demo, Demo Complete, Missed Demo, Contract Sent, Contract Signed, Lost, For Pairing, For Consultation, For Onboarding ...
     dealname: 'hubspot_deal_name',
     pipeline: 'hubspot_pipeline', //The pipeline the deal is in. This determines which stages are options for the deal.
     dealstage: 'hubspot_dealstage', //The stage of the deal. Deal stages allow you to categorize and track the progress of the deals that you are working on
