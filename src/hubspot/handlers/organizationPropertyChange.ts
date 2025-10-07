@@ -47,6 +47,10 @@ export class HandlerOrganizationPropertyChange {
                   .map((item: string) => item.trim())
                   .filter((item: string) => item.length > 0);
             }
+
+            if (fieldUpdated === 'number_of_employees') {
+                value = event.propertyValue ? Number(event.propertyValue) : null;
+            }
             
             await this.prisma.organization.update({
                 where: {
