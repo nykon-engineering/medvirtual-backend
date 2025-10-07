@@ -22,4 +22,16 @@ export class CronController {
         }
     }
 
+
+    @Get('get-candidate-id')
+    @ApiProperty({ description: 'Trigger the cron job to get current staffs without candidate_id and check it on hubspot' })
+    async getCandidateId() {
+        const result = await this.cron.getCandidateId();
+        return {
+            status: 200,
+            message: 'Cron working successfully',
+            data: result
+        }
+    }
+
 }

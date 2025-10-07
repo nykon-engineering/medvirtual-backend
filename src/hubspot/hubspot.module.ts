@@ -43,6 +43,6 @@ import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
     HandlerDealAssociationChange
   ],
   imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule)],
-  exports: [HubspotService, HandlerOrganizationCreation],
+  exports: [HubspotService, HandlerOrganizationCreation, HandlerObjectCreation],
 })
 export class HubspotModule {}
