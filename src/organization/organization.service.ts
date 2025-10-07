@@ -39,6 +39,7 @@ import { staffStatusDictionary } from '../common/dictionaries/staff-status-dicti
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
+import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
 
 
 @Injectable()
@@ -1008,9 +1009,16 @@ export class OrganizationService {
         this.prisma.staff.count({ where }),
       ]);
 
+      const staffWithDictionary: any = staff.map((s) => (
+        {
+          ...s,
+          hubspot_dealstage: s.hubspot_dealstage ? dealPipelineToDbDictionary[s.hubspot_dealstage] || s.hubspot_dealstage : undefined,
+        }
+      ))
+
       return {
         status: 200,
-        data: staff,
+        data: staffWithDictionary,
         meta: {
           total,
           page,
