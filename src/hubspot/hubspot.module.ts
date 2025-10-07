@@ -20,6 +20,7 @@ import { HandlerDealCreation } from './handlers/dealCreation';
 import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
+import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 
 
 
@@ -39,6 +40,7 @@ import { HandlerOrganizationAssociationChange } from './handlers/organizationAss
     HandlerDealCreation,
     HandlerDealPropertyChange,
     HandlerDealDeletion,
+    HandlerDealAssociationChange
   ],
   imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule)],
   exports: [HubspotService, HandlerOrganizationCreation],
