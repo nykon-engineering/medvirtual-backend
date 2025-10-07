@@ -10,7 +10,6 @@ export class HandlerDealPropertyChange {
     constructor(
         private readonly prisma: PrismaService,
         private readonly dealCreation: HandlerDealCreation
-       
     ){}
 
     async execute(event){
