@@ -18,11 +18,14 @@ import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
 import { Prisma } from '@prisma/client';
+import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
+
 
 
 
@@ -38,8 +41,10 @@ export class HubspotService {
       private readonly organizationCreation: HandlerOrganizationCreation,
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
+      private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
 
       private readonly dealCreation: HandlerDealCreation,
+      private readonly dealPropertyChange: HandlerDealPropertyChange,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -146,7 +151,7 @@ export class HubspotService {
                     break;
 
                 case 'deal.propertyChange':
-
+                    await this.dealPropertyChange.execute(event);
                     break;
 
                 case 'deal.deletion':

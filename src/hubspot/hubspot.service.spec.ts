@@ -14,6 +14,8 @@ import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
+import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
+import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 
 
 jest.mock('axios', () => ({
@@ -75,6 +77,11 @@ const HandlerOrganizationPropertyChangeMock = {
   execute: jest.fn(),
 }
 
+const HandlerOrganizationAssociationChangeMock = {
+  execute: jest.fn(),
+}
+
+
 const HandlerObjectDeletionMock = {
   execute: jest.fn(),
 }
@@ -94,6 +101,11 @@ const HandlerOwnerDeletionMock = {
 const HandlerDealCreationMock = {
   execute: jest.fn(),
 }
+
+const HandlerDealPropertyChangeMock = {
+  execute: jest.fn(),
+}
+
 
 
 jest.mock('../common/utils/hubspot.util', () => ({
@@ -124,12 +136,14 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
+        {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
         {provide: HandlerOrganizationDeletion, useValue: HandlerObjectDeletionMock},
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
         {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
         {provide: CandidatesService, useValue: candidateMock},
-        {provide: HandlerDealCreation, useValue: HandlerDealCreationMock}
+        {provide: HandlerDealCreation, useValue: HandlerDealCreationMock},
+        {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock}
       ],
     }).compile();
 
@@ -179,12 +193,14 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
+        {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
         {provide: HandlerOrganizationDeletion, useValue: HandlerObjectDeletionMock},
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
         {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
         {provide: CandidatesService, useValue: candidateMock},
-        {provide: HandlerDealCreation, useValue: HandlerDealCreationMock}
+        {provide: HandlerDealCreation, useValue: HandlerDealCreationMock},
+        {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock}
       ]
     }).compile();
 
