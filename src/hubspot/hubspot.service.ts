@@ -26,6 +26,7 @@ import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
 import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
+import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 
 
 
@@ -47,6 +48,7 @@ export class HubspotService {
       private readonly dealCreation: HandlerDealCreation,
       private readonly dealPropertyChange: HandlerDealPropertyChange,
       private readonly dealDeletion: HandlerDealDeletion,
+      private readonly dealAssociationChange: HandlerDealAssociationChange,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -158,6 +160,10 @@ export class HubspotService {
 
                 case 'deal.deletion':
                     await this.dealDeletion.execute(event);
+                    break;
+
+                case 'deal.associationChange':
+                    await this.dealAssociationChange.execute(event);
                     break;
                 /*
                 [{

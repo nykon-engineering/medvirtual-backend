@@ -17,6 +17,7 @@ import { HandlerDealCreation } from './handlers/dealCreation';
 import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
+import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 
 
 jest.mock('axios', () => ({
@@ -111,6 +112,9 @@ const HandlerDealDeletionMock = {
   execute: jest.fn(),
 }
 
+const HandlerDealAssociationChangeMock = {
+  execute: jest.fn(),
+}
 
 
 jest.mock('../common/utils/hubspot.util', () => ({
@@ -149,7 +153,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: CandidatesService, useValue: candidateMock},
         {provide: HandlerDealCreation, useValue: HandlerDealCreationMock},
         {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock},
-        {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock}
+        {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
+        {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock}
       ],
     }).compile();
 
@@ -207,7 +212,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: CandidatesService, useValue: candidateMock},
         {provide: HandlerDealCreation, useValue: HandlerDealCreationMock},
         {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock},
-        {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock}
+        {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
+        {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock}
       ]
     }).compile();
 
