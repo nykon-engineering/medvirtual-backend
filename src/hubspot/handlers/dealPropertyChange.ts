@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerDealCreation } from "./dealCreation";
 import { dealToDbDictionary } from "../../common/dictionaries/deal-dictionary";
+import axios from "axios";
 
 @Injectable()
 
@@ -13,13 +14,55 @@ export class HandlerDealPropertyChange {
     ){}
 
     async execute(event){
-        const deal = await this.prisma.staff.findUnique({
+        let deal = await this.prisma.staff.findUnique({
             where: {
                 hubspot_id: String(event.objectId)
             }
         })
 
-        if(!deal ) return await this.dealCreation.execute(event);
+        if(!deal ){
+            await this.dealCreation.execute(event);
+            deal = await this.prisma.staff.findUnique({
+                where: {
+                    hubspot_id: String(event.objectId)
+                }
+            })
+        }
+        if(!deal) return;
+
+        //=====>
+        const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/${process.env.HUBSPOT_CUSTOM_OBJECT}`,
+            {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+                },
+            });
+            //console.log('getObject: ', getObject.data);
+
+            if (getObject?.data?.results?.length > 0) {
+
+                const candidateExists = await this.prisma.candidate.findUnique({
+                    where: {
+                        hubspot_id: String(getObject.data.results[0].id)
+                    },
+                    select: {
+                        id: true,
+                    }
+                })
+
+                await this.prisma.staff.update({
+                    where: {
+                        id: deal.id
+                    },
+                    data: {
+                        candidate_id: candidateExists ? candidateExists.id : null,
+                        hubspot_candidate_id: getObject.data.results[0].id
+                    }
+                })
+                
+            }
+        //=====>
 
 
         const fieldExists = Object.keys(dealToDbDictionary).includes(event.propertyName);
