@@ -884,10 +884,11 @@ export class OrganizationService {
       const take = perPage;
 
       const where: any = {
-        hireRequest: {
-          org_id: organizationId,
-        },
-        candidate: {},
+        //hireRequest: {
+        //  org_id: organizationId,
+        //},
+        //candidate: {},
+        organization_id: organizationId,
       };
 
       if (search) {
