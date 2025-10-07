@@ -938,7 +938,7 @@ export class OrganizationService {
         hubspot_contract_sign_date: true,
         hubspot_conversion_type: true,
         hubspot_csm_deal_stage: true,
-        hubspot__deal_name: true,
+        hubspot_deal_name: true,
         hubspot_dealstage: true,
         hubspot_dealtype: true,
         hubspot_deployment_type: true,
