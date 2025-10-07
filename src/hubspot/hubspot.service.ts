@@ -2,6 +2,7 @@ import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException 
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
+import { Prisma } from '@prisma/client';
 
 import {  mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
@@ -23,8 +24,8 @@ import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
-import { Prisma } from '@prisma/client';
 import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
+import { HandlerDealDeletion } from './handlers/dealDeletion';
 
 
 
@@ -45,6 +46,7 @@ export class HubspotService {
 
       private readonly dealCreation: HandlerDealCreation,
       private readonly dealPropertyChange: HandlerDealPropertyChange,
+      private readonly dealDeletion: HandlerDealDeletion,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -142,7 +144,7 @@ export class HubspotService {
                     break;
 
                 case 'company.associationChange': 
-
+                    await this.organizationAssociationChange.execute(event);
                     break;
                 
                 case 'deal.creation':
@@ -155,7 +157,7 @@ export class HubspotService {
                     break;
 
                 case 'deal.deletion':
-
+                    await this.dealDeletion.execute(event);
                     break;
                 /*
                 [{
