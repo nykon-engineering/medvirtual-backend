@@ -85,9 +85,9 @@ export class HandlerDealPropertyChange {
             [fieldUpdated]: value
         }
 
-        if (deal && event.propertyName == 'dealstage' && event.propertyValue == 'Paused Deal (for replacement)' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == 'Replaced - Endorsed to New Launch' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == 'Lost'
+        if (deal && event.propertyName == 'dealstage' && event.propertyValue == '148234581' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '1012779094' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '16981844'
         ) {
             objectToUpdate.status='terminated';
         }else{
