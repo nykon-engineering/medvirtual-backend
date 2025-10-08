@@ -5,6 +5,7 @@ export const dealToDbDictionary:Record<string,string> = {
     client_name: 'hubspot_client_name',
     closedate: 'hubspot_close_date',  //Date the deal was closed. This property is set automatically by HubSpot.
     company_name: 'hubspot_company_name',
+    start_date: 'start_date',
     contract_sign_date: 'hubspot_contract_sign_date',
     conversion_date: 'start_date',
     conversion_type: 'hubspot_conversion_type', //Full-time or Part-Time
