@@ -270,7 +270,17 @@ export class StaffService {
     };
 
     if (user.role.includes('organization')) {
-      where.hireRequest.org_id = user.organization_id;
+      //where.hireRequest.org_id = user.organization_id;
+      where.OR = [
+        {
+          hireRequest: {
+            org_id: user.organization_id,
+          },
+        },
+        {
+          organization_id: user.organization_id,
+        },
+      ];
     }
 
     if (search) {
@@ -307,11 +317,26 @@ export class StaffService {
       start_date: true,
       created_at: true,
       updated_at: true,
+      hubspot_id: true,
+      hubspot_close_date: true,
+      hubspot_contract_sign_date: true,
+      hubspot_conversion_type: true,
+      hubspot_deal_name: true,
+      hubspot_dealstage: true,
+      hubspot_dealtype: true,
+      hubspot_deployment_type: true,
+      hubspot_description: true,
+      hubspot_hs_acv: true,
+      hubspot_pipeline: true,
+      hubspot_business_unit: true,
+      hubspot_candidate_id: true,
+      hubspot_organization_id: true,
       candidate: {
         select: {
           id: true,
           first_name: true,
           last_name: true,
+          name: true,
           email: true,
           specialization: true,
           employment_type: true,
