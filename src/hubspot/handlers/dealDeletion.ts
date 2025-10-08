@@ -8,7 +8,7 @@ export class HandlerDealDeletion {
     ){}
 
     async execute(event){
-        //try {
+        try {
             const staffExists = await this.prisma.staff.findUnique({
                 where: {
                     hubspot_id: String(event.objectId)
@@ -24,7 +24,9 @@ export class HandlerDealDeletion {
                     id: staffExists.id
                 }
             });
-        
+        }catch (error) {
+            throw new BadRequestException('Error deleting staff', error);
+        }
         
     }
 }

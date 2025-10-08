@@ -37,6 +37,7 @@ export class HandlerDealPropertyChange {
             return await this.dealDeletion.execute(event);
         }
 
+
         //=====>
         const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/${process.env.HUBSPOT_CUSTOM_OBJECT}`,
             {
@@ -75,23 +76,42 @@ export class HandlerDealPropertyChange {
         const fieldExists = Object.keys(dealToDbDictionary).includes(event.propertyName);
         if(!fieldExists) return;
 
+        let objectToUpdate: any = {};
+
         const fieldUpdated = dealToDbDictionary[event.propertyName];
         let value = event.propertyValue;
+
+        objectToUpdate = {
+            [fieldUpdated]: value
+        }
+
+        if (deal && event.propertyName == 'dealstage' && event.propertyValue == 'Paused Deal (for replacement)' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == 'Replaced - Endorsed to New Launch' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == 'Lost'
+        ) {
+            objectToUpdate.status='terminated';
+        }else{
+            if(deal.status === 'terminated'){
+                objectToUpdate.status='active';
+            }
+        }
+        
+
 
         if (fieldUpdated === 'hubspot_close_date') {
             const timestamp = Number(event.propertyValue);
             if (!isNaN(timestamp)) {
               value = new Date(timestamp).toISOString();
             }
-          }
-
+        }
+        
         
         await this.prisma.staff.update({
             where: {
                 id: deal.id
             },
             data: {
-                [fieldUpdated]: value
+                ...objectToUpdate
             }
         })
         
