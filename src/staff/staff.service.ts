@@ -181,11 +181,13 @@ export class StaffService {
         id: true,
         candidate_id: true,
         status: true,
+        hubspot_deal_name: true,
         candidate: {
           select: {
             id: true,
             first_name: true,
             last_name: true,
+            name: true,
           },
         },
       },
@@ -218,7 +220,7 @@ export class StaffService {
           organization: { connect: { id: user.organization_id || undefined } },
           staff: { connect: { id: staff.id } },
           type: 'termination',
-          title: `Termination Requested: ${staff?.candidate?.first_name} ${staff?.candidate?.last_name}`,
+          title: `Termination Requested: ${staff.hubspot_deal_name ? staff.hubspot_deal_name :  staff?.candidate?.first_name+` `+staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'high',
           user: assignedValidated
