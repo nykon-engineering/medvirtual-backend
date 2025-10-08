@@ -150,6 +150,7 @@ model Candidate {
   processed_resume_data  Json?
   processing_status      ProcessingStatus        @default(pending)
   processing_error       String?
+  processing_cost        Decimal?                @default(0)
   processed_at           DateTime?
   createdAt              DateTime                @default(now())
   hourly_pay_rate        Decimal?

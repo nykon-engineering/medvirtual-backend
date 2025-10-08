@@ -104,7 +104,7 @@ export class OpenaiService {
         - Same as experience.
 
         #### Cost
-        - Cost spend on OpenAi to process the request in USD.
+        - Cost spend on OpenAi to process the request formatted in USD ($0,00).
 
         #### Ordering
         - Sort experience by most recent start_year (descending) if available; otherwise preserve source order.
@@ -137,12 +137,30 @@ export class OpenaiService {
                 ],
                 temperature: 0.2,
             });
-    
-            const message = response.choices?.[0]?.message?.content;
-    
+            const usage = response.usage;
+            let cost = 0;
+            if (usage) {
+                const inputCost = (usage.prompt_tokens / 1000) * 0.0005;
+                const outputCost = (usage.completion_tokens / 1000) * 0.0015;
+                cost = inputCost + outputCost;
+            }
+
+            let message: any = response.choices?.[0]?.message?.content;
             if (!message) {
             throw new BadRequestException('OpenAI did not return a valid message.');
             }
+
+            let parsedMessage;
+
+            try {
+                parsedMessage = JSON.parse(message);
+            } catch (e) {
+                console.error('Erro ao converter resposta JSON da OpenAI:', e);
+                throw new BadRequestException('Invalid JSON returned from OpenAI');
+            }
+            parsedMessage.cost = `$${cost.toFixed(4)}`;
+            message = JSON.stringify(parsedMessage, null, 2);
+
             return message;
 
         }catch (error: any) {
