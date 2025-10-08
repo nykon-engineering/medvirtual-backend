@@ -117,11 +117,13 @@ export class StaffService {
         id: true,
         candidate_id: true,
         status: true,
+        hubspot_deal_name: true,
         candidate: {
           select: {
             id: true,
             first_name: true,
             last_name: true,
+            name: true,
           },
         },
       },
@@ -162,7 +164,7 @@ export class StaffService {
           organization: { connect: { id: user.organization_id || undefined } },
           type: 'bonus',
           staff: { connect: { id: data.staff_id } },
-          title: `Bonus Added: $${data.bonus} to ${staff?.candidate?.first_name} ${staff?.candidate?.last_name}`,
+          title: `Bonus Added: $${data.bonus} to ${staff.hubspot_deal_name ? staff.hubspot_deal_name :  staff?.candidate?.first_name+` `+staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'medium',
           user: assignedValidated
