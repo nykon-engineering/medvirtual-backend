@@ -232,6 +232,34 @@ export class TicketService {
               email: true,
             },
           },
+          candidate: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              name: true,
+            },
+          },
+          staff: {
+            select: {
+              id: true,
+              status: true,
+              start_date: true,
+              terminated_date: true,
+              candidate: {
+                select: {
+                  id: true,
+                  first_name: true,
+                  last_name: true,
+                  email: true,
+                  name: true,
+                  specialization: true,
+                  years_of_experience: true,
+                },
+              },
+            },
+          },
         },
       });
       if (!tickets) throw new BadRequestException('Failed to fetch tickets');
