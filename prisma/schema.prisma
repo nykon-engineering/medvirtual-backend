@@ -419,7 +419,7 @@ model Bonus {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
   created_by  String?
-  staff       Staff    @relation(fields: [staff_id], references: [id])
+  staff       Staff    @relation(fields: [staff_id], references: [id], onDelete: Cascade)
 
   @@index([staff_id], map: "idx_bonus_staff_id")
 }
