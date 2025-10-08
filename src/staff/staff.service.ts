@@ -425,6 +425,144 @@ export class StaffService {
       // Extract staff-specific fields and candidate fields
       const {
         status,
+      } = updateData;
+
+      // Update staff record
+      const staffUpdateData: any = {};
+      if (status !== undefined) {
+        staffUpdateData.status = staffStatusDictionary[status] || status;
+      }
+      
+      // Use transaction to update both staff and candidate records
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Update staff record
+        const updatedStaff = await tx.staff.update({
+          where: { id: staffId },
+          data: staffUpdateData,
+        });
+
+        // Return updated staff with all relations
+        return await tx.staff.findUnique({
+          where: { id: staffId },
+          select: {
+            id: true,
+            hirerequest_id: true,
+            status: true,
+            salary: true,
+            start_date: true,
+            created_at: true,
+            updated_at: true,
+            hubspot_id: true,
+            hubspot_close_date: true,
+            hubspot_contract_sign_date: true,
+            hubspot_conversion_type: true,
+            hubspot_deal_name: true,
+            hubspot_dealstage: true,
+            hubspot_dealtype: true,
+            hubspot_deployment_type: true,
+            hubspot_description: true,
+            hubspot_hs_acv: true,
+            hubspot_pipeline: true,
+            hubspot_business_unit: true,
+            hubspot_candidate_id: true,
+            hubspot_organization_id: true,
+            candidate: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                name: true,
+                email: true,
+                specialization: true,
+                employment_type: true,
+                country: true,
+                about_me: true,
+                years_of_experience: true,
+                hourly_pay_rate: true,
+                gender: true,
+                medical_tools: true,
+                tools: true,
+                languages: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+                skills: {
+                  select: {
+                    id: true,
+                    skill_name: true,
+                    proficiency_level: true,
+                    skill_type: true,
+                  },
+                },
+                createdAt: true,
+              },
+            },
+            hireRequest: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                status: true,
+                priority: true,
+                availability: true,
+                contract_length: true,
+                expected_start_date: true,
+                salary_range_from: true,
+                salary_range_to: true,
+                specialization: true,
+                location: true,
+              },
+            },
+            bonus: {
+              select: {
+                id: true,
+                amount: true,
+                description: true,
+                created_at: true,
+                created_by: true,
+              },
+            },
+          },
+        });
+      });
+
+      return {
+        status: 200,
+        message: 'Staff updated successfully',
+        data: result,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to update staff member');
+    }
+  }
+
+  /* //We removed that method to simplify the code, but kept it here for reference
+  async updateStaff(
+    staffId: string,
+    updateData: any,
+    user: USER,
+    ): Promise<any> {
+    try {
+      // Verify staff exists
+      const existingStaff = await this.prisma.staff.findUnique({
+        where: { id: staffId },
+        include: {
+          candidate: true,
+        },
+      });
+
+      if (!existingStaff) {
+        throw new NotFoundException('Staff member not found');
+      }
+
+      // Extract staff-specific fields and candidate fields
+      const {
+        status,
         salary,
         start_date,
         first_name,
@@ -614,6 +752,7 @@ export class StaffService {
       throw new BadRequestException('Failed to update staff member');
     }
   }
+    */
 
   
 }
