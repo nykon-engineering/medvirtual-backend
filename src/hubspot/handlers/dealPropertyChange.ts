@@ -1,8 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerDealCreation } from "./dealCreation";
+import { HandlerDealDeletion } from "./dealDeletion";
 import { dealToDbDictionary } from "../../common/dictionaries/deal-dictionary";
 import axios from "axios";
+
 
 @Injectable()
 
@@ -10,7 +12,8 @@ export class HandlerDealPropertyChange {
 
     constructor(
         private readonly prisma: PrismaService,
-        private readonly dealCreation: HandlerDealCreation
+        private readonly dealCreation: HandlerDealCreation,
+        private readonly dealDeletion: HandlerDealDeletion
     ){}
 
     async execute(event){
@@ -29,6 +32,10 @@ export class HandlerDealPropertyChange {
             })
         }
         if(!deal) return;
+
+        if (deal && event.propertyName === 'pipeline' && event.propertyValue !== '5155250') { //5155250 => BV Operations
+            return await this.dealDeletion.execute(event);
+        }
 
         //=====>
         const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/${process.env.HUBSPOT_CUSTOM_OBJECT}`,
