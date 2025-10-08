@@ -301,7 +301,7 @@ export class StaffService {
         },
       ];
     }
-
+    
     if (search) {
       where.OR = [
         {

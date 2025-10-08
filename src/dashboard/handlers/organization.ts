@@ -60,14 +60,26 @@ export class HandlerOrganization {
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('User or organization not found');
 
+
+    
+
+
     const hiredStaff = await this.prisma.staff.findMany({
       where:{
         status: {
           not: 'terminated',
         },
-        hireRequest:{
-          org_id: user.organization_id,
-        }
+        OR:[
+          {
+            hireRequest:{
+              org_id: user.organization_id,
+            }
+          },
+          {
+            organization_id: user.organization_id,
+          },
+        ]
+        
       }, 
       select : {
         id: true,
