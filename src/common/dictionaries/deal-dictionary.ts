@@ -7,7 +7,7 @@ export const dealToDbDictionary:Record<string,string> = {
     company_name: 'hubspot_company_name',
     start_date: 'start_date',
     contract_sign_date: 'hubspot_contract_sign_date',
-    conversion_date: 'start_date',
+    //conversion_date: 'start_date',
     conversion_type: 'hubspot_conversion_type', //Full-time or Part-Time
     dealname: 'hubspot_deal_name',
     pipeline: 'hubspot_pipeline', //The pipeline the deal is in. This determines which stages are options for the deal.
