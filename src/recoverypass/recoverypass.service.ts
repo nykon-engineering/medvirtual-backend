@@ -46,8 +46,18 @@ export class RecoverypassService {
     const mailSent = await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: user.email,
-      subject: 'Reset Password',
+      subject: 'Reset Your MedVirtual Password - Action Required',
       html: emailBody,
+      headers: {
+        'X-Mailer': 'MedVirtual Platform',
+        'X-Priority': '3',
+        'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
+        'X-Entity-Ref-ID': `reset-${user.id}`,
+      },
+      tags: [
+        { name: 'type', value: 'password_reset' },
+        { name: 'source', value: 'medvirtual' }
+      ],
     });
 
     if (!mailSent)
