@@ -42,21 +42,25 @@ export class CronService {
             },
         })
 
-        for( const candidate of candidates) {
-            console.log(`Re-running pipeline for candidate ID: ${candidate.id}, Name: ${candidate.first_name} ${candidate.last_name}`);
-            try{
-                await this.candidate.processData(candidate.id);
-                console.log(`===>Finished Pipeline for the candidate ID: ${candidate.id}`);
-            }catch{
-                await this.prisma.candidate.update({
-                    where: { id: candidate.id },
-                    data: {
-                        processing_status: 'failed'
-                    },
-                });
-                console.log(`===>Error in Pipeline for the candidate ID: ${candidate.id}`);
+        if (process.env.ENVIRONMENT === 'PROD') {
+            for( const candidate of candidates) {
+                console.log(`Re-running pipeline for candidate ID: ${candidate.id}, Name: ${candidate.first_name} ${candidate.last_name}`);
+                try{
+                    await this.candidate.processData(candidate.id);
+                    console.log(`===>Finished Pipeline for the candidate ID: ${candidate.id}`);
+                }catch{
+                    await this.prisma.candidate.update({
+                        where: { id: candidate.id },
+                        data: {
+                            processing_status: 'failed'
+                        },
+                    });
+                    console.log(`===>Error in Pipeline for the candidate ID: ${candidate.id}`);
+                }
+            
             }
-           
+        }else{
+            console.log('Environment is not PROD. Skipping re-run of pipelines.');
         }
         return true;
     }

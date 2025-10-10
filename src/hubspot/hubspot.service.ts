@@ -498,9 +498,12 @@ export class HubspotService {
                     data: candidateData
                 })
                 console.log('Candidate updated:', candidate.first_name);
-
-                await this.candidate.processData(candidate.id)
-                console.log('Candidate processed:', candidate.first_name);
+                if (process.env.ENVIRONMENT === 'PROD') {
+                    await this.candidate.processData(candidate.id)
+                    console.log('Candidate processed:', candidate.first_name);
+                }else{
+                    console.log('Environment is not PROD. Skipping processing for candidate:', candidate.first_name);
+                }
 
             }
             
