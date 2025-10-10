@@ -40,37 +40,72 @@ export class HandlerDealPropertyChange {
 
         //=====>
         const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/${process.env.HUBSPOT_CUSTOM_OBJECT}`,
+        {
+        headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+            },
+        });
+
+        if (getObject?.data?.results?.length > 0) {
+            const candidateExists = await this.prisma.candidate.findUnique({
+                where: {
+                    hubspot_id: String(getObject.data.results[0].id)
+                },
+                select: {
+                    id: true,
+                }
+            })
+
+            await this.prisma.staff.update({
+                where: {
+                    id: deal.id
+                },
+                data: {
+                    candidate_id: candidateExists ? candidateExists.id : null,
+                    hubspot_candidate_id: getObject.data.results[0].id
+                }
+            })
+        }
+        //=====>
+
+        //=====>
+        const getObjectOrg = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/companies`,
             {
             headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
                 'Content-Type': 'application/json',
                 },
             });
-            //console.log('getObject: ', getObject.data);
-
-            if (getObject?.data?.results?.length > 0) {
-
-                const candidateExists = await this.prisma.candidate.findUnique({
+    
+            if (getObjectOrg?.data?.results?.length > 0) {
+                const OrganizationExists = await this.prisma.organization.findUnique({
                     where: {
-                        hubspot_id: String(getObject.data.results[0].id)
+                        hubspot_id: String(getObjectOrg.data.results[0].id)
                     },
                     select: {
                         id: true,
+                        status: true
                     }
                 })
-
+                if (OrganizationExists && OrganizationExists.status === 'inactive') {
+                    await this.prisma.organization.update({
+                        where: { id: OrganizationExists.id },
+                        data: { status: 'active' }
+                    });
+                }
+    
                 await this.prisma.staff.update({
                     where: {
                         id: deal.id
                     },
                     data: {
-                        candidate_id: candidateExists ? candidateExists.id : null,
-                        hubspot_candidate_id: getObject.data.results[0].id
+                        candidate_id: OrganizationExists ? OrganizationExists.id : null,
+                        hubspot_candidate_id: getObjectOrg.data.results[0].id
                     }
                 })
-                
             }
-        //=====>
+            //=====>
 
 
         const fieldExists = Object.keys(dealToDbDictionary).includes(event.propertyName);
