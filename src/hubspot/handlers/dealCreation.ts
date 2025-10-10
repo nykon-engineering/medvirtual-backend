@@ -36,7 +36,6 @@ export class HandlerDealCreation {
             const dealData = mapDealToDb(getObject.data.properties);
             dealData.status = 'active';
             //console.log('dealData before date conversion: ', dealData);
-            dealData.hubspot_contract_sign_date = dealData.hubspot_contract_sign_date ? new Date(dealData.hubspot_contract_sign_date) : null;
             dealData.hubspot_close_date = dealData.hubspot_close_date ? new Date(dealData.hubspot_close_date) : null;
             dealData.start_date = dealData.start_date ? new Date(dealData.start_date) : null;
             
