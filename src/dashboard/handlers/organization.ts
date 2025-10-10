@@ -91,8 +91,6 @@ export class HandlerOrganization {
         updated_at: true,
         hubspot_id: true,
         hubspot_close_date: true,
-        hubspot_contract_sign_date: true,
-        hubspot_conversion_type: true,
         hubspot_deal_name: true,
         hubspot_dealstage: true,
         hubspot_dealtype: true,

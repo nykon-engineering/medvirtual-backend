@@ -91,7 +91,7 @@ export class OpenaiService {
 
         #### Experience
         - Use only literal data from Textract.
-        - "description": MUST be composed of **sentence separated by semicolons (;) and each sentence MUST be between 100 and 120 characters.** Do not return shorter or longer sentences. 
+        - "description": MUST be composed of **sentences separated by semicolons (;) and each sentence MUST be between 100 and 120 characters.** Do not return shorter or longer sentences. 
         - Return only the JSON. No explanations or preamble.
         - On the start_date and end_date fields, return the date in the format YYYY-MM-DD.
         - if the date is not found, return null.

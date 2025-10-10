@@ -218,6 +218,10 @@ export class StaffController {
     return result;
   }
 
-  
+  @Get('populate-db/from-hubspot')
+  @ApiOperation({ summary: "Populate DB", description: 'Populate DB with organizations from hubspot' })
+  async populateDbFromHubspot() {
+    return await this.staffService.populateDbFromHubspot();
+  }
 
 }

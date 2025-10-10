@@ -396,8 +396,6 @@ model Staff {
   hubspot_client_name String?
   hubspot_close_date DateTime?
   hubspot_company_name String?
-  hubspot_contract_sign_date DateTime?
-  hubspot_conversion_type String?
   hubspot_deal_name String?
   hubspot_pipeline String?
   hubspot_dealstage String?
