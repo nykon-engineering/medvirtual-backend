@@ -542,14 +542,28 @@ export class CandidatesService {
       console.log('starting with the openAi step...');
       //processing_organizeData
       await this.updateStatus(id, 'processing_organizeData');   
-      const organizedData = await this.openai.organizeText(extract, candidate);
-      if (!organizedData) {
+      const organizedDataString = await this.openai.organizeText(extract, candidate);
+
+      const organizedData = JSON.parse(organizedDataString);
+      const transformedData = {
+        ...organizedData,
+        experience: organizedData.experience.map(exp => ({
+          ...exp,
+          description: exp.description.join("; ")
+        })),
+        education: organizedData.education.map(edu => ({
+          ...edu,
+          description: edu.description.join("; ")
+        }))
+      };
+      
+      if (!transformedData) {
         await this.updateStatus(id, 'failed', 'Failed to organize data from OpenAI');
         console.log('Failed to organize data from OpenAI');
         return false;
       }
 
-      const parsedData = JSON.parse(organizedData);
+      const parsedData = transformedData;
       console.log('The datas were organized successfully by openAi');
 
       //processing_updateCandidate
