@@ -16,7 +16,7 @@ export class HandlerDealCreation {
 
     async execute(event){
         
-        //try{
+        try{
             const properties = Object.keys(dealToDbDictionary).join(',');
             const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}?properties=${properties}`,
             {
@@ -55,7 +55,6 @@ export class HandlerDealCreation {
                 'Content-Type': 'application/json',
                 },
             });
-            //console.log('getObjectVA: ', getObjectVA.data);
 
             if (getObjectVA?.data?.results?.length > 0) {
                 dealData.hubspot_candidate_id = getObjectVA.data.results[0].id
@@ -78,7 +77,6 @@ export class HandlerDealCreation {
                 'Content-Type': 'application/json',
                 },
             });
-            //console.log('getObjectCompany: ', getObjectCompany.data);
             if (getObjectCompany?.data?.results?.length > 0) {
                 dealData.hubspot_organization_id = getObjectCompany.data.results[0].id
                 const organizationExists = await this.prisma.organization.findUnique({
@@ -87,11 +85,17 @@ export class HandlerDealCreation {
                     },
                     select: {
                         id: true,
+                        status: true
                     }
                 })
-                if (organizationExists) dealData.organization_id = organizationExists.id
+                if (organizationExists) dealData.organization_id = organizationExists.id;
+                if (organizationExists && organizationExists.status === 'inactive') {
+                    await this.prisma.organization.update({
+                        where: { id: organizationExists.id },
+                        data: { status: 'active' }
+                    });
+                }
             }
-            //console.log('dealData after date conversion and associations: ', dealData);
 
             const dealCreated = await this.prisma.staff.create({
                 data: dealData
@@ -102,8 +106,8 @@ export class HandlerDealCreation {
 
             return true;
 
-        /*}catch (error) {
+        }catch (error) {
             throw new BadRequestException(`Error fetching object creation Deal: ${error.message}`);
-        }*/
+        }
     }
 }
