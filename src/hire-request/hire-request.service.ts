@@ -1998,6 +1998,7 @@ export class HireRequestService {
           candidate: {
             ...pc.candidate,
             years_of_experience,
+            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
           },
         };
       }),
