@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StaffService } from './staff.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 
 describe('StaffService', () => {
   let service: StaffService;
@@ -15,10 +16,15 @@ describe('StaffService', () => {
     }
   }
 
+  const HandlerObjectCreationMock = {
+    execute: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [StaffService,
-        { provide: PrismaService, useValue: mockPrisma }
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: HandlerObjectCreation, useValue: HandlerObjectCreationMock }
       ],
     }).compile();
 

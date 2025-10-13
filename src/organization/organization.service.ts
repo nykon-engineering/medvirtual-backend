@@ -2119,5 +2119,22 @@ export class OrganizationService {
     return `DB populated from HubSpot successfully with ${mappedOrganizations.length} organizations`;
   }
   
+  async desactiveWithoutStaff(): Promise<any>{
+
+    const organizations = await this.prisma.organization.updateMany({
+      where: {
+        staff: {
+          none: {},
+        },
+      },
+      data: {
+        status: 'inactive',
+        organization_role: 'prospect'
+      },
+    });
+
+    return organizations;
+  }
+
 
 }

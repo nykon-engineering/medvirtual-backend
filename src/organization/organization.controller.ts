@@ -587,4 +587,12 @@ export class OrganizationController {
   async populateDbFromHubspot() {
     return await this.organizationService.populateDbFromHubspot();
   }
+
+  @Get('desactive-all/without-staff')
+  @ApiProperty({ description: 'Desactive the records which doesnt have staff' })
+  async desactiveWithoutStaff() {
+    return await this.organizationService.desactiveWithoutStaff();
+  }
+
+
 }
