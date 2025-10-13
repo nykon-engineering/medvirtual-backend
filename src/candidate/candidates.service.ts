@@ -17,6 +17,7 @@ import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
 
+
 @Injectable()
 export class CandidatesService {
 
@@ -463,6 +464,43 @@ export class CandidatesService {
     return true
   }
 
+  async processAvatar(id: string): Promise<boolean>{
+    console.log('starting process data for candidate ID:', id);
+    if (!id) throw new BadRequestException('Candidate ID is required');
+
+    const candidate = await this.prisma.candidate.findUnique({
+      where: {
+        id: id
+      }
+    });
+    if(!candidate) throw new BadRequestException('Candidate not found');
+
+    //if( candidate && candidate.resume_url && candidate.resume_url.includes('http')) {  => handler with the field from hubspot, like resume_link
+      //const idImage = '1AjdfgUU0qTwpBdEUKdEBH0R8mlgCnn4a';
+      //const idImage = '1HsIGszx_8OMncDntKBCziUFHLdr5jYK2';
+      //const idImage = '1nL-kL3dK0emQsH3xHY27DZQ9KuAf8rlw';
+      const idImage = '1wa-egm9aaA-TSdvmQTvWz6cM6ZYzXqVB'
+      //const idImage = extractDriveFileId(candidate.resume_url); => handler with the field from hubspot, like resume_link
+      
+      const imageName = `${candidate.id}__image.png`;
+      const downloadDir = path.resolve(__dirname, '/tmp');
+
+      const imageDownloaded = await this.google.downloadImage(idImage, imageName, downloadDir);
+      if (!imageDownloaded ) {
+        console.log('Failed to download image from Google Drive:', imageDownloaded);
+      }
+      console.log('Image downloaded successfully from Google Drive', imageDownloaded);
+      
+      console.log("starting with the avatar generate...")
+      await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
+      console.log('Avatar generated successfully');
+
+      //Save Avatar on S3 and update candidate database 
+
+    //} 
+    return true;
+  }
+
   async processData(id: string): Promise<boolean>{
     console.log('starting process data for candidate ID:', id);
     if (!id) throw new BadRequestException('Candidate ID is required');
@@ -483,6 +521,7 @@ export class CandidatesService {
         await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
         return false;
       }
+      
       console.log('starting with download step...');
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
@@ -538,17 +577,36 @@ export class CandidatesService {
         return false;
       }
 
+
+
+      
+
+
       console.log('starting with the openAi step...');
       //processing_organizeData
       await this.updateStatus(id, 'processing_organizeData');   
-      const organizedData = await this.openai.organizeText(extract, candidate);
-      if (!organizedData) {
+      const organizedDataString = await this.openai.organizeText(extract, candidate);
+
+      const organizedData = JSON.parse(organizedDataString);
+      const transformedData = {
+        ...organizedData,
+        experience: organizedData.experience.map(exp => ({
+          ...exp,
+          description: exp.description.join("; ")
+        })),
+        education: organizedData.education.map(edu => ({
+          ...edu,
+          description: edu.description.join("; ")
+        }))
+      };
+      
+      if (!transformedData) {
         await this.updateStatus(id, 'failed', 'Failed to organize data from OpenAI');
         console.log('Failed to organize data from OpenAI');
         return false;
       }
 
-      const parsedData = JSON.parse(organizedData);
+      const parsedData = transformedData;
       console.log('The datas were organized successfully by openAi');
 
       //processing_updateCandidate

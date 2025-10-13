@@ -39,6 +39,7 @@ import { staffStatusDictionary } from '../common/dictionaries/staff-status-dicti
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
+import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
 
 
 @Injectable()
@@ -884,10 +885,11 @@ export class OrganizationService {
       const take = perPage;
 
       const where: any = {
-        hireRequest: {
-          org_id: organizationId,
-        },
-        candidate: {},
+        //hireRequest: {
+        //  org_id: organizationId,
+        //},
+        //candidate: {},
+        organization_id: organizationId,
       };
 
       if (search) {
@@ -933,11 +935,23 @@ export class OrganizationService {
         created_at: true,
         updated_at: true,
         hubspot_id: true,
+        hubspot_close_date: true,
+        hubspot_deal_name: true,
+        hubspot_dealstage: true,
+        hubspot_dealtype: true,
+        hubspot_deployment_type: true,
+        hubspot_description: true,
+        hubspot_hs_acv: true,
+        hubspot_pipeline: true,
+        hubspot_business_unit: true,
+        hubspot_candidate_id: true,
+        hubspot_organization_id: true,
         candidate: {
           select: {
             id: true,
             first_name: true,
             last_name: true,
+            name: true,
             email: true,
             specialization: true,
             employment_type: true,
@@ -993,9 +1007,16 @@ export class OrganizationService {
         this.prisma.staff.count({ where }),
       ]);
 
+      const staffWithDictionary: any = staff.map((s) => (
+        {
+          ...s,
+          hubspot_dealstage: s.hubspot_dealstage ? dealPipelineToDbDictionary[s.hubspot_dealstage] || s.hubspot_dealstage : undefined,
+        }
+      ))
+
       return {
         status: 200,
-        data: staff,
+        data: staffWithDictionary,
         meta: {
           total,
           page,

@@ -93,7 +93,13 @@ export class HandlerObjectPropertyChange {
             */
 
             // Re-run the resume pipeline if this chnge is related to the resume
-            if(event.propertyName === 'resume_link') await this.candidateService.processData(candidate.id);
+            if(event.propertyName === 'resume_link') {
+                if (process.env.ENVIRONMENT === 'PROD') {
+                    await this.candidateService.processData(candidate.id);
+                }else{
+                    console.log('Environment is not PROD. Skipping re-run of pipelines.');
+                }
+            }
             
             return true;
         }

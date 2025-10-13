@@ -3,11 +3,13 @@ import { CronService } from './cron.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
+import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 
 describe('CronService', () => {
   let service: CronService;
   let prismaServiceMock: { candidate: { findMany: jest.Mock } };
   let candidatesServiceMock: { processData: jest.Mock };
+  let handlerObjectCreationMock: { execute: jest.Mock };
   
 
   beforeEach(async () => {
@@ -21,10 +23,15 @@ describe('CronService', () => {
       processData: jest.fn(),
     };
 
+    handlerObjectCreationMock = {
+      execute: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [CronService,
         {provide: PrismaService, useValue: prismaServiceMock},
-        {provide: CandidatesService, useValue: candidatesServiceMock}
+        {provide: CandidatesService, useValue: candidatesServiceMock},
+        {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock}
       ],
     }).compile();
 

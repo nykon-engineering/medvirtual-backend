@@ -33,12 +33,24 @@ export class HandlerOrganizationPropertyChange {
 
             const fieldUpdated = organizationToDbDictionary[event.propertyName];
             let value = event.propertyValue;
+
             if (fieldUpdated === 'organization_role') {
-                if (event.propertyValue === 'Prospect'){
+                if (event.propertyValue.toLowerCase() === 'prospect'){
                     value = OrganizationRole.prospect;
                 }else{
                     value = OrganizationRole.client;
                 }
+            }
+
+            if (fieldUpdated === 'specialties') {
+                value = event.propertyValue
+                  ?.split(',')
+                  .map((item: string) => item.trim())
+                  .filter((item: string) => item.length > 0);
+            }
+
+            if (fieldUpdated === 'number_of_employees') {
+                value = event.propertyValue ? Number(event.propertyValue) : null;
             }
             
             await this.prisma.organization.update({

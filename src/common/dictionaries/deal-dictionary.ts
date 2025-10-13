@@ -5,10 +5,8 @@ export const dealToDbDictionary:Record<string,string> = {
     client_name: 'hubspot_client_name',
     closedate: 'hubspot_close_date',  //Date the deal was closed. This property is set automatically by HubSpot.
     company_name: 'hubspot_company_name',
-    contract_sign_date: 'hubspot_contract_sign_date',
-    conversion_date: 'start_date',
-    conversion_type: 'hubspot_conversion_type', //Full-time or Part-Time
-    csm_deal_stage: 'hubspot_csm_deal_stage', //Sales Pipeline, For Demo, Demo Complete, Missed Demo, Contract Sent, Contract Signed, Lost, For Pairing, For Consultation, For Onboarding ...
+    start_date: 'start_date',
+    //conversion_date: 'start_date',
     dealname: 'hubspot_deal_name',
     pipeline: 'hubspot_pipeline', //The pipeline the deal is in. This determines which stages are options for the deal.
     dealstage: 'hubspot_dealstage', //The stage of the deal. Deal stages allow you to categorize and track the progress of the deals that you are working on

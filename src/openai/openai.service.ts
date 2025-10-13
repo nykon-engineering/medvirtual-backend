@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { OpenAI } from 'openai';
+import fs from "fs";
+import OpenAI, { toFile } from "openai";
 import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+
 
 @Injectable()
 export class OpenaiService {
@@ -24,20 +27,18 @@ export class OpenaiService {
             apiKey: apiKey
         });
 
-        const prompt= `
-        You are an information extraction assistant. 
-        You will receive two inputs:
-        1. Plain text from Amazon Textract (resume content).
-        2. A object with existing candidate information from HubSpot.
+        const prompt = `
+        You are a resume data extraction assistant.
 
-        Your task is to return a JSON object in the EXACT structure defined below.
-        You MUST NOT invent or guess information—use ONLY what is explicitly available in the Textract text or the HubSpot JSON. 
-        If a field is missing, leave it empty or null as indicated.
+        Your job is to read:
+        1. Plain text extracted by Amazon Textract (resume content)
+        2. A JSON object with candidate info
+
+        and return a **single valid JSON object** with the exact structure below.
 
         ---
 
-        ### OUTPUT STRUCTURE (fixed)
-
+        ### OUTPUT SCHEMA (DO NOT CHANGE KEYS OR ORDER)
         {
         "bio": "",
         "experience": [
@@ -46,7 +47,7 @@ export class OpenaiService {
             "role": "",
             "start_date": null,
             "end_date": null,
-            "description": "",
+            "description": ""
             }
         ],
         "education": [
@@ -55,72 +56,71 @@ export class OpenaiService {
             "degree": "",
             "start_date": null,
             "end_date": null,
-            "description": ""
+            "description": []
             }
         ]
         }
 
         ---
-        
 
-        ### CRITICAL RULES (HIGHEST PRIORITY)
-        - NEVER include the candidate’s personal name, initials, or any direct identifier in the "bio".  
-        - If a name appears in Textract or HubSpot, IGNORE it completely when writing the bio.  
-
-        ### RULES
-        #### General
-        - Do not change the JSON structure or key order.
-        - Extract only literal data found in Textract or HubSpot JSON.
-        - If a field is not found, return it as "" (for strings), null (for numbers/dates), or [] (for arrays).
-        - Do not invent or infer values. Only extract what is explicitly present in the input.
-        - If a field is not applicable, leave it empty or null as specified.
-        - If it is impossible to read a candidate data from hubspot, consider just the textract data.
-        - Do not include the person's name on the bio.
-
-
-        #### Bio / Summary
-        - Do not include the person's name on the bio.
-        - Write a brief description about the professional.
-        - Write in a **client-oriented tone**, highlighting why the candidate is valuable to a potential employer.
-        - Use **keywords** from the 'specializations' array in the HubSpot JSON.  
-        - If relevant details exist in both Textract and HubSpot, combine them.
-        - Only include facts actually present in the inputs; do not invent achievements or roles.
-        - Length: 2–4 sentences, concise, professional.
-        
-
-        #### Experience
-        - Use only literal data from Textract.
-        - "description": MUST be composed of **sentence separated by semicolons (;) and each sentence MUST be between 100 and 120 characters.** Do not return shorter or longer sentences. 
-        - Return only the JSON. No explanations or preamble.
-        - On the start_date and end_date fields, return the date in the format YYYY-MM-DD.
-        - if the date is not found, return null.
-        - If the end_date is not found, return null.
-        - if the start_date is not found, return null.
-        - if is impossible get start_date and end_date, return null. never return 'Invalid Date'
-        - Rewrite only for clarity and brevity if needed, but do not add information not present in Textract.  
-
-        #### Education
-        - Same as experience.
-
-        #### Ordering
-        - Sort experience by most recent start_year (descending) if available; otherwise preserve source order.
-        - Sort education chronologically by start_year if available.
+        ### CRITICAL RULES
+        - Return ONLY valid JSON. No markdown, no explanations, no comments.
+        - If a value is unknown, return "" or null (do not invent facts).
+        - Never include personal names or identifiers in the "bio".
+        - All dates must be ISO format (YYYY-MM-DD) or null.
+        - Each "experience.description" must be:
+            - Array of strings, each string a single sentence.
+            - Each sentence between 100 and 120 characters.
+            - If needed, use bullet points (•) to separate different responsibilities or achievements.
+            - Each sentence need to have at least 100 characters.Don't return short than 100 characters.
+            - If the description is too short, expand it with relevant details based on the role and industry.
+        - Use the filler phrases only when needed to reach 100 characters:
+            - "demonstrating strong attention to detail and adherence to quality standards"
+            - "ensuring compliance with regulations and maintaining accurate documentation"
+            - "coordinating with teams to optimize outcomes and workflow continuity"
+            - "providing training and support to improve performance"
+        - Do not create new companies, degrees, or dates. Use only information from the inputs.
 
         ---
 
-        ### INPUTS
-        Textract Resume Text:
-        ----------------
-        ${text}
-        ----------------
+        ### BIO
+        - Do not include the person's name on the bio.
+        - Write a brief description about the professional.
+        - Write in a **client-oriented tone**, highlighting why the candidate is valuable to a potential employer.
+        - Write 2–4 sentences (without the candidate’s name) summarizing professional background.
+        - You may combine or paraphrase facts from Textract and HubSpot.
+        - Use **keywords** from the 'specializations' array in the HubSpot JSON. 
+        - If relevant details exist in both Textract and HubSpot, combine them.
+        - Only include facts actually present in the inputs; do not invent achievements or roles.
+        - Length: 2–4 sentences, concise, professional.
 
-        HubSpot Candidate JSON:
-        ----------------
+
+        ---
+
+        ### ORDERING
+        - Sort experience by most recent start_date.
+        - Sort education by chronological order.
+
+        ---
+
+        ### INPUT DATA
+
+        **Textract Resume Text:**
+        ${text}
+
+        **HubSpot Candidate JSON:**
         ${candidateJSON}
-        ----------------`
+
+        ---
+
+        ### FINAL INSTRUCTION
+        Return only a **single valid JSON object** that passes strict JSON.parse().
+        `;
+
+
         try{
             const response = await openai.chat.completions.create({
-                model: 'gpt-4',
+                model: 'gpt-4o-mini',
                 messages: [
                     {
                         role: 'system',
@@ -133,12 +133,30 @@ export class OpenaiService {
                 ],
                 temperature: 0.2,
             });
-    
-            const message = response.choices?.[0]?.message?.content;
-    
+            const usage = response.usage;
+            let cost = 0;
+            if (usage) {
+                const inputCost = (usage.prompt_tokens / 1000) * 0.0020;
+                const outputCost = (usage.completion_tokens / 1000) * 0.0060;
+                cost = inputCost + outputCost;
+            }
+
+            let message: any = response.choices?.[0]?.message?.content;
             if (!message) {
             throw new BadRequestException('OpenAI did not return a valid message.');
             }
+
+            let parsedMessage;
+
+            try {
+                parsedMessage = JSON.parse(message);
+            } catch (e) {
+                console.error('Erro ao converter resposta JSON da OpenAI:', e);
+                throw new BadRequestException('Invalid JSON returned from OpenAI');
+            }
+            parsedMessage.cost = `$${cost.toFixed(4)}`;
+            message = JSON.stringify(parsedMessage, null, 2);
+
             return message;
 
         }catch (error: any) {
@@ -192,4 +210,40 @@ export class OpenaiService {
         }
         
     }
+
+    async generateAvatarWithScreenshoot(candidate: any, imageDownloaded: any): Promise<any>{
+        
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      
+        const prompt = `
+        Generate a realistic professional avatar inspired by the person in the reference image.
+        Keep a similar lighting setup (soft studio light) and neutral background, but without accessories like headphone.
+        Style: modern corporate headshot, natural facial expression, confident and friendly.
+        Avoid copying the person — just use the image as reference for lighting and style.
+        `;
+
+        const image = fs.createReadStream(imageDownloaded);
+
+        const result = await openai.images.edit({
+            model: "gpt-image-1",
+            image: await toFile(image, null, {
+                type: "image/png",
+            }),
+            //mask: await toFile(fs.createReadStream("mask.png"), null, {
+            //    type: "image/png",
+            //}),
+            prompt,
+        });
+
+        //=> calculate the cost
+        
+        
+        if (!result.data || !result.data[0] || !result.data[0].b64_json) {
+            throw new Error("A resposta da API OpenAI não contém os dados esperados.");
+        }
+        const imageBase64 = result.data[0].b64_json;
+        fs.writeFileSync(`${Date.now()}_avatarX.png`, Buffer.from(imageBase64, "base64"));
+    }
+
+
 }

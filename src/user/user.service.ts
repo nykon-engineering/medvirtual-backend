@@ -780,8 +780,14 @@ export class UserService {
       const mailSent = await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: inviteData.email,
-        subject: 'MedVirtual Invitation',
+        subject: 'Welcome to MedVirtual - Complete Your Account Setup',
         html: emailBody,
+        headers: {
+          'X-Mailer': 'MedVirtual Platform',
+          'X-Priority': '3',
+          'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
+          'X-Entity-Ref-ID': `invite-${newUser.id}`,
+        },
       });
 
       if (!mailSent) {

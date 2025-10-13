@@ -195,5 +195,6 @@ export class CandidatesController {
       message: 'Candidate endorsed successfully',
       data: result
     }
-  } 
+  }
+
 }

@@ -124,6 +124,7 @@ model Organization {
   organization_candidates OrganizationCandidate[]
   hire_requests           HireRequest[]
   tickets                 Ticket[]
+  staff                   Staff[]
 
   // Relations
   owner USER? @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
@@ -149,6 +150,7 @@ model Candidate {
   processed_resume_data  Json?
   processing_status      ProcessingStatus        @default(pending)
   processing_error       String?
+  processing_cost        Decimal?                @default(0)
   processed_at           DateTime?
   createdAt              DateTime                @default(now())
   hourly_pay_rate        Decimal?
@@ -371,8 +373,9 @@ model GoogleToken {
 
 model Staff {
   id              String      @id @default(uuid())
-  candidate_id    String
-  hirerequest_id  String
+  candidate_id    String?
+  hirerequest_id  String?
+  organization_id String?
   status          String
   salary          Decimal?
   start_date      DateTime?
@@ -381,8 +384,9 @@ model Staff {
   created_by      String?
   terminated_date DateTime?
   bonus           Bonus[]
-  candidate       Candidate   @relation(fields: [candidate_id], references: [id])
-  hireRequest     HireRequest @relation(fields: [hirerequest_id], references: [id])
+  candidate       Candidate?   @relation(fields: [candidate_id], references: [id])
+  hireRequest     HireRequest? @relation(fields: [hirerequest_id], references: [id])
+  organization    Organization? @relation(fields: [organization_id], references: [id])
   tickets         Ticket[]
 
   //info from hubspot
@@ -392,9 +396,6 @@ model Staff {
   hubspot_client_name String?
   hubspot_close_date DateTime?
   hubspot_company_name String?
-  hubspot_contract_sign_date DateTime?
-  hubspot_conversion_type String?
-  hubspot_csm_deal_stage String?
   hubspot_deal_name String?
   hubspot_pipeline String?
   hubspot_dealstage String?
@@ -417,7 +418,7 @@ model Bonus {
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
   created_by  String?
-  staff       Staff    @relation(fields: [staff_id], references: [id])
+  staff       Staff    @relation(fields: [staff_id], references: [id], onDelete: Cascade)
 
   @@index([staff_id], map: "idx_bonus_staff_id")
 }

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TicketService } from './ticket.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { BadRequestException } from '@nestjs/common';
 import { Priority } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
@@ -44,14 +45,25 @@ describe('TicketService', () => {
       findUnique: jest.fn(),
     },
     staff :{
+      findUnique: jest.fn(),
       update: jest.fn(),
     }
+  }
+
+  const mockNotificationsService = {
+    sendNotification: jest.fn(),
+    createNotification: jest.fn(),
+    getNotifications: jest.fn(),
+    markAsRead: jest.fn(),
+    deleteNotification: jest.fn(),
+    notifyTicketEvent: jest.fn(),
   }
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [TicketService,
-        {provide: PrismaService, useValue: mockPrisma}
+        {provide: PrismaService, useValue: mockPrisma},
+        {provide: NotificationsService, useValue: mockNotificationsService}
       ],
     }).compile();
 
@@ -215,6 +227,34 @@ describe('TicketService', () => {
               role: true,
               status: true,
               email: true,
+            }
+          },
+          candidate: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              name: true,
+            }
+          },
+          staff: {
+            select: {
+              id: true,
+              status: true,
+              start_date: true,
+              terminated_date: true,
+              candidate: {
+                select: {
+                  id: true,
+                  first_name: true,
+                  last_name: true,
+                  email: true,
+                  name: true,
+                  specialization: true,
+                  years_of_experience: true,
+                }
+              }
             }
           }
         }

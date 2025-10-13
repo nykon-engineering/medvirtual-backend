@@ -60,14 +60,26 @@ export class HandlerOrganization {
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('User or organization not found');
 
+
+    
+
+
     const hiredStaff = await this.prisma.staff.findMany({
       where:{
         status: {
           not: 'terminated',
         },
-        hireRequest:{
-          org_id: user.organization_id,
-        }
+        OR:[
+          {
+            hireRequest:{
+              org_id: user.organization_id,
+            }
+          },
+          {
+            organization_id: user.organization_id,
+          },
+        ]
+        
       }, 
       select : {
         id: true,
@@ -77,11 +89,24 @@ export class HandlerOrganization {
         start_date: true,
         created_at: true,
         updated_at: true,
+        hubspot_id: true,
+        hubspot_close_date: true,
+        hubspot_deal_name: true,
+        hubspot_dealstage: true,
+        hubspot_dealtype: true,
+        hubspot_deployment_type: true,
+        hubspot_description: true,
+        hubspot_hs_acv: true,
+        hubspot_pipeline: true,
+        hubspot_business_unit: true,
+        hubspot_candidate_id: true,
+        hubspot_organization_id: true,
         candidate:{
           select:{
             id: true,
             first_name: true,
             last_name: true,
+            name: true,
             email: true,
             specialization: true,
             employment_type: true,

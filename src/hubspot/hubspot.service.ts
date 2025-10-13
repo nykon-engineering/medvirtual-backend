@@ -2,6 +2,7 @@ import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException 
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
+import { Prisma } from '@prisma/client';
 
 import {  mapHubspotToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
@@ -18,10 +19,15 @@ import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
+import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
+import { HandlerDealDeletion } from './handlers/dealDeletion';
+import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
+
 
 
 
@@ -37,8 +43,12 @@ export class HubspotService {
       private readonly organizationCreation: HandlerOrganizationCreation,
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
+      private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
 
       private readonly dealCreation: HandlerDealCreation,
+      private readonly dealPropertyChange: HandlerDealPropertyChange,
+      private readonly dealDeletion: HandlerDealDeletion,
+      private readonly dealAssociationChange: HandlerDealAssociationChange,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -136,7 +146,7 @@ export class HubspotService {
                     break;
 
                 case 'company.associationChange': 
-
+                    await this.organizationAssociationChange.execute(event);
                     break;
                 
                 case 'deal.creation':
@@ -145,11 +155,15 @@ export class HubspotService {
                     break;
 
                 case 'deal.propertyChange':
-
+                    await this.dealPropertyChange.execute(event);
                     break;
 
                 case 'deal.deletion':
+                    await this.dealDeletion.execute(event);
+                    break;
 
+                case 'deal.associationChange':
+                    await this.dealAssociationChange.execute(event);
                     break;
                 /*
                 [{
@@ -356,10 +370,28 @@ export class HubspotService {
             limit: 100
             })
             if (!response || !response.results || response.results.length === 0) {
-                throw new BadRequestException('No candidates data found');
+                //throw new BadRequestException('No candidates data found');
+                console.log('No candidate data found in Hubspot for candidate ID:', candidate.id, 'with Hubspot ID:', candidate.hubspot_id);
+                continue;
             }
-            console.log('Candidate found in Hubspot:', response.results[0].properties.name);
-            const candidateData = mapHubspotToDb(response.results[0].properties);
+
+            const hubspotProps = response.results[0].properties;
+            console.log('Candidate found in Hubspot:', hubspotProps.name);
+
+            
+
+
+            const candidateData : Prisma.CandidateUpdateInput = mapHubspotToDb(hubspotProps);
+
+            if (candidateData.approved_positions_pairing) {
+                candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as string)
+                .split(';')
+                .map(s => s.trim())
+                .filter(Boolean);
+            }else {
+                candidateData.approved_positions_pairing = []; 
+              }
+              
             
             await this.prisma.candidate.update({
                 where: {
@@ -370,13 +402,13 @@ export class HubspotService {
 
             console.log('Candidate updated:', response.results[0]);
             //Here, I start to work with the skills
-            if (response.results[0].properties.career_highlights_relevant_job_experiences) {
+            if (hubspotProps.career_highlights_relevant_job_experiences) {
                 await this.prisma.candidateSkill.deleteMany({
                     where: {
                         candidate_id: candidate.id
                     }
                 });
-                const candidadeSkills = response.results[0].properties.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
+                const candidadeSkills = hubspotProps.career_highlights_relevant_job_experiences.split(';').map((skill: string) => skill.trim());
 
                 for (const skill of candidadeSkills) {
                     console.log('Skill to add:', skill);
@@ -391,13 +423,13 @@ export class HubspotService {
             }
 
             //here I start to work with the language
-            if (response.results[0].properties.language_spoken) {
+            if (hubspotProps.language_spoken) {
                 await this.prisma.candidateLanguage.deleteMany({
                     where: {
                         candidate_id: candidate.id
                     }
                 });
-                const languageCandidateSpoken = response.results[0].properties.language_spoken.split('&').map((lang: string) => lang.trim());
+                const languageCandidateSpoken = hubspotProps.language_spoken.split('&').map((lang: string) => lang.trim());
 
                 for (const language of languageCandidateSpoken) {
                     await this.prisma.candidateLanguage.create({
@@ -466,9 +498,12 @@ export class HubspotService {
                     data: candidateData
                 })
                 console.log('Candidate updated:', candidate.first_name);
-
-                await this.candidate.processData(candidate.id)
-                console.log('Candidate processed:', candidate.first_name);
+                if (process.env.ENVIRONMENT === 'PROD') {
+                    await this.candidate.processData(candidate.id)
+                    console.log('Candidate processed:', candidate.first_name);
+                }else{
+                    console.log('Environment is not PROD. Skipping processing for candidate:', candidate.first_name);
+                }
 
             }
             

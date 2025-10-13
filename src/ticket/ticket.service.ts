@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { Priority, TicketStatus, USER } from '@prisma/client';
@@ -9,7 +10,10 @@ import { reassignTicketDto } from './dto/reassign-ticket.dto';
 
 @Injectable()
 export class TicketService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private async findOne(id: string): Promise<any> {
     const ticket = await this.prisma.ticket.findUnique({
@@ -49,6 +53,27 @@ export class TicketService {
             last_name: true,
             email: true,
             name: true,
+            specialization: true,
+            years_of_experience: true,
+            country: true,
+          },
+        },
+        staff: {
+          select: {
+            id: true,
+            status: true,
+            salary: true,
+            start_date: true,
+            candidate: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                specialization: true,
+                years_of_experience: true,
+                country: true,
+              },
+            },
           },
         },
       },
@@ -108,7 +133,7 @@ export class TicketService {
       // Verify staff belongs to the organization making the request
       if (
         user.role.includes('organization') &&
-        staff.hireRequest.org_id !== user.organization_id
+        staff?.hireRequest?.org_id !== user.organization_id
       ) {
         throw new BadRequestException(
           'Staff member does not belong to your organization',
@@ -159,6 +184,13 @@ export class TicketService {
       const ticketFull = await this.findOne(ticket.id);
       if (!ticketFull)
         throw new BadRequestException('Failed to retrieve full ticket');
+
+      // Notify assignee via email (non-blocking)
+      try {
+        await this.notifications.notifyTicketEvent(ticket.id, 'created');
+      } catch (err) {
+        console.warn('[notifications] ticket-created email failed', err?.message || err);
+      }
 
       return ticketFull;
     } catch (error) {
@@ -221,6 +253,34 @@ export class TicketService {
               email: true,
             },
           },
+          candidate: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              name: true,
+            },
+          },
+          staff: {
+            select: {
+              id: true,
+              status: true,
+              start_date: true,
+              terminated_date: true,
+              candidate: {
+                select: {
+                  id: true,
+                  first_name: true,
+                  last_name: true,
+                  email: true,
+                  name: true,
+                  specialization: true,
+                  years_of_experience: true,
+                },
+              },
+            },
+          },
         },
       });
       if (!tickets) throw new BadRequestException('Failed to fetch tickets');
@@ -258,6 +318,14 @@ export class TicketService {
       const ticket = await this.findOne(id);
       if (!ticket)
         throw new BadRequestException('Failed to fetch reassigned ticket');
+
+      // Notify assignee via email (non-blocking)
+      try {
+        await this.notifications.notifyTicketEvent(id, 'assigned');
+      } catch (err) {
+        console.warn('[notifications] ticket-assigned email failed', err?.message || err);
+      }
+
       return ticket;
     } catch (error) {
       throw new BadRequestException('Error reassigning ticket', error.message);
@@ -332,6 +400,16 @@ export class TicketService {
       const ticket = await this.findOne(id);
       if (!ticket)
         throw new BadRequestException('Failed to fetch reassigned ticket');
+
+      // Notify assignee via email when ticket is closed (non-blocking)
+      if (data.status === 'closed') {
+        try {
+          await this.notifications.notifyTicketEvent(id, 'canceled');
+        } catch (err) {
+          console.warn('[notifications] ticket-closed email failed', err?.message || err);
+        }
+      }
+
       return ticket;
     } catch (error) {
       throw new BadRequestException(

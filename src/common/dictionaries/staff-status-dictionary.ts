@@ -1,5 +1,6 @@
 export const staffStatusDictionary: Record <string, string> = {
     'Active': 'active',
-    'Rermination Requested': 'termination-requested',
+    'Inactive': 'inactive',
+    'Termination Requested': 'termination-requested',
     'Terminated': 'terminated',
 }
