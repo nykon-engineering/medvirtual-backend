@@ -33,6 +33,7 @@ export class HandlerOrganizationPropertyChange {
 
             const fieldUpdated = organizationToDbDictionary[event.propertyName];
             let value = event.propertyValue;
+            
             if (fieldUpdated === 'organization_role') {
                 if (event.propertyValue === 'Prospect'){
                     value = OrganizationRole.prospect;

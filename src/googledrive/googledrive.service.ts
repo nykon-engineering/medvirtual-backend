@@ -17,7 +17,6 @@ export class GoogledriveService {
     );
   }
 
-
   generateAuthUrl(): string {
     const scopes = ['https://www.googleapis.com/auth/drive.readonly'];
     return this.oauth2Client.generateAuthUrl({
@@ -169,4 +168,81 @@ export class GoogledriveService {
       //return false;
     }
   }
+
+  async downloadImage(fileId: string, filename: string, downloadDir: string) {
+    const accessToken = await this.getValidAccessToken();
+    this.oauth2Client.setCredentials({ access_token: accessToken });
+  
+    const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+  
+    try {
+      
+      const { data: metadata } = await drive.files.get({
+        fileId,
+        fields: 'name,mimeType',
+        supportsAllDrives: true,
+      });
+      
+      const destPath = path.resolve(downloadDir, filename);    
+
+      const dest = fs.createWriteStream(destPath);
+      
+      const exportableTypes: Record<string, string> = {
+        'application/vnd.google-apps.document': 'application/pdf',
+        'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.google-apps.presentation': 'application/pdf',
+      };
+  
+      if (exportableTypes[metadata.mimeType!]) {
+       
+        const mimeType = exportableTypes[metadata.mimeType!];
+        //const dest = fs.createWriteStream(destPath);
+  
+        await new Promise<void>((resolve, reject) => {
+          drive.files.export(
+            { fileId, mimeType },
+            { responseType: 'stream' },
+            (err, res: any) => {
+              if (err) return reject(err);
+              res.data
+                .on('end', () => {
+                  console.log(`Arquivo exportado com sucesso em ${destPath}`);
+                  resolve();
+                })
+                .on('error', (err: any) => reject(err))
+                .pipe(dest);
+            }
+          );
+        });
+  
+      } else {
+        //const dest = fs.createWriteStream(destPath);
+  
+        const res = await drive.files.get(
+          {
+            fileId,
+            alt: 'media',
+            supportsAllDrives: true,
+          },
+          { responseType: 'stream' }
+        );
+  
+        await new Promise<void>((resolve, reject) => {
+          res.data
+            .on('end', () => {
+              console.log(`Arquivo salvo com sucesso em ${destPath}`);
+              resolve();
+            })
+            .on('error', (err: any) => reject(err))
+            .pipe(dest);
+        });
+      }
+  
+      return destPath; // return the complet path
+    } catch (error: any) {
+      console.error(`Falha ao baixar arquivo: ${error.message}`, `Code: ${error.code}`);
+      throw new Error(error.message);
+    }
+  }
+  
 }

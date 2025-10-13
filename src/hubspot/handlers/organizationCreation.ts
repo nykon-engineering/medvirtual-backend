@@ -54,7 +54,8 @@ export class HandlerOrganizationCreation {
 
             console.log('Mapped organization data:', organizationData);
 
-            organizationData.status=OrganizationStatus.active;
+
+            organizationData.status=OrganizationStatus.inactive; // => asked by Pauli on 10-13-2025 because She needs to active them manualy or when this organization has a deal/staff
             organizationData.email = organizationData.email ?? undefined;
 
             const organizationExists = await this.prisma.organization.findUnique({

@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { OpenAI } from 'openai';
+import fs from "fs";
+import OpenAI, { toFile } from "openai";
 import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+
 
 @Injectable()
 export class OpenaiService {
@@ -133,8 +136,8 @@ export class OpenaiService {
             const usage = response.usage;
             let cost = 0;
             if (usage) {
-                const inputCost = (usage.prompt_tokens / 1000) * 0.0005;
-                const outputCost = (usage.completion_tokens / 1000) * 0.0015;
+                const inputCost = (usage.prompt_tokens / 1000) * 0.0020;
+                const outputCost = (usage.completion_tokens / 1000) * 0.0060;
                 cost = inputCost + outputCost;
             }
 
@@ -208,136 +211,39 @@ export class OpenaiService {
         
     }
 
-
-    async LimitText(text: string): Promise<string> {
+    async generateAvatarWithScreenshoot(candidate: any, imageDownloaded: any): Promise<any>{
         
-        const apiKey = process.env.OPENAI_API_KEY;
-
-        if (!apiKey) {
-            throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
-        }
-        const openai = new OpenAI({
-            apiKey: apiKey
-        });
-
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      
         const prompt = `
-        You are a formatter and limitter data.
-
-        Your job is to read:
-        1. A JSON object with candidate info
-
-        rewrite the experience.description with the rules below.
-
-        ### CRITICAL RULES
-        - Return ONLY valid JSON. No markdown, no explanations, no comments.
-        - Each "experience.description" must be:
-            - A single string with sentences separated by semicolons (;)
-            - Each sentence between 100 and 120 characters.
-        - Use the filler phrases only when needed to reach 100 characters:
-            - "demonstrating strong attention to detail and adherence to quality standards"
-            - "ensuring compliance with regulations and maintaining accurate documentation"
-            - "coordinating with teams to optimize outcomes and workflow continuity"
-            - "providing training and support to improve performance"
-
-        ---
-
-        ### INPUT DATA
-
-        **Candidate Info:**
-        ${text}
+        Generate a realistic professional avatar inspired by the person in the reference image.
+        Keep a similar lighting setup (soft studio light) and neutral background, but without accessories like headphone.
+        Style: modern corporate headshot, natural facial expression, confident and friendly.
+        Avoid copying the person — just use the image as reference for lighting and style.
         `;
 
+        const image = fs.createReadStream(imageDownloaded);
 
-        try{
-            const response = await openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'You are a organizer data. return only the JSON request',
-                    },
-                    {
-                        role: 'user',
-                        content: prompt,
-                    },
-                ],
-                temperature: 0.2,
-            });
-            const usage = response.usage;
-            let cost = 0;
-            if (usage) {
-                const inputCost = (usage.prompt_tokens / 1000) * 0.0005;
-                const outputCost = (usage.completion_tokens / 1000) * 0.0015;
-                cost = inputCost + outputCost;
-            }
+        const result = await openai.images.edit({
+            model: "gpt-image-1",
+            image: await toFile(image, null, {
+                type: "image/png",
+            }),
+            //mask: await toFile(fs.createReadStream("mask.png"), null, {
+            //    type: "image/png",
+            //}),
+            prompt,
+        });
 
-            let message: any = response.choices?.[0]?.message?.content;
-            if (!message) {
-            throw new BadRequestException('OpenAI did not return a valid message.');
-            }
-
-            let parsedMessage;
-
-            try {
-                parsedMessage = JSON.parse(message);
-            } catch (e) {
-                console.error('Erro ao converter resposta JSON da OpenAI:', e);
-                throw new BadRequestException('Invalid JSON returned from OpenAI');
-            }
-            parsedMessage.cost = `$${cost.toFixed(4)}`;
-            message = JSON.stringify(parsedMessage, null, 2);
-
-            return message;
-
-        }catch (error: any) {
-            
-            if (error?.type === 'insufficient_quota') {
-                console.error('[OpenAI] Insufficient Quota:');
-
-                const today = new Date();
-                const existingMail = await this.prisma.mail_Settings.findFirst({
-                where: {
-                    title: 'insufficient_quota',
-                    created_at: {
-                    gte: new Date(today.setHours(0, 0, 0, 0)),
-                    lt: new Date(today.setHours(23, 59, 59, 999)), 
-                    },
-                },
-                });
-                if (!existingMail) {
-                    // Send insufficient quota via email
-                    const emailBody = insufficient_quota();
-                    const mailSent = await this.mailService.sendMail({
-                    from: 'MedVirtual <noreply@medvirtual.ai>',
-                    to: 'shayan@regenta.ai',
-                    cc: 'paulo@regenta.ai',
-                    subject: 'Insufficient Quota from OpenAI',
-                    html: emailBody,
-                    });
-                    if (!mailSent) {
-                        console.log('Failed to send insufficient quota email notification.');
-                    }
-                    //Here I save in the database that I sent the email
-                    await this.prisma.mail_Settings.create({
-                        data: {
-                          title: 'insufficient_quota',
-                        },
-                    });
-                }
-
-                
-                
-                throw new BadRequestException('You dont have credits. Check your plan/billing.');
-            }
-
-            if (error?.type === 'rate_limit_error') {
-                console.log('[OpenAI] Rate Limit Exceeded:');
-                throw new BadRequestException('Rate limit exceeded. Please try again later.');
-            }
-          
-            console.log('[OpenAI] unexpected error:', error);
-            throw new BadRequestException('unexpected error to request OpenAI.', error);
-        }
+        //=> calculate the cost
         
+        
+        if (!result.data || !result.data[0] || !result.data[0].b64_json) {
+            throw new Error("A resposta da API OpenAI não contém os dados esperados.");
+        }
+        const imageBase64 = result.data[0].b64_json;
+        fs.writeFileSync(`${Date.now()}_avatarX.png`, Buffer.from(imageBase64, "base64"));
     }
+
+
 }
