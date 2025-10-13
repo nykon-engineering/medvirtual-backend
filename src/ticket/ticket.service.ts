@@ -53,6 +53,27 @@ export class TicketService {
             last_name: true,
             email: true,
             name: true,
+            specialization: true,
+            years_of_experience: true,
+            country: true,
+          },
+        },
+        staff: {
+          select: {
+            id: true,
+            status: true,
+            salary: true,
+            start_date: true,
+            candidate: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                specialization: true,
+                years_of_experience: true,
+                country: true,
+              },
+            },
           },
         },
       },

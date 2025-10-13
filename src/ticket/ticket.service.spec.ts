@@ -45,6 +45,7 @@ describe('TicketService', () => {
       findUnique: jest.fn(),
     },
     staff :{
+      findUnique: jest.fn(),
       update: jest.fn(),
     }
   }
@@ -55,6 +56,7 @@ describe('TicketService', () => {
     getNotifications: jest.fn(),
     markAsRead: jest.fn(),
     deleteNotification: jest.fn(),
+    notifyTicketEvent: jest.fn(),
   }
 
   beforeEach(async () => {
