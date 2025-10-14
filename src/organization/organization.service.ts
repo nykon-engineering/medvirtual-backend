@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  Body,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -40,6 +39,7 @@ import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
+import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
 
 
 @Injectable()
@@ -441,7 +441,7 @@ export class OrganizationService {
         postal_code: org.postal_code || undefined,
         location: org.location || undefined,
         description: org.description || undefined,
-        industry: org.industry || undefined,
+        industry: org.industry ? organizationIndustryToDbDictionary[org.industry] : undefined,
         business_unit: org.business_unit || undefined,
         organization_role: org.organization_role,
         number_of_employees: org.number_of_employees || undefined,
@@ -611,7 +611,7 @@ export class OrganizationService {
           postal_code: data.zip,
           location: data.location,
           description: data.description,
-          industry: data.industry,
+          industry: data.industry ? organizationIndustryToDbDictionary[data.industry] : undefined,
           business_unit: data.business_unit,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
