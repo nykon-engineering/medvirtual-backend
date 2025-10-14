@@ -424,6 +424,11 @@ export class OrganizationService {
               id: true,
             },
           },
+          staff: {
+            select: {
+              id: true,
+            },
+          }
         },
       });
 
@@ -460,6 +465,7 @@ export class OrganizationService {
         owner: org.owner || undefined,
         admin: org.admin || undefined,
         userCount: org.users.length,
+        staffCount: org.staff.length,
       }));
 
       // Calculate pagination metadata
