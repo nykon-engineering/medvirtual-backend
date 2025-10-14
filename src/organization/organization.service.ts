@@ -441,7 +441,7 @@ export class OrganizationService {
         postal_code: org.postal_code || undefined,
         location: org.location || undefined,
         description: org.description || undefined,
-        industry: org.industry ? organizationIndustryToDbDictionary[org.industry] : undefined,
+        industry: org.industry ? organizationIndustryToDbDictionary[org.industry] || org.industry : undefined,
         business_unit: org.business_unit || undefined,
         organization_role: org.organization_role,
         number_of_employees: org.number_of_employees || undefined,
@@ -611,7 +611,7 @@ export class OrganizationService {
           postal_code: data.zip,
           location: data.location,
           description: data.description,
-          industry: data.industry ? organizationIndustryToDbDictionary[data.industry] : undefined,
+          industry: data.industry ? organizationIndustryToDbDictionary[data.industry] || data.industry : undefined,
           business_unit: data.business_unit,
           organization_role:
             data.organization_role || OrganizationRole.prospect,

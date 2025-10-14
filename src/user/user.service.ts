@@ -178,7 +178,9 @@ export class UserService {
             specialties: user.organization.specialties || undefined,
             services: user.organization.services || undefined,
             description: user.organization.description || undefined,
-            industry:  user.organization.industry ? organizationIndustryToDbDictionary[user.organization.industry] : undefined,
+            industry:  user.organization.industry 
+            ? organizationIndustryToDbDictionary[user.organization.industry] || user.organization.industry
+            : undefined,
             number_of_employees:
               user.organization.number_of_employees || undefined,
             createdAt: user.organization.createdAt,
@@ -362,7 +364,9 @@ export class UserService {
               specialties: updatedUser.organization.specialties || undefined,
               services: updatedUser.organization.services || undefined,
               description: updatedUser.organization.description || undefined,
-              industry: updatedUser.organization.industry ? organizationIndustryToDbDictionary[updatedUser.organization.industry] : undefined,
+              industry: updatedUser.organization.industry 
+              ? organizationIndustryToDbDictionary[updatedUser.organization.industry] || updatedUser.organization.industry
+              : undefined,
               number_of_employees:
                 updatedUser.organization.number_of_employees || undefined,
               createdAt: updatedUser.organization.createdAt,
