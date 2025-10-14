@@ -18,7 +18,6 @@ import { OpenaiModule } from './openai/openai.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CronModule } from './cron/cron.module';
 import { HireRequestModule } from './hire-request/hire-request.module';
-import { GooglesheetModule } from './googlesheet/googlesheet.module';
 import { TicketModule } from './ticket/ticket.module';
 import { StaffModule } from './staff/staff.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -43,7 +42,6 @@ import { NotificationsModule } from './notifications/notifications.module';
     DashboardModule,
     CronModule,
     HireRequestModule,
-    GooglesheetModule,
     TicketModule,
     StaffModule,
     NotificationsModule
