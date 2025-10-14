@@ -280,19 +280,31 @@ export class HubspotService {
             throw new BadRequestException('No candidates data found');
         }
 
-        //console.log('Candidates found in Hubspot:', response.results);
+        console.log('Candidates found in Hubspot:', response.total);
 
         for (const result of response.results) {
 
+
             const user = await this.prisma.candidate.findUnique({
                 where: {
-                    hubspot_id: String(result.properties.hs_object_id)
+                    hubspot_id: String(result.properties.hs_object_id),
+                    pipeline_status: pipeline_stage ? pipeline_stage : '99999999'
                 }
             })
+            
 
-
+            
             if (!user){
+                console.log('Candidate found in Hubspot and not found on database:', result.properties.name, result.properties.hs_object_id);
                 const candidateData = mapHubspotToDb(result.properties);
+
+                if (candidateData.approved_positions_pairing && typeof candidateData.approved_positions_pairing === 'string') {
+                    candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as string)
+                    .split(';')
+                    .map(s => s.trim());
+                } else {
+                    candidateData.approved_positions_pairing = [];
+                }
                 const newCandidate = await this.prisma.candidate.create({
                     data: candidateData,
                 })
@@ -327,6 +339,7 @@ export class HubspotService {
                 }
                 console.log('Candidate created:', result.properties.name);
             }
+            
         }
         return 'Candidates created successfully';
     }
