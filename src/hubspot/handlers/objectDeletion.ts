@@ -39,6 +39,12 @@ export class HandlerObjectDeletion {
                     candidate_id: candidateExists.id
                 }
             });
+
+            await this.prisma.panelCandidate.deleteMany({
+                where: {
+                    candidate_id: candidateExists.id
+                }
+            })
     
             //Then, delete the candidate
             await this.prisma.candidate.delete({
