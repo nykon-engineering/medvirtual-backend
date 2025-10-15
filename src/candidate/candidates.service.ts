@@ -465,7 +465,7 @@ export class CandidatesService {
   }
 
   async processAvatar(id: string): Promise<boolean>{
-    console.log('starting process data for candidate ID:', id);
+    console.log('starting process Avatar for candidate ID:', id);
     if (!id) throw new BadRequestException('Candidate ID is required');
 
     const candidate = await this.prisma.candidate.findUnique({

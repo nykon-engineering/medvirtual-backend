@@ -102,11 +102,24 @@ export class CandidatesController {
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
   @UseGuards(AuthGuard)
   async processData(@Param('id') id: string) {
-    console.log('Processing data for candidate ID -  controller:', id);
     const result = await this.candidatesService.processData(id);
     return {
       status: 200,
       message: 'Candidate data processed successfully',
+    }
+  }
+
+  @Get('/process-avatar/:id')
+  @ApiOperation({ summary: 'Process data for a specific candidate by ID' })
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'Candidate data processed successfully' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @UseGuards(AuthGuard)
+  async processAvatar(@Param('id') id: string) {
+    const result = await this.candidatesService.processAvatar(id);
+    return {
+      status: 200,
+      message: 'Candidate Avatar processed successfully',
     }
   }
 
