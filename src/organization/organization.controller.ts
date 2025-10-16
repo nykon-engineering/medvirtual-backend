@@ -594,5 +594,10 @@ export class OrganizationController {
     return await this.organizationService.desactiveWithoutStaff();
   }
 
+  @Get('sync-all/organizations-with-deals')
+  @ApiOperation({ summary: 'Sync all organizations with deals' })
+  async syncAllOrganizationsWithDeals() {
+    return await this.organizationService.syncOrganizationsWithDeals();
+  }
 
 }

@@ -1,8 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerOrganizationCreation } from "./organizationCreation";
-import { organizationToDbDictionary } from "../../common/dictionaries/organization-dictionary";
-import { OrganizationRole } from "@prisma/client";
 import { HandlerDealCreation } from "./dealCreation";
 
 @Injectable()

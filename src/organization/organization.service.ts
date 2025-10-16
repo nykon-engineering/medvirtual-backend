@@ -40,6 +40,9 @@ import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCre
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
+import { mapDealToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util';
+import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
+import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 
 
 @Injectable()
@@ -49,6 +52,8 @@ export class OrganizationService {
     private readonly auth: AuthService,
     @Inject(forwardRef (() => HandlerOrganizationCreation))
     private readonly organizationCreation: HandlerOrganizationCreation,
+    //@Inject(forwardRef (() => HandlerDealCreation))
+    //private readonly dealCreation: HandlerDealCreation,
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService
     
@@ -2142,5 +2147,142 @@ export class OrganizationService {
     return organizations;
   }
 
+  async syncOrganizationsWithDeals() {
+    const properties = Object.keys(organizationToDbDictionary).join(',');
+  
+    try {
+      const now = Date.now();
+      const oneDayAgo = now - 24 * 60 * 60 * 1000;
+
+      const response = await axios.post(
+        'https://api.hubapi.com/crm/v3/objects/companies/search',
+        {
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: 'business_unit',
+                  operator: 'IN',
+                  values: ['MedVirtual', 'Berry Virtual'],
+                },
+                {
+                  propertyName: 'hs_lastmodifieddate', //when the user just created the organization, the hs_lastmodifieddate is the creation date
+                  operator: 'GTE',
+                  value: oneDayAgo.toString(),
+                },
+              ],
+            },
+
+          ],
+          properties: properties.split(','),
+          limit: 100,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+  
+      const companies = response.data.results;
+      if (!companies || companies.length === 0)
+        throw new BadRequestException('Nenhuma organização encontrada.');
+  
+      const mappedOrganizations: any = [];
+  
+      // 2️⃣ Iterar sobre cada companhia e mapear para formato interno
+      for (const company of companies) {
+        const organizationData = mapOrganizationToDbHubspot(company.properties);
+  
+        organizationData.status = OrganizationStatus.inactive; // como no execute
+        organizationData.email = organizationData.email ?? undefined;
+        organizationData.industry = organizationData.industry
+          ? organizationIndustryToDbDictionary[organizationData.industry] ?? ''
+          : '';
+  
+        // 3️⃣ Buscar deals associados à companhia
+        const dealsResponse = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/companies/${company.id}/associations/deals`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+  
+        const associatedDeals = dealsResponse.data.results || [];
+  
+        if (associatedDeals.length > 0) {
+          // 4️⃣ Buscar os dados detalhados de cada deal
+          const dealIds = associatedDeals.map((d: any) => d.id);
+          const dealsData: any = [];
+  
+          for (const dealId of dealIds) {
+            const deal = await axios.get(
+              `https://api.hubapi.com/crm/v3/objects/deals/${dealId}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+              },
+            );
+  
+            // Mapear os dados do deal
+            const mappedDeal = dealToDbDictionary
+              ? mapDealToDb(deal.data.properties)
+              : deal.data.properties;
+            //console.log('mappedDeal', mappedDeal);
+            dealsData.push(mappedDeal);
+          }
+  
+          // 5️⃣ Adicionar deals dentro de "staff"
+          organizationData.staff = dealsData;
+        }
+        //console.log('organizationData', organizationData);
+        mappedOrganizations.push(organizationData);
+      }
+      console.log('mappedOrganizations', mappedOrganizations.length);
+
+
+      // 6️⃣ Inserir ou atualizar no banco
+      for (const org of mappedOrganizations) {
+        let existing = await this.prisma.organization.findUnique({
+          where: { hubspot_id: org.hubspot_id },
+          select: { id: true}
+        })
+        if (!existing) {
+          console.log('=>Creating organization: ', org);
+          //await this.organizationCreation.execute(org);
+          existing = await this.prisma.organization.findUnique({
+            where: { hubspot_id: org.hubspot_id },
+            select: { id: true}
+          })
+        }
+        
+        for ( const staff of org.staff || [] ) {
+          let existingStaff = await this.prisma.staff.findFirst({
+            where: { hubspot_id: staff.hubspot_id },
+            select: { id: true }
+          })
+          if (!existingStaff){
+            console.log('Creating staff/deal: ', org.hubspot_id, '-',  staff.hubspot_id);
+            //await this.dealCreation.execute(staff);
+          }
+        }
+      }
+      
+  
+      return mappedOrganizations;
+    } catch (error) {
+      console.error(error);
+      throw new BadRequestException(
+        `Erro ao sincronizar organizações: ${error.message}`,
+      );
+    }
+  }
+  
 
 }
