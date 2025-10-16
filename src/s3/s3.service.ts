@@ -21,14 +21,14 @@ export class S3Service {
     });
   }
 
-  async uploadFile(localFilePath: string, originalFileName: string): Promise<string> {
+  async uploadFile(localFilePath: string, originalFileName: string, bucketName: string): Promise<string> {
     const fileContent = fs.readFileSync(localFilePath);
     const contentType = mime.lookup(originalFileName) || 'application/octet-stream';
 
     const fileName = `${uuidv4()}${extname(originalFileName)}`;
 
     const params: PutObjectCommandInput = {
-      Bucket: 'medvirtual-documents',
+      Bucket: bucketName,
       Key: fileName,
       Body: fileContent,
       ContentType: contentType,

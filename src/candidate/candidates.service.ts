@@ -492,9 +492,16 @@ export class CandidatesService {
       console.log('Image downloaded successfully from Google Drive', imageDownloaded);
       
       console.log("starting with the avatar generate...")
-      await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
-      console.log('Avatar generated successfully');
+      const avatarImage= await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
+      console.log('Avatar generated successfully: ', avatarImage);
 
+
+      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, avatarImage), `${avatarImage}`, 'medvirtual-avatar');
+      if (!bucketFile) {
+        console.log('Failed to upload avatar to S3');
+        return false;
+      }
+      console.log('Avatar uploaded successfully to S3:', bucketFile);
       //Save Avatar on S3 and update candidate database 
 
     //} 
@@ -550,7 +557,7 @@ export class CandidatesService {
       console.log('starting with upload step...');
       //processing_uploadFile
       await this.updateStatus(id, 'processing_uploadFile');
-      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
+      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`, 'medvirtual-documents');
       if (!bucketFile) {
         await this.updateStatus(id, 'failed', 'Failed to upload file to S3');
         console.log('Failed to upload file to S3');

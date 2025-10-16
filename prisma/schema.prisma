@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("PROD_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -146,6 +146,8 @@ model Candidate {
   first_name             String?
   last_name              String?
   resume_url             String?
+  headshot_url           String?
+  avatar_url             String?
   about_me               String?
   processed_resume_data  Json?
   processing_status      ProcessingStatus        @default(pending)
