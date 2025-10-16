@@ -140,6 +140,7 @@ const MailMock ={
         hourly_pay_rate: 5,
         employment_type: 'Full-time',
         educations: [{ degree: 'BSc', institution: 'University', year: '2020' }],
+        approved_positions_pairings: ["Test"],
         experiences: [
           {
             company: 'Company A',
@@ -183,6 +184,7 @@ const MailMock ={
               year: true,
             },
           },
+          approved_positions_pairing: true,
           experiences: {
             orderBy: { start_date: 'desc' },
             select: {

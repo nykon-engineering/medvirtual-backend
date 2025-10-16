@@ -241,6 +241,7 @@ export class CandidatesService {
           responsabilities: true
         } 
       },
+      approved_positions_pairing: true,
       selectedInInterviews: {
         select: {
           scheduled_date: true,
@@ -314,8 +315,6 @@ export class CandidatesService {
     }
   }
 
-  
-
   async findOne(id: string, user: USER) {
     const {organization_id} = user;
     if (!id) throw new BadRequestException('Candidate ID is required');
@@ -353,6 +352,7 @@ export class CandidatesService {
           year: true
         }
       },
+      approved_positions_pairing: true,
       experiences: {
         orderBy: { start_date: Prisma.SortOrder.desc },
         select: {
