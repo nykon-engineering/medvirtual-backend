@@ -8,6 +8,7 @@ export const candidadeToDbDictionary : Record<string, string | string[]> = {
     hs_pipeline_stage: ['pipeline_status', 'employment_type'],
     agreed_hourly_pay_rate: 'hourly_pay_rate',
     resume_link: 'resume_url',
+    headshot_screenshot: 'headshot_url',
     practice_area_experience: 'specialization',
     country__residence_: 'country',
     //changed on 10-03-2025 asked by Pauli
