@@ -234,7 +234,7 @@ export class NotificationsService {
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
          <p><strong>Title:</strong> ${ticket.title}</p>
-         <p><strong>Organization:</strong> ${ticket.organization.name}</p>
+         <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
          <p><strong>Description:</strong> ${ticket.description}</p>
          <p><strong>Type:</strong> ${ticket.type}</p>
          <p><strong>Priority:</strong> ${ticket.priority}</p>
