@@ -125,6 +125,9 @@ export class PaginatedOrganizationsResponseDto {
   })
   data: OrganizationResponseDto[];
 
+  @ApiProperty({ description: 'Timestamp of the last sync', nullable: true })
+  last_synced_at: string;
+
   @ApiProperty({ description: 'Pagination metadata', type: PaginationMetaDto })
   meta: PaginationMetaDto;
 }

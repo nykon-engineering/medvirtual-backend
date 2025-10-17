@@ -479,7 +479,6 @@ export class OrganizationService {
         admin: org.admin || undefined,
         userCount: org.users.length,
         staffCount: org.staff.length,
-        last_synced_at: sync ? sync.last_synced_at : undefined,
       }));
 
       // Calculate pagination metadata
@@ -489,6 +488,7 @@ export class OrganizationService {
 
       return {
         data,
+        last_synced_at: sync ? sync.last_synced_at.toISOString() : '',
         meta: {
           page,
           limit,
