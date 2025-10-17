@@ -86,7 +86,7 @@ export class UserService {
     return users;
   }
 
-  async findUsersByOrganizationByCurrentUser(user: USER): Promise<any> {
+  async findUsersByOrganizationByCurrentUser(user: USER, status?: string): Promise<any> {
     let whereClause: any = {};
 
     // If user is system_admin, only return users from organizations they admin
@@ -114,6 +114,11 @@ export class UserService {
       whereClause = { organization_id: user.organization_id };
     }
 
+    // Add status filter if provided
+    if (status) {
+      whereClause.status = status;
+    }
+
     const users = await this.prisma.uSER.findMany({
       where: whereClause,
       select: {
@@ -127,6 +132,9 @@ export class UserService {
         role: true,
         status: true,
         createdAt: true,
+      },
+      orderBy: {
+        first_name: 'asc',
       },
     });
 
