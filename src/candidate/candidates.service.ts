@@ -44,14 +44,19 @@ export class CandidatesService {
     languages?: string,
     page?: number,
     perPage?: number,
-    search?: string
+    search?: string,
+    all?: string
   ): Promise <any> {
 
+    // Check if all parameter is set to true
+    const getAllCandidates = all === 'true';
+    
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
 
-    const skip =(page - 1) * perPage;
-    const take = perPage;
+    // If all=true, skip pagination (set skip=0, take=undefined)
+    const skip = getAllCandidates ? 0 : (page - 1) * perPage;
+    const take = getAllCandidates ? undefined : perPage;
 
     
     
@@ -259,6 +264,20 @@ export class CandidatesService {
           skip,
           take,
           select,
+          orderBy: [
+            {
+              first_name: {
+                sort: 'asc',
+                nulls: 'last'
+              }
+            },
+            {
+              last_name: {
+                sort: 'asc',
+                nulls: 'last'
+              }
+            }
+          ]
         }),
         this.prisma.candidate.count({where})
       ])
@@ -305,11 +324,18 @@ export class CandidatesService {
 
       return {
         data: candidatesWithScheduledInterview,
-        meta: {
+        meta: getAllCandidates ? {
+          total,
+          page: 1,
+          perPage: total,
+          totalPages: 1,
+          all: true
+        } : {
           total,
           page,
           perPage,
-          totalPages: Math.ceil(Number(total) / perPage)
+          totalPages: Math.ceil(Number(total) / perPage),
+          all: false
         }
       };
     }catch(error){

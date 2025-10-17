@@ -29,6 +29,7 @@ export class CandidatesController {
   @ApiQuery({ name: 'specializations', required: false, type: Number, description: 'Filter candidates by specializations', example: "pediatric" })
   @ApiQuery({ name: 'skills', required: false, type: Number, description: 'Filter candidates by skills', example: "office, communication" })
   @ApiQuery({ name: 'languages', required: false, type: Number, description: 'Filter candidates by languages spoken', example: "English, Spanish" })
+  @ApiQuery({ name: 'all', required: false, type: Boolean, description: 'If true, returns all candidates without pagination' })
   @ApiResponse({ status: 200, description: 'Candidates retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Failed to fetch candidates' })
   @UseGuards(AuthGuard)
@@ -45,6 +46,7 @@ export class CandidatesController {
     @Query('page') page,
     @Query('perPage') perPage,
     @Query('search') search: string,
+    @Query('all') all: string,
   ) {
     const result = await this.candidatesService.findAll(
       user, 
@@ -59,6 +61,7 @@ export class CandidatesController {
       page,
       perPage,
       search,
+      all,
     );
     return result
   }
