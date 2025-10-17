@@ -126,6 +126,12 @@ export class CronService {
                 }
                    
         }
+        await this.prisma.sync.create({
+            data: {
+                role: 'get-candidate-id',
+                last_synced_at: new Date(),
+            }
+        })
         return true;
     }
 

@@ -459,7 +459,6 @@ export class HubspotService {
     }
 
 
-
     ////=> this service is just a example to populate our database
     async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {
       if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');

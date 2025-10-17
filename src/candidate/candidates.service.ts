@@ -471,16 +471,21 @@ export class CandidatesService {
     const candidate = await this.prisma.candidate.findUnique({
       where: {
         id: id
+      },
+      select:{
+        id: true,
+        headshot_url: true,
       }
     });
     if(!candidate) throw new BadRequestException('Candidate not found');
 
-    //if( candidate && candidate.resume_url && candidate.resume_url.includes('http')) {  => handler with the field from hubspot, like resume_link
-      //const idImage = '1AjdfgUU0qTwpBdEUKdEBH0R8mlgCnn4a';
-      //const idImage = '1HsIGszx_8OMncDntKBCziUFHLdr5jYK2';
-      //const idImage = '1nL-kL3dK0emQsH3xHY27DZQ9KuAf8rlw';
-      const idImage = '1wa-egm9aaA-TSdvmQTvWz6cM6ZYzXqVB'
-      //const idImage = extractDriveFileId(candidate.resume_url); => handler with the field from hubspot, like resume_link
+    if( candidate && candidate.headshot_url && candidate.headshot_url.includes('http')) { 
+      
+      const idImage = extractDriveFileId(candidate.headshot_url);
+      if (!idImage) {
+        console.log('Error in extracting image ID from URL');
+        return false;
+      }
       
       const imageName = `${candidate.id}__image.png`;
       const downloadDir = path.resolve(__dirname, '/tmp');
@@ -490,13 +495,10 @@ export class CandidatesService {
         console.log('Failed to download image from Google Drive:', imageDownloaded);
       }
       console.log('Image downloaded successfully from Google Drive', imageDownloaded);
-      
-      console.log("starting with the avatar generate...")
       const avatarImage= await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
       console.log('Avatar generated successfully: ', avatarImage);
 
-
-      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, avatarImage), `${avatarImage}`, 'medvirtual-avatar');
+      const bucketFile = await this.s3.uploadFile(avatarImage, path.basename(avatarImage), 'medvirtual-avatar');
       if (!bucketFile) {
         console.log('Failed to upload avatar to S3');
         return false;
@@ -504,7 +506,15 @@ export class CandidatesService {
       console.log('Avatar uploaded successfully to S3:', bucketFile);
       //Save Avatar on S3 and update candidate database 
 
-    //} 
+      //update database with new avatar URL
+      const updatedCandidate = await this.prisma.candidate.update({
+        where: { id: id },
+        data: { 
+          avatar_url: bucketFile,
+         }
+      });
+
+    } 
     return true;
   }
 
@@ -994,6 +1004,40 @@ export class CandidatesService {
 
     return true;
 
+  }
+
+  async processAllAvatars(): Promise<boolean> {
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        headshot_url: {
+          contains: 'http'
+        },
+        avatar_url: null
+      },
+      select: {
+        id: true,
+        headshot_url: true,
+      }
+    });
+    if (!candidates || candidates.length === 0) {
+      console.log('No candidates found with headshot_url and without avatar_url');
+      return true;
+    }
+
+    for (const candidate of candidates) {
+      console.log(`Processing avatar for candidate ID: ${candidate.id}`);
+      try {
+        const result = await this.processAvatar(candidate.id);
+        if (result) {
+          console.log(`Successfully processed avatar for candidate ID: ${candidate.id}`);
+        } else {
+          console.log(`Failed to process avatar for candidate ID: ${candidate.id}`);
+        }
+      } catch (error) {
+        console.error(`Error processing avatar for candidate ID: ${candidate.id}`, error);
+      }
+    }
+    return true;
   }
 
 }

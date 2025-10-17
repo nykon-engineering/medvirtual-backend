@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("PROD_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -429,6 +429,12 @@ model Mail_Settings {
   id                String   @id @default(uuid())
   title             String
   created_at        DateTime @default(now())
+}
+
+model Sync {
+  id                String   @id @default(uuid())
+  role              String
+  last_synced_at    DateTime
 }
 
 enum Role {

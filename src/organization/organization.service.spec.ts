@@ -8,6 +8,7 @@ import { HubspotService } from '../hubspot/hubspot.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
+import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 
 
 const userfake = { 
@@ -69,6 +70,10 @@ describe('OrganizationService', () => {
     execute: jest.fn(),
   }
 
+  const handlerDealCreationMock = {
+    execute: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -80,6 +85,7 @@ describe('OrganizationService', () => {
         { provide: AuthService, useValue: mockAuthService },
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: HandlerOrganizationCreation , useValue: handlerObjectCreationMock },
+        { provide: HandlerDealCreation , useValue: handlerDealCreationMock },
       ],
     }).compile();
 

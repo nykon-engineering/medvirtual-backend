@@ -52,8 +52,7 @@ export class OrganizationService {
     private readonly auth: AuthService,
     @Inject(forwardRef (() => HandlerOrganizationCreation))
     private readonly organizationCreation: HandlerOrganizationCreation,
-    //@Inject(forwardRef (() => HandlerDealCreation))
-    //private readonly dealCreation: HandlerDealCreation,
+    private readonly dealCreation: HandlerDealCreation,
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService
     
@@ -437,6 +436,15 @@ export class OrganizationService {
         },
       });
 
+      const sync = await this.prisma.sync.findFirst({
+        where: {
+          role: 'organizations',
+        },
+        orderBy: {
+          last_synced_at: 'desc',
+        },
+      })
+
       // Transform data
       const data: OrganizationResponseDto[] = organizations.map((org) => ({
         id: org.id,
@@ -471,6 +479,7 @@ export class OrganizationService {
         admin: org.admin || undefined,
         userCount: org.users.length,
         staffCount: org.staff.length,
+        last_synced_at: sync ? sync.last_synced_at : undefined,
       }));
 
       // Calculate pagination metadata
@@ -2149,10 +2158,11 @@ export class OrganizationService {
 
   async syncOrganizationsWithDeals() {
     const properties = Object.keys(organizationToDbDictionary).join(',');
+    const propertiesDeals = Object.keys(dealToDbDictionary).join(',');
   
     try {
       const now = Date.now();
-      const oneDayAgo = now - 24 * 60 * 60 * 1000;
+      const lastTime = now - 8 * 60 * 60 * 1000; // 8 hours
 
       const response = await axios.post(
         'https://api.hubapi.com/crm/v3/objects/companies/search',
@@ -2168,7 +2178,7 @@ export class OrganizationService {
                 {
                   propertyName: 'hs_lastmodifieddate', //when the user just created the organization, the hs_lastmodifieddate is the creation date
                   operator: 'GTE',
-                  value: oneDayAgo.toString(),
+                  value: lastTime.toString(),
                 },
               ],
             },
@@ -2201,7 +2211,6 @@ export class OrganizationService {
           ? organizationIndustryToDbDictionary[organizationData.industry] ?? ''
           : '';
   
-        // 3️⃣ Buscar deals associados à companhia
         const dealsResponse = await axios.get(
           `https://api.hubapi.com/crm/v3/objects/companies/${company.id}/associations/deals`,
           {
@@ -2215,13 +2224,36 @@ export class OrganizationService {
         const associatedDeals = dealsResponse.data.results || [];
   
         if (associatedDeals.length > 0) {
-          // 4️⃣ Buscar os dados detalhados de cada deal
           const dealIds = associatedDeals.map((d: any) => d.id);
           const dealsData: any = [];
   
           for (const dealId of dealIds) {
-            const deal = await axios.get(
-              `https://api.hubapi.com/crm/v3/objects/deals/${dealId}`,
+
+            if(dealId === null || dealId === undefined){
+              console.log(`Invalid deal ID: ${dealId}. Skipping...`);
+              continue;
+            }
+
+            const deal = await axios.post(`https://api.hubapi.com/crm/v3/objects/deals/search/`,
+              {  filterGroups: [
+                  {
+                    filters: [
+                      {
+                        propertyName: 'hs_object_id',
+                        operator: 'EQ',
+                        value: dealId,
+                      },
+                      {
+                        propertyName: 'pipeline',
+                        operator: 'EQ',
+                        value: '5155250',
+                      }
+                    ],
+                  },
+                ],
+                properties: propertiesDeals.split(','),
+                limit: 10,
+              },
               {
                 headers: {
                   Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -2229,37 +2261,36 @@ export class OrganizationService {
                 },
               },
             );
-  
-            // Mapear os dados do deal
+
+            if (!deal.data.results || deal.data.results.length === 0) {
+              //console.log(`Deal with ID ${dealId} not found or does not belong to the expected pipeline.`);
+              continue;
+            }
+
             const mappedDeal = dealToDbDictionary
-              ? mapDealToDb(deal.data.properties)
-              : deal.data.properties;
-            //console.log('mappedDeal', mappedDeal);
+              ? mapDealToDb(deal.data.results[0].properties)
+              : deal.data.results[0].properties;
+
             dealsData.push(mappedDeal);
           }
   
-          // 5️⃣ Adicionar deals dentro de "staff"
+
           organizationData.staff = dealsData;
         }
-        //console.log('organizationData', organizationData);
+        
         mappedOrganizations.push(organizationData);
       }
-      console.log('mappedOrganizations', mappedOrganizations.length);
+      console.log('mappedOrganizations', mappedOrganizations);
 
 
-      // 6️⃣ Inserir ou atualizar no banco
       for (const org of mappedOrganizations) {
         let existing = await this.prisma.organization.findUnique({
           where: { hubspot_id: org.hubspot_id },
           select: { id: true}
         })
         if (!existing) {
-          console.log('=>Creating organization: ', org);
-          //await this.organizationCreation.execute(org);
-          existing = await this.prisma.organization.findUnique({
-            where: { hubspot_id: org.hubspot_id },
-            select: { id: true}
-          })
+          console.log('=>Creating organization: ', org.hubspot_id);
+          await this.organizationCreation.execute(org);
         }
         
         for ( const staff of org.staff || [] ) {
@@ -2269,11 +2300,17 @@ export class OrganizationService {
           })
           if (!existingStaff){
             console.log('Creating staff/deal: ', org.hubspot_id, '-',  staff.hubspot_id);
-            //await this.dealCreation.execute(staff);
+            await this.dealCreation.execute(staff);
           }
         }
       }
       
+      await this.prisma.sync.create({
+        data: {
+          role: 'organizations',
+          last_synced_at: new Date(),
+        },
+      })
   
       return mappedOrganizations;
     } catch (error) {

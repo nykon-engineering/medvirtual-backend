@@ -210,4 +210,17 @@ export class CandidatesController {
     }
   }
 
+  @Get('process-all-avatars')
+  @ApiOperation({ summary: 'Process avatars for all candidates without an avatar' })
+  @ApiResponse({ status: 200, description: 'Avatar processing initiated successfully' })
+  @UseGuards(AuthGuard)
+  async processAllAvatars() {
+    const result = await this.candidatesService.processAllAvatars();
+    return {
+      status: 200,
+      message: 'Avatar processing initiated successfully',
+      data: result
+    }
+  }
+
 }
