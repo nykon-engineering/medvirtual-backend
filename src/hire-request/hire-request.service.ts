@@ -723,6 +723,7 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return this.findOne(id, user);
 
+    /* It was removed on 10-17-2025 asked by Pauli and fouond by Liz - https://regenta-company.monday.com/boards/9328303960/pulses/18193994589
     } else if (hireRequest.status == 'placement_completed' && data.status === 'panel_ready' ){
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
@@ -793,6 +794,8 @@ export class HireRequestService {
       if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
 
       return this.findOne(id, user);
+
+    */
     } else if (hireRequest.status == 'panel_ready' && data.status === 'interview_scheduled' ){
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
