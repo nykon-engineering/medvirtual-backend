@@ -345,11 +345,11 @@ model Ticket {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   type         String
-  org_id       String
+  org_id       String?
   priority     Priority
   staff_id     String?
   candidate_id String?
-  organization Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff        Staff?       @relation(fields: [staff_id], references: [id])
   user         USER?        @relation(fields: [user_id], references: [id])
   candidate    Candidate?   @relation(fields: [candidate_id], references: [id])

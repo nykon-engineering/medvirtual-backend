@@ -143,34 +143,46 @@ export class TicketService {
 
     let assignedValidatedUser;
     let assignedValidatedOrg;
-    if (!user || (user.role.includes('organization') && !user.organization_id))
-      throw new BadRequestException('User organization not found');
-    if (user.role.includes('organization')) {
-      //get the concierge client as assigned user
-      const org = await this.prisma.organization.findUnique({
-        where: { id: user.organization_id || undefined },
-        select: {
-          admin_id: true,
-          id: true,
-        },
-      });
-      if (!org) throw new BadRequestException('Organization not found');
-      assignedValidatedUser = org.admin_id;
-      assignedValidatedOrg = org.id;
-    } else {
+    
+    // For support tickets, organization is optional
+    if (createTicketDto.type === 'Support') {
       assignedValidatedUser = createTicketDto.assigned_user_id;
       assignedValidatedOrg = createTicketDto.client_id;
+    } else {
+      // For other ticket types, organization is required
+      if (!user || (user.role.includes('organization') && !user.organization_id))
+        throw new BadRequestException('User organization not found');
+      if (user.role.includes('organization')) {
+        //get the concierge client as assigned user
+        const org = await this.prisma.organization.findUnique({
+          where: { id: user.organization_id || undefined },
+          select: {
+            admin_id: true,
+            id: true,
+          },
+        });
+        if (!org) throw new BadRequestException('Organization not found');
+        assignedValidatedUser = org.admin_id;
+        assignedValidatedOrg = org.id;
+      } else {
+        assignedValidatedUser = createTicketDto.assigned_user_id;
+        assignedValidatedOrg = createTicketDto.client_id;
+      }
     }
 
     try {
       const ticket = await this.prisma.ticket.create({
         data: {
-          organization: { connect: { id: assignedValidatedOrg } },
+          organization: assignedValidatedOrg 
+            ? { connect: { id: assignedValidatedOrg } }
+            : undefined,
           type: typeBE,
           title: createTicketDto.title,
           description: createTicketDto.description,
           priority: createTicketDto.priority,
-          user: { connect: { id: assignedValidatedUser } },
+          user: assignedValidatedUser 
+            ? { connect: { id: assignedValidatedUser } }
+            : undefined,
           candidate: createTicketDto.candidate_id
             ? { connect: { id: createTicketDto.candidate_id } }
             : undefined,
