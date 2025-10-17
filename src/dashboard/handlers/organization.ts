@@ -28,6 +28,7 @@ export class HandlerOrganization {
       specialization: true,
       tools: true,
       medical_tools: true,
+      avatar_url: true,
       languages: {
         select: {
           name: true,
@@ -113,6 +114,7 @@ export class HandlerOrganization {
             country: true,
             about_me: true,
             hourly_pay_rate: true,
+            avatar_url: true,
             languages: {
               select: {
                 name: true,
@@ -153,6 +155,14 @@ export class HandlerOrganization {
         }
       }
     })
+
+    const hiredStaffWithAvatar = hiredStaff.map((staff) => ({
+      ...staff,
+      candidate: {
+        ...staff.candidate,
+        avatar: staff.candidate?.avatar_url ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}` :  null,
+      }
+    }))
 
     result.hiredStaff = hiredStaff;
     
@@ -240,9 +250,10 @@ export class HandlerOrganization {
 
     const otherTalentsSalary = otherTalents.map((talent) => ({
       ...talent,
-      salary: findMonthlySalary(Number(talent?.hourly_pay_rate))
+      salary: findMonthlySalary(Number(talent?.hourly_pay_rate)),
+      avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` :  null,
     }))
-    result.otherTalents = otherTalents;
+    result.otherTalents = otherTalentsSalary;
 
     return result;
   }

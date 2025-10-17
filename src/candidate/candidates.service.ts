@@ -214,6 +214,7 @@ export class CandidatesService {
       medical_tools: true,
       processing_status: true,
       processing_error: true,
+      avatar_url: true,
       languages: {
         select: {
           name: true,
@@ -298,7 +299,8 @@ export class CandidatesService {
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
-        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0)
+        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+        avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
       }));
 
       return {

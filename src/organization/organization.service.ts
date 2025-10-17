@@ -2316,7 +2316,7 @@ export class OrganizationService {
     } catch (error) {
       console.error(error);
       throw new BadRequestException(
-        `Erro ao sincronizar organizações: ${error.message}`,
+        `Error sync organizations: ${error.message}`,
       );
     }
   }

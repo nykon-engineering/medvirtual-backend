@@ -216,6 +216,7 @@ export class HireRequestService {
                       specialization: true,
                       about_me: true,
                       hourly_pay_rate: true,
+                      avatar_url: true,
                       skills: {
                         select: {
                           skill_name: true,
@@ -284,6 +285,7 @@ export class HireRequestService {
           candidate:{
             ...pc.candidate,
             salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
           }
         }))
       }))
@@ -348,6 +350,7 @@ export class HireRequestService {
                     processing_status: true,
                     processing_error: true,
                     organization_id: true,
+                    avatar_url: true,
                     languages: {
                       select: {
                         name: true,
@@ -414,8 +417,8 @@ export class HireRequestService {
             candidate:{
               ...pc.candidate,
               salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
-              years_of_experience: years_of_experience
-              
+              years_of_experience: years_of_experience,
+              avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
             }}
         })
       }))
@@ -924,6 +927,7 @@ export class HireRequestService {
         country: true,
         specialization: true,
         employment_type : true,
+        avatar_url: true,
         languages: {
           select: {
             name: true,
@@ -1005,6 +1009,7 @@ export class HireRequestService {
     const candidatesWithSalary = scoredCandidates.map(c => ({
       ...c,
       salary: findMonthlySalary(c.hourly_pay_rate?.toNumber() || 0),
+      avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
     }))
   
     return candidatesWithSalary;
@@ -1474,7 +1479,8 @@ export class HireRequestService {
                 educations: true,
                 experiences: true,
                 skills:true,
-                pipeline_status: true
+                pipeline_status: true,
+                avatar_url: true
               },
             },
           },
@@ -1514,6 +1520,7 @@ export class HireRequestService {
         candidate: {
           ...pc.candidate,
           salary: findMonthlySalary(pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0),
+          avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
         }
       }))
       
@@ -2007,6 +2014,7 @@ export class HireRequestService {
                 name: true,
                 hourly_pay_rate: true,
                 country: true,
+                avatar_url: true,
                 experiences: {
                   orderBy: { start_date: 'asc' },
                   take: 1, 
@@ -2058,6 +2066,7 @@ export class HireRequestService {
             ...pc.candidate,
             years_of_experience,
             salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
           },
         };
       }),
@@ -2173,6 +2182,7 @@ export class HireRequestService {
                 pipeline_status: true,
                 hourly_pay_rate: true,
                 years_of_experience: true,
+                avatar_url: true,
                 languages: {
                   select: { name: true },
                 },
@@ -2226,6 +2236,7 @@ export class HireRequestService {
       panelScheduledDate: panel.scheduled_date,
       isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
       salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(pc.candidate.hourly_pay_rate.toNumber()) : null,
+      avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
     }));
 
     return mappedCandidates;
