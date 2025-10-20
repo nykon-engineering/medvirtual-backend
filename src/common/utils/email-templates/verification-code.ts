@@ -1,13 +1,17 @@
-import { EmailHeader, EmailFooter } from './components';
+import { getEmailHeader, getEmailFooter } from './components';
+import { EmailTheme } from './theme';
 
-export default function getVerificationCodeTemplate(verificationCode: string) {
+export default function getVerificationCodeTemplate(verificationCode: string, theme?: EmailTheme) {
+  const primaryColor = theme?.primaryColor || '#01546B';
+  const companyName = theme?.companyName || 'MedVirtual';
+  
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Verify Your MedVirtual Account</title>
+  <title>Verify Your ${companyName} Account</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -45,7 +49,7 @@ export default function getVerificationCodeTemplate(verificationCode: string) {
     .verification-code {
       font-size: 36px;
       font-weight: 700;
-      color: #01546B;
+      color: ${primaryColor};
       letter-spacing: 8px;
       font-family: 'Courier New', monospace;
       margin: 0;
@@ -64,7 +68,7 @@ export default function getVerificationCodeTemplate(verificationCode: string) {
 
 <body>
   <div class="container">
-    ${EmailHeader}
+    ${getEmailHeader(theme)}
 
     <div class="content">
       <h2 style="color: #333333; font-size: 24px; margin-bottom: 20px;">
@@ -95,7 +99,7 @@ export default function getVerificationCodeTemplate(verificationCode: string) {
       </div>
     </div>
     
-    ${EmailFooter}
+    ${getEmailFooter(theme)}
   </div>
 </body>
 </html>

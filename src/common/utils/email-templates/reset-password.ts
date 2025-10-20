@@ -1,16 +1,22 @@
-import { EmailHeader, EmailFooter } from './components';
+import { getEmailHeader, getEmailFooter } from './components';
+import { EmailTheme } from './theme';
 
 export default function getResetPasswordTemplate(
   userName: string,
   resetLink: string,
+  theme?: EmailTheme
 ) {
+  const primaryColor = theme?.primaryColor || '#01546B';
+  const primaryColorHover = theme?.primaryColorHover || '#013A4F';
+  const companyName = theme?.companyName || 'MedVirtual';
+  
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Password Reset - MedVirtual Platform</title>
+  <title>Password Reset - ${companyName} Platform</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -32,7 +38,7 @@ export default function getResetPasswordTemplate(
     .button {
       display: inline-block;
       padding: 16px 32px;
-      background-color: #01546B;
+      background-color: ${primaryColor};
       color: #ffffff;
       text-decoration: none;
       border-radius: 8px;
@@ -41,7 +47,7 @@ export default function getResetPasswordTemplate(
       margin: 20px 0;
     }
     .button:hover {
-      background-color: #013A4F;
+      background-color: ${primaryColorHover};
     }
     .warning-box {
       background-color: #fff3cd;
@@ -58,7 +64,7 @@ export default function getResetPasswordTemplate(
       word-break: break-all;
     }
     .text-link a {
-      color: #01546B;
+      color: ${primaryColor};
       text-decoration: none;
     }
   </style>
@@ -66,7 +72,7 @@ export default function getResetPasswordTemplate(
 
 <body>
   <div class="container">
-    ${EmailHeader}
+    ${getEmailHeader(theme)}
 
     <div class="content">
       <h2 style="color: #333333; font-size: 24px; margin-bottom: 20px;">
@@ -78,7 +84,7 @@ export default function getResetPasswordTemplate(
       </p>
       
       <p style="color: #333333; font-size: 18px; line-height: 1.6; margin-bottom: 32px;">
-        We received a request to reset your password for your MedVirtual account. Click the button below to create a new password.
+        We received a request to reset your password for your ${companyName} account. Click the button below to create a new password.
       </p>
 
       <div style="text-align: center; margin: 32px 0;">
@@ -103,7 +109,7 @@ export default function getResetPasswordTemplate(
       </p>
     </div>
 
-    ${EmailFooter}
+    ${getEmailFooter(theme)}
   </div>
 </body>
 </html>

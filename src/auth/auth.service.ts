@@ -19,6 +19,7 @@ import { AuthInviteUserDto } from './dto/authInviteUser.dto';
 import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
 import getVerificationCodeTemplate from '../common/utils/email-templates/verification-code';
 import InviteSignup from '../common/utils/email-templates/invite-signup';
+import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { AuthSignUpDto } from './dto/authSignUp.dto';
 import { AuthVerifyCodeDtoReturn } from './dto/authVerifyCodeReturn.dto';
 import { AuthinvitedUserSignupDto } from './dto/invitedUserSignup.dto';
@@ -288,8 +289,11 @@ export class AuthService {
       throw new BadRequestException('Failed to generate verification code');
     }
 
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
+    
     // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(code);
+    const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,
@@ -451,8 +455,11 @@ export class AuthService {
       throw new BadRequestException('Failed to store verification code');
     }
 
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+    
     // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(code);
+    const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: user.email,
@@ -535,9 +542,12 @@ export class AuthService {
       throw new BadRequestException('Failed to generate invite code');
     }
 
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
+    
     // Send signup link via email
     const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const emailBody = InviteSignup(inviteLink);
+    const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,

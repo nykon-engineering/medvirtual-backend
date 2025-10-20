@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
-import { EmailFooter, EmailHeader } from '../common/utils/email-templates/components';
+import { getEmailFooter, getEmailHeader } from '../common/utils/email-templates/components';
+import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 
 @Injectable()
 export class NotificationsService {
@@ -10,8 +11,8 @@ export class NotificationsService {
     private readonly mail: MailService,
   ) {}
 
-  private buildEmail(htmlInner: string): string {
-    return `<!DOCTYPE html><html><body><div style="max-width:600px;margin:0 auto;background:#ffffff;">${EmailHeader}<div style="padding:24px;">${htmlInner}</div>${EmailFooter}</div></body></html>`;
+  private buildEmail(htmlInner: string, theme?: any): string {
+    return `<!DOCTYPE html><html><body><div style="max-width:600px;margin:0 auto;background:#ffffff;">${getEmailHeader(theme)}<div style="padding:24px;">${htmlInner}</div>${getEmailFooter(theme)}</div></body></html>`;
   }
 
   async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
@@ -29,7 +30,7 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         assigned_user: {
-          select: { email: true, first_name: true, last_name: true },
+          select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
           select: { name: true },
@@ -48,6 +49,9 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    
     const html = this.buildEmail(
       `<h2>Placement Completed</h2>
        <p>The hire request has been marked as <strong>placement completed</strong>.</p>
@@ -66,10 +70,11 @@ export class NotificationsService {
        
        <p>Please proceed with onboarding steps.</p>
        <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: #01546B; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
            View Hire Request Details
          </a>
        </p>`,
+      emailTheme
     );
 
     return await this.mail.sendMail({
@@ -90,7 +95,7 @@ export class NotificationsService {
         priority: true,
         specialization: true,
         location: true,
-        assigned_user: { select: { email: true } },
+        assigned_user: { select: { id: true, email: true } },
         organization: {
           select: { name: true },
         },
@@ -102,6 +107,10 @@ export class NotificationsService {
 
     const verb = action === 'edited' ? 'edited' : 'canceled';
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    
     const html = this.buildEmail(
       `<h2>Hire Request ${verb.toUpperCase()}</h2>
        <p>The hire request was ${verb} by the client.</p>
@@ -117,10 +126,11 @@ export class NotificationsService {
        </div>
        
        <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: #01546B; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
            View Hire Request Details
          </a>
        </p>`,
+      emailTheme
     );
 
     return await this.mail.sendMail({
@@ -148,7 +158,7 @@ export class NotificationsService {
         availability: true,
         contract_length: true,
         assigned_user: {
-          select: { email: true, first_name: true, last_name: true },
+          select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
           select: { name: true },
@@ -167,6 +177,9 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    
     const html = this.buildEmail(
       `<h2>New Hire Request Assigned</h2>
        <p>You have been assigned a new hire request that requires your attention.</p>
@@ -188,10 +201,11 @@ export class NotificationsService {
        
        <p>Please review the details and take appropriate action.</p>
        <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: #01546B; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
            View Hire Request Details
          </a>
        </p>`,
+      emailTheme
     );
 
     return await this.mail.sendMail({
@@ -213,7 +227,7 @@ export class NotificationsService {
         priority: true,
         type: true,
         createdAt: true,
-        user: { select: { email: true } }, // assignee
+        user: { select: { id: true, email: true } }, // assignee
         organization: {
           select: { name: true },
         },
@@ -226,6 +240,9 @@ export class NotificationsService {
 
     const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
+    
+    // Get user email theme
+    const emailTheme = ticket.user ? await getUserEmailTheme(this.prisma, ticket.user.id) : null;
     
     const html = this.buildEmail(
       `<h2>Ticket ${event.toUpperCase()}</h2>
@@ -243,10 +260,11 @@ export class NotificationsService {
        </div>
        
        <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: #01546B; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
            View Ticket Details
          </a>
        </p>`,
+      emailTheme
     );
 
     return await this.mail.sendMail({

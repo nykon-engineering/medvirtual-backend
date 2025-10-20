@@ -1,13 +1,18 @@
-import { EmailFooter, EmailHeader } from './components';
+import { getEmailFooter, getEmailHeader } from './components';
+import { EmailTheme } from './theme';
 
-export default function InviteSignup(inviteLink: string) {
+export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
+  const primaryColor = theme?.primaryColor || '#01546B';
+  const primaryColorHover = theme?.primaryColorHover || '#013A4F';
+  const companyName = theme?.companyName || 'MedVirtual';
+  
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MedVirtual Platform Invitation</title>
+  <title>${companyName} Platform Invitation</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -29,7 +34,7 @@ export default function InviteSignup(inviteLink: string) {
     .button {
       display: inline-block;
       padding: 16px 32px;
-      background-color: #01546B;
+      background-color: ${primaryColor};
       color: #ffffff;
       text-decoration: none;
       border-radius: 8px;
@@ -38,7 +43,7 @@ export default function InviteSignup(inviteLink: string) {
       margin: 20px 0;
     }
     .button:hover {
-      background-color: #013A4F;
+      background-color: ${primaryColorHover};
     }
     .warning-box {
       background-color: #fff3cd;
@@ -67,7 +72,7 @@ export default function InviteSignup(inviteLink: string) {
       word-break: break-all;
     }
     .text-link a {
-      color: #01546B;
+      color: ${primaryColor};
       text-decoration: none;
     }
   </style>
@@ -75,11 +80,11 @@ export default function InviteSignup(inviteLink: string) {
 
 <body>
   <div class="container">
-    ${EmailHeader}
+    ${getEmailHeader(theme)}
 
     <div class="content">
       <h2 style="color: #333333; font-size: 24px; margin-bottom: 20px;">
-        Welcome to MedVirtual Platform
+        Welcome to ${companyName} Platform
       </h2>
       
       <p style="color: #333333; font-size: 18px; line-height: 1.6; margin-bottom: 32px;">
@@ -108,9 +113,9 @@ export default function InviteSignup(inviteLink: string) {
       </p>
     </div>
 
-    ${EmailFooter}
+    ${getEmailFooter(theme)}
   </div>
 </body>
 </html>
-        `;
+`;
 }
