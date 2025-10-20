@@ -213,7 +213,7 @@ export class CronService {
             const emailBody = systemReport(availableCandidates, endorsedCandidates, withoutResume, failedResumeParsing, withoutHeadshot);
             const mailSent = await this.mailService.sendMail({
             from: 'MedVirtual <noreply@medvirtual.ai>',
-            to: 'pauloisaquecpd@hotmail.com',
+            to: 'shayan@regenta.ai',
             cc: 'paulo@regenta.ai',
             subject: 'System Report',
             html: emailBody,

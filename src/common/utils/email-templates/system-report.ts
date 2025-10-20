@@ -71,8 +71,8 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
         Hi Shayan, below is important data regarding candidates on our system.
       </p>
     </div>
-    <div style="display: flex; justify-content: center; flex-wrap: wrap;">
-        <div style="width: 30%; border-radius: 8%; margin: 2%; background-color: #ccc; text-align: center; padding: 10px;">
+    <div style="display: flex; justify-content: center; flex-wrap: wrap; text-align: center" align="center">
+        <div style="width: 30%; border-radius: 8%; margin: 8%; background-color: #ccc; text-align: center; padding: 10px;">
           <p style="color:#181D27;font-size:18px;line-height:1.6;margin-bottom:20px;">
             Available candidates
           </p>
@@ -80,7 +80,7 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
             ${availableCandidates}
           </div>
         </div>
-        <div style="width: 30%; border-radius: 8%; margin: 2%; background-color: #ccc; text-align: center; padding: 10px;">
+        <div style="width: 30%; border-radius: 8%; margin: 8%; background-color: #ccc; text-align: center; padding: 10px;">
           <p style="color:#181D27;font-size:18px;line-height:1.6;margin-bottom:20px;">
             Endorsed candidates
           </p>
@@ -89,8 +89,8 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
           </div>
         </div>
     </div>
-    <div style="display: flex; justify-content: center; flex-wrap: wrap;">
-        <div style="width: 30%; border-radius: 8%; margin: 2%; background-color: #ccc; text-align: center; padding: 10px;">
+    <div style="display: flex; justify-content: center; flex-wrap: wrap; text-align: center" align="center">
+        <div style="width: 30%; border-radius: 8%; margin: 8%; background-color: #ccc; text-align: center; padding: 10px;">
           <p style="color:#181D27;font-size:18px;line-height:1.6;margin-bottom:5px;">
             Without resume link
           </p>
@@ -101,7 +101,7 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
             ${withoutResume}
           </div>
         </div>
-        <div style="width: 30%; border-radius: 8%; margin: 2%; background-color: #ccc; text-align: center; padding: 10px;">
+        <div style="width: 30%; border-radius: 8%; margin: 8%; background-color: #ccc; text-align: center; padding: 10px;">
           <p style="color:#181D27;font-size:18px;line-height:1.6;margin-bottom:5px;">
             Failed resume parsing
           </p>
