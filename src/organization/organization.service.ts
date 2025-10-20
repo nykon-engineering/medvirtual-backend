@@ -2156,7 +2156,52 @@ export class OrganizationService {
     return organizations;
   }
 
-  async syncOrganizationsWithDeals() {
+  async syncOrganizationsWithDeals(): Promise<boolean>{
+    const organizations = await this.prisma.organization.findMany({
+      where: {
+        status: 'active',
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+        staff: {
+          select: {
+            hubspot_id: true,
+          },
+        },
+      },
+    });
+    console.log('Found organizations to sync:', organizations.length);
+
+    const organizationsId = organizations.map(org => org.hubspot_id);
+    console.log('Organizations HubSpot IDs:', organizationsId);
+
+    try{
+      const response = await axios.post('https://api.hubapi.com/crm/v4/associations/company/deal/batch/read', 
+        {
+          inputs:[
+            ...organizationsId.map(id => ({ id }))
+          ]
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      console.log('Associations response received', response);
+    }catch(error){
+      console.error('Error during sync:', error);
+      throw new BadRequestException(`Error during sync: ${error.message}`);
+    }
+
+
+    return true;
+  }
+
+  async syncOrganizationsWithDealsBKP() {
     const properties = Object.keys(organizationToDbDictionary).join(',');
     const propertiesDeals = Object.keys(dealToDbDictionary).join(',');
   
