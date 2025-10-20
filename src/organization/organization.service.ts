@@ -2192,6 +2192,8 @@ export class OrganizationService {
       )
 
       console.log('Associations response received', response);
+
+      
     }catch(error){
       console.error('Error during sync:', error);
       throw new BadRequestException(`Error during sync: ${error.message}`);
