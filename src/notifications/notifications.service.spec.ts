@@ -63,7 +63,6 @@ describe('NotificationsService', () => {
       status: 'placement_completed',
       priority: 'high',
       specialization: 'Frontend',
-      location: 'Remote',
       salary_range_from: 5000,
       salary_range_to: 8000,
       expected_start_date: new Date('2024-02-01'),
@@ -138,7 +137,6 @@ describe('NotificationsService', () => {
       description: 'Looking for a senior developer',
       priority: 'high',
       specialization: 'Frontend',
-      location: 'Remote',
       assigned_user: { email: 'assignee@example.com' },
       organization: { name: 'Test Company' },
     };
@@ -197,7 +195,6 @@ describe('NotificationsService', () => {
       status: 'new',
       priority: 'high',
       specialization: 'Frontend',
-      location: 'Remote',
       salary_range_from: 5000,
       salary_range_to: 8000,
       expected_start_date: new Date('2024-02-01'),
@@ -249,7 +246,6 @@ describe('NotificationsService', () => {
       const hireRequestMinimal = {
         ...mockHireRequest,
         description: null,
-        location: null,
         contract_length: null,
         salary_range_from: null,
         salary_range_to: null,
@@ -315,18 +311,18 @@ describe('NotificationsService', () => {
       });
     });
 
-    it('should send notification for canceled ticket', async () => {
+    it('should send notification for closed ticket', async () => {
       mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
       mockMailService.sendMail.mockResolvedValue(true);
 
-      const result = await service.notifyTicketEvent('ticket1', 'canceled');
+      const result = await service.notifyTicketEvent('ticket1', 'closed');
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: 'Ticket canceled: Bug Report',
-        html: expect.stringContaining('Ticket CANCELED'),
+        subject: 'Ticket closed: Bug Report',
+        html: expect.stringContaining('Ticket CLOSED'),
       });
     });
 
@@ -363,7 +359,6 @@ describe('NotificationsService', () => {
         status: 'new',
         priority: 'high',
         specialization: 'Frontend',
-        location: 'Remote',
         salary_range_from: 5000,
         salary_range_to: 8000,
         expected_start_date: new Date('2024-02-01'),
@@ -420,7 +415,6 @@ describe('NotificationsService', () => {
         status: 'new',
         priority: 'high',
         specialization: 'Frontend',
-        location: 'Remote',
         salary_range_from: 5000,
         salary_range_to: 8000,
         expected_start_date: new Date('2024-02-01'),

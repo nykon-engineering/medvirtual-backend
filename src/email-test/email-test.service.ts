@@ -140,7 +140,6 @@ export class EmailTestService {
       <p><strong>Request Details:</strong></p>
       <ul>
         <li>Title: Senior Developer Position</li>
-        <li>Location: Remote</li>
         <li>Salary: $80,000 - $100,000</li>
         <li>Status: Completed</li>
       </ul>

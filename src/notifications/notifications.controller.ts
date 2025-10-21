@@ -18,7 +18,7 @@
  *    - Sends notification when client edits or cancels a hire request
  *    - Used in: HireRequestService.update() and status change methods
  * 
- * 4. notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'canceled')
+ * 4. notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'closed')
  *    - Sends notification for ticket events
  *    - Used in: TicketService.create() and other ticket operations
  * 

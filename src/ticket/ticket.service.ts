@@ -416,7 +416,7 @@ export class TicketService {
       // Notify assignee via email when ticket is closed (non-blocking)
       if (data.status === 'closed') {
         try {
-          await this.notifications.notifyTicketEvent(id, 'canceled');
+          await this.notifications.notifyTicketEvent(id, 'closed');
         } catch (err) {
           console.warn('[notifications] ticket-closed email failed', err?.message || err);
         }

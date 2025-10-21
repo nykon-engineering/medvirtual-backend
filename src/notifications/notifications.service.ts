@@ -173,7 +173,6 @@ export class NotificationsService {
         status: true,
         priority: true,
         specialization: true,
-        location: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -211,7 +210,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Priority:</strong> ${hr.priority}</p>
-         <p><strong>Location:</strong> ${hr.location || 'Not specified'}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
        </div>
@@ -242,7 +240,6 @@ export class NotificationsService {
         description: true,
         priority: true,
         specialization: true,
-        location: true,
         assigned_user: { select: { id: true, email: true } },
         organization: {
           select: { name: true },
@@ -270,7 +267,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Priority:</strong> ${hr.priority}</p>
-         <p><strong>Location:</strong> ${hr.location || 'Not specified'}</p>
        </div>
        
        <p style="margin-top: 20px;">
@@ -299,7 +295,6 @@ export class NotificationsService {
         status: true,
         priority: true,
         specialization: true,
-        location: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -339,7 +334,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Priority:</strong> ${hr.priority}</p>
-         <p><strong>Location:</strong> ${hr.location || 'Not specified'}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
          <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
@@ -364,7 +358,7 @@ export class NotificationsService {
     });
   }
 
-  async notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'canceled'): Promise<boolean> {
+  async notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'closed'): Promise<boolean> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
       select: {
