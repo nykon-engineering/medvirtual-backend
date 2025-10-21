@@ -749,6 +749,33 @@ export class StaffService {
   }
 
 
+  async moveStaffBackToActive(staffId: string): Promise<any> {
+    if (!staffId) {
+      throw new BadRequestException('Staff ID is required');
+    }
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: {
+        id: true,
+      }
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff member not found');
+    }
+
+    const updatedStaff = await this.prisma.staff.update({
+      where: { id: staffId },
+      data: { status: 'active' },
+    });
+    if (!updatedStaff) {
+      throw new BadRequestException('Failed to move staff member back to active');
+    }
+
+    return this.findOne(staffId);
+  }
+
+
 
 
   /* //We removed that method to simplify the code, but kept it here for reference

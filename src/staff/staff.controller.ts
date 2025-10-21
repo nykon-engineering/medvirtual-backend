@@ -224,4 +224,23 @@ export class StaffController {
     return await this.staffService.populateDbFromHubspot();
   }
 
+
+  @Get('back-to-active/:id')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Staff member ID' })
+  @ApiOperation({ summary: "Back to active", description: 'Move staff from termination-requested to active' })
+  @ApiResponse({ status: 200, description: 'Staff member moved back to active successfully' })
+  @ApiResponse({ status: 400, description: 'Staff ID is required' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  @ApiResponse({ status: 400, description: 'Failed to move staff member back to active' })
+  
+  async moveStaffBackToActive(@Param('id') staffId: string) {
+    const result = await this.staffService.moveStaffBackToActive(staffId);
+    return {
+      status: 200,
+      message: 'Staff member moved back to active successfully',
+      data: result,
+    };
+  }
 }
