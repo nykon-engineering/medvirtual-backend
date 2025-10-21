@@ -48,10 +48,12 @@ describe('NotificationsService', () => {
       const result = (service as any).buildEmail(htmlInner);
       
       expect(result).toContain('<!DOCTYPE html>');
-      expect(result).toContain('<html><body>');
-      expect(result).toContain('<div style="max-width:600px;margin:0 auto;background:#ffffff;">');
+      expect(result).toContain('<html lang="en">');
+      expect(result).toContain('<div class="email-wrapper">');
+      expect(result).toContain('<div class="container">');
       expect(result).toContain(htmlInner);
-      expect(result).toContain('</div></body></html>');
+      expect(result).toContain('</body>');
+      expect(result).toContain('</html>');
     });
   });
 

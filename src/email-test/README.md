@@ -1,25 +1,25 @@
 # Email Testing Endpoints
 
-Este módulo proporciona endpoints para probar todos los templates de email con diferentes temas.
+This module provides endpoints to test all email templates with different themes.
 
-## Endpoints Disponibles
+## Available Endpoints
 
 ### Base URL
 ```
 GET /email-test
 ```
 
-### 1. Probar Template de Verification Code
+### 1. Test Verification Code Template
 ```
 GET /email-test/verification-code?theme=medvirtual&berry=false&email=test@example.com
 ```
 
-**Parámetros:**
-- `theme` (opcional): `medvirtual` o `berry` (default: `medvirtual`)
-- `berry` (opcional): `true` o `false` (default: `false`)
-- `email` (opcional): Email de destino (default: `test@example.com`)
+**Parameters:**
+- `theme` (optional): `medvirtual` or `berry` (default: `medvirtual`)
+- `berry` (optional): `true` or `false` (default: `false`)
+- `email` (optional): Destination email (default: `test@example.com`)
 
-**Ejemplo:**
+**Example:**
 ```bash
 # MedVirtual theme
 curl "http://localhost:3000/email-test/verification-code?theme=medvirtual&berry=false&email=test@example.com"
@@ -28,79 +28,79 @@ curl "http://localhost:3000/email-test/verification-code?theme=medvirtual&berry=
 curl "http://localhost:3000/email-test/verification-code?theme=berry&berry=true&email=test@example.com"
 ```
 
-### 2. Probar Template de Invite Signup
+### 2. Test Invite Signup Template
 ```
 GET /email-test/invite-signup?theme=medvirtual&email=test@example.com
 ```
 
-**Parámetros:**
-- `theme` (opcional): `medvirtual` o `berry` (default: `medvirtual`)
-- `email` (opcional): Email de destino (default: `test@example.com`)
+**Parameters:**
+- `theme` (optional): `medvirtual` or `berry` (default: `medvirtual`)
+- `email` (optional): Destination email (default: `test@example.com`)
 
-**Ejemplo:**
+**Example:**
 ```bash
 curl "http://localhost:3000/email-test/invite-signup?theme=berry&email=test@example.com"
 ```
 
-### 3. Probar Template de Reset Password
+### 3. Test Reset Password Template
 ```
 GET /email-test/reset-password?theme=medvirtual&email=test@example.com
 ```
 
-**Parámetros:**
-- `theme` (opcional): `medvirtual` o `berry` (default: `medvirtual`)
-- `email` (opcional): Email de destino (default: `test@example.com`)
+**Parameters:**
+- `theme` (optional): `medvirtual` or `berry` (default: `medvirtual`)
+- `email` (optional): Destination email (default: `test@example.com`)
 
-**Ejemplo:**
+**Example:**
 ```bash
 curl "http://localhost:3000/email-test/reset-password?theme=medvirtual&email=test@example.com"
 ```
 
-### 4. Probar Template de Notification
+### 4. Test Notification Template
 ```
 GET /email-test/notification?theme=medvirtual&email=test@example.com
 ```
 
-**Parámetros:**
-- `theme` (opcional): `medvirtual` o `berry` (default: `medvirtual`)
-- `email` (opcional): Email de destino (default: `test@example.com`)
+**Parameters:**
+- `theme` (optional): `medvirtual` or `berry` (default: `medvirtual`)
+- `email` (optional): Destination email (default: `test@example.com`)
 
-**Ejemplo:**
+**Example:**
 ```bash
 curl "http://localhost:3000/email-test/notification?theme=berry&email=test@example.com"
 ```
 
-### 5. Probar Todos los Templates
+### 5. Test All Templates
 ```
 GET /email-test/all?theme=medvirtual&email=test@example.com
 ```
 
-**Parámetros:**
-- `theme` (opcional): `medvirtual` o `berry` (default: `medvirtual`)
-- `email` (opcional): Email de destino (default: `test@example.com`)
+**Parameters:**
+- `theme` (optional): `medvirtual` or `berry` (default: `medvirtual`)
+- `email` (optional): Destination email (default: `test@example.com`)
 
-**Ejemplo:**
+**Example:**
 ```bash
 curl "http://localhost:3000/email-test/all?theme=berry&email=test@example.com"
 ```
 
-## Temas Disponibles
+## Available Themes
 
 ### MedVirtual (Default)
-- **Color primario**: #01546B
-- **Color hover**: #013A4F
-- **Nombre**: MedVirtual
-- **Uso**: Para usuarios sin organización o con organización que no sea Berry Virtual
+- **Primary color**: #01546B
+- **Hover color**: #013A4F
+- **Name**: MedVirtual
+- **Usage**: For users without organization or with organization that is not Berry Virtual
 
 ### Berry Virtual
-- **Color primario**: #FD7171
-- **Color hover**: #E55A5A
-- **Nombre**: Berry Virtual
-- **Uso**: Para usuarios con organización Berry Virtual activa
+- **Primary color**: #FD7171
+- **Hover color**: #E55A5A
+- **Name**: Berry Virtual
+- **Usage**: For users with active Berry Virtual organization
 
-## Respuesta de la API
+## API Response
 
-### Respuesta Exitosa
+### Success Response
 ```json
 {
   "success": true,
@@ -112,7 +112,7 @@ curl "http://localhost:3000/email-test/all?theme=berry&email=test@example.com"
 }
 ```
 
-### Respuesta de Error
+### Error Response
 ```json
 {
   "success": false,
@@ -121,7 +121,7 @@ curl "http://localhost:3000/email-test/all?theme=berry&email=test@example.com"
 }
 ```
 
-### Respuesta para /all
+### Response for /all
 ```json
 {
   "success": true,
@@ -136,75 +136,75 @@ curl "http://localhost:3000/email-test/all?theme=berry&email=test@example.com"
 }
 ```
 
-## Características de los Templates
+## Template Features
 
-### Diseño Moderno
-- Logo con punto de color
-- Saludo simple "Hi,"
-- Mensaje principal con emoji :)
-- Botón CTA moderno
-- Cierre personalizado "Best, [Company] team"
-- Footer minimalista con soporte
+### Modern Design
+- Logo with color dot
+- Simple greeting "Hi,"
+- Main message with emoji :)
+- Modern CTA button
+- Personalized closing "Best, [Company] team"
+- Minimalist footer with support
 
 ### Responsive
-- Compatible con clientes de email
-- Fuentes del sistema
-- Estilos inline para máxima compatibilidad
+- Compatible with email clients
+- System fonts
+- Inline styles for maximum compatibility
 
-### Temática Dinámica
-- Colores según la organización
-- Nombre de empresa dinámico
-- Email de soporte personalizado
+### Dynamic Theming
+- Colors based on organization
+- Dynamic company name
+- Customized support email
 
-## Uso en Desarrollo
+## Development Usage
 
-1. **Iniciar el servidor**:
+1. **Start the server**:
    ```bash
    npm run start:dev
    ```
 
-2. **Probar un template específico**:
+2. **Test a specific template**:
    ```bash
-   curl "http://localhost:3000/email-test/verification-code?theme=berry&email=tu-email@ejemplo.com"
+   curl "http://localhost:3000/email-test/verification-code?theme=berry&email=your-email@example.com"
    ```
 
-3. **Probar todos los templates**:
+3. **Test all templates**:
    ```bash
-   curl "http://localhost:3000/email-test/all?theme=medvirtual&email=tu-email@ejemplo.com"
+   curl "http://localhost:3000/email-test/all?theme=medvirtual&email=your-email@example.com"
    ```
 
-## Variables de Entorno Requeridas
+## Required Environment Variables
 
-Asegúrate de tener configuradas las siguientes variables de entorno:
+Make sure you have the following environment variables configured:
 
 ```bash
-# Requerido para el servicio de mail
-RESEND_API_KEY=tu_api_key_de_resend
+# Required for mail service
+RESEND_API_KEY=your_resend_api_key
 
-# Opcional - Email de remitente (default: noreply@medvirtual.ai)
+# Optional - Sender email (default: noreply@medvirtual.ai)
 FROM_EMAIL=noreply@medvirtual.ai
 
-# Opcional - URL del frontend (default: http://localhost:3000)
+# Optional - Frontend URL (default: http://localhost:3000)
 FRONTEND_URL=http://localhost:3000
 ```
 
-## Archivos de Logo Requeridos
+## Required Logo Files
 
-Asegúrate de tener los siguientes archivos de logo en tu frontend:
+Make sure you have the following logo files in your frontend:
 
 ```
-frontend/public/logo.png      # Logo de MedVirtual
-frontend/public/logobv.png    # Logo de Berry Virtual
+frontend/public/logo.png      # MedVirtual logo
+frontend/public/logobv.png    # Berry Virtual logo
 ```
 
-Los templates seleccionarán automáticamente el logo correcto según el tema:
+Templates will automatically select the correct logo based on the theme:
 - **MedVirtual**: `logo.png`
 - **Berry Virtual**: `logobv.png`
 
-## Notas Importantes
+## Important Notes
 
-- Los emails se envían realmente usando el servicio de mail configurado
-- Los tokens y códigos son de prueba (no válidos para uso real)
-- Asegúrate de tener configurado correctamente el servicio de mail (Resend)
-- Los endpoints están disponibles solo en desarrollo (considera agregar guards para producción)
-- El campo `from` se toma de `FROM_EMAIL` o usa `noreply@medvirtual.ai` por defecto
+- Emails are actually sent using the configured mail service
+- Tokens and codes are for testing (not valid for real use)
+- Make sure you have the mail service (Resend) configured correctly
+- Endpoints are available only in development (consider adding guards for production)
+- The `from` field is taken from `FROM_EMAIL` or uses `noreply@medvirtual.ai` by default
