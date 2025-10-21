@@ -13,6 +13,10 @@ export class EmailTestService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   private getTheme(themeName: string): EmailTheme | undefined {
     switch (themeName.toLowerCase()) {
       case 'berry':
@@ -143,9 +147,9 @@ export class EmailTestService {
         <li>Salary: $80,000 - $100,000</li>
         <li>Status: Completed</li>
       </ul>
-      <div style="text-align: center; margin: 30px 0;">
+      <div style="text-align: left; margin: 30px 0;">
         <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/hire-requests" 
-           style="background-color: ${theme?.primaryColor || '#01546B'}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+           style="background-color: ${theme?.primaryColor || '#01546B'}; color: white; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px;">
           View Details
         </a>
       </div>
@@ -176,11 +180,23 @@ export class EmailTestService {
   }
 
   async testAllTemplates(themeName: string, email: string) {
+    // Send emails with delay to avoid rate limiting (Resend allows 2 requests per second)
+    const verificationCode = await this.testVerificationCode(themeName, themeName === 'berry', email);
+    await this.delay(600); // Wait 600ms between emails
+
+    const inviteSignup = await this.testInviteSignup(themeName, email);
+    await this.delay(600); // Wait 600ms between emails
+
+    const resetPassword = await this.testResetPassword(themeName, email);
+    await this.delay(600); // Wait 600ms between emails
+
+    const notification = await this.testNotification(themeName, email);
+
     const results = {
-      verificationCode: await this.testVerificationCode(themeName, themeName === 'berry', email),
-      inviteSignup: await this.testInviteSignup(themeName, email),
-      resetPassword: await this.testResetPassword(themeName, email),
-      notification: await this.testNotification(themeName, email),
+      verificationCode,
+      inviteSignup,
+      resetPassword,
+      notification,
     };
 
     const allSuccessful = Object.values(results).every(result => result.success);

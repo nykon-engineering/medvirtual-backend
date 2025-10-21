@@ -68,7 +68,7 @@ export class NotificationsService {
     }
     .cta-button {
       display: inline-block;
-      background-color: ${primaryColor};
+      background-color: ${theme?.primaryColor || primaryColor};
       color: #ffffff !important;
       padding: 14px 28px;
       text-decoration: none;
@@ -203,12 +203,12 @@ export class NotificationsService {
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
        </div>
        
-       <p>Please proceed with onboarding steps.</p>
-       <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
-           View Hire Request Details
-         </a>
-       </p>`,
+        <p>Please proceed with onboarding steps.</p>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="${detailUrl}" class="cta-button">
+            View Hire Request Details
+          </a>
+        </div>`,
       emailTheme
     );
 
@@ -258,11 +258,11 @@ export class NotificationsService {
          <p><strong>Priority:</strong> ${hr.priority}</p>
        </div>
        
-       <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
-       </p>`,
+       </div>`,
       emailTheme
     );
 
@@ -331,11 +331,11 @@ export class NotificationsService {
        </div>
        
        <p>Please review the details and take appropriate action.</p>
-       <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
-       </p>`,
+       </div>`,
       emailTheme
     );
 
@@ -390,11 +390,11 @@ export class NotificationsService {
          <p><strong>Created:</strong> ${createdDate}</p>
        </div>
        
-       <p style="margin-top: 20px;">
-         <a href="${detailUrl}" style="background-color: ${emailTheme?.primaryColor || '#01546B'}; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
            View Ticket Details
          </a>
-       </p>`,
+       </div>`,
       emailTheme
     );
 
