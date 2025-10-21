@@ -5,10 +5,11 @@
 ### 1. Getting User Theme
 
 ```typescript
-import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
+import { getUserEmailTheme, isUserBerryVirtual } from '../common/utils/email-templates/theme-helper';
 
 // In your service
 const emailTheme = await getUserEmailTheme(this.prisma, userId);
+const isBerryVirtual = await isUserBerryVirtual(this.prisma, userId);
 ```
 
 ### 2. Using in Email Templates
@@ -16,8 +17,11 @@ const emailTheme = await getUserEmailTheme(this.prisma, userId);
 ```typescript
 import getVerificationCodeTemplate from '../common/utils/email-templates/verification-code';
 
-// Generate themed email
-const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined);
+// Generate verification URL with Berry Virtual parameter
+const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
+
+// Generate themed email with Berry Virtual indicator and verification URL
+const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
 ```
 
 ## Service Integration Examples
@@ -27,7 +31,12 @@ const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined);
 ```typescript
 // In signUp method
 const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
-const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined);
+const isBerryVirtual = await isUserBerryVirtual(this.prisma, newUser.id);
+
+// Generate verification URL with Berry Virtual parameter
+const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
+
+const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
 
 await this.mailService.sendMail({
   from: 'MedVirtual <noreply@medvirtual.ai>',
@@ -216,6 +225,32 @@ describe('getUserEmailTheme', () => {
     
     expect(theme?.primaryColor).toBe('#FD7171');
     expect(theme?.companyName).toBe('Berry Virtual');
+  });
+
+  it('should return true for Berry Virtual user', async () => {
+    const organization = await createOrganization({ business_unit: 'Berry Virtual' });
+    const user = await createUser({ organization_id: organization.id });
+    
+    const isBerryVirtual = await isUserBerryVirtual(prisma, user.id);
+    
+    expect(isBerryVirtual).toBe(true);
+  });
+
+  it('should return false for non-Berry Virtual user', async () => {
+    const organization = await createOrganization({ business_unit: 'MedVirtual' });
+    const user = await createUser({ organization_id: organization.id });
+    
+    const isBerryVirtual = await isUserBerryVirtual(prisma, user.id);
+    
+    expect(isBerryVirtual).toBe(false);
+  });
+
+  it('should return false for system users', async () => {
+    const user = await createUser({ role: 'system_super_admin' });
+    
+    const isBerryVirtual = await isUserBerryVirtual(prisma, user.id);
+    
+    expect(isBerryVirtual).toBe(false);
   });
 });
 ```

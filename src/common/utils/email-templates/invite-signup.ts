@@ -15,35 +15,78 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
   <title>${companyName} Platform Invitation</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       margin: 0;
       padding: 0;
       background-color: #f4f4f4;
       -webkit-text-size-adjust: 100%;
       -ms-text-size-adjust: 100%;
     }
+    .email-wrapper {
+      background-color: #f4f4f4;
+      padding: 20px;
+      min-height: 100vh;
+    }
     .container {
       max-width: 600px;
       margin: 0 auto;
       background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
     }
     .content {
       padding: 40px 30px;
-      text-align: center;
     }
-    .button {
+    .logo {
+      text-align: left;
+      margin-bottom: 30px;
+    }
+    .logo img {
+      max-width: 200px;
+      height: auto;
+    }
+    .greeting {
+      color: #333333;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .main-message {
+      color: #333333;
+      font-size: 16px;
+      line-height: 1.5;
+      margin-bottom: 30px;
+    }
+    .cta-button {
       display: inline-block;
-      padding: 16px 32px;
       background-color: ${primaryColor};
-      color: #ffffff;
+      color: #ffffff !important;
+      padding: 14px 28px;
       text-decoration: none;
       border-radius: 8px;
       font-weight: 600;
       font-size: 16px;
       margin: 20px 0;
+      transition: background-color 0.2s ease;
     }
-    .button:hover {
+    .cta-button:hover {
       background-color: ${primaryColorHover};
+      color: #ffffff !important;
+    }
+    .cta-button:visited {
+      color: #ffffff !important;
+    }
+    .cta-button:link {
+      color: #ffffff !important;
+    }
+    .closing {
+      color: #333333;
+      font-size: 16px;
+      margin: 30px 0 10px 0;
+    }
+    .sender {
+      color: #333333;
+      font-size: 16px;
     }
     .warning-box {
       background-color: #fff3cd;
@@ -54,66 +97,91 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
       color: #856404;
       font-size: 14px;
     }
-    .footer-links {
-      margin-top: 20px;
-      font-size: 12px;
-    }
-    .footer-links a {
-      color: #666666;
-      text-decoration: none;
-      margin: 0 10px;
-    }
-    .footer-links a:hover {
-      text-decoration: underline;
-    }
     .text-link {
       color: #666666;
       font-size: 12px;
       word-break: break-all;
+      margin-top: 20px;
     }
     .text-link a {
       color: ${primaryColor};
       text-decoration: none;
     }
+    .footer {
+      border-top: 1px solid #e9ecef;
+      padding: 20px 30px;
+      margin-top: 30px;
+    }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .support-text {
+      color: #666666;
+      font-size: 14px;
+      margin: 0;
+    }
+    .support-email {
+      color: ${primaryColor};
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .support-email-highlight {
+      background-color: #fff3cd;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+    .social-icon {
+      width: 32px;
+      height: 32px;
+      background-color: #8e44ad;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+    }
   </style>
 </head>
 
 <body>
-  <div class="container">
-    ${getEmailHeader(theme)}
-
-    <div class="content">
-      <h2 style="color: #333333; font-size: 24px; margin-bottom: 20px;">
-        Welcome to ${companyName} Platform
-      </h2>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="${process.env.FRONTEND_URL || 'http://localhost:3000'}/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+        </div>
       
-      <p style="color: #333333; font-size: 18px; line-height: 1.6; margin-bottom: 32px;">
-        You have been invited to join our healthcare platform. Click the button below to create your account and get started with your new workspace.
-      </p>
+      <div class="greeting">Hi,</div>
+      
+      <div class="main-message">
+        You have been invited to join our healthcare platform. Just click the button below to easily and securely create your account :)
+      </div>
 
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${inviteLink}" class="button" style="color: #ffffff !important;">
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${inviteLink}" class="cta-button">
           Create My Account
         </a>
       </div>
 
-      <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 30px 0;">
-        If you did not expect this invitation, you can safely ignore this message.
-      </p>
-
       <div class="warning-box">
-        <strong>⏰ Important:</strong> This invitation link will expire in 24 hours for security reasons.
+        <strong>⏰ Important:</strong> This invitation will expire in 24 hours for security reasons.
       </div>
 
-      <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-      
-      <p class="text-link">
+      <div class="text-link">
         Having trouble with the button? Copy and paste this link into your browser:<br>
         <a href="${inviteLink}">${inviteLink}</a>
-      </p>
+      </div>
+      
+      <div class="closing">Best,</div>
+      <div class="sender">
+        <strong>${companyName}</strong> team
+      </div>
     </div>
-
-    ${getEmailFooter(theme)}
+    
   </div>
 </body>
 </html>

@@ -63,8 +63,8 @@ export async function getUserEmailTheme(prisma: PrismaService, userId: string)
 - **Dynamic Elements**: Button colors, header background, company name
 
 #### 2. Verification Code (`verification-code.ts`)
-- **Usage**: `getVerificationCodeTemplate(code: string, theme?: EmailTheme)`
-- **Dynamic Elements**: Code color, header background, company name
+- **Usage**: `getVerificationCodeTemplate(code: string, theme?: EmailTheme, isBerryVirtual?: boolean, verificationUrl?: string)`
+- **Dynamic Elements**: Code color, header background, company name, Berry Virtual indicator, verification URL
 
 #### 3. Reset Password (`reset-password.ts`)
 - **Usage**: `getResetPasswordTemplate(userName: string, resetLink: string, theme?: EmailTheme)`
@@ -103,6 +103,35 @@ export async function getUserEmailTheme(prisma: PrismaService, userId: string)
 }
 ```
 
+### Berry Virtual Indicator
+
+For verification code emails, an additional visual indicator is shown when the user belongs to Berry Virtual:
+
+```html
+<div style="background-color: #FD7171; color: white; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; font-weight: 600;">
+  <strong>Berry Virtual Account</strong>
+</div>
+```
+
+This indicator only appears when `isBerryVirtual` is `true`.
+
+### Verification URL
+
+The verification code email includes a URL that contains both the verification token and the Berry Virtual status:
+
+```
+http://localhost:3000/signup/verification-code?t=TOKEN&berry=true
+http://localhost:3000/signup/verification-code?t=TOKEN&berry=false
+```
+
+- `t`: The verification token/code
+- `berry`: Boolean indicating if the user belongs to Berry Virtual (`true` or `false`)
+
+This URL allows the frontend to:
+1. Extract the verification code automatically
+2. Apply appropriate styling based on Berry Virtual status
+3. Show relevant branding and messaging
+
 ### MedVirtual Theme (Default)
 ```typescript
 {
@@ -120,11 +149,15 @@ export async function getUserEmailTheme(prisma: PrismaService, userId: string)
 All authentication-related emails automatically use dynamic theming:
 
 ```typescript
-// Get user email theme
+// Get user email theme and Berry Virtual status
 const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+const isBerryVirtual = await isUserBerryVirtual(this.prisma, user.id);
 
-// Send email with theme
-const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined);
+// Generate verification URL with Berry Virtual parameter
+const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
+
+// Send email with theme, Berry Virtual indicator, and verification URL
+const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
 ```
 
 **Affected Methods:**

@@ -9,10 +9,158 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
-  ) {}
+  ) { }
 
   private buildEmail(htmlInner: string, theme?: any): string {
-    return `<!DOCTYPE html><html><body><div style="max-width:600px;margin:0 auto;background:#ffffff;">${getEmailHeader(theme)}<div style="padding:24px;">${htmlInner}</div>${getEmailFooter(theme)}</div></body></html>`;
+    const primaryColor = theme?.primaryColor || '#01546B';
+    const companyName = theme?.companyName || 'MedVirtual';
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${companyName} Notification</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+    .email-wrapper {
+      background-color: #f4f4f4;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+    .content {
+      padding: 40px 30px;
+    }
+    .logo {
+      text-align: left;
+      margin-bottom: 30px;
+    }
+    .logo img {
+      max-width: 200px;
+      height: auto;
+    }
+    .greeting {
+      color: #333333;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .main-message {
+      color: #333333;
+      font-size: 16px;
+      line-height: 1.5;
+      margin-bottom: 30px;
+    }
+    .cta-button {
+      display: inline-block;
+      background-color: ${primaryColor};
+      color: #ffffff !important;
+      padding: 14px 28px;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 20px 0;
+      transition: background-color 0.2s ease;
+    }
+    .cta-button:hover {
+      background-color: ${theme?.primaryColorHover || '#013A4F'};
+      color: #ffffff !important;
+    }
+    .cta-button:visited {
+      color: #ffffff !important;
+    }
+    .cta-button:link {
+      color: #ffffff !important;
+    }
+    .closing {
+      color: #333333;
+      font-size: 16px;
+      margin: 30px 0 10px 0;
+    }
+    .sender {
+      color: #333333;
+      font-size: 16px;
+    }
+    .footer {
+      border-top: 1px solid #e9ecef;
+      padding: 20px 30px;
+      margin-top: 30px;
+    }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .support-text {
+      color: #666666;
+      font-size: 14px;
+      margin: 0;
+    }
+    .support-email {
+      color: ${primaryColor};
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .support-email-highlight {
+      background-color: #fff3cd;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+    .social-icon {
+      width: 32px;
+      height: 32px;
+      background-color: #8e44ad;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="${process.env.FRONTEND_URL || 'http://localhost:3000'}/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+        </div>
+      
+      <div class="greeting">Hi,</div>
+      
+      <div class="main-message">
+        ${htmlInner}
+      </div>
+      
+      <div class="closing">Best,</div>
+      <div class="sender">
+        <strong>${companyName}</strong> team
+      </div>
+    </div>
+    
+    
+  </div>
+</body>
+</html>`;
   }
 
   async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
@@ -42,16 +190,16 @@ export class NotificationsService {
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to 
+    const salaryRange = hr.salary_range_from && hr.salary_range_to
       ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
       : 'Not specified';
-    const startDate = hr.expected_start_date 
+    const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
-    
+
     const html = this.buildEmail(
       `<h2>Placement Completed</h2>
        <p>The hire request has been marked as <strong>placement completed</strong>.</p>
@@ -107,10 +255,10 @@ export class NotificationsService {
 
     const verb = action === 'edited' ? 'edited' : 'canceled';
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    
+
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
-    
+
     const html = this.buildEmail(
       `<h2>Hire Request ${verb.toUpperCase()}</h2>
        <p>The hire request was ${verb} by the client.</p>
@@ -170,16 +318,16 @@ export class NotificationsService {
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to 
+    const salaryRange = hr.salary_range_from && hr.salary_range_to
       ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
       : 'Not specified';
-    const startDate = hr.expected_start_date 
+    const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
-    
+
     const html = this.buildEmail(
       `<h2>New Hire Request Assigned</h2>
        <p>You have been assigned a new hire request that requires your attention.</p>
@@ -240,10 +388,10 @@ export class NotificationsService {
 
     const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
-    
+
     // Get user email theme
     const emailTheme = ticket.user ? await getUserEmailTheme(this.prisma, ticket.user.id) : null;
-    
+
     const html = this.buildEmail(
       `<h2>Ticket ${event.toUpperCase()}</h2>
        <p>The ticket was ${event}.</p>
