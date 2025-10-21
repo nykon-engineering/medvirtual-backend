@@ -2160,6 +2160,8 @@ export class OrganizationService {
     const organizations = await this.prisma.organization.findMany({
       where: {
         status: 'active',
+        organization_role: 'client',
+        hubspot_id: { not: null}
       },
       select: {
         id: true,
@@ -2171,95 +2173,17 @@ export class OrganizationService {
         },
       },
     });
-    console.log('Found organizations to sync:', organizations.length);
 
     const organizationsId = organizations.map(org => org.hubspot_id);
-    console.log('Organizations HubSpot IDs:', organizationsId);
+    const chunkSize = 100;
 
-    try{
-      const response = await axios.post('https://api.hubapi.com/crm/v4/associations/company/deal/batch/read', 
-        {
-          inputs:[
-            ...organizationsId.map(id => ({ id }))
-          ]
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
+    for (let i = 0; i < organizationsId.length; i += chunkSize) {
+      const chunk = organizationsId.slice(i, i + chunkSize);
 
-      console.log('Associations response received', response);
-
-      
-    }catch(error){
-      console.error('Error during sync:', error);
-      throw new BadRequestException(`Error during sync: ${error.message}`);
-    }
-
-
-    return true;
-  }
-
-  async syncOrganizationsWithDealsBKP() {
-    const properties = Object.keys(organizationToDbDictionary).join(',');
-    const propertiesDeals = Object.keys(dealToDbDictionary).join(',');
-  
-    try {
-      const now = Date.now();
-      const lastTime = now - 8 * 60 * 60 * 1000; // 8 hours
-
-      const response = await axios.post(
-        'https://api.hubapi.com/crm/v3/objects/companies/search',
-        {
-          filterGroups: [
-            {
-              filters: [
-                {
-                  propertyName: 'business_unit',
-                  operator: 'IN',
-                  values: ['MedVirtual', 'Berry Virtual'],
-                },
-                {
-                  propertyName: 'hs_lastmodifieddate', //when the user just created the organization, the hs_lastmodifieddate is the creation date
-                  operator: 'GTE',
-                  value: lastTime.toString(),
-                },
-              ],
-            },
-
-          ],
-          properties: properties.split(','),
-          limit: 100,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-  
-      const companies = response.data.results;
-      if (!companies || companies.length === 0)
-        throw new BadRequestException('Nenhuma organização encontrada.');
-  
-      const mappedOrganizations: any = [];
-  
-      // 2️⃣ Iterar sobre cada companhia e mapear para formato interno
-      for (const company of companies) {
-        const organizationData = mapOrganizationToDbHubspot(company.properties);
-  
-        organizationData.status = OrganizationStatus.inactive; // como no execute
-        organizationData.email = organizationData.email ?? undefined;
-        organizationData.industry = organizationData.industry
-          ? organizationIndustryToDbDictionary[organizationData.industry] ?? ''
-          : '';
-  
-        const dealsResponse = await axios.get(
-          `https://api.hubapi.com/crm/v3/objects/companies/${company.id}/associations/deals`,
+      try {
+        const response = await axios.post(
+          'https://api.hubapi.com/crm/v4/associations/company/deal/batch/read',
+          { inputs: chunk.map(id => ({ id })) },
           {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -2267,105 +2191,47 @@ export class OrganizationService {
             },
           },
         );
-  
-        const associatedDeals = dealsResponse.data.results || [];
-  
-        if (associatedDeals.length > 0) {
-          const dealIds = associatedDeals.map((d: any) => d.id);
-          const dealsData: any = [];
-  
-          for (const dealId of dealIds) {
 
-            if(dealId === null || dealId === undefined){
-              console.log(`Invalid deal ID: ${dealId}. Skipping...`);
-              continue;
-            }
+        //console.log(`Batch ${i / chunkSize + 1} response:`, response.data.results?.length || 0);
+        //console.log('Response data:', response.data);
 
-            const deal = await axios.post(`https://api.hubapi.com/crm/v3/objects/deals/search/`,
-              {  filterGroups: [
-                  {
-                    filters: [
-                      {
-                        propertyName: 'hs_object_id',
-                        operator: 'EQ',
-                        value: dealId,
-                      },
-                      {
-                        propertyName: 'pipeline',
-                        operator: 'EQ',
-                        value: '5155250',
-                      }
-                    ],
-                  },
-                ],
-                properties: propertiesDeals.split(','),
-                limit: 10,
-              },
-              {
-                headers: {
-                  Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                  'Content-Type': 'application/json',
-                },
-              },
-            );
-
-            if (!deal.data.results || deal.data.results.length === 0) {
-              //console.log(`Deal with ID ${dealId} not found or does not belong to the expected pipeline.`);
-              continue;
-            }
-
-            const mappedDeal = dealToDbDictionary
-              ? mapDealToDb(deal.data.results[0].properties)
-              : deal.data.results[0].properties;
-
-            dealsData.push(mappedDeal);
+        for (let object of response.data.results){
+          //console.log('from: ', object.from , '-> to', object.to);
+          const org = organizations.find(o => o.hubspot_id === object.from.id);
+          if (!org) {
+            console.log(`=> Organization with HubSpot ID ${object.from.id} not found in local data.`);
+            await this.organizationCreation.execute({ objectId: object.from });
+            continue;
           }
-  
 
-          organizationData.staff = dealsData;
-        }
-        
-        mappedOrganizations.push(organizationData);
-      }
-      console.log('mappedOrganizations', mappedOrganizations);
-
-
-      for (const org of mappedOrganizations) {
-        let existing = await this.prisma.organization.findUnique({
-          where: { hubspot_id: org.hubspot_id },
-          select: { id: true}
-        })
-        if (!existing) {
-          console.log('=>Creating organization: ', org.hubspot_id);
-          await this.organizationCreation.execute(org);
-        }
-        
-        for ( const staff of org.staff || [] ) {
-          let existingStaff = await this.prisma.staff.findFirst({
-            where: { hubspot_id: staff.hubspot_id },
-            select: { id: true }
-          })
-          if (!existingStaff){
-            console.log('Creating staff/deal: ', org.hubspot_id, '-',  staff.hubspot_id);
-            await this.dealCreation.execute(staff);
+          for (let association of object.to){
+            const dealHubspotId = association.toObjectId;
+            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
+            if (!existingStaff) {
+              console.log(`==>Staff with HubSpot ID ${dealHubspotId} NOT FOUND for  organization ${org.hubspot_id}.`);
+              await this.dealCreation.execute({ objectId: dealHubspotId });
+            }
           }
         }
+
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          console.error('Error in batch', i / chunkSize + 1, error.response?.data);
+        } else {
+          console.error('Unexpected error:', error);
+        }
       }
-      
-      await this.prisma.sync.create({
-        data: {
-          role: 'organizations',
-          last_synced_at: new Date(),
-        },
-      })
-  
-      return mappedOrganizations;
-    } catch (error) {
-      console.error(error);
-      throw new BadRequestException(
-        `Error sync organizations: ${error.message}`,
-      );
     }
+
+    await this.prisma.sync.create({
+      data: {
+        role: 'organizations',
+        last_synced_at: new Date(),
+      },
+    })
+    
+    return true;
+    
   }
   
 
