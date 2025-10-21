@@ -142,7 +142,7 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
 
       <div style="text-align: left; margin: 30px 0;">
         <a href="${inviteLink}" class="cta-button">
-          Activate my account
+          Activate My Account
         </a>
       </div>
 
