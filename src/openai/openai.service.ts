@@ -221,6 +221,7 @@ export class OpenaiService {
         Keep a similar lighting setup (soft studio light) and neutral background, but without accessories like headphone.
         Style: modern corporate headshot, natural facial expression, confident and friendly.
         Avoid copying the person — just use the image as reference for lighting and style.
+        The avatar result need to be on format 1024x1024 pixels.
         `;
 
         const image = fs.createReadStream(imageDownloaded);
