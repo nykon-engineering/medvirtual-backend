@@ -67,7 +67,7 @@ export default function getResetPasswordTemplate(
       color: #ffffff !important;
       padding: 14px 28px;
       text-decoration: none;
-      border-radius: 8px;
+      border-radius: 30px;
       font-weight: 600;
       font-size: 16px;
       margin: 20px 0;
@@ -91,15 +91,6 @@ export default function getResetPasswordTemplate(
     .sender {
       color: #333333;
       font-size: 16px;
-    }
-    .warning-box {
-      background-color: #fff3cd;
-      border: 1px solid #ffeaa7;
-      border-radius: 8px;
-      padding: 15px;
-      margin: 25px 0;
-      color: #856404;
-      font-size: 14px;
     }
     .text-link {
       color: #666666;
@@ -136,18 +127,7 @@ export default function getResetPasswordTemplate(
       padding: 1px 3px;
       border-radius: 2px;
     }
-    .social-icon {
-      width: 32px;
-      height: 32px;
-      background-color: #8e44ad;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: 14px;
-    }
+    
   </style>
 </head>
 
@@ -156,7 +136,7 @@ export default function getResetPasswordTemplate(
     <div class="container">
       <div class="content">
         <div class="logo">
-          <img src="${process.env.FRONTEND_URL || 'http://localhost:3000'}/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+          <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
         </div>
       
       <div class="greeting">Hi ${userName},</div>
@@ -165,15 +145,13 @@ export default function getResetPasswordTemplate(
         We received a request to reset your password for your ${companyName} account. Just click the button below to easily and securely create a new password :)
       </div>
 
-      <div style="text-align: center; margin: 30px 0;">
+      <div style="text-align: left; margin: 30px 0;">
         <a href="${resetLink}" class="cta-button">
           Reset My Password
         </a>
       </div>
 
-      <div class="warning-box">
         <strong>⏰ Important:</strong> This password reset link will expire in 10 minutes for security reasons.
-      </div>
 
       <div style="color: #666666; font-size: 14px; line-height: 1.5; margin: 20px 0;">
         If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.

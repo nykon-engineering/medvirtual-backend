@@ -3,7 +3,7 @@ import { EmailTheme } from './theme';
 export default function getVerificationCodeTemplate(verificationCode: string, theme?: EmailTheme, isBerryVirtual?: boolean, verificationUrl?: string) {
   const primaryColor = theme?.primaryColor || '#01546B';
   const companyName = theme?.companyName || 'MedVirtual';
-  
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -85,7 +85,7 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
       color: #ffffff !important;
       padding: 14px 28px;
       text-decoration: none;
-      border-radius: 8px;
+      border-radius: 30px;
       font-weight: 600;
       font-size: 16px;
       margin: 20px 0;
@@ -110,15 +110,7 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
       color: #333333;
       font-size: 16px;
     }
-    .warning-box {
-      background-color: #fff3cd;
-      border: 1px solid #ffeaa7;
-      border-radius: 8px;
-      padding: 15px;
-      margin: 25px 0;
-      color: #856404;
-      font-size: 14px;
-    }
+    
     .footer {
       border-top: 1px solid #e9ecef;
       padding: 20px 30px;
@@ -144,18 +136,7 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
       padding: 1px 3px;
       border-radius: 2px;
     }
-    .social-icon {
-      width: 32px;
-      height: 32px;
-      background-color: #8e44ad;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: 14px;
-    }
+    
   </style>
 </head>
 
@@ -164,7 +145,7 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
     <div class="container">
       <div class="content">
         <div class="logo">
-          <img src="${process.env.FRONTEND_URL || 'http://localhost:3000'}/${isBerryVirtual ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+          <img src="https://staging.medvirtual.ai/${isBerryVirtual ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
         </div>
       
       <div class="greeting">Hi,</div>
@@ -189,16 +170,14 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
       </div>
       
       ${verificationUrl ? `
-      <div style="text-align: center; margin: 30px 0;">
+      <div style="text-align: left; margin: 30px 0;">
         <a href="${verificationUrl}" class="cta-button">
           Verify Account
         </a>
       </div>
       ` : ''}
       
-      <div class="warning-box">
         <strong>⏰ Important:</strong> This code will expire in 10 minutes for security reasons.
-      </div>
       
       <div class="closing">Best,</div>
       <div class="sender">
