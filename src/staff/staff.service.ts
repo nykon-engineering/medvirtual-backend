@@ -754,14 +754,17 @@ export class StaffService {
       throw new BadRequestException('Staff ID is required');
     }
     const staff = await this.prisma.staff.findUnique({
-      where: { id: staffId },
+      where: { 
+        id: staffId, 
+        status: 'termination-requested' 
+      },
       select: {
         id: true,
       }
     });
 
     if (!staff) {
-      throw new NotFoundException('Staff member not found');
+      throw new NotFoundException('Staff member not found or not in termination-requested status');
     }
 
     const updatedStaff = await this.prisma.staff.update({

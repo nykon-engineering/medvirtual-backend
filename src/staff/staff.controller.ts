@@ -232,7 +232,7 @@ export class StaffController {
   @ApiOperation({ summary: "Back to active", description: 'Move staff from termination-requested to active' })
   @ApiResponse({ status: 200, description: 'Staff member moved back to active successfully' })
   @ApiResponse({ status: 400, description: 'Staff ID is required' })
-  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  @ApiResponse({ status: 404, description: 'Staff member not found or not in termination-requested status' })
   @ApiResponse({ status: 400, description: 'Failed to move staff member back to active' })
   
   async moveStaffBackToActive(@Param('id') staffId: string) {

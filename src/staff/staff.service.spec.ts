@@ -42,7 +42,7 @@ describe('StaffService', () => {
 
   describe('moveStaffBackToActive', () => {
     const mockStaffId = '123';
-    const mockStaffData = { id: mockStaffId };
+    const mockStaffData = { id: mockStaffId, status: 'termination-requested' };
     const mockUpdatedStaff = { id: mockStaffId, status: 'active' };
     const mockFindOneResult = { id: mockStaffId, name: 'John Doe' };
   
@@ -60,7 +60,7 @@ describe('StaffService', () => {
   
       await expect(service.moveStaffBackToActive(mockStaffId)).rejects.toThrow(NotFoundException);
       expect(mockPrisma.staff.findUnique).toHaveBeenCalledWith({
-        where: { id: mockStaffId },
+        where: { id: mockStaffId, status: 'termination-requested' },
         select: { id: true },
       });
     });
@@ -85,7 +85,7 @@ describe('StaffService', () => {
       const result = await service.moveStaffBackToActive(mockStaffId);
   
       expect(mockPrisma.staff.findUnique).toHaveBeenCalledWith({
-        where: { id: mockStaffId },
+        where: { id: mockStaffId, status: 'termination-requested' },
         select: { id: true },
       });
       expect(mockPrisma.staff.update).toHaveBeenCalledWith({
