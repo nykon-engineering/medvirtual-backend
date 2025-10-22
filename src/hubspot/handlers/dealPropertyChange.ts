@@ -100,8 +100,8 @@ export class HandlerDealPropertyChange {
                         id: deal.id
                     },
                     data: {
-                        candidate_id: OrganizationExists ? OrganizationExists.id : null,
-                        hubspot_candidate_id: getObjectOrg.data.results[0].id
+                        organization_id: OrganizationExists ? OrganizationExists.id : null,
+                        hubspot_organization_id: getObjectOrg.data.results[0].id
                     }
                 })
             }
