@@ -152,7 +152,7 @@ export class NotificationsService {
 </html>`;
   }
 
-  async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestPlacementCompleted(hireRequestId: string, winnerCandidateId?: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -171,6 +171,24 @@ export class NotificationsService {
         organization: {
           select: { name: true },
         },
+        panels: {
+          select: {
+            id: true,
+            panelCandidates: {
+              where: winnerCandidateId ? { candidate_id: winnerCandidateId } : { status: 'selected_by_client' },
+              select: {
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
@@ -183,6 +201,12 @@ export class NotificationsService {
       : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
+      : 'Not specified';
+
+    // Get winner candidate name
+    const winnerCandidate = hr.panels?.[0]?.panelCandidates?.[0]?.candidate;
+    const winnerName = winnerCandidate
+      ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
       : 'Not specified';
 
     // Get user email theme
@@ -201,6 +225,7 @@ export class NotificationsService {
          <p><strong>Priority:</strong> ${hr.priority}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
+         <p><strong>Selected Candidate:</strong> ${winnerName}</p>
        </div>
        
         <p>Please proceed with onboarding steps.</p>
@@ -347,23 +372,8 @@ export class NotificationsService {
     });
   }
 
-  async notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'closed'): Promise<boolean> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        type: true,
-        createdAt: true,
-        user: { select: { id: true, email: true } }, // assignee
-        organization: {
-          select: { name: true },
-        },
-      },
-    });
+  async notifyTicketEvent(ticket: any, event: 'created' | 'assigned' | 'closed'): Promise<boolean> {
+
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     const to = ticket.user?.email ? [ticket.user.email] : undefined;
@@ -374,6 +384,25 @@ export class NotificationsService {
 
     // Get user email theme
     const emailTheme = ticket.user ? await getUserEmailTheme(this.prisma, ticket.user.id) : null;
+
+    // Build staff member details if available
+    let staffDetails = '';
+    if (ticket.staff?.candidate) {
+      const staffName = `${ticket.staff.candidate.name}`.trim() || 'Unknown';
+      staffDetails = `
+         <p><strong>Staff Member:</strong> ${staffName}</p>
+         <p><strong>Staff Email:</strong> ${ticket.staff.candidate.email || 'N/A'}</p>`;
+    }
+
+    // Build candidate details if available
+    let candidateDetails = '';
+    if (ticket.candidate) {
+      const staffName = `${ticket.candidate.name || ' '}`.trim() || 'Unknown';
+      candidateDetails = `
+         <p><strong>Staff Member:</strong> ${staffName}</p>
+         <p><strong>Staff Email:</strong> ${ticket.candidate.email || 'N/A'}</p>`;
+    }
+
 
     const html = this.buildEmail(
       `<h2>Ticket ${event.toUpperCase()}</h2>
@@ -387,7 +416,7 @@ export class NotificationsService {
          <p><strong>Type:</strong> ${ticket.type}</p>
          <p><strong>Priority:</strong> ${ticket.priority}</p>
          <p><strong>Status:</strong> ${ticket.status}</p>
-         <p><strong>Created:</strong> ${createdDate}</p>
+         <p><strong>Created:</strong> ${createdDate}</p>${staffDetails}${candidateDetails}
        </div>
        
        <div style="text-align: left; margin: 30px 0;">

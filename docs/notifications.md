@@ -34,10 +34,11 @@ The system uses the following notification methods internally:
 - **Recipient**: The newly assigned user
 
 #### 3. Placement Completed
-- **Method**: `notifyHireRequestPlacementCompleted(hireRequestId: string)`
+- **Method**: `notifyHireRequestPlacementCompleted(hireRequestId: string, winnerCandidateId?: string)`
 - **Triggered when**: A hire request status changes to 'placement_completed'
-- **Used in**: `HireRequestService.updateStatus()`
+- **Used in**: `HireRequestService.changeWinner()`
 - **Recipient**: The assigned user
+- **Includes**: Winner candidate name in the email template
 
 #### 4. Client Changes
 - **Method**: `notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled')`

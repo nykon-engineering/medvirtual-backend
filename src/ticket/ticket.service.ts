@@ -199,7 +199,7 @@ export class TicketService {
 
       // Notify assignee via email (non-blocking)
       try {
-        await this.notifications.notifyTicketEvent(ticket.id, 'created');
+        await this.notifications.notifyTicketEvent(ticketFull, 'created');
       } catch (err) {
         console.warn('[notifications] ticket-created email failed', err?.message || err);
       }
@@ -333,7 +333,7 @@ export class TicketService {
 
       // Notify assignee via email (non-blocking)
       try {
-        await this.notifications.notifyTicketEvent(id, 'assigned');
+        await this.notifications.notifyTicketEvent(ticket, 'assigned');
       } catch (err) {
         console.warn('[notifications] ticket-assigned email failed', err?.message || err);
       }
@@ -416,7 +416,7 @@ export class TicketService {
       // Notify assignee via email when ticket is closed (non-blocking)
       if (data.status === 'closed') {
         try {
-          await this.notifications.notifyTicketEvent(id, 'closed');
+          await this.notifications.notifyTicketEvent(ticket, 'closed');
         } catch (err) {
           console.warn('[notifications] ticket-closed email failed', err?.message || err);
         }
