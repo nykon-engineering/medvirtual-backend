@@ -288,9 +288,10 @@ describe('AuthService - signIn', () => {
       authentication_method: 'different',
       status: 'active',
     });
-    prismaMock.organization.findMany.mockResolvedValue([
-      { business_unit: 'Test Unit', status: 'active' }
-    ]);
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new UnauthorizedException(
@@ -307,9 +308,10 @@ describe('AuthService - signIn', () => {
       verified: false,
       status: 'active',
     });
-    prismaMock.organization.findMany.mockResolvedValue([
-      { business_unit: 'Test Unit', status: 'active' }
-    ]);
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new UnauthorizedException('User not verified'),
@@ -326,9 +328,10 @@ describe('AuthService - signIn', () => {
       status: 'active',
       organization_id: 'org1',
     });
-    prismaMock.organization.findMany.mockResolvedValue([
-      { business_unit: 'Test Unit', status: 'active' }
-    ]);
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
@@ -347,9 +350,10 @@ describe('AuthService - signIn', () => {
       status: 'active',
       organization_id: 'org1',
     });
-    prismaMock.organization.findMany.mockResolvedValue([
-      { business_unit: 'Test Unit', status: 'active' }
-    ]);
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
@@ -375,9 +379,10 @@ describe('AuthService - signIn', () => {
       role: 'admin',
     };
     userMock.findByEmail.mockResolvedValue(userObj);
-    prismaMock.organization.findMany.mockResolvedValue([
-      { business_unit: 'Berry Virtual', status: 'active' }
-    ]);
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Berry Virtual', 
+      status: 'active' 
+    });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
@@ -419,11 +424,10 @@ describe('AuthService - signIn', () => {
       role: 'admin',
     };
     userMock.findByEmail.mockResolvedValue(userObj);
-    prismaMock.organization.findMany.mockResolvedValue([
-      { business_unit: 'Other Unit', status: 'active' },
-      { business_unit: 'Berry Virtual', status: 'active' },
-      { business_unit: 'Another Unit', status: 'active' }
-    ]);
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Berry Virtual', 
+      status: 'active' 
+    });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
