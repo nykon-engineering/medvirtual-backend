@@ -15,7 +15,6 @@ export class HandlerDealCreation {
 
 
     async execute(event){
-        
         try{
             const properties = Object.keys(dealToDbDictionary).join(',');
             const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}?properties=${properties}`,
@@ -29,7 +28,6 @@ export class HandlerDealCreation {
             if (!getObject) {
                 throw new BadRequestException('No object data found');
             }
-            
             
             if (getObject.data.properties.pipeline && getObject.data.properties.pipeline !== '5155250') return; //Only process deals from BV OPERATIONS PIPELINE (5155250)
 

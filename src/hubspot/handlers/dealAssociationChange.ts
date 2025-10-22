@@ -14,13 +14,13 @@ export class HandlerDealAssociationChange {
         switch (event.associationType) {
                
             case 'DEAL_TO_COMPANY':
-
+                
                 //HERE I JUST REVERT THE IDS TO REUSE THE SAME LOGIC ON 'COMPANY_TO_DEAL'
                 const tempId = event.fromObjectId;
                 event.fromObjectId = event.toObjectId;
                 event.toObjectId = tempId;
-                event.subscriptionType = 'COMPANY_TO_DEAL'
-                
+                event.associationType = 'COMPANY_TO_DEAL'
+
                 await this.organizationAssociationChange.execute(event);
 
                 break;

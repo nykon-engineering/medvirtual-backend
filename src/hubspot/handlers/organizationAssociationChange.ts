@@ -52,7 +52,11 @@ export class HandlerOrganizationAssociationChange {
                 })
                 const eventStaff = {...event, objectId: event.toObjectId}
                 if(!staff) {
-                    await this.dealCreation.execute(eventStaff);
+                    const newDeal = await this.dealCreation.execute(eventStaff);
+                    if (!newDeal) {
+                        console.log('Impossible to create staff from dealCreation handler | Maybe this deal is not in the right pipeline');
+                        return;
+                    }
                 } 
 
                 await this.prisma.staff.update({
