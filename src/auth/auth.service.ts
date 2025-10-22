@@ -19,6 +19,7 @@ import { AuthInviteUserDto } from './dto/authInviteUser.dto';
 import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
 import getVerificationCodeTemplate from '../common/utils/email-templates/verification-code';
 import InviteSignup from '../common/utils/email-templates/invite-signup';
+import { getUserEmailTheme, isUserBerryVirtual } from '../common/utils/email-templates/theme-helper';
 import { AuthSignUpDto } from './dto/authSignUp.dto';
 import { AuthVerifyCodeDtoReturn } from './dto/authVerifyCodeReturn.dto';
 import { AuthinvitedUserSignupDto } from './dto/invitedUserSignup.dto';
@@ -157,16 +158,22 @@ export class AuthService {
       );
     }
 
+    let business_unit: string | null = null;
     // Only check organization status for users who belong to an organization
     if (user.organization_id) {
       const organization = await this.prisma.organization.findUnique({
         where: { id: user.organization_id },
-        select: { status: true },
+        select: {
+          business_unit: true,
+          status: true,
+        },
       });
-      if (!organization || organization.status === 'inactive')
+      if (!organization || organization.status === 'inactive') {
         throw new UnauthorizedException(
           'User organization not found or inactive. Please contact support.',
         );
+      }
+      business_unit = organization.business_unit;
     }
 
     if (user.authentication_method !== authenticationMethod) {
@@ -216,6 +223,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         clientId: user.organization_id,
+        business_unit: business_unit,
       },
     };
   }
@@ -267,8 +275,15 @@ export class AuthService {
       throw new BadRequestException('Failed to generate verification code');
     }
 
+    // Get user email theme and Berry Virtual status
+    const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
+    const isBerryVirtual = await isUserBerryVirtual(this.prisma, newUser.id);
+    
+    // Generate verification URL with Berry Virtual parameter
+    const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
+    
     // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(code);
+    const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
     const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,
@@ -430,8 +445,15 @@ export class AuthService {
       throw new BadRequestException('Failed to store verification code');
     }
 
+    // Get user email theme and Berry Virtual status
+    const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+    const isBerryVirtual = await isUserBerryVirtual(this.prisma, user.id);
+    
+    // Generate verification URL with Berry Virtual parameter
+    const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
+    
     // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(code);
+    const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
     const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: user.email,
@@ -514,9 +536,12 @@ export class AuthService {
       throw new BadRequestException('Failed to generate invite code');
     }
 
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
+    
     // Send signup link via email
     const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const emailBody = InviteSignup(inviteLink);
+    const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,

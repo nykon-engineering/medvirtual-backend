@@ -11,6 +11,7 @@ import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { RecoveryForgotPasswordDto } from './dto/recoveryForgotPassword.dto';
 import getResetPasswordTemplate from '../common/utils/email-templates/reset-password';
+import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { RecoveryResetPasswordDto } from './dto/recoveryResetPassword.dto';
 
 @Injectable()
@@ -38,10 +39,14 @@ export class RecoverypassService {
 
     if (!hash) throw new BadRequestException('Error generating recovery hash');
 
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+    
     // Send verification code via email
     const emailBody = getResetPasswordTemplate(
       user.first_name,
       `${process.env.FRONTEND_URL}/set-password?t=${hash}`,
+      emailTheme || undefined
     );
     const mailSent = await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',

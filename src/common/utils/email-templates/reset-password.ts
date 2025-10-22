@@ -1,109 +1,173 @@
-import { EmailHeader, EmailFooter } from './components';
+import { getEmailHeader, getEmailFooter } from './components';
+import { EmailTheme } from './theme';
 
 export default function getResetPasswordTemplate(
   userName: string,
   resetLink: string,
+  theme?: EmailTheme
 ) {
+  const primaryColor = theme?.primaryColor || '#01546B';
+  const primaryColorHover = theme?.primaryColorHover || '#013A4F';
+  const companyName = theme?.companyName || 'MedVirtual';
+
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Password Reset - MedVirtual Platform</title>
+  <title>Password Reset - ${companyName} Platform</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       margin: 0;
       padding: 0;
       background-color: #f4f4f4;
       -webkit-text-size-adjust: 100%;
       -ms-text-size-adjust: 100%;
     }
+    .email-wrapper {
+      background-color: #f4f4f4;
+      padding: 20px;
+      min-height: 100vh;
+    }
     .container {
       max-width: 600px;
       margin: 0 auto;
       background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
     }
     .content {
       padding: 40px 30px;
-      text-align: center;
     }
-    .button {
+    .logo {
+      text-align: left;
+      margin-bottom: 30px;
+    }
+    .logo img {
+      max-width: 200px;
+      height: auto;
+    }
+    .greeting {
+      color: #333333;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .main-message {
+      color: #333333;
+      font-size: 16px;
+      line-height: 1.5;
+      margin-bottom: 30px;
+    }
+    .cta-button {
       display: inline-block;
-      padding: 16px 32px;
-      background-color: #01546B;
-      color: #ffffff;
+      background-color: ${primaryColor};
+      color: #ffffff !important;
+      padding: 14px 28px;
       text-decoration: none;
-      border-radius: 8px;
+      border-radius: 30px;
       font-weight: 600;
       font-size: 16px;
       margin: 20px 0;
+      transition: background-color 0.2s ease;
     }
-    .button:hover {
-      background-color: #013A4F;
+    .cta-button:hover {
+      background-color: ${primaryColorHover};
+      color: #ffffff !important;
     }
-    .warning-box {
-      background-color: #fff3cd;
-      border: 1px solid #ffeaa7;
-      border-radius: 8px;
-      padding: 15px;
-      margin: 25px 0;
-      color: #856404;
-      font-size: 14px;
+    .cta-button:visited {
+      color: #ffffff !important;
+    }
+    .cta-button:link {
+      color: #ffffff !important;
+    }
+    .closing {
+      color: #333333;
+      font-size: 16px;
+      margin: 30px 0 10px 0;
+    }
+    .sender {
+      color: #333333;
+      font-size: 16px;
     }
     .text-link {
       color: #666666;
       font-size: 12px;
       word-break: break-all;
+      margin-top: 20px;
     }
     .text-link a {
-      color: #01546B;
+      color: ${primaryColor};
       text-decoration: none;
     }
+    .footer {
+      border-top: 1px solid #e9ecef;
+      padding: 20px 30px;
+      margin-top: 30px;
+    }
+    .footer-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .support-text {
+      color: #666666;
+      font-size: 14px;
+      margin: 0;
+    }
+    .support-email {
+      color: ${primaryColor};
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .support-email-highlight {
+      background-color: #fff3cd;
+      padding: 1px 3px;
+      border-radius: 2px;
+    }
+    
   </style>
 </head>
 
 <body>
-  <div class="container">
-    ${EmailHeader}
-
-    <div class="content">
-      <h2 style="color: #333333; font-size: 24px; margin-bottom: 20px;">
-        Reset Your Password
-      </h2>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+        </div>
       
-      <p style="color: #333333; font-size: 18px; line-height: 1.6; margin-bottom: 20px;">
-        Hello ${userName},
-      </p>
+      <div class="greeting">Hi ${userName},</div>
       
-      <p style="color: #333333; font-size: 18px; line-height: 1.6; margin-bottom: 32px;">
-        We received a request to reset your password for your MedVirtual account. Click the button below to create a new password.
-      </p>
+      <div class="main-message">
+        We received a request to reset your password for your ${companyName} account. Just click the button below to easily and securely create a new password :)
+      </div>
 
-      <div style="text-align: center; margin: 32px 0;">
-        <a href="${resetLink}" class="button" style="color: #ffffff !important;">
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${resetLink}" class="cta-button">
           Reset My Password
         </a>
       </div>
 
-      <div class="warning-box">
         <strong>⏰ Important:</strong> This password reset link will expire in 10 minutes for security reasons.
+
+      <div style="color: #666666; font-size: 14px; line-height: 1.5; margin: 20px 0;">
+        If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
       </div>
 
-      <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 30px 0;">
-        If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.
-      </p>
-
-      <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-      
-      <p class="text-link">
+      <div class="text-link">
         Having trouble with the button? Copy and paste this link into your browser:<br>
         <a href="${resetLink}">${resetLink}</a>
-      </p>
+      </div>
+      
+      <div class="closing">Best,</div>
+      <div class="sender">
+        <strong>${companyName}</strong> team
+      </div>
     </div>
-
-    ${EmailFooter}
+    
   </div>
 </body>
 </html>

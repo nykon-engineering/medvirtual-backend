@@ -17,6 +17,7 @@
     "build:esbuild": "node esbuild.config.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
+    "start:dev": "nest start --watch",
     "dev": "npm test && npm run prisma:clean && npm install && npm run prisma:generate && npx nodemon",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",

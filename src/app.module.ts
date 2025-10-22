@@ -21,6 +21,7 @@ import { HireRequestModule } from './hire-request/hire-request.module';
 import { TicketModule } from './ticket/ticket.module';
 import { StaffModule } from './staff/staff.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { EmailTestModule } from './email-test/email-test.module';
 
 @Module({
   imports: [
@@ -44,7 +45,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     HireRequestModule,
     TicketModule,
     StaffModule,
-    NotificationsModule
+    NotificationsModule,
+    EmailTestModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],
