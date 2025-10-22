@@ -161,33 +161,19 @@ export class AuthService {
     let business_unit: string | null = null;
     // Only check organization status for users who belong to an organization
     if (user.organization_id) {
-      const userOrganizations = await this.prisma.organization.findMany({
-        where: {
-          OR: [
-            ...(user.organization_id ? [{ id: user.organization_id }] : []),
-            { admin_id: user.id },
-            { owner_id: user.id }
-          ]
-        },
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: user.organization_id },
         select: {
           business_unit: true,
-          status: true
-        }
+          status: true,
+        },
       });
-
-      // Find Berry Virtual first, then fallback to any other business_unit
-      const berryVirtualOrg = userOrganizations.find(org =>
-        org.business_unit === "Berry Virtual" && org.status === 'active'
-      );
-
-      business_unit = berryVirtualOrg?.business_unit ??
-        userOrganizations.find(org => org.status === 'active')?.business_unit ??
-        null;
-
-      if (!business_unit)
+      if (!organization || organization.status === 'inactive') {
         throw new UnauthorizedException(
           'User organization not found or inactive. Please contact support.',
         );
+      }
+      business_unit = organization.business_unit;
     }
 
     if (user.authentication_method !== authenticationMethod) {
