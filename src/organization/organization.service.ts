@@ -300,6 +300,8 @@ export class OrganizationService {
         location,
         admin,
         business_unit,
+        hasUser,
+        hasStaff,
         sortBy = 'createdAt',
         sortOrder = 'desc',
       } = query;
@@ -385,6 +387,18 @@ export class OrganizationService {
 
       if (business_unit) {
         whereClause.business_unit = business_unit;
+      }
+
+      if (hasUser) {
+        whereClause.users = {
+          some: {},
+        };
+      }
+
+      if (hasStaff) {
+        whereClause.staff = {
+          some: {},
+        };
       }
 
       // Build orderBy clause
