@@ -396,6 +396,7 @@ describe('AuthService - signIn', () => {
       message: 'User authenticated successfully',
       token: 'mocked-token',
       user: {
+        id: 'u1',
         firstName: 'Test',
         lastName: 'User',
         email: dataFake.email,

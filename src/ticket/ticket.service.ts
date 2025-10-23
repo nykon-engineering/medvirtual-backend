@@ -191,6 +191,7 @@ export class TicketService {
           staff: createTicketDto.staff_id
             ? { connect: { id: createTicketDto.staff_id } }
             : undefined,
+          created_by: user.id,
         },
       });
       if (!ticket) throw new BadRequestException('Failed to create ticket');
@@ -228,11 +229,19 @@ export class TicketService {
         where: {
           type: type ? type : undefined,
           priority: priority ? priority as Priority : undefined,
-          user: user.role === 'system_admin' ? { is : { id: user.id}} : undefined,
-          OR: search ? [
-            { organization: { name: { contains: search, mode: 'insensitive' } } },
-            { title: { contains: search, mode: 'insensitive' } }
-          ] : undefined,
+          ...(user.role === 'system_super_admin' ? {} : 
+              user.role === 'system_admin' ? {
+                OR: [
+                  { user: { is: { id: user.id } } },
+                  { created_by: user.id }
+                ]
+              } : { user: { is: { id: user.id } } }),
+          ...(search ? {
+            OR: [
+              { organization: { name: { contains: search, mode: 'insensitive' } } },
+              { title: { contains: search, mode: 'insensitive' } }
+            ]
+          } : {}),
           
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
@@ -247,6 +256,7 @@ export class TicketService {
           status: true,
           priority: true,
           createdAt: true,
+          created_by: true, 
           organization: {
             select: {
               id: true,

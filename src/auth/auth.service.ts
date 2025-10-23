@@ -218,6 +218,7 @@ export class AuthService {
       message: 'User authenticated successfully',
       token: token,
       user: {
+        id: user.id,
         firstName: user.first_name,
         lastName: user.last_name,
         email: user.email,

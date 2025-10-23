@@ -41,4 +41,9 @@ export class CreateTicketDto {
     @IsString()
     @IsOptional()
     staff_id?: string;
+
+    @ApiProperty({ description: 'ID of the user who created the ticket', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    created_by?: string;
 }

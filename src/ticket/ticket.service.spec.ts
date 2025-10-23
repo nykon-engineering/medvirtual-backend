@@ -191,8 +191,7 @@ describe('TicketService', () => {
         where: {
           type: undefined,
           priority: undefined,
-          user: undefined,
-          OR: undefined,
+          user: { is: { id: "1" } },
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
             AND: [
@@ -209,6 +208,7 @@ describe('TicketService', () => {
           status: true,
           priority: true,
           createdAt: true,
+          created_by: true,
           organization: {
             select: {
               id: true,
