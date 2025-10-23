@@ -154,7 +154,7 @@ export class UserController {
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Number of results to return (max 50)',
+    description: 'Number of results to return (no maximum limit)',
   })
   async searchUsers(@Query() query: SearchUsersDto) {
     return this.userService.searchUsers(query);
