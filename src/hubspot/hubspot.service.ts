@@ -2,9 +2,9 @@ import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException 
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
-import { Prisma } from '@prisma/client';
+import { OrganizationRole, Prisma } from '@prisma/client';
 
-import {  mapHubspotToDb } from '../common/utils/hubspot.util'
+import {  mapHubspotToDb, mapOrganizationToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 
 import { CandidatesService } from '../candidate/candidates.service';
@@ -27,6 +27,8 @@ import { HandlerDealCreation } from './handlers/dealCreation';
 import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
+import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
+import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
 
 
 
@@ -458,6 +460,78 @@ export class HubspotService {
         }
     }
 
+    //// => This service is just a example to read organizations on our database and UPDATE it with the data from hubspot
+    async updateOrganizations(): Promise<any> {
+        
+        const properties = Object.keys(organizationToDbDictionary).join(',');
+
+        const organizations = await this.prisma.organization.findMany({
+            where:{
+                industry: ''
+            },
+            orderBy:{
+                updatedAt: 'asc'
+            },
+            select:{
+                id: true,
+                hubspot_id: true,
+                name: true,
+                owner_id: true,
+            }
+        })
+       // console.log('Candidates to process:', candidates);
+
+        for (const org of organizations){
+            if (!org.hubspot_id) {  
+                console.log('Organization with ID:', org.id, 'does not have a Hubspot ID. Skipping update.');
+                continue;
+            }
+            const response = await this.hubspotClient.crm.companies.searchApi.doSearch({
+            filterGroups: [
+                {
+                    filters: [
+                        {
+                            propertyName: 'hs_object_id',
+                            operator: FilterOperatorEnum.Eq,
+                            value: org.hubspot_id
+                        }
+                    ]
+                }
+            ],
+            properties: properties.split(','),
+            limit: 100
+            })
+            if (!response || !response.results || response.results.length === 0) {
+                //throw new BadRequestException('No candidates data found');
+                console.log('No Organization data found in Hubspot for Organization ID:', org.id, 'with Hubspot ID:', org.hubspot_id);
+                continue;
+            }
+
+            const hubspotProps = response.results[0].properties;
+            console.log('Organization found in Hubspot:', hubspotProps.name);
+
+            const organizationData = mapOrganizationToDbHubspot(hubspotProps);
+
+            organizationData.email = organizationData.email ?? undefined;
+            organizationData.industry = organizationData.industry 
+            ? organizationIndustryToDbDictionary[organizationData.industry] ?? organizationData.industry  
+            : '';
+            organizationData.organization_role = organizationData.organization_role?.toLocaleLowerCase() === 'prospect' ? OrganizationRole.prospect : OrganizationRole.client;
+            organizationData.specialties = organizationData.specialties ? organizationData.specialties.toString().split(',').map((item: string) => item.trim()).filter((item: string) => item.length > 0) : [];
+            organizationData.number_of_employees = organizationData.number_of_employees ? Number(organizationData.number_of_employees) : 0;
+
+            await this.prisma.organization.update({
+                where: {
+                    id: org.id
+                },
+                data: organizationData,
+            })
+            
+            console.log('Organization updated:', org.name,':=>', organizationData);
+  
+        }
+    }
+
 
     ////=> this service is just a example to populate our database
     async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {
@@ -481,7 +555,7 @@ export class HubspotService {
             }
 
 
-          for (let i=0; i< response.results.length ; i++){
+            for (let i=0; i< response.results.length ; i++){
             const candidateData = mapHubspotToDb(response.results[i].properties);
             
             //=> function to populate db with the datas from hubspot
