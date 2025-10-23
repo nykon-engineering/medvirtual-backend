@@ -40,6 +40,7 @@ export class CandidatesService {
     monthly_compensation_to?: string, 
     years_of_experience?: string,
     specializations?: string,
+    positions?: string,
     skills?: string,
     languages?: string,
     page?: number,
@@ -85,6 +86,9 @@ export class CandidatesService {
     const specializationArray = specializations 
     ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
     : [];
+    const positionsArray = positions 
+    ? positions.split(',').map(s => s.trim()).filter(Boolean) 
+    : [];
     
     if (languagesArray.length) {
       combinedFilters.push(
@@ -105,6 +109,13 @@ export class CandidatesService {
       combinedFilters.push(
         ...specializationArray.map(spec => ({
           specialization: { contains: spec, mode: 'insensitive' }
+        }))
+      );
+    }
+    if (positionsArray.length) {
+      combinedFilters.push(
+        ...positionsArray.map(spec => ({
+          approved_positions_pairing: { has: spec }
         }))
       );
     }
@@ -702,6 +713,7 @@ export class CandidatesService {
       let returned
 
       for (const field of fields) {
+        
         if (field === 'languages'){
           returned = await this.prisma.candidateLanguage.findMany({
             where: {
@@ -765,8 +777,30 @@ export class CandidatesService {
           };
           
           result[field]=returned;
+        
+        }else if (field === 'approved_positions_pairing'){
+          returned = await this.prisma.candidate.findMany({
+            where: {
+              OR:[
+                {pipeline_status: '261075105'},
+                {pipeline_status: '1087596819'}
+              ],
+              approved_positions_pairing: { isEmpty: false },
+            },
 
+            select: {
+              [field]: true
+            },
+          })
+
+          const uniquePositions = [
+            ...new Set(
+              returned.flatMap((c) => c.approved_positions_pairing || [])
+            ),
+          ].sort();
+          returned=uniquePositions;
         }else{
+          
           returned = await this.prisma.candidate.findMany({
             where: {
               OR:[
