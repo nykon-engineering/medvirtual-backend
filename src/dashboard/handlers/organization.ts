@@ -29,6 +29,7 @@ export class HandlerOrganization {
       tools: true,
       medical_tools: true,
       avatar_url: true,
+      gender: true,
       languages: {
         select: {
           name: true,
@@ -115,6 +116,7 @@ export class HandlerOrganization {
             about_me: true,
             hourly_pay_rate: true,
             avatar_url: true,
+            gender: true,
             languages: {
               select: {
                 name: true,
@@ -164,7 +166,7 @@ export class HandlerOrganization {
       }
     }))
 
-    result.hiredStaff = hiredStaff;
+    result.hiredStaff = hiredStaffWithAvatar;
     
     // New: use HireRequestService to bring the same shape as /hire-request (includes specialization and skills)
     const hireRequestsResult = await this.hireRequestService.findAll(user, undefined, page, perPage);

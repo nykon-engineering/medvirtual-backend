@@ -931,6 +931,7 @@ export class HireRequestService {
         specialization: true,
         employment_type : true,
         avatar_url: true,
+        gender: true,
         languages: {
           select: {
             name: true,
@@ -1483,7 +1484,8 @@ export class HireRequestService {
                 experiences: true,
                 skills:true,
                 pipeline_status: true,
-                avatar_url: true
+                avatar_url: true,
+                gender: true
               },
             },
           },

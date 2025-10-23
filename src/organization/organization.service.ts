@@ -991,6 +991,8 @@ export class OrganizationService {
             employment_type: true,
             country: true,
             about_me: true,
+            gender: true,
+            avatar_url: true,
             languages: {
               select: {
                 name: true,
@@ -1045,6 +1047,10 @@ export class OrganizationService {
         {
           ...s,
           hubspot_dealstage: s.hubspot_dealstage ? dealPipelineToDbDictionary[s.hubspot_dealstage] || s.hubspot_dealstage : undefined,
+          candidate: s.candidate? {
+            ...s.candidate,
+            avatar: s.candidate.avatar_url ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}` :  null,
+          } : null
         }
       ))
 

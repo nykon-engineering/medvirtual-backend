@@ -127,6 +127,7 @@ const MailMock ={
         id: '1',
         organization_id: 'org-1',
         first_name: 'John',
+        gender: 'male',
         last_name: 'Doe',
         email: 'a@a.com',
         name: 'John Doe',
@@ -176,6 +177,7 @@ const MailMock ={
           about_me: true,
           tools: true,
           medical_tools: true,
+          gender: true,
           country: true,
           educations: {
             select: {
