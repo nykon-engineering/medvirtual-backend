@@ -170,7 +170,7 @@ describe('TicketService', () => {
   
   
   describe('findAll', () => {
-    const mockTickets = [{ id: 1, title: 'Ticket 1' }];
+    const mockTickets = [{ id: 1, title: 'Ticket 1', candidate: null, staff: null  }];
   
     beforeEach(() => {
       jest.clearAllMocks();
@@ -236,6 +236,8 @@ describe('TicketService', () => {
               last_name: true,
               email: true,
               name: true,
+              gender: true,
+              avatar_url: true,
             }
           },
           staff: {
@@ -253,6 +255,8 @@ describe('TicketService', () => {
                   name: true,
                   specialization: true,
                   years_of_experience: true,
+                  gender: true,
+                  avatar_url: true,
                 }
               }
             }

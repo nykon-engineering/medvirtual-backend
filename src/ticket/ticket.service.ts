@@ -56,6 +56,8 @@ export class TicketService {
             specialization: true,
             years_of_experience: true,
             country: true,
+            gender: true,
+            avatar_url: true,
           },
         },
         staff: {
@@ -272,6 +274,8 @@ export class TicketService {
               last_name: true,
               email: true,
               name: true,
+              gender: true,
+              avatar_url: true,
             },
           },
           staff: {
@@ -289,6 +293,8 @@ export class TicketService {
                   name: true,
                   specialization: true,
                   years_of_experience: true,
+                  gender: true,
+                  avatar_url: true,
                 },
               },
             },
@@ -296,7 +302,23 @@ export class TicketService {
         },
       });
       if (!tickets) throw new BadRequestException('Failed to fetch tickets');
-      return tickets;
+
+      const filteredTickets = tickets.map((ticket) => ({
+        ...ticket,
+        candidate: ticket.candidate ? {
+          ...ticket.candidate,
+          avatar: ticket.candidate.avatar_url ? `${process.env.AVATAR_URL}${ticket.candidate.avatar_url}` :  null,
+        }: null,
+        staff: ticket.staff ? {
+          ...ticket.staff,
+          candidate: ticket.staff.candidate ? {
+            ...ticket.staff.candidate,
+            avatar: ticket.staff.candidate.avatar_url ? `${process.env.AVATAR_URL}${ticket.staff.candidate.avatar_url}` :  null,
+          } : null,
+        } : null,
+      }))
+
+      return filteredTickets;
     } catch (error) {
       throw new BadRequestException('Error fetching tickets');
     }
