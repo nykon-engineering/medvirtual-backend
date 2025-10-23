@@ -546,7 +546,7 @@ export class AuthService {
     const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,
-      subject: 'Welcome to MedVirtual - Complete Your Account Setup',
+      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
       headers: {
         'X-Mailer': 'MedVirtual Platform',

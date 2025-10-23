@@ -13,6 +13,7 @@ import { UpdateProfileDto } from './dto/updateProfile.dto';
 import { GetProfileDto } from './dto/getProfile.dto';
 import { SearchUsersDto } from './dto/searchUsers.dto';
 import InviteSignup from '../common/utils/email-templates/invite-signup';
+import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { InviteUserToOrganizationDto } from './dto/inviteUserToOrganization.dto';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
 
@@ -787,13 +788,16 @@ export class UserService {
         expiresIn: '24h',
       });
 
+      // Get user email theme
+      const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
+      
       // Send signup link via email
       const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-      const emailBody = InviteSignup(inviteLink);
+      const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: inviteData.email,
-        subject: 'Welcome to MedVirtual - Complete Your Account Setup',
+        subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
         html: emailBody,
         headers: {
           'X-Mailer': 'MedVirtual Platform',
