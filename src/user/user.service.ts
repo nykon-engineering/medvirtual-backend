@@ -792,7 +792,10 @@ export class UserService {
       const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
       
       // Send signup link via email
-      const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+      const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+      const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
+        ? `${baseInviteLink}&company=berry` 
+        : baseInviteLink;
       const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
