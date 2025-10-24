@@ -431,12 +431,12 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Staff Member:.*Jane Smith/),
+          html: expect.stringMatching(/Candidate Member:.*Jane Smith/),
         })
       );
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Staff Email:.*jane\.smith@example\.com/),
+          html: expect.stringMatching(/Candidate Email:.*jane\.smith@example\.com/),
         })
       );
     });
@@ -469,7 +469,7 @@ describe('NotificationsService', () => {
       );
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Staff Member:.*Jane Smith/),
+          html: expect.stringMatching(/Candidate Member:.*Jane Smith/),
         })
       );
     });
