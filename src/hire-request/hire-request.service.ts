@@ -250,6 +250,7 @@ export class HireRequestService {
               interviews: {
                 select: {
                   scheduled_date: true,
+                  link: true,
                 },
               },
             },
@@ -281,6 +282,7 @@ export class HireRequestService {
       panels: hr.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
+        interview_link: panel.interviews[0]?.link || null,
         interviews: undefined,
         panelCandidates: panel.panelCandidates.map(pc => ({
           ...pc,
@@ -394,6 +396,7 @@ export class HireRequestService {
             interviews: {
               select: {
                 scheduled_date: true,
+                link: true
               },
             },
           },
@@ -408,6 +411,7 @@ export class HireRequestService {
       panels: hireRequest.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
+        interview_link: panel.interviews[0]?.link || null,
         interviews: undefined,
         panelCandidates: panel.panelCandidates.map(pc => {
           const startDate = pc.candidate.experiences[0]?.start_date;
@@ -1697,8 +1701,8 @@ export class HireRequestService {
       },
       select:{
         id: true,
-      }
-    });
+        
+    }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
     const updatedDate = new Date(`${data.date_time}`);
 
@@ -1706,6 +1710,7 @@ export class HireRequestService {
       data: {
         panel_id: panel.id,
         scheduled_date: updatedDate,
+        link: data.interview_link,
         duration: 30, // default duration of 30 minutes
         
       },
@@ -1732,6 +1737,49 @@ export class HireRequestService {
       },
     });
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
+
+    
+    return this.findOne(id, user);
+
+  }
+
+  async editInterview(id: string, data: scheduleInterviewDTO, user: USER){
+    if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: {
+        id: id,
+        organization: user.role.includes('organization') ? { id : user.organization_id || undefined,} : undefined
+      },
+      select:{
+        id: true,
+      }
+    });
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    const panel = await this.prisma.candidatePanel.findFirst({
+      where: {
+        hire_request_id: hireRequest.id,
+      },
+      select:{
+        id: true,
+        
+    }});
+    if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
+
+    const updatedDate = new Date(`${data.date_time}`);
+
+    const editInterview = await this.prisma.interview.updateMany({
+      where: {
+        panel_id: panel.id,
+      },
+      data: {
+        scheduled_date: updatedDate,
+        link: data.interview_link,
+      },
+    });
+    
+    if (!editInterview) throw new BadRequestException(`Interview not updated`);
 
     return this.findOne(id, user);
 

@@ -18,6 +18,7 @@ import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { scheduleInterviewDTO } from './dto/schedule-interview.dto';
 import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
+import { editInterviewDTO } from './dto/edit-interview.dt';
 
 @Controller('hire-request')
 export class HireRequestController {
@@ -303,6 +304,25 @@ export class HireRequestController {
   @ApiResponse({ status: 400, description: 'Hire request status not updated to interview scheduled' })
   async scheduleInterview(@Param('id') id: string, @Body() data: scheduleInterviewDTO, @CurrentUser() user: USER) {
     const result = await this.hireRequestService.scheduleInterview(id, data, user);
+    return {
+      status: 200,
+      message: 'Interview scheduled successfully',
+      data: result,
+    }
+  }
+
+  @Post('edit-interview/:id')
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ description: 'edit interview for a specific hire request' })
+  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiBody({ type: editInterviewDTO })
+  @ApiResponse({ status: 200, description: 'Interview updated successfully' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'Hire request not found' })
+  async editInterview(@Param('id') id: string, @Body() data: editInterviewDTO, @CurrentUser() user: USER) {
+    const result = await this.hireRequestService.editInterview(id, data, user);
     return {
       status: 200,
       message: 'Interview scheduled successfully',

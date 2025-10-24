@@ -1,8 +1,8 @@
 import { DateTime } from "@hubspot/api-client/lib/codegen/crm/associations/v4";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsDate, IsString } from "class-validator";
+import { IsString } from "class-validator";
 
-export class scheduleInterviewDTO{
+export class editInterviewDTO{
 
     @ApiProperty({ description: 'The date of the interview', type:String, required: true })
     @IsString()

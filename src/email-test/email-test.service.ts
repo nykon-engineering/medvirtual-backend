@@ -5,6 +5,7 @@ import InviteSignup from '../common/utils/email-templates/invite-signup';
 import getResetPasswordTemplate from '../common/utils/email-templates/reset-password';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailTheme } from '../common/utils/email-templates/theme';
+import scheduleInterview from 'src/common/utils/email-templates/schedule-interview';
 
 @Injectable()
 export class EmailTestService {
@@ -208,4 +209,6 @@ export class EmailTestService {
       results,
     };
   }
+
+  
 }

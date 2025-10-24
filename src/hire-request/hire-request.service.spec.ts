@@ -408,6 +408,7 @@ describe('HireRequestService', () => {
             readable: true,
             panelCandidates: [],
             interview_date: new Date('2025-08-25T10:00:00Z'),
+            interview_link: null,
             interviews: undefined,
           },
         ],
