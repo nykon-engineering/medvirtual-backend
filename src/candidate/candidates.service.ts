@@ -1103,7 +1103,6 @@ export class CandidatesService {
     }
     return true;
   }
-
 }
 
 

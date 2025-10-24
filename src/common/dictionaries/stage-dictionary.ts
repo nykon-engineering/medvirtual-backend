@@ -1,6 +1,5 @@
 export const dbToStageDictionary: Record<number, string> = {
     //id => name
-
     942502182: 'New Candidates',
     1119641993: 'Incomplete Information',
     1119641994: 'Follow Up Candidates',

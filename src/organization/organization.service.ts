@@ -2176,7 +2176,8 @@ export class OrganizationService {
     return organizations;
   }
 
-  async syncOrganizationsWithDeals(): Promise<boolean>{
+  async syncOrganizationsWithDeals(): Promise<Object>{
+    const arrayReturn: any[] = [];
     const organizations = await this.prisma.organization.findMany({
       where: {
         status: 'active',
@@ -2220,6 +2221,7 @@ export class OrganizationService {
           const org = organizations.find(o => o.hubspot_id === object.from.id);
           if (!org) {
             console.log(`=> Organization with HubSpot ID ${object.from.id} not found in local data.`);
+            arrayReturn.push(`=> Organization ${object.from.id} was created.`);
             await this.organizationCreation.execute({ objectId: object.from });
             continue;
           }
@@ -2229,6 +2231,7 @@ export class OrganizationService {
             const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
             if (!existingStaff) {
               console.log(`==>Staff with HubSpot ID ${dealHubspotId} NOT FOUND for  organization ${org.hubspot_id}.`);
+              arrayReturn.push(`=> Staff ${dealHubspotId} was created below organization ${org.hubspot_id}.`);
               await this.dealCreation.execute({ objectId: dealHubspotId });
             }
           }
@@ -2250,7 +2253,11 @@ export class OrganizationService {
       },
     })
     
-    return true;
+    return {
+      message: 'Organization sync with deals completed',
+      status: 200,
+      data: { arrayReturn }
+    };
     
   }
   

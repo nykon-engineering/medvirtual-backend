@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HireRequestStatus, OrganizationRole, USER } from '@prisma/client';
+import { HireRequestStatus, USER } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
@@ -24,6 +24,7 @@ import {
   findHourlySalary,
   findMonthlySalary,
 } from '../common/utils/salary.util';
+import { changeLabelAvailability } from '../common/utils/hubspot.util';
 
 @Injectable()
 export class HireRequestService {
@@ -1666,6 +1667,7 @@ export class HireRequestService {
             ...pc.candidate,
             // Use the stored years_of_experience or calculate from experiences
             years_of_experience: pc.candidate.years_of_experience ?? calculatedYearsOfExperience,
+            employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
           },
         };
       }),
@@ -2242,6 +2244,7 @@ export class HireRequestService {
       isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
       salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(pc.candidate.hourly_pay_rate.toNumber()) : null,
       avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+      employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
     }));
 
     return mappedCandidates;
