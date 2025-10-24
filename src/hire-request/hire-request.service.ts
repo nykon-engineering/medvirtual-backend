@@ -218,6 +218,7 @@ export class HireRequestService {
                       about_me: true,
                       hourly_pay_rate: true,
                       avatar_url: true,
+                      approved_positions_pairing: true,
                       skills: {
                         select: {
                           skill_name: true,
@@ -933,6 +934,7 @@ export class HireRequestService {
         employment_type : true,
         avatar_url: true,
         gender: true,
+        approved_positions_pairing: true,
         languages: {
           select: {
             name: true,

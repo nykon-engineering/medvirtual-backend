@@ -2283,7 +2283,7 @@ export class OrganizationService {
 
       for (let association of object.to){
         const candidateHubspotId = association.toObjectId;
-        console.log(`--> Deal ${dealHubspotId} has associated candidate ${candidateHubspotId} on HubSpot.`);
+        //console.log(`--> Deal ${dealHubspotId} has associated candidate ${candidateHubspotId} on HubSpot.`);
         if (staffMember.candidate && staffMember.candidate.hubspot_id == candidateHubspotId){
           //all good, candidate is associated
           //console.log(`==> Staff ${dealHubspotId} already has associated candidate ${candidateHubspotId}.`);
@@ -2307,7 +2307,7 @@ export class OrganizationService {
                   hubspot_candidate_id: candidate.hubspot_id,
                 },
             });
-            //console.log(`==> Staff ${dealHubspotId} updated with associated candidate ${candidateHubspotId}.`);
+            console.log(`==> Staff ${dealHubspotId} updated with associated candidate ${candidateHubspotId}.`);
             arrayReturn.push(`=> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
           }else{
             console.log(`==> Candidate with HubSpot ID ${candidateHubspotId} not found in local DB.`);
@@ -2323,6 +2323,7 @@ export class OrganizationService {
         last_synced_at: new Date(),
       },
     })
+    console.log('ArrayReturn: ' , arrayReturn)
     
     return {
       message: 'Organization sync with deals completed',
