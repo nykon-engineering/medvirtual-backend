@@ -595,6 +595,8 @@ export class OrganizationController {
   }
 
   @Get('sync-all/organizations-with-deals')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
   @ApiOperation({ summary: 'Sync all organizations with deals' })
   async syncAllOrganizationsWithDeals() {
     return await this.organizationService.syncOrganizationsWithDeals();

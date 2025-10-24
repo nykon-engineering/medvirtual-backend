@@ -2190,6 +2190,12 @@ export class OrganizationService {
         staff: {
           select: {
             hubspot_id: true,
+            candidate: {
+              select: {
+                id: true,
+                hubspot_id: true,
+              },
+            },
           },
         },
       },
@@ -2197,6 +2203,7 @@ export class OrganizationService {
 
     const organizationsId = organizations.map(org => org.hubspot_id);
     const chunkSize = 100;
+    let staffArray : string[] = [];
 
     for (let i = 0; i < organizationsId.length; i += chunkSize) {
       const chunk = organizationsId.slice(i, i + chunkSize);
@@ -2214,25 +2221,33 @@ export class OrganizationService {
         );
 
         //console.log(`Batch ${i / chunkSize + 1} response:`, response.data.results?.length || 0);
-        //console.log('Response data:', response.data);
+        //console.log('Associations:', response.data.results);
 
         for (let object of response.data.results){
           //console.log('from: ', object.from , '-> to', object.to);
           const org = organizations.find(o => o.hubspot_id === object.from.id);
           if (!org) {
-            console.log(`=> Organization with HubSpot ID ${object.from.id} not found in local data.`);
-            arrayReturn.push(`=> Organization ${object.from.id} was created.`);
-            await this.organizationCreation.execute({ objectId: object.from });
+            const newOrganization = await this.organizationCreation.execute({ objectId: object.from });
+            if (newOrganization){
+              console.log(`=> Organization with HubSpot ID ${object.from.id} not found in local data.`);
+              arrayReturn.push(`=> Organization ${object.from.id} was created.`);
+            }
             continue;
           }
 
+
           for (let association of object.to){
+            
             const dealHubspotId = association.toObjectId;
-            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
+            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId); //Already has this staff on database?
             if (!existingStaff) {
-              console.log(`==>Staff with HubSpot ID ${dealHubspotId} NOT FOUND for  organization ${org.hubspot_id}.`);
-              arrayReturn.push(`=> Staff ${dealHubspotId} was created below organization ${org.hubspot_id}.`);
-              await this.dealCreation.execute({ objectId: dealHubspotId });
+              const newStaff = await this.dealCreation.execute({ objectId: dealHubspotId });
+              if (newStaff){
+                console.log(`==>Staff with HubSpot ID ${dealHubspotId} created for organization ${org.hubspot_id}.`);
+                arrayReturn.push(`=> Staff ${dealHubspotId} was created below organization ${org.hubspot_id}.`);
+              }
+            }else{ 
+              staffArray.push(dealHubspotId); //Iterate this arrays to use it later
             }
           }
         }
@@ -2242,6 +2257,62 @@ export class OrganizationService {
           console.error('Error in batch', i / chunkSize + 1, error.response?.data);
         } else {
           console.error('Unexpected error:', error);
+        }
+      }
+    }
+
+    //=>start with hubspot request to check Candidates associated: 
+    const candidatesAssociated = await axios.post(
+      `https://api.hubapi.com/crm/v4/associations/deal/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/read`,
+      { inputs: staffArray.map(id => ({ id })) },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    for (let object of candidatesAssociated.data.results){
+      //console.log('from: ', object.from , '-> to', object.to);
+      const dealHubspotId = object.from.id;
+      const org = organizations.find(o => o.staff.some(s => s.hubspot_id === dealHubspotId));
+      if (!org) continue;
+      const staffMember = org.staff.find(s => s.hubspot_id === dealHubspotId);
+      if (!staffMember) continue;
+
+      for (let association of object.to){
+        const candidateHubspotId = association.toObjectId;
+        console.log(`--> Deal ${dealHubspotId} has associated candidate ${candidateHubspotId} on HubSpot.`);
+        if (staffMember.candidate && staffMember.candidate.hubspot_id == candidateHubspotId){
+          //all good, candidate is associated
+          //console.log(`==> Staff ${dealHubspotId} already has associated candidate ${candidateHubspotId}.`);
+        }else{
+          //console.log(`==> Staff ${dealHubspotId} doenst has associated candidate ${candidateHubspotId}.`);
+          //update staff with candidate
+          
+          const candidate = await this.prisma.candidate.findFirst({
+            where: { hubspot_id: candidateHubspotId.toString() },
+            select: { 
+              id: true,
+              hubspot_id: true
+            }
+          });
+          if (candidate){
+            await this.prisma.staff.update({
+              where: { 
+                id: staffMember.candidate ? staffMember.candidate.id : '' },
+                data: { 
+                  candidate_id: candidate.id,
+                  hubspot_candidate_id: candidate.hubspot_id,
+                },
+            });
+            //console.log(`==> Staff ${dealHubspotId} updated with associated candidate ${candidateHubspotId}.`);
+            arrayReturn.push(`=> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
+          }else{
+            console.log(`==> Candidate with HubSpot ID ${candidateHubspotId} not found in local DB.`);
+          }
+          
         }
       }
     }
