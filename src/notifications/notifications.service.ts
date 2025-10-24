@@ -399,8 +399,8 @@ export class NotificationsService {
     if (ticket.candidate) {
       const staffName = `${ticket.candidate.name || ' '}`.trim() || 'Unknown';
       candidateDetails = `
-         <p><strong>Staff Member:</strong> ${staffName}</p>
-         <p><strong>Staff Email:</strong> ${ticket.candidate.email || 'N/A'}</p>`;
+         <p><strong>Candidate Member:</strong> ${staffName}</p>
+         <p><strong>Candidate Email:</strong> ${ticket.candidate.email || 'N/A'}</p>`;
     }
 
 
