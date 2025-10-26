@@ -1500,6 +1500,7 @@ export class HireRequestService {
         interviews: {
           select: {
             scheduled_date: true,
+            link: true,
           },
         },
         hireRequest: {
