@@ -1,6 +1,6 @@
 import { DateTime } from "@hubspot/api-client/lib/codegen/crm/associations/v4";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsString } from "class-validator";
+import { IsOptional, IsString } from "class-validator";
 
 export class editInterviewDTO{
 
@@ -10,5 +10,6 @@ export class editInterviewDTO{
 
     @ApiProperty({ description: 'The link of the interview', example: 'https://meet.google.com/XXXX', required: false })
     @IsString()
+    @IsOptional()
     interview_link: string;
 }

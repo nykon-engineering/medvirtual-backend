@@ -308,7 +308,7 @@ model Interview {
   id                    String          @id @default(uuid())
   panel_id              String
   scheduled_date        DateTime
-  link                  String
+  link                  String?
   alert_closed          Boolean         @default(false)
   duration              Int
   status                InterviewStatus @default(scheduled)
