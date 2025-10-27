@@ -171,6 +171,7 @@ describe('AuthService - signIn', () => {
     },
     organization: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     user: {
       findUnique: jest.fn(),
@@ -273,7 +274,7 @@ describe('AuthService - signIn', () => {
       organization_id: 'org1',
       authentication_method: 'OwnSign',
     });
-    prismaMock.organization.findUnique.mockResolvedValue({ status: 'inactive' });
+    prismaMock.organization.findMany.mockResolvedValue([]);
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new UnauthorizedException('User organization not found or inactive. Please contact support.'),
@@ -287,7 +288,10 @@ describe('AuthService - signIn', () => {
       authentication_method: 'different',
       status: 'active',
     });
-    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new UnauthorizedException(
@@ -304,7 +308,10 @@ describe('AuthService - signIn', () => {
       verified: false,
       status: 'active',
     });
-    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     await expect(service.signIn(dataFake)).rejects.toThrow(
       new UnauthorizedException('User not verified'),
@@ -321,7 +328,10 @@ describe('AuthService - signIn', () => {
       status: 'active',
       organization_id: 'org1',
     });
-    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
@@ -340,7 +350,10 @@ describe('AuthService - signIn', () => {
       status: 'active',
       organization_id: 'org1',
     });
-    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Test Unit', 
+      status: 'active' 
+    });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
@@ -366,7 +379,10 @@ describe('AuthService - signIn', () => {
       role: 'admin',
     };
     userMock.findByEmail.mockResolvedValue(userObj);
-    prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Berry Virtual', 
+      status: 'active' 
+    });
 
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
@@ -380,17 +396,48 @@ describe('AuthService - signIn', () => {
       message: 'User authenticated successfully',
       token: 'mocked-token',
       user: {
+        id: 'u1',
         firstName: 'Test',
         lastName: 'User',
         email: dataFake.email,
         role: 'admin',
         clientId: 'org1',
+        business_unit: 'Berry Virtual',
       },
     });
     expect(prisma.session.updateMany).toHaveBeenCalledWith({
       where: { userId: 'u1' },
       data: { isRevoked: true },
     });
+  });
+
+  it('should prioritize Berry Virtual business unit over others', async () => {
+    const userObj = {
+      id: 'u1',
+      email: dataFake.email,
+      password: 'hashed-pass',
+      authentication_method: authenticationMethod,
+      verified: true,
+      status: 'active',
+      organization_id: 'org1',
+      first_name: 'Test',
+      last_name: 'User',
+      role: 'admin',
+    };
+    userMock.findByEmail.mockResolvedValue(userObj);
+    prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
+      business_unit: 'Berry Virtual', 
+      status: 'active' 
+    });
+
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (jwt.sign as jest.Mock).mockReturnValue('mocked-token');
+    prismaMock.session.updateMany.mockResolvedValue({});
+    prismaMock.session.create.mockResolvedValue({ id: 'session1' });
+
+    const result = await service.signIn(dataFake);
+
+    expect((result as any).user.business_unit).toBe('Berry Virtual');
   });
 });
 

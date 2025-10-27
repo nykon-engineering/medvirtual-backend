@@ -91,6 +91,27 @@ export class GetOrganizationsDto {
   @IsString()
   business_unit?: string;
 
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Filter if has user',
+  })
+  @IsOptional()
+  @IsString()
+  hasUser?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Filter if has staff',
+  })
+  @IsOptional()
+  @IsString()
+  hasStaff?: string;
+
+
+
   @ApiProperty({
     required: false,
     description: 'Sort field',

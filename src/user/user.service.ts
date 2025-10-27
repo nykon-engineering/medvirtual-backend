@@ -13,7 +13,9 @@ import { UpdateProfileDto } from './dto/updateProfile.dto';
 import { GetProfileDto } from './dto/getProfile.dto';
 import { SearchUsersDto } from './dto/searchUsers.dto';
 import InviteSignup from '../common/utils/email-templates/invite-signup';
+import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { InviteUserToOrganizationDto } from './dto/inviteUserToOrganization.dto';
+import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
 
 @Injectable()
 export class UserService {
@@ -85,7 +87,7 @@ export class UserService {
     return users;
   }
 
-  async findUsersByOrganizationByCurrentUser(user: USER): Promise<any> {
+  async findUsersByOrganizationByCurrentUser(user: USER, status?: string): Promise<any> {
     let whereClause: any = {};
 
     // If user is system_admin, only return users from organizations they admin
@@ -113,6 +115,11 @@ export class UserService {
       whereClause = { organization_id: user.organization_id };
     }
 
+    // Add status filter if provided
+    if (status) {
+      whereClause.status = status;
+    }
+
     const users = await this.prisma.uSER.findMany({
       where: whereClause,
       select: {
@@ -126,6 +133,9 @@ export class UserService {
         role: true,
         status: true,
         createdAt: true,
+      },
+      orderBy: {
+        first_name: 'asc',
       },
     });
 
@@ -177,7 +187,9 @@ export class UserService {
             specialties: user.organization.specialties || undefined,
             services: user.organization.services || undefined,
             description: user.organization.description || undefined,
-            industry: user.organization.industry || undefined,
+            industry:  user.organization.industry 
+            ? organizationIndustryToDbDictionary[user.organization.industry] || user.organization.industry
+            : undefined,
             number_of_employees:
               user.organization.number_of_employees || undefined,
             createdAt: user.organization.createdAt,
@@ -361,7 +373,9 @@ export class UserService {
               specialties: updatedUser.organization.specialties || undefined,
               services: updatedUser.organization.services || undefined,
               description: updatedUser.organization.description || undefined,
-              industry: updatedUser.organization.industry || undefined,
+              industry: updatedUser.organization.industry 
+              ? organizationIndustryToDbDictionary[updatedUser.organization.industry] || updatedUser.organization.industry
+              : undefined,
               number_of_employees:
                 updatedUser.organization.number_of_employees || undefined,
               createdAt: updatedUser.organization.createdAt,
@@ -774,13 +788,19 @@ export class UserService {
         expiresIn: '24h',
       });
 
+      // Get user email theme
+      const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
+      
       // Send signup link via email
-      const inviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-      const emailBody = InviteSignup(inviteLink);
+      const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+      const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
+        ? `${baseInviteLink}&company=berry` 
+        : baseInviteLink;
+      const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: inviteData.email,
-        subject: 'Welcome to MedVirtual - Complete Your Account Setup',
+        subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
         html: emailBody,
         headers: {
           'X-Mailer': 'MedVirtual Platform',

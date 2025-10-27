@@ -74,6 +74,24 @@ export function mapOrganizationToDb(hubspotData: organizationData): CreateOrgani
     return result as CreateOrganizationDto;
 }
 
+export function mapOrganizationToDbHubspot(hubspotData: organizationData): any {
+  const result: Partial<CreateOrganizationDto> = {};
+
+  for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
+    const value = hubspotData[hubspotKey];
+      if (value === undefined) continue;
+
+      if (hubspotKey === "type") {
+        result[dbKey] = value === "PROSPECT" ? OrganizationRole.prospect : OrganizationRole.client;
+      } else {
+        result[dbKey] = value;
+      }
+      
+    }
+  return result as any;
+}
+
+
 export function mapOwnerToDb(hubspotData: ownerData): any {
     const result: Partial<any> = {};
 
@@ -101,7 +119,11 @@ export function mapDealToDb(hubspotData: dealData): any {
 }
 
 export function changeLabelAvailability(label: string): string {
-    return label === "Available Candidates - Part Time" ? "Part Time" : "Full Time";
+    return label === "Available Candidates - Part Time" 
+    ? "Part Time" 
+    : label === "Available Candidates" 
+      ? "Full Time"
+      : label;
 }
 
 

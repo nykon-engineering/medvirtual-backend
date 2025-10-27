@@ -2,13 +2,15 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { USER } from '@prisma/client';
 import { HandlerOrganization } from './handlers/organization';
 import { HandlerClient } from './handlers/client';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class DashboardService {
 
     constructor(
         private readonly organization: HandlerOrganization,
-        private readonly client: HandlerClient
+        private readonly client: HandlerClient,
+        private readonly prisma: PrismaService
     ) {}
               
 
@@ -26,5 +28,19 @@ export class DashboardService {
         }
 
         
+    }
+
+    async closeAlert(interviewId: string): Promise<any> {
+        
+        if (!interviewId) throw new BadRequestException('Interview ID is required');
+
+        const closedInterview = await this.prisma.interview.update({
+            where: { id: interviewId },
+            data: { alert_closed: true }
+        });
+        if (!closedInterview) {
+            throw new BadRequestException('Failed to close alert for the interview');
+        }
+        return closedInterview;
     }
 }

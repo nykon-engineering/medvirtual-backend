@@ -4,6 +4,7 @@ import OpenAI, { toFile } from "openai";
 import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import path from 'path';
 
 
 
@@ -220,6 +221,7 @@ export class OpenaiService {
         Keep a similar lighting setup (soft studio light) and neutral background, but without accessories like headphone.
         Style: modern corporate headshot, natural facial expression, confident and friendly.
         Avoid copying the person — just use the image as reference for lighting and style.
+        The avatar result need to be on format 1024x1024 pixels.
         `;
 
         const image = fs.createReadStream(imageDownloaded);
@@ -242,7 +244,12 @@ export class OpenaiService {
             throw new Error("A resposta da API OpenAI não contém os dados esperados.");
         }
         const imageBase64 = result.data[0].b64_json;
-        fs.writeFileSync(`${Date.now()}_avatarX.png`, Buffer.from(imageBase64, "base64"));
+        const fileName = `${Date.now()}_avatarX.png`;
+        const outputPath = path.resolve('/tmp', fileName);
+        console.log('Output path for avatar:', outputPath);
+        fs.writeFileSync(outputPath, Buffer.from(imageBase64, "base64"));
+
+        return outputPath;
     }
 
 

@@ -154,7 +154,7 @@ export class UserController {
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Number of results to return (max 50)',
+    description: 'Number of results to return (no maximum limit)',
   })
   async searchUsers(@Query() query: SearchUsersDto) {
     return this.userService.searchUsers(query);
@@ -291,13 +291,22 @@ export class UserController {
   @ApiOperation({
     summary: 'Get all users of the organization from current User',
   })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Filter by user status',
+    enum: ['active', 'inactive', 'invited', 'suspended'],
+  })
   @ApiResponse({ status: 200, description: 'Users found successfully.' })
   @ApiResponse({
     status: 404,
     description: 'No users found in this organization.',
   })
-  async findUsersByOrganizationByCurrentUser(@CurrentUser() user: USER) {
-    return this.userService.findUsersByOrganizationByCurrentUser(user);
+  async findUsersByOrganizationByCurrentUser(
+    @CurrentUser() user: USER,
+    @Query('status') status?: string,
+  ) {
+    return this.userService.findUsersByOrganizationByCurrentUser(user, status);
   }
 
   @Patch(':id')

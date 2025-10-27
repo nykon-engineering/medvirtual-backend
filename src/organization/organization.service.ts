@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  Body,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -40,6 +39,10 @@ import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
+import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
+import { mapDealToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util';
+import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
+import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 
 
 @Injectable()
@@ -49,6 +52,7 @@ export class OrganizationService {
     private readonly auth: AuthService,
     @Inject(forwardRef (() => HandlerOrganizationCreation))
     private readonly organizationCreation: HandlerOrganizationCreation,
+    private readonly dealCreation: HandlerDealCreation,
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService
     
@@ -296,6 +300,8 @@ export class OrganizationService {
         location,
         admin,
         business_unit,
+        hasUser,
+        hasStaff,
         sortBy = 'createdAt',
         sortOrder = 'desc',
       } = query;
@@ -383,6 +389,18 @@ export class OrganizationService {
         whereClause.business_unit = business_unit;
       }
 
+      if (hasUser) {
+        whereClause.users = {
+          some: {},
+        };
+      }
+
+      if (hasStaff) {
+        whereClause.staff = {
+          some: {},
+        };
+      }
+
       // Build orderBy clause
       const orderBy: any = {};
       orderBy[sortBy] = sortOrder;
@@ -424,8 +442,22 @@ export class OrganizationService {
               id: true,
             },
           },
+          staff: {
+            select: {
+              id: true,
+            },
+          }
         },
       });
+
+      const sync = await this.prisma.sync.findFirst({
+        where: {
+          role: 'organizations',
+        },
+        orderBy: {
+          last_synced_at: 'desc',
+        },
+      })
 
       // Transform data
       const data: OrganizationResponseDto[] = organizations.map((org) => ({
@@ -441,7 +473,7 @@ export class OrganizationService {
         postal_code: org.postal_code || undefined,
         location: org.location || undefined,
         description: org.description || undefined,
-        industry: org.industry || undefined,
+        industry: org.industry ? organizationIndustryToDbDictionary[org.industry] || org.industry : undefined,
         business_unit: org.business_unit || undefined,
         organization_role: org.organization_role,
         number_of_employees: org.number_of_employees || undefined,
@@ -460,6 +492,7 @@ export class OrganizationService {
         owner: org.owner || undefined,
         admin: org.admin || undefined,
         userCount: org.users.length,
+        staffCount: org.staff.length,
       }));
 
       // Calculate pagination metadata
@@ -469,6 +502,7 @@ export class OrganizationService {
 
       return {
         data,
+        last_synced_at: sync ? sync.last_synced_at.toISOString() : '',
         meta: {
           page,
           limit,
@@ -611,7 +645,7 @@ export class OrganizationService {
           postal_code: data.zip,
           location: data.location,
           description: data.description,
-          industry: data.industry,
+          industry: data.industry ? organizationIndustryToDbDictionary[data.industry] || data.industry : undefined,
           business_unit: data.business_unit,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
@@ -957,6 +991,8 @@ export class OrganizationService {
             employment_type: true,
             country: true,
             about_me: true,
+            gender: true,
+            avatar_url: true,
             languages: {
               select: {
                 name: true,
@@ -1011,6 +1047,10 @@ export class OrganizationService {
         {
           ...s,
           hubspot_dealstage: s.hubspot_dealstage ? dealPipelineToDbDictionary[s.hubspot_dealstage] || s.hubspot_dealstage : undefined,
+          candidate: s.candidate? {
+            ...s.candidate,
+            avatar: s.candidate.avatar_url ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}` :  null,
+          } : null
         }
       ))
 
@@ -2117,6 +2157,180 @@ export class OrganizationService {
     }
   
     return `DB populated from HubSpot successfully with ${mappedOrganizations.length} organizations`;
+  }
+  
+  async desactiveWithoutStaff(): Promise<any>{
+
+    const organizations = await this.prisma.organization.updateMany({
+      where: {
+        staff: {
+          none: {},
+        },
+      },
+      data: {
+        status: 'inactive',
+        organization_role: 'prospect'
+      },
+    });
+
+    return organizations;
+  }
+
+  async syncOrganizationsWithDeals(): Promise<Object>{
+    const arrayReturn: any[] = [];
+    const organizations = await this.prisma.organization.findMany({
+      where: {
+        status: 'active',
+        organization_role: 'client',
+        hubspot_id: { not: null}
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+        staff: {
+          select: {
+            hubspot_id: true,
+            candidate: {
+              select: {
+                id: true,
+                hubspot_id: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const organizationsId = organizations.map(org => org.hubspot_id);
+    const chunkSize = 100;
+    let staffArray : string[] = [];
+
+    for (let i = 0; i < organizationsId.length; i += chunkSize) {
+      const chunk = organizationsId.slice(i, i + chunkSize);
+
+      try {
+        const response = await axios.post(
+          'https://api.hubapi.com/crm/v4/associations/company/deal/batch/read',
+          { inputs: chunk.map(id => ({ id })) },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+
+        //console.log(`Batch ${i / chunkSize + 1} response:`, response.data.results?.length || 0);
+        //console.log('Associations:', response.data.results);
+
+        for (let object of response.data.results){
+          //console.log('from: ', object.from , '-> to', object.to);
+          const org = organizations.find(o => o.hubspot_id === object.from.id);
+          if (!org) {
+            const newOrganization = await this.organizationCreation.execute({ objectId: object.from });
+            if (newOrganization){
+              console.log(`=> Organization with HubSpot ID ${object.from.id} not found in local data.`);
+              arrayReturn.push(`=> Organization ${object.from.id} was created.`);
+            }
+            continue;
+          }
+
+
+          for (let association of object.to){
+            
+            const dealHubspotId = association.toObjectId;
+            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId); //Already has this staff on database?
+            if (!existingStaff) {
+              const newStaff = await this.dealCreation.execute({ objectId: dealHubspotId });
+              if (newStaff){
+                console.log(`==>Staff with HubSpot ID ${dealHubspotId} created for organization ${org.hubspot_id}.`);
+                arrayReturn.push(`=> Staff ${dealHubspotId} was created below organization ${org.hubspot_id}.`);
+              }
+            }else{ 
+              staffArray.push(dealHubspotId); //Iterate this arrays to use it later
+            }
+          }
+        }
+
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          console.error('Error in batch', i / chunkSize + 1, error.response?.data);
+        } else {
+          console.error('Unexpected error:', error);
+        }
+      }
+    }
+
+    //=>start with hubspot request to check Candidates associated: 
+    const candidatesAssociated = await axios.post(
+      `https://api.hubapi.com/crm/v4/associations/deal/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/read`,
+      { inputs: staffArray.map(id => ({ id })) },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    for (let object of candidatesAssociated.data.results){
+      //console.log('from: ', object.from , '-> to', object.to);
+      const dealHubspotId = object.from.id;
+      const org = organizations.find(o => o.staff.some(s => s.hubspot_id === dealHubspotId));
+      if (!org) continue;
+      const staffMember = org.staff.find(s => s.hubspot_id === dealHubspotId);
+      if (!staffMember) continue;
+
+      for (let association of object.to){
+        const candidateHubspotId = association.toObjectId;
+        //console.log(`--> Deal ${dealHubspotId} has associated candidate ${candidateHubspotId} on HubSpot.`);
+        if (staffMember.candidate && staffMember.candidate.hubspot_id == candidateHubspotId){
+          //all good, candidate is associated
+          //console.log(`==> Staff ${dealHubspotId} already has associated candidate ${candidateHubspotId}.`);
+        }else{
+          //console.log(`==> Staff ${dealHubspotId} doenst has associated candidate ${candidateHubspotId}.`);
+          //update staff with candidate
+          
+          const candidate = await this.prisma.candidate.findFirst({
+            where: { hubspot_id: candidateHubspotId.toString() },
+            select: { 
+              id: true,
+              hubspot_id: true
+            }
+          });
+          if (candidate){
+            await this.prisma.staff.update({
+              where: { 
+                id: staffMember.candidate ? staffMember.candidate.id : '' },
+                data: { 
+                  candidate_id: candidate.id,
+                  hubspot_candidate_id: candidate.hubspot_id,
+                },
+            });
+            console.log(`==> Staff ${dealHubspotId} updated with associated candidate ${candidateHubspotId}.`);
+            arrayReturn.push(`=> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
+          }else{
+            console.log(`==> Candidate with HubSpot ID ${candidateHubspotId} not found in local DB.`);
+          }
+          
+        }
+      }
+    }
+
+    await this.prisma.sync.create({
+      data: {
+        role: 'organizations',
+        last_synced_at: new Date(),
+      },
+    })
+    console.log('ArrayReturn: ' , arrayReturn)
+    
+    return {
+      message: 'Organization sync with deals completed',
+      status: 200,
+      data: { arrayReturn }
+    };
+    
   }
   
 

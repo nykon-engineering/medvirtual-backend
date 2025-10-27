@@ -4,6 +4,7 @@ import { HandlerOrganizationCreation } from "./organizationCreation";
 import { organizationToDbDictionary } from "../../common/dictionaries/organization-dictionary";
 import { HandlerOrganizationDeletion } from "./organizationDeletion";
 import { OrganizationRole } from "@prisma/client";
+import { organizationIndustryToDbDictionary } from "../../common/dictionaries/organizationIndustry-dictionary";
 
 @Injectable()
 
@@ -40,6 +41,10 @@ export class HandlerOrganizationPropertyChange {
                 }else{
                     value = OrganizationRole.client;
                 }
+            }
+
+            if (fieldUpdated === 'industry') {
+                value = event.propertyValue ? (organizationIndustryToDbDictionary[event.propertyValue] ?? '') : '';
             }
 
             if (fieldUpdated === 'specialties') {

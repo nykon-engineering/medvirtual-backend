@@ -28,6 +28,8 @@ export class HandlerOrganization {
       specialization: true,
       tools: true,
       medical_tools: true,
+      avatar_url: true,
+      gender: true,
       languages: {
         select: {
           name: true,
@@ -113,6 +115,8 @@ export class HandlerOrganization {
             country: true,
             about_me: true,
             hourly_pay_rate: true,
+            avatar_url: true,
+            gender: true,
             languages: {
               select: {
                 name: true,
@@ -154,7 +158,15 @@ export class HandlerOrganization {
       }
     })
 
-    result.hiredStaff = hiredStaff;
+    const hiredStaffWithAvatar = hiredStaff.map((staff) => ({
+      ...staff,
+      candidate: {
+        ...staff.candidate,
+        avatar: staff.candidate?.avatar_url ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}` :  null,
+      }
+    }))
+
+    result.hiredStaff = hiredStaffWithAvatar;
     
     // New: use HireRequestService to bring the same shape as /hire-request (includes specialization and skills)
     const hireRequestsResult = await this.hireRequestService.findAll(user, undefined, page, perPage);
@@ -237,12 +249,51 @@ export class HandlerOrganization {
       select,
       take: 8,
     });
+    const lastTimeofDay = new Date();
+    lastTimeofDay.setHours(23, 59, 59, 999);
+
+    const interviews = await this.prisma.interview.findMany({
+      where:{
+       panel: {
+        hireRequest:{
+          org_id: user.organization_id,
+        }
+       },
+       scheduled_date: {
+        gte: new Date(),
+        lte: lastTimeofDay
+       },
+       alert_closed: false,
+      },
+      select:{
+        id: true,
+        scheduled_date: true,
+        link: true,
+        alert_closed: true,
+        panel:{
+          select:{
+            hireRequest:{
+              select:{
+                title: true,
+              }
+            }
+          }
+        }
+      }
+    })
+    const interviewSanitized = interviews.map((interview) => ({
+      ...interview,
+      hireRequestTitle: interview.panel.hireRequest.title,
+    }))
+
+    result.interviews = interviewSanitized;
 
     const otherTalentsSalary = otherTalents.map((talent) => ({
       ...talent,
-      salary: findMonthlySalary(Number(talent?.hourly_pay_rate))
+      salary: findMonthlySalary(Number(talent?.hourly_pay_rate)),
+      avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` :  null,
     }))
-    result.otherTalents = otherTalents;
+    result.otherTalents = otherTalentsSalary;
 
     return result;
   }

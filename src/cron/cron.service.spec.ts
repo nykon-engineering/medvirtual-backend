@@ -4,12 +4,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { MailService } from '../mail/mail.service';
 
 describe('CronService', () => {
   let service: CronService;
   let prismaServiceMock: { candidate: { findMany: jest.Mock } };
   let candidatesServiceMock: { processData: jest.Mock };
   let handlerObjectCreationMock: { execute: jest.Mock };
+  let mailServiceMock: { sendMail: jest.Mock };
   
 
   beforeEach(async () => {
@@ -27,11 +29,17 @@ describe('CronService', () => {
       execute: jest.fn(),
     };
 
+    mailServiceMock = {
+      sendMail: jest.fn(),
+    };
+    
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [CronService,
         {provide: PrismaService, useValue: prismaServiceMock},
         {provide: CandidatesService, useValue: candidatesServiceMock},
-        {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock}
+        {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
+        { provide: MailService, useValue: mailServiceMock },
       ],
     }).compile();
 

@@ -587,4 +587,19 @@ export class OrganizationController {
   async populateDbFromHubspot() {
     return await this.organizationService.populateDbFromHubspot();
   }
+
+  @Get('desactive-all/without-staff')
+  @ApiProperty({ description: 'Desactive the records which doesnt have staff' })
+  async desactiveWithoutStaff() {
+    return await this.organizationService.desactiveWithoutStaff();
+  }
+
+  @Get('sync-all/organizations-with-deals')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Sync all organizations with deals' })
+  async syncAllOrganizationsWithDeals() {
+    return await this.organizationService.syncOrganizationsWithDeals();
+  }
+
 }

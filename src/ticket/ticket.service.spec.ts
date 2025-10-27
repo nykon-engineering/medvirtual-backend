@@ -170,7 +170,7 @@ describe('TicketService', () => {
   
   
   describe('findAll', () => {
-    const mockTickets = [{ id: 1, title: 'Ticket 1' }];
+    const mockTickets = [{ id: 1, title: 'Ticket 1', candidate: null, staff: null  }];
   
     beforeEach(() => {
       jest.clearAllMocks();
@@ -191,8 +191,7 @@ describe('TicketService', () => {
         where: {
           type: undefined,
           priority: undefined,
-          user: undefined,
-          OR: undefined,
+          user: { is: { id: "1" } },
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
             AND: [
@@ -209,6 +208,7 @@ describe('TicketService', () => {
           status: true,
           priority: true,
           createdAt: true,
+          created_by: true,
           organization: {
             select: {
               id: true,
@@ -236,6 +236,8 @@ describe('TicketService', () => {
               last_name: true,
               email: true,
               name: true,
+              gender: true,
+              avatar_url: true,
             }
           },
           staff: {
@@ -253,6 +255,8 @@ describe('TicketService', () => {
                   name: true,
                   specialization: true,
                   years_of_experience: true,
+                  gender: true,
+                  avatar_url: true,
                 }
               }
             }

@@ -13,10 +13,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { staffStatusDictionary } from '../common/dictionaries/staff-status-dictionary';
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import axios from 'axios';
+import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 
 @Injectable()
 export class StaffService {
-  constructor(private readonly prisma: PrismaService) {}
+    constructor(
+      private readonly prisma: PrismaService,
+      private readonly objectCreation : HandlerObjectCreation
+  ) {}
 
   private async findOne(id: string) {
     return await this.prisma.staff.findUnique({
@@ -615,6 +619,7 @@ export class StaffService {
             const dateValue = new Date(value);
             value = isNaN(dateValue.getTime()) ? null : dateValue;
           }
+
           
           mapped[dbKey] = value;
       }
@@ -651,12 +656,23 @@ export class StaffService {
           if (assoc?.to?.length > 0) {
             const hubspotCandidateId = assoc.to[0].id;
 
-            const candidateExists = await this.prisma.candidate.findUnique({
+            let candidateExists = await this.prisma.candidate.findUnique({
               where: { hubspot_id: String(hubspotCandidateId) },
               select: { id: true },
             });
 
             if (candidateExists) {
+              deal.candidate_id = candidateExists.id;
+            }else{
+              let event = {
+                objectId: hubspotCandidateId
+              }
+              await this.objectCreation.execute(event);
+              candidateExists = await this.prisma.candidate.findUnique({
+                where: { hubspot_id: String(hubspotCandidateId) },
+                select: { id: true },
+              });
+              if (candidateExists)
               deal.candidate_id = candidateExists.id;
             }
             deal.hubspot_candidate_id = hubspotCandidateId;
@@ -727,10 +743,39 @@ export class StaffService {
         data: chunk,
         skipDuplicates: true,
       });
-      
     }
   
     return `DB populated from HubSpot successfully with ${CompanyDeals.length} deals`;
+  }
+
+
+  async moveStaffBackToActive(staffId: string): Promise<any> {
+    if (!staffId) {
+      throw new BadRequestException('Staff ID is required');
+    }
+    const staff = await this.prisma.staff.findUnique({
+      where: { 
+        id: staffId, 
+        status: 'termination-requested' 
+      },
+      select: {
+        id: true,
+      }
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff member not found or not in termination-requested status');
+    }
+
+    const updatedStaff = await this.prisma.staff.update({
+      where: { id: staffId },
+      data: { status: 'active' },
+    });
+    if (!updatedStaff) {
+      throw new BadRequestException('Failed to move staff member back to active');
+    }
+
+    return this.findOne(staffId);
   }
 
 

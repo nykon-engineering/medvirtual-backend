@@ -5,47 +5,42 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("DATABASE_URL") //LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model USER {
-  id                     String              @id @default(uuid())
-  email                  String              @unique
-  organization_id        String?
-  organization_name      String
-  first_name             String
-  last_name              String
-  phone                  String
-  avatar                 String
-  job_title              String
-  role                   String
-  workos_id              String
-  password               String              @db.VarChar(255)
-  authentication_method  String
-  status                 String
-  verified               Boolean             @default(false)
-  createdAt              DateTime            @default(now())
-  updatedAt              DateTime            @updatedAt
-  is_organization_owner  Boolean             @default(false)
-  hubspot_id             String?             @unique
-  
-  // User creation tracking fields
-  createdByMethod        String              @default("self_signup") // "self_signup", "admin_invite", "system_created"
-  createdByUserId        String?             // ID of the user who created this account (if created by admin)
-  
-  email_invitations      EmailInvitation[]
-  email_verifications    EmailVerification[]
-  hireRequestsAssigned   HireRequest[]       @relation("AssignedUser")
-  adminOrganizations     Organization[]      @relation("OrganizationAdmin")
-  ownedOrganizations     Organization[]      @relation("OrganizationOwner")
-  sessions               Session[]
-  tickets                Ticket[]
-  organization           Organization?       @relation(fields: [organization_id], references: [id])
-  
-  // Self-referential relationship for createdByUserId
-  createdBy              USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
-  createdUsers           USER[]              @relation("UserCreatedBy")
+  id                    String              @id @default(uuid())
+  email                 String              @unique
+  organization_id       String?
+  organization_name     String
+  first_name            String
+  last_name             String
+  phone                 String
+  avatar                String
+  job_title             String
+  role                  String
+  workos_id             String
+  password              String              @db.VarChar(255)
+  authentication_method String
+  status                String
+  verified              Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  is_organization_owner Boolean             @default(false)
+  createdByMethod       String              @default("self_signup")
+  createdByUserId       String?
+  hubspot_id            String?             @unique
+  email_invitations     EmailInvitation[]
+  email_verifications   EmailVerification[]
+  hireRequestsAssigned  HireRequest[]       @relation("AssignedUser")
+  adminOrganizations    Organization[]      @relation("OrganizationAdmin")
+  ownedOrganizations    Organization?       @relation("OrganizationOwner")
+  sessions              Session[]
+  tickets               Ticket[]
+  createdBy             USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
+  createdUsers          USER[]              @relation("UserCreatedBy")
+  organization          Organization?       @relation(fields: [organization_id], references: [id])
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -88,47 +83,41 @@ model EmailInvitation {
 }
 
 model Organization {
-  id                   String             @id @default(uuid())
-  name                 String
-  email                String?             @unique
-  phone                String?
-  website_url          String?
-  location             String?
-  address              String?
-  city                 String?
-  state                String?
-  postal_code          String?
-  description          String?
-  industry             String?
-  organization_role    OrganizationRole   @default(prospect)
-  number_of_employees  Int?
-  date_founded         DateTime?
-  date_joined          DateTime?
-  date_became_client   DateTime?
-  status               OrganizationStatus @default(active)
-  signed_document_url  String?
-  signed_document_date DateTime?
-  hubspot_id           String?            @unique
-  business_unit        String?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-
-  // Relationships
-  owner_id String? @unique // One owner per organization
-  admin_id String? // Assigned system admin/super admin (consolidated from concierge)
-
-  // Many-to-many relationships
-  specialties             String[]
+  id                      String                  @id @default(uuid())
+  name                    String
+  email                   String?                 @unique
+  hubspot_id              String?                 @unique
+  createdAt               DateTime                @default(now())
+  admin_id                String?
+  description             String?
+  owner_id                String?                 @unique
+  date_became_client      DateTime?
+  date_founded            DateTime?
+  date_joined             DateTime?
+  industry                String?
+  location                String?
+  number_of_employees     Int?
+  organization_role       OrganizationRole        @default(prospect)
+  phone                   String?
   services                String[]
-  users                   USER[] // All users in the organization
-  organization_candidates OrganizationCandidate[]
+  signed_document_date    DateTime?
+  signed_document_url     String?
+  updatedAt               DateTime                @updatedAt
+  website_url             String?
+  status                  OrganizationStatus      @default(active)
+  specialties             String[]
+  address                 String?
+  city                    String?
+  postal_code             String?
+  state                   String?
+  business_unit           String?
   hire_requests           HireRequest[]
-  tickets                 Ticket[]
+  admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
+  owner                   USER?                   @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
+  organization_candidates OrganizationCandidate[]
   staff                   Staff[]
-
-  // Relations
-  owner USER? @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
-  admin USER? @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
+  tickets                 Ticket[]
+  users                   USER[]
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -140,41 +129,43 @@ model Organization {
 }
 
 model Candidate {
-  id                     String                  @id @default(uuid())
-  hubspot_id             String                  @unique
-  email                  String
-  first_name             String?
-  last_name              String?
-  resume_url             String?
-  about_me               String?
-  processed_resume_data  Json?
-  processing_status      ProcessingStatus        @default(pending)
-  processing_error       String?
-  processing_cost        Decimal?                @default(0)
-  processed_at           DateTime?
-  createdAt              DateTime                @default(now())
-  hourly_pay_rate        Decimal?
-  organization_id        String?
-  pipeline_status        String                  @default("available")
-  pipeline_status_origin String?                  
-  years_of_experience    Int?
-  country                String?
-  specialization         String?
-  employment_type        String?
-  name                   String?
-  medical_tools          String?
-  tools                  String?
-  gender                 String?
-  educations             CandidateEducation[]
-  experiences            CandidateExperience[]
-  languages              CandidateLanguage[]
-  skills                 CandidateSkill[]
-  selectedInInterviews   Interview[]             @relation("SelectedCandidate")
-  organizationCandidates OrganizationCandidate[]
-  panelCandidates        PanelCandidate[]
-  staff                  Staff[]
-  tickets                Ticket[]
-  approved_positions_pairing     String[]         
+  id                         String                  @id @default(uuid())
+  hubspot_id                 String                  @unique
+  email                      String
+  first_name                 String?
+  last_name                  String?
+  resume_url                 String?
+  about_me                   String?
+  processed_resume_data      Json?
+  processing_status          ProcessingStatus        @default(pending)
+  processing_error           String?
+  processed_at               DateTime?
+  createdAt                  DateTime                @default(now())
+  hourly_pay_rate            Decimal?
+  organization_id            String?
+  pipeline_status            String                  @default("available")
+  years_of_experience        Int?
+  country                    String?
+  specialization             String?
+  employment_type            String?
+  name                       String?
+  medical_tools              String?
+  tools                      String?
+  gender                     String?
+  pipeline_status_origin     String?
+  approved_positions_pairing String[]
+  processing_cost            Decimal?                @default(0)
+  avatar_url                 String?
+  headshot_url               String?
+  educations                 CandidateEducation[]
+  experiences                CandidateExperience[]
+  languages                  CandidateLanguage[]
+  skills                     CandidateSkill[]
+  selectedInInterviews       Interview[]             @relation("SelectedCandidate")
+  organizationCandidates     OrganizationCandidate[]
+  panelCandidates            PanelCandidate[]
+  staff                      Staff[]
+  tickets                    Ticket[]
 }
 
 model CandidateLanguage {
@@ -317,6 +308,8 @@ model Interview {
   id                    String          @id @default(uuid())
   panel_id              String
   scheduled_date        DateTime
+  link                  String?
+  alert_closed          Boolean         @default(false)
   duration              Int
   status                InterviewStatus @default(scheduled)
   notes                 String?
@@ -335,7 +328,7 @@ model Interview {
 }
 
 model Ticket {
-  id           String       @id @default(uuid())
+  id           String        @id @default(uuid())
   user_id      String?
   title        String
   description  String
@@ -343,14 +336,15 @@ model Ticket {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   type         String
-  org_id       String
+  org_id       String?
   priority     Priority
   staff_id     String?
   candidate_id String?
-  organization Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  staff        Staff?       @relation(fields: [staff_id], references: [id])
-  user         USER?        @relation(fields: [user_id], references: [id])
-  candidate    Candidate?   @relation(fields: [candidate_id], references: [id])
+  created_by   String?
+  candidate    Candidate?    @relation(fields: [candidate_id], references: [id])
+  organization Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  staff        Staff?        @relation(fields: [staff_id], references: [id])
+  user         USER?         @relation(fields: [user_id], references: [id])
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
@@ -372,38 +366,36 @@ model GoogleToken {
 }
 
 model Staff {
-  id              String      @id @default(uuid())
-  candidate_id    String?
-  hirerequest_id  String?
-  organization_id String?
-  status          String
-  salary          Decimal?
-  start_date      DateTime?
-  created_at      DateTime    @default(now())
-  updated_at      DateTime    @updatedAt
-  created_by      String?
-  terminated_date DateTime?
-  bonus           Bonus[]
-  candidate       Candidate?   @relation(fields: [candidate_id], references: [id])
-  hireRequest     HireRequest? @relation(fields: [hirerequest_id], references: [id])
-  organization    Organization? @relation(fields: [organization_id], references: [id])
-  tickets         Ticket[]
-
-  //info from hubspot
-  hubspot_id      String?     @unique
-  hubspot_candidate_id String?
-  hubspot_organization_id String?
-  hubspot_client_name String?
-  hubspot_close_date DateTime?
-  hubspot_company_name String?
-  hubspot_deal_name String?
-  hubspot_pipeline String?
-  hubspot_dealstage String?
-  hubspot_dealtype String?
+  id                      String        @id @default(uuid())
+  candidate_id            String?
+  hirerequest_id          String?
+  status                  String
+  salary                  Decimal?
+  start_date              DateTime?
+  created_at              DateTime      @default(now())
+  updated_at              DateTime      @updatedAt
+  created_by              String?
+  terminated_date         DateTime?
+  hubspot_client_name     String?
+  hubspot_close_date      DateTime?
+  hubspot_company_name    String?
+  hubspot_deal_name       String?
+  hubspot_dealstage       String?
+  hubspot_dealtype        String?
   hubspot_deployment_type String?
-  hubspot_description String?
-  hubspot_hs_acv String?
-  hubspot_business_unit String?
+  hubspot_description     String?
+  hubspot_hs_acv          String?
+  hubspot_id              String?       @unique
+  hubspot_pipeline        String?
+  hubspot_business_unit   String?
+  hubspot_candidate_id    String?
+  hubspot_organization_id String?
+  organization_id         String?
+  bonus                   Bonus[]
+  candidate               Candidate?    @relation(fields: [candidate_id], references: [id])
+  hireRequest             HireRequest?  @relation(fields: [hirerequest_id], references: [id])
+  organization            Organization? @relation(fields: [organization_id], references: [id])
+  tickets                 Ticket[]
 
   @@index([candidate_id], map: "idx_staff_candidate_id")
   @@index([hirerequest_id], map: "idx_staff_hirerequest_id")
@@ -424,9 +416,15 @@ model Bonus {
 }
 
 model Mail_Settings {
-  id                String   @id @default(uuid())
-  title             String
-  created_at        DateTime @default(now())
+  id         String   @id @default(uuid())
+  title      String
+  created_at DateTime @default(now())
+}
+
+model Sync {
+  id             String   @id @default(uuid())
+  role           String
+  last_synced_at DateTime
 }
 
 enum Role {

@@ -34,4 +34,15 @@ export class CronController {
         }
     }
 
+    @Get('system-report')
+    @ApiProperty({ description: 'Send email with important datas' })
+    async systemReport() {
+        const result = await this.cron.systemReport();
+        return {
+            status: 200,
+            message: 'System report sent successfully',
+            data: result
+        }
+    }
+
 }

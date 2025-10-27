@@ -50,6 +50,15 @@ export class HubspotController {
 
 
 
+    @Post('update-organizations')
+    @ApiProperty({ description: 'Update all organization with data from HubSpot' })
+    @UseGuards(AuthGuard)
+    async updateOrganizations(){
+        return this.hubspotService.updateOrganizations();
+    }
+
+
+
     //=> this route is just a example to read candidates and download resume
     @Post('candidates-download')
     //@UseGuards(AuthGuard, RolesGuard)

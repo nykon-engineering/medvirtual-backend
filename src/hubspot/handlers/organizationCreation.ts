@@ -6,6 +6,7 @@ import { mapOrganizationToDb } from "../../common/utils/hubspot.util";
 import { OrganizationStatus } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OrganizationService } from "../../organization/organization.service";
+import { organizationIndustryToDbDictionary } from "../../common/dictionaries/organizationIndustry-dictionary";
 
 
 @Injectable()
@@ -57,6 +58,7 @@ export class HandlerOrganizationCreation {
 
             organizationData.status=OrganizationStatus.inactive; // => asked by Pauli on 10-13-2025 because She needs to active them manualy or when this organization has a deal/staff
             organizationData.email = organizationData.email ?? undefined;
+            organizationData.industry = organizationData.industry ? organizationIndustryToDbDictionary[organizationData.industry] ?? organizationData.industry : '';
 
             const organizationExists = await this.prisma.organization.findUnique({
                 where: {
@@ -70,6 +72,7 @@ export class HandlerOrganizationCreation {
                 throw new BadRequestException('Error creating organization in the database');
             }
             return true;
+
 
         
         }catch (error) {

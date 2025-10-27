@@ -15,7 +15,7 @@ Notifications are sent automatically when:
 - A hire request is reassigned to another user
 - A hire request status changes to 'placement_completed'
 - A client edits or cancels a hire request
-- A ticket is created, assigned, or canceled
+- A ticket is created, assigned, or closed
 
 ### Notification Methods
 
@@ -34,10 +34,11 @@ The system uses the following notification methods internally:
 - **Recipient**: The newly assigned user
 
 #### 3. Placement Completed
-- **Method**: `notifyHireRequestPlacementCompleted(hireRequestId: string)`
+- **Method**: `notifyHireRequestPlacementCompleted(hireRequestId: string, winnerCandidateId?: string)`
 - **Triggered when**: A hire request status changes to 'placement_completed'
-- **Used in**: `HireRequestService.updateStatus()`
+- **Used in**: `HireRequestService.changeWinner()`
 - **Recipient**: The assigned user
+- **Includes**: Winner candidate name in the email template
 
 #### 4. Client Changes
 - **Method**: `notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled')`
@@ -46,8 +47,8 @@ The system uses the following notification methods internally:
 - **Recipient**: The assigned user
 
 #### 5. Ticket Events
-- **Method**: `notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'canceled')`
-- **Triggered when**: Ticket is created, assigned, or canceled
+- **Method**: `notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'closed')`
+- **Triggered when**: Ticket is created, assigned, or closed
 - **Used in**: `TicketService.create()` and other ticket operations
 - **Recipient**: The assigned user (`ticket.user.email`)
 

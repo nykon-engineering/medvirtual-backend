@@ -40,18 +40,24 @@ export class CandidatesService {
     monthly_compensation_to?: string, 
     years_of_experience?: string,
     specializations?: string,
+    positions?: string,
     skills?: string,
     languages?: string,
     page?: number,
     perPage?: number,
-    search?: string
+    search?: string,
+    all?: string
   ): Promise <any> {
 
+    // Check if all parameter is set to true
+    const getAllCandidates = all === 'true';
+    
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
 
-    const skip =(page - 1) * perPage;
-    const take = perPage;
+    // If all=true, skip pagination (set skip=0, take=undefined)
+    const skip = getAllCandidates ? 0 : (page - 1) * perPage;
+    const take = getAllCandidates ? undefined : perPage;
 
     
     
@@ -80,6 +86,9 @@ export class CandidatesService {
     const specializationArray = specializations 
     ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
     : [];
+    const positionsArray = positions 
+    ? positions.split(',').map(s => s.trim()).filter(Boolean) 
+    : [];
     
     if (languagesArray.length) {
       combinedFilters.push(
@@ -100,6 +109,13 @@ export class CandidatesService {
       combinedFilters.push(
         ...specializationArray.map(spec => ({
           specialization: { contains: spec, mode: 'insensitive' }
+        }))
+      );
+    }
+    if (positionsArray.length) {
+      combinedFilters.push(
+        ...positionsArray.map(spec => ({
+          approved_positions_pairing: { has: spec }
         }))
       );
     }
@@ -214,6 +230,8 @@ export class CandidatesService {
       medical_tools: true,
       processing_status: true,
       processing_error: true,
+      avatar_url: true,
+      gender: true,
       languages: {
         select: {
           name: true,
@@ -241,6 +259,7 @@ export class CandidatesService {
           responsabilities: true
         } 
       },
+      approved_positions_pairing: true,
       selectedInInterviews: {
         select: {
           scheduled_date: true,
@@ -257,6 +276,20 @@ export class CandidatesService {
           skip,
           take,
           select,
+          orderBy: [
+            {
+              first_name: {
+                sort: 'asc',
+                nulls: 'last'
+              }
+            },
+            {
+              last_name: {
+                sort: 'asc',
+                nulls: 'last'
+              }
+            }
+          ]
         }),
         this.prisma.candidate.count({where})
       ])
@@ -297,24 +330,30 @@ export class CandidatesService {
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
-        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0)
+        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+        avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
       }));
 
       return {
         data: candidatesWithScheduledInterview,
-        meta: {
+        meta: getAllCandidates ? {
+          total,
+          page: 1,
+          perPage: total,
+          totalPages: 1,
+          all: true
+        } : {
           total,
           page,
           perPage,
-          totalPages: Math.ceil(Number(total) / perPage)
+          totalPages: Math.ceil(Number(total) / perPage),
+          all: false
         }
       };
     }catch(error){
       throw new BadGatewayException('Failed to fetch candidates', error.message);
     }
   }
-
-  
 
   async findOne(id: string, user: USER) {
     const {organization_id} = user;
@@ -335,6 +374,7 @@ export class CandidatesService {
       specialization: true,
       tools: true,
       medical_tools: true,
+      gender: true,
       languages: {
         select: {
           name: true,
@@ -353,6 +393,7 @@ export class CandidatesService {
           year: true
         }
       },
+      approved_positions_pairing: true,
       experiences: {
         orderBy: { start_date: Prisma.SortOrder.desc },
         select: {
@@ -465,22 +506,27 @@ export class CandidatesService {
   }
 
   async processAvatar(id: string): Promise<boolean>{
-    console.log('starting process data for candidate ID:', id);
+    console.log('starting process Avatar for candidate ID:', id);
     if (!id) throw new BadRequestException('Candidate ID is required');
 
     const candidate = await this.prisma.candidate.findUnique({
       where: {
         id: id
+      },
+      select:{
+        id: true,
+        headshot_url: true,
       }
     });
     if(!candidate) throw new BadRequestException('Candidate not found');
 
-    //if( candidate && candidate.resume_url && candidate.resume_url.includes('http')) {  => handler with the field from hubspot, like resume_link
-      //const idImage = '1AjdfgUU0qTwpBdEUKdEBH0R8mlgCnn4a';
-      //const idImage = '1HsIGszx_8OMncDntKBCziUFHLdr5jYK2';
-      //const idImage = '1nL-kL3dK0emQsH3xHY27DZQ9KuAf8rlw';
-      const idImage = '1wa-egm9aaA-TSdvmQTvWz6cM6ZYzXqVB'
-      //const idImage = extractDriveFileId(candidate.resume_url); => handler with the field from hubspot, like resume_link
+    if( candidate && candidate.headshot_url && candidate.headshot_url.includes('http')) { 
+      
+      const idImage = extractDriveFileId(candidate.headshot_url);
+      if (!idImage) {
+        console.log('Error in extracting image ID from URL');
+        return false;
+      }
       
       const imageName = `${candidate.id}__image.png`;
       const downloadDir = path.resolve(__dirname, '/tmp');
@@ -490,14 +536,26 @@ export class CandidatesService {
         console.log('Failed to download image from Google Drive:', imageDownloaded);
       }
       console.log('Image downloaded successfully from Google Drive', imageDownloaded);
-      
-      console.log("starting with the avatar generate...")
-      await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
-      console.log('Avatar generated successfully');
+      const avatarImage= await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
+      console.log('Avatar generated successfully: ', avatarImage);
 
+      const bucketFile = await this.s3.uploadFile(avatarImage, path.basename(avatarImage), 'medvirtual-avatar');
+      if (!bucketFile) {
+        console.log('Failed to upload avatar to S3');
+        return false;
+      }
+      console.log('Avatar uploaded successfully to S3:', bucketFile);
       //Save Avatar on S3 and update candidate database 
 
-    //} 
+      //update database with new avatar URL
+      const updatedCandidate = await this.prisma.candidate.update({
+        where: { id: id },
+        data: { 
+          avatar_url: bucketFile,
+         }
+      });
+
+    } 
     return true;
   }
 
@@ -550,7 +608,7 @@ export class CandidatesService {
       console.log('starting with upload step...');
       //processing_uploadFile
       await this.updateStatus(id, 'processing_uploadFile');
-      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`);
+      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`, 'medvirtual-documents');
       if (!bucketFile) {
         await this.updateStatus(id, 'failed', 'Failed to upload file to S3');
         console.log('Failed to upload file to S3');
@@ -655,6 +713,7 @@ export class CandidatesService {
       let returned
 
       for (const field of fields) {
+        
         if (field === 'languages'){
           returned = await this.prisma.candidateLanguage.findMany({
             where: {
@@ -718,8 +777,30 @@ export class CandidatesService {
           };
           
           result[field]=returned;
+        
+        }else if (field === 'approved_positions_pairing'){
+          returned = await this.prisma.candidate.findMany({
+            where: {
+              OR:[
+                {pipeline_status: '261075105'},
+                {pipeline_status: '1087596819'}
+              ],
+              approved_positions_pairing: { isEmpty: false },
+            },
 
+            select: {
+              [field]: true
+            },
+          })
+
+          const uniquePositions = [
+            ...new Set(
+              returned.flatMap((c) => c.approved_positions_pairing || [])
+            ),
+          ].sort();
+          returned=uniquePositions;
         }else{
+          
           returned = await this.prisma.candidate.findMany({
             where: {
               OR:[
@@ -989,6 +1070,39 @@ export class CandidatesService {
 
   }
 
+  async processAllAvatars(): Promise<boolean> {
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        headshot_url: {
+          contains: 'http'
+        },
+        avatar_url: null
+      },
+      select: {
+        id: true,
+        headshot_url: true,
+      }
+    });
+    if (!candidates || candidates.length === 0) {
+      console.log('No candidates found with headshot_url and without avatar_url');
+      return true;
+    }
+
+    for (const candidate of candidates) {
+      console.log(`Processing avatar for candidate ID: ${candidate.id}`);
+      try {
+        const result = await this.processAvatar(candidate.id);
+        if (result) {
+          console.log(`Successfully processed avatar for candidate ID: ${candidate.id}`);
+        } else {
+          console.log(`Failed to process avatar for candidate ID: ${candidate.id}`);
+        }
+      } catch (error) {
+        console.error(`Error processing avatar for candidate ID: ${candidate.id}`, error);
+      }
+    }
+    return true;
+  }
 }
 
 

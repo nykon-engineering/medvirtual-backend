@@ -29,6 +29,7 @@ export class CandidatesController {
   @ApiQuery({ name: 'specializations', required: false, type: Number, description: 'Filter candidates by specializations', example: "pediatric" })
   @ApiQuery({ name: 'skills', required: false, type: Number, description: 'Filter candidates by skills', example: "office, communication" })
   @ApiQuery({ name: 'languages', required: false, type: Number, description: 'Filter candidates by languages spoken', example: "English, Spanish" })
+  @ApiQuery({ name: 'all', required: false, type: Boolean, description: 'If true, returns all candidates without pagination' })
   @ApiResponse({ status: 200, description: 'Candidates retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Failed to fetch candidates' })
   @UseGuards(AuthGuard)
@@ -40,11 +41,13 @@ export class CandidatesController {
     @Query('monthly_compensation_to') monthly_compensation_to: string, 
     @Query('years_of_experience') years_of_experience: string,
     @Query('specializations') specializations: string,
+    @Query('positions') positions: string,
     @Query('skills') skills: string,
     @Query('languages') languages: string,
     @Query('page') page,
     @Query('perPage') perPage,
     @Query('search') search: string,
+    @Query('all') all: string,
   ) {
     const result = await this.candidatesService.findAll(
       user, 
@@ -54,11 +57,13 @@ export class CandidatesController {
       monthly_compensation_to, 
       years_of_experience,
       specializations,
+      positions,
       skills,
       languages,
       page,
       perPage,
       search,
+      all,
     );
     return result
   }
@@ -102,11 +107,24 @@ export class CandidatesController {
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
   @UseGuards(AuthGuard)
   async processData(@Param('id') id: string) {
-    console.log('Processing data for candidate ID -  controller:', id);
     const result = await this.candidatesService.processData(id);
     return {
       status: 200,
       message: 'Candidate data processed successfully',
+    }
+  }
+
+  @Get('/process-avatar/:id')
+  @ApiOperation({ summary: 'Process data for a specific candidate by ID' })
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
+  @ApiResponse({ status: 200, description: 'Candidate data processed successfully' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @UseGuards(AuthGuard)
+  async processAvatar(@Param('id') id: string) {
+    const result = await this.candidatesService.processAvatar(id);
+    return {
+      status: 200,
+      message: 'Candidate Avatar processed successfully',
     }
   }
 
@@ -193,6 +211,19 @@ export class CandidatesController {
     return {
       status: 200,
       message: 'Candidate endorsed successfully',
+      data: result
+    }
+  }
+
+  @Get('process-all-avatars')
+  @ApiOperation({ summary: 'Process avatars for all candidates without an avatar' })
+  @ApiResponse({ status: 200, description: 'Avatar processing initiated successfully' })
+  @UseGuards(AuthGuard)
+  async processAllAvatars() {
+    const result = await this.candidatesService.processAllAvatars();
+    return {
+      status: 200,
+      message: 'Avatar processing initiated successfully',
       data: result
     }
   }

@@ -48,10 +48,12 @@ describe('NotificationsService', () => {
       const result = (service as any).buildEmail(htmlInner);
       
       expect(result).toContain('<!DOCTYPE html>');
-      expect(result).toContain('<html><body>');
-      expect(result).toContain('<div style="max-width:600px;margin:0 auto;background:#ffffff;">');
+      expect(result).toContain('<html lang="en">');
+      expect(result).toContain('<div class="email-wrapper">');
+      expect(result).toContain('<div class="container">');
       expect(result).toContain(htmlInner);
-      expect(result).toContain('</div></body></html>');
+      expect(result).toContain('</body>');
+      expect(result).toContain('</html>');
     });
   });
 
@@ -63,7 +65,6 @@ describe('NotificationsService', () => {
       status: 'placement_completed',
       priority: 'high',
       specialization: 'Frontend',
-      location: 'Remote',
       salary_range_from: 5000,
       salary_range_to: 8000,
       expected_start_date: new Date('2024-02-01'),
@@ -75,6 +76,21 @@ describe('NotificationsService', () => {
       organization: {
         name: 'Test Company',
       },
+      panels: [
+        {
+          id: 'panel1',
+          panelCandidates: [
+            {
+              candidate: {
+                id: 'candidate1',
+                first_name: 'Jane',
+                last_name: 'Smith',
+                name: 'Jane Smith',
+              },
+            },
+          ],
+        },
+      ],
     };
 
     it('should send notification email successfully', async () => {
@@ -88,12 +104,19 @@ describe('NotificationsService', () => {
         where: { id: 'hr1' },
         select: expect.any(Object),
       });
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
-        to: ['assignee@example.com'],
-        subject: 'Placement completed: Senior Developer',
-        html: expect.stringContaining('Placement Completed'),
-      });
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: 'MedVirtual <noreply@medvirtual.ai>',
+          to: ['assignee@example.com'],
+          subject: 'Placement completed: Senior Developer',
+          html: expect.stringContaining('Placement Completed'),
+        })
+      );
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Selected Candidate:.*Jane Smith/),
+        })
+      );
     });
 
     it('should throw NotFoundException when hire request not found', async () => {
@@ -101,6 +124,30 @@ describe('NotificationsService', () => {
 
       await expect(service.notifyHireRequestPlacementCompleted('hr1'))
         .rejects.toThrow(NotFoundException);
+    });
+
+    it('should handle missing winner candidate gracefully', async () => {
+      const mockHireRequestWithoutWinner = {
+        ...mockHireRequest,
+        panels: [
+          {
+            id: 'panel1',
+            panelCandidates: [],
+          },
+        ],
+      };
+      
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequestWithoutWinner);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestPlacementCompleted('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Selected Candidate:.*Not specified/),
+        })
+      );
     });
 
     it('should throw BadRequestException when no assignee email', async () => {
@@ -138,7 +185,6 @@ describe('NotificationsService', () => {
       description: 'Looking for a senior developer',
       priority: 'high',
       specialization: 'Frontend',
-      location: 'Remote',
       assigned_user: { email: 'assignee@example.com' },
       organization: { name: 'Test Company' },
     };
@@ -197,7 +243,6 @@ describe('NotificationsService', () => {
       status: 'new',
       priority: 'high',
       specialization: 'Frontend',
-      location: 'Remote',
       salary_range_from: 5000,
       salary_range_to: 8000,
       expected_start_date: new Date('2024-02-01'),
@@ -249,7 +294,6 @@ describe('NotificationsService', () => {
       const hireRequestMinimal = {
         ...mockHireRequest,
         description: null,
-        location: null,
         contract_length: null,
         salary_range_from: null,
         salary_range_to: null,
@@ -279,19 +323,16 @@ describe('NotificationsService', () => {
       createdAt: new Date('2024-01-15'),
       user: { email: 'assignee@example.com' },
       organization: { name: 'Test Company' },
+      staff: null,
+      candidate: null,
     };
 
     it('should send notification for created ticket', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
       mockMailService.sendMail.mockResolvedValue(true);
 
-      const result = await service.notifyTicketEvent('ticket1', 'created');
+      const result = await service.notifyTicketEvent(mockTicket, 'created');
 
       expect(result).toBe(true);
-      expect(mockPrismaService.ticket.findUnique).toHaveBeenCalledWith({
-        where: { id: 'ticket1' },
-        select: expect.any(Object),
-      });
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
@@ -301,10 +342,9 @@ describe('NotificationsService', () => {
     });
 
     it('should send notification for assigned ticket', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
       mockMailService.sendMail.mockResolvedValue(true);
 
-      const result = await service.notifyTicketEvent('ticket1', 'assigned');
+      const result = await service.notifyTicketEvent(mockTicket, 'assigned');
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
@@ -315,42 +355,123 @@ describe('NotificationsService', () => {
       });
     });
 
-    it('should send notification for canceled ticket', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+    it('should send notification for closed ticket', async () => {
       mockMailService.sendMail.mockResolvedValue(true);
 
-      const result = await service.notifyTicketEvent('ticket1', 'canceled');
+      const result = await service.notifyTicketEvent(mockTicket, 'closed');
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: 'Ticket canceled: Bug Report',
-        html: expect.stringContaining('Ticket CANCELED'),
+        subject: 'Ticket closed: Bug Report',
+        html: expect.stringContaining('Ticket CLOSED'),
       });
     });
 
     it('should throw NotFoundException when ticket not found', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(null);
-
-      await expect(service.notifyTicketEvent('ticket1', 'created'))
+      await expect(service.notifyTicketEvent(null, 'created'))
         .rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException when no assignee email', async () => {
       const ticketWithoutEmail = { ...mockTicket, user: { email: null } };
-      mockPrismaService.ticket.findUnique.mockResolvedValue(ticketWithoutEmail);
 
-      await expect(service.notifyTicketEvent('ticket1', 'created'))
+      await expect(service.notifyTicketEvent(ticketWithoutEmail, 'created'))
         .rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException when user is null', async () => {
       const ticketWithoutUser = { ...mockTicket, user: null };
-      mockPrismaService.ticket.findUnique.mockResolvedValue(ticketWithoutUser);
 
-      await expect(service.notifyTicketEvent('ticket1', 'created'))
+      await expect(service.notifyTicketEvent(ticketWithoutUser, 'created'))
         .rejects.toThrow(BadRequestException);
+    });
+
+    it('should include staff member details when present', async () => {
+      const ticketWithStaff = {
+        ...mockTicket,
+        staff: {
+          id: 'staff1',
+          candidate: {
+            id: 'candidate1',
+            name: 'John Doe',
+            email: 'john.doe@example.com',
+          },
+        },
+      };
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketEvent(ticketWithStaff, 'created');
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Staff Member:.*John Doe/),
+        })
+      );
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Staff Email:.*john\.doe@example\.com/),
+        })
+      );
+    });
+
+    it('should include candidate details when present', async () => {
+      const ticketWithCandidate = {
+        ...mockTicket,
+        candidate: {
+          id: 'candidate1',
+          name: 'Jane Smith',
+          email: 'jane.smith@example.com',
+        },
+      };
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketEvent(ticketWithCandidate, 'created');
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Candidate Member:.*Jane Smith/),
+        })
+      );
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Candidate Email:.*jane\.smith@example\.com/),
+        })
+      );
+    });
+
+    it('should include both staff and candidate details when both are present', async () => {
+      const ticketWithBoth = {
+        ...mockTicket,
+        staff: {
+          id: 'staff1',
+          candidate: {
+            id: 'candidate1',
+            name: 'John Doe',
+            email: 'john.doe@example.com',
+          },
+        },
+        candidate: {
+          id: 'candidate2',
+          name: 'Jane Smith',
+          email: 'jane.smith@example.com',
+        },
+      };
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketEvent(ticketWithBoth, 'created');
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Staff Member:.*John Doe/),
+        })
+      );
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringMatching(/Candidate Member:.*Jane Smith/),
+        })
+      );
     });
   });
 
@@ -363,7 +484,6 @@ describe('NotificationsService', () => {
         status: 'new',
         priority: 'high',
         specialization: 'Frontend',
-        location: 'Remote',
         salary_range_from: 5000,
         salary_range_to: 8000,
         expected_start_date: new Date('2024-02-01'),
@@ -396,12 +516,13 @@ describe('NotificationsService', () => {
         createdAt: new Date('2024-01-15'),
         user: { email: 'test@example.com' },
         organization: { name: 'Test Company' },
+        staff: null,
+        candidate: null,
       };
 
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
       mockMailService.sendMail.mockResolvedValue(true);
 
-      await service.notifyTicketEvent('ticket1', 'created');
+      await service.notifyTicketEvent(mockTicket, 'created');
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -420,7 +541,6 @@ describe('NotificationsService', () => {
         status: 'new',
         priority: 'high',
         specialization: 'Frontend',
-        location: 'Remote',
         salary_range_from: 5000,
         salary_range_to: 8000,
         expected_start_date: new Date('2024-02-01'),

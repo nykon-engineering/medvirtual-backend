@@ -15,7 +15,6 @@ export class HandlerDealCreation {
 
 
     async execute(event){
-        
         try{
             const properties = Object.keys(dealToDbDictionary).join(',');
             const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}?properties=${properties}`,

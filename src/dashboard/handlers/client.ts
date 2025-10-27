@@ -45,8 +45,8 @@ export class HandlerClient {
         OR: [
           { status: TicketStatus.new },
           { status: TicketStatus.in_progress },
-        ]
-        
+        ],
+        ...(user.role === 'system_admin' ? { user_id: user.id } : {}),
       },
     });
     result.openTickets = openTicketsCount;

@@ -56,6 +56,8 @@ export class TicketService {
             specialization: true,
             years_of_experience: true,
             country: true,
+            gender: true,
+            avatar_url: true,
           },
         },
         staff: {
@@ -143,40 +145,53 @@ export class TicketService {
 
     let assignedValidatedUser;
     let assignedValidatedOrg;
-    if (!user || (user.role.includes('organization') && !user.organization_id))
-      throw new BadRequestException('User organization not found');
-    if (user.role.includes('organization')) {
-      //get the concierge client as assigned user
-      const org = await this.prisma.organization.findUnique({
-        where: { id: user.organization_id || undefined },
-        select: {
-          admin_id: true,
-          id: true,
-        },
-      });
-      if (!org) throw new BadRequestException('Organization not found');
-      assignedValidatedUser = org.admin_id;
-      assignedValidatedOrg = org.id;
-    } else {
+    
+    // For support tickets, organization is optional
+    if (createTicketDto.type === 'Support') {
       assignedValidatedUser = createTicketDto.assigned_user_id;
       assignedValidatedOrg = createTicketDto.client_id;
+    } else {
+      // For other ticket types, organization is required
+      if (!user || (user.role.includes('organization') && !user.organization_id))
+        throw new BadRequestException('User organization not found');
+      if (user.role.includes('organization')) {
+        //get the concierge client as assigned user
+        const org = await this.prisma.organization.findUnique({
+          where: { id: user.organization_id || undefined },
+          select: {
+            admin_id: true,
+            id: true,
+          },
+        });
+        if (!org) throw new BadRequestException('Organization not found');
+        assignedValidatedUser = org.admin_id;
+        assignedValidatedOrg = org.id;
+      } else {
+        assignedValidatedUser = createTicketDto.assigned_user_id;
+        assignedValidatedOrg = createTicketDto.client_id;
+      }
     }
 
     try {
       const ticket = await this.prisma.ticket.create({
         data: {
-          organization: { connect: { id: assignedValidatedOrg } },
+          organization: assignedValidatedOrg 
+            ? { connect: { id: assignedValidatedOrg } }
+            : undefined,
           type: typeBE,
           title: createTicketDto.title,
           description: createTicketDto.description,
           priority: createTicketDto.priority,
-          user: { connect: { id: assignedValidatedUser } },
+          user: assignedValidatedUser 
+            ? { connect: { id: assignedValidatedUser } }
+            : undefined,
           candidate: createTicketDto.candidate_id
             ? { connect: { id: createTicketDto.candidate_id } }
             : undefined,
           staff: createTicketDto.staff_id
             ? { connect: { id: createTicketDto.staff_id } }
             : undefined,
+          created_by: user.id,
         },
       });
       if (!ticket) throw new BadRequestException('Failed to create ticket');
@@ -187,7 +202,7 @@ export class TicketService {
 
       // Notify assignee via email (non-blocking)
       try {
-        await this.notifications.notifyTicketEvent(ticket.id, 'created');
+        await this.notifications.notifyTicketEvent(ticketFull, 'created');
       } catch (err) {
         console.warn('[notifications] ticket-created email failed', err?.message || err);
       }
@@ -214,11 +229,19 @@ export class TicketService {
         where: {
           type: type ? type : undefined,
           priority: priority ? priority as Priority : undefined,
-          user: user.role === 'system_admin' ? { is : { id: user.id}} : undefined,
-          OR: search ? [
-            { organization: { name: { contains: search, mode: 'insensitive' } } },
-            { title: { contains: search, mode: 'insensitive' } }
-          ] : undefined,
+          ...(user.role === 'system_super_admin' ? {} : 
+              user.role === 'system_admin' ? {
+                OR: [
+                  { user: { is: { id: user.id } } },
+                  { created_by: user.id }
+                ]
+              } : { user: { is: { id: user.id } } }),
+          ...(search ? {
+            OR: [
+              { organization: { name: { contains: search, mode: 'insensitive' } } },
+              { title: { contains: search, mode: 'insensitive' } }
+            ]
+          } : {}),
           
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
@@ -233,6 +256,7 @@ export class TicketService {
           status: true,
           priority: true,
           createdAt: true,
+          created_by: true, 
           organization: {
             select: {
               id: true,
@@ -260,6 +284,8 @@ export class TicketService {
               last_name: true,
               email: true,
               name: true,
+              gender: true,
+              avatar_url: true,
             },
           },
           staff: {
@@ -277,6 +303,8 @@ export class TicketService {
                   name: true,
                   specialization: true,
                   years_of_experience: true,
+                  gender: true,
+                  avatar_url: true,
                 },
               },
             },
@@ -284,7 +312,23 @@ export class TicketService {
         },
       });
       if (!tickets) throw new BadRequestException('Failed to fetch tickets');
-      return tickets;
+
+      const filteredTickets = tickets.map((ticket) => ({
+        ...ticket,
+        candidate: ticket.candidate ? {
+          ...ticket.candidate,
+          avatar: ticket.candidate.avatar_url ? `${process.env.AVATAR_URL}${ticket.candidate.avatar_url}` :  null,
+        }: null,
+        staff: ticket.staff ? {
+          ...ticket.staff,
+          candidate: ticket.staff.candidate ? {
+            ...ticket.staff.candidate,
+            avatar: ticket.staff.candidate.avatar_url ? `${process.env.AVATAR_URL}${ticket.staff.candidate.avatar_url}` :  null,
+          } : null,
+        } : null,
+      }))
+
+      return filteredTickets;
     } catch (error) {
       throw new BadRequestException('Error fetching tickets');
     }
@@ -321,7 +365,7 @@ export class TicketService {
 
       // Notify assignee via email (non-blocking)
       try {
-        await this.notifications.notifyTicketEvent(id, 'assigned');
+        await this.notifications.notifyTicketEvent(ticket, 'assigned');
       } catch (err) {
         console.warn('[notifications] ticket-assigned email failed', err?.message || err);
       }
@@ -404,7 +448,7 @@ export class TicketService {
       // Notify assignee via email when ticket is closed (non-blocking)
       if (data.status === 'closed') {
         try {
-          await this.notifications.notifyTicketEvent(id, 'canceled');
+          await this.notifications.notifyTicketEvent(ticket, 'closed');
         } catch (err) {
           console.warn('[notifications] ticket-closed email failed', err?.message || err);
         }

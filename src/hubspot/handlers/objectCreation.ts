@@ -111,7 +111,8 @@ export class HandlerObjectCreation {
             console.log(`Candidate created with ID: ${createCandidate.id}, Name: ${createCandidate.first_name} ${createCandidate.last_name}`);
             // Run the resume pipeline when the candidate is created
             if (process.env.ENVIRONMENT === 'PROD') {
-                await this.candidateService.processData(createCandidate.id);
+               await this.candidateService.processData(createCandidate.id);
+               await this.candidateService.processAvatar(createCandidate.id);
             }else{
                 console.log('Environment is not PROD. Skipping resume processing pipeline.');
             }
