@@ -249,6 +249,24 @@ export class HandlerOrganization {
       select,
       take: 8,
     });
+    const lastTimeofDay = new Date();
+    lastTimeofDay.setHours(23, 59, 59, 999);
+
+    const interviews = await this.prisma.interview.findMany({
+      where:{
+       panel: {
+        hireRequest:{
+          org_id: user.organization_id,
+        }
+       },
+       scheduled_date: {
+        gte: new Date(),
+        lte: lastTimeofDay
+       },
+       alert_closed: false,
+      }
+    })
+    result.interviews = interviews;
 
     const otherTalentsSalary = otherTalents.map((talent) => ({
       ...talent,

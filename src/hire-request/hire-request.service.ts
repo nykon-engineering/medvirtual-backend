@@ -1527,6 +1527,7 @@ export class HireRequestService {
     const result = panels.map(panel => ({
       ...panel,
       interview_date: panel.interviews[0]?.scheduled_date || null,
+      interview_link: panel.interviews[0]?.link || null,
       interviews: undefined,
       panelCandidates: panel.panelCandidates.map(pc => ({
         ...pc,
