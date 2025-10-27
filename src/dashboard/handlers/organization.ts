@@ -264,9 +264,29 @@ export class HandlerOrganization {
         lte: lastTimeofDay
        },
        alert_closed: false,
+      },
+      select:{
+        id: true,
+        scheduled_date: true,
+        link: true,
+        alert_closed: true,
+        panel:{
+          select:{
+            hireRequest:{
+              select:{
+                title: true,
+              }
+            }
+          }
+        }
       }
     })
-    result.interviews = interviews;
+    const interviewSanitized = interviews.map((interview) => ({
+      ...interview,
+      hireRequestTitle: interview.panel.hireRequest.title,
+    }))
+
+    result.interviews = interviewSanitized;
 
     const otherTalentsSalary = otherTalents.map((talent) => ({
       ...talent,
