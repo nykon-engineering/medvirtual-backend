@@ -6,7 +6,10 @@ import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import path from 'path';
 
-
+import { File as NodeFile } from "node:buffer";
+if (!globalThis.File) {
+    globalThis.File = NodeFile as unknown as typeof File;
+}
 
 @Injectable()
 export class OpenaiService {
@@ -15,6 +18,10 @@ export class OpenaiService {
         private readonly prisma: PrismaService
     ) {}
     /* istanbul ignore next */
+
+
+
+
     async organizeText(text: string, candidate: any): Promise<string> {
 
         const candidateJSON = JSON.stringify(candidate);
