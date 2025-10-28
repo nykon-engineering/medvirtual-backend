@@ -1973,13 +1973,6 @@ export class HireRequestService {
     });
     if( !hireRequestUpdated) throw new BadRequestException(`Hire request not updated to placement completed`);
 
-    // Fire placement completed notification (non-blocking)
-    try {
-      await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id, data.winner_id);
-    } catch (err) {
-      console.warn('[notifications] placement-completed email failed', err?.message || err);
-    }
-
     //update the winner candidate as selected_by_client
     const winner = await this.prisma.panelCandidate.updateMany({
       where: {
@@ -2050,7 +2043,19 @@ export class HireRequestService {
     }
     */
     
+    // Fire placement completed notification (non-blocking)
+    try {
+      await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id, data.winner_id);
+    } catch (err) {
+      console.warn('[notifications] placement-completed email failed', err?.message || err);
+    }
 
+    // Fire select winner notification to organization admins (non-blocking)
+    try {
+      await this.notifications.notifyHireRequestSelectWinner(hireRequest.id);
+    } catch (err) {
+      console.warn('[notifications] select-winner email failed', err?.message || err);
+    }
 
     // =========== return object requested by Lucas
 

@@ -14,6 +14,7 @@ Notifications are sent automatically when:
 - A hire request is created and assigned to a user
 - A hire request is reassigned to another user
 - A hire request status changes to 'placement_completed'
+- Organization admins and super admins need to select a winner when hire request is completed
 - A client edits or cancels a hire request
 - A ticket is created, assigned, or closed
 
@@ -40,13 +41,20 @@ The system uses the following notification methods internally:
 - **Recipient**: The assigned user
 - **Includes**: Winner candidate name in the email template
 
-#### 4. Client Changes
+#### 4. Select Winner Notification
+- **Method**: `notifyHireRequestSelectWinner(hireRequestId: string)`
+- **Triggered when**: A hire request is marked as 'placement_completed' and requires client action
+- **Used in**: `HireRequestService.updateStatus()` and `OrganizationService.createStaffWithOptionalHireRequest()`
+- **Recipients**: Organization admins and super admins (`organization_admin`, `organization_super_admin` roles)
+- **Includes**: Hire request details and selected candidate information
+
+#### 5. Client Changes
 - **Method**: `notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled')`
 - **Triggered when**: Client edits or cancels a hire request
 - **Used in**: `HireRequestService.update()` and status change methods
 - **Recipient**: The assigned user
 
-#### 5. Ticket Events
+#### 6. Ticket Events
 - **Method**: `notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'closed')`
 - **Triggered when**: Ticket is created, assigned, or closed
 - **Used in**: `TicketService.create()` and other ticket operations
@@ -101,4 +109,5 @@ You can test notifications by:
 1. Creating a new hire request with an assigned user
 2. Reassigning a hire request to another user
 3. Changing a hire request status to 'placement_completed'
-4. Editing a hire request as a client user
+4. Creating staff with hire request (triggers select winner notification)
+5. Editing a hire request as a client user
