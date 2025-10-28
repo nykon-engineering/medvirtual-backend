@@ -44,7 +44,10 @@ export class HandlerDealCreation {
                     hubspot_id: String(event.objectId)
                 }
             })
-            if(dealExists) throw new BadRequestException('Deal already exists on the database');
+            if(dealExists){
+                console.log(`Deal with Hubspot ID ${event.objectId} already exists. Skipping creation.`);
+                return ;
+            }
 
             //Here I need to check if we alreadey have an candidate (VirtualAssistant) before we proceed with the deal Creation
             const getObjectVA = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}/associations/${process.env.HUBSPOT_CUSTOM_OBJECT}`,
