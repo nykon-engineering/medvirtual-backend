@@ -40,9 +40,10 @@ import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCre
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
-import { mapDealToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util';
-import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
+// import { mapDealToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util';
+//import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
+import { NotificationsService } from '../notifications/notifications.service';
 
 
 @Injectable()
@@ -54,7 +55,9 @@ export class OrganizationService {
     private readonly organizationCreation: HandlerOrganizationCreation,
     private readonly dealCreation: HandlerDealCreation,
     @Inject(forwardRef (() => HubspotService))
-    private readonly hubspot: HubspotService
+    private readonly hubspot: HubspotService,
+    @Inject(forwardRef (() => NotificationsService))
+    private readonly notifications: NotificationsService
     
   ) {}
 

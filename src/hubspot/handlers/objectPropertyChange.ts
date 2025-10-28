@@ -67,7 +67,13 @@ export class HandlerObjectPropertyChange {
             const fields = Array.isArray(fieldUpdated) ? fieldUpdated : [fieldUpdated];
 
             const updateData = fields.reduce((acc, field) => {
-            acc[field] = event.propertyValue;
+                if (field === 'approved_positions_pairing') {
+                    acc[field] = event.propertyValue
+                      ? event.propertyValue.split(';').map((v: string) => v.trim())
+                      : [];
+                  } else {
+                    acc[field] = event.propertyValue;
+                  }
             return acc;
             }, {} as Record<string, any>);
 

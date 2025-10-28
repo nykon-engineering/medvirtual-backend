@@ -14,11 +14,15 @@
  *    - Sends notification when a hire request placement is completed
  *    - Used in: HireRequestService.updateStatus() when status changes to 'placement_completed'
  * 
- * 3. notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled')
+ * 3. notifyHireRequestSelectWinner(hireRequestId: string)
+ *    - Sends notification to organization admins and super admins when hire request is marked as completed
+ *    - Used in: HireRequestService.updateStatus() and OrganizationService.createStaffWithOptionalHireRequest()
+ * 
+ * 4. notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled')
  *    - Sends notification when client edits or cancels a hire request
  *    - Used in: HireRequestService.update() and status change methods
  * 
- * 4. notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'closed')
+ * 5. notifyTicketEvent(ticketId: string, event: 'created' | 'assigned' | 'closed')
  *    - Sends notification for ticket events
  *    - Used in: TicketService.create() and other ticket operations
  * 

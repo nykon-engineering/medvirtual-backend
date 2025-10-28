@@ -9,6 +9,7 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
+import { NotificationsService } from '../notifications/notifications.service';
 
 
 const userfake = { 
@@ -74,6 +75,10 @@ describe('OrganizationService', () => {
     execute: jest.fn(),
   }
 
+  const mockNotificationsService = {
+    notifyHireRequestSelectWinner: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -86,6 +91,7 @@ describe('OrganizationService', () => {
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: HandlerOrganizationCreation , useValue: handlerObjectCreationMock },
         { provide: HandlerDealCreation , useValue: handlerDealCreationMock },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 

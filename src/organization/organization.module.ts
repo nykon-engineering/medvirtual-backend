@@ -4,11 +4,12 @@ import { OrganizationService } from './organization.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { HubspotModule } from '../hubspot/hubspot.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   controllers: [OrganizationController],
   providers: [OrganizationService],
-  imports: [PrismaModule, AuthModule, forwardRef(() => HubspotModule)],
+  imports: [PrismaModule, AuthModule, forwardRef(() => HubspotModule), NotificationsModule],
   exports: [OrganizationService],
 })
 export class OrganizationModule {}

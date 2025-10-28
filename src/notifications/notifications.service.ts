@@ -435,8 +435,152 @@ export class NotificationsService {
     });
   }
 
+  async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        specialization: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        expected_start_date: true,
+        organization: {
+          select: { 
+            id: true,
+            name: true,
+            business_unit: true,
+            admin: {
+              select: { id: true, email: true, first_name: true, last_name: true }
+            },
+            owner: {
+              select: { id: true, email: true, first_name: true, last_name: true }
+            }
+          },
+        },
+        panels: {
+          select: {
+            id: true,
+            panelCandidates: {
+              where: { status: 'selected_by_client' },
+              select: {
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
 
+    if (!hr) throw new NotFoundException('Hire request not found');
 
+    // Get organization admin and super admin users
+    const organizationAdmins = await this.prisma.uSER.findMany({
+      where: {
+        organization_id: hr.organization.id,
+        role: { in: ['organization_admin', 'organization_super_admin'] },
+        status: 'active',
+      },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+      },
+    });
+
+    // Also include organization admin and owner if they exist
+    const additionalRecipients: any[] = [];
+    if (hr.organization.admin && hr.organization.admin.email) {
+      additionalRecipients.push(hr.organization.admin);
+    }
+    if (hr.organization.owner && hr.organization.owner.email) {
+      additionalRecipients.push(hr.organization.owner);
+    }
+
+    // Combine all recipients and remove duplicates
+    const allRecipients = [...organizationAdmins, ...additionalRecipients];
+    const uniqueRecipients = allRecipients.filter((recipient, index, self) => 
+      index === self.findIndex(r => r.email === recipient.email)
+    );
+
+    if (uniqueRecipients.length === 0) {
+      throw new BadRequestException('No organization admins found to notify');
+    }
+
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    const salaryRange = hr.salary_range_from && hr.salary_range_to
+      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+      : 'Not specified';
+    const startDate = hr.expected_start_date
+      ? new Date(hr.expected_start_date).toLocaleDateString()
+      : 'Not specified';
+
+    // Get winner candidate name
+    const winnerCandidate = hr.panels?.[0]?.panelCandidates?.[0]?.candidate;
+    const winnerName = winnerCandidate
+      ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
+      : 'Not specified';
+
+    // Send notification to each recipient
+    const emailPromises = uniqueRecipients.map(async (recipient) => {
+      // Get user email theme
+      const emailTheme = await getUserEmailTheme(this.prisma, recipient.id);
+
+      // Determine company name based on organization business unit
+      const companyName = hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual';
+      const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
+
+      const html = this.buildEmail(
+        `<h2>Hire Request Status Update</h2>
+         <p>Your hire request has been completed.</p>
+         
+         <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+           <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+           <p><strong>Title:</strong> ${hr.title}</p>
+           <p><strong>Organization:</strong> ${hr.organization.name}</p>
+           <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+           <p><strong>Specialization:</strong> ${hr.specialization}</p>
+           <p><strong>Priority:</strong> ${hr.priority}</p>
+           <p><strong>Salary Range:</strong> ${salaryRange}</p>
+           <p><strong>Expected Start Date:</strong> ${startDate}</p>
+           <p><strong>Selected Candidate:</strong> ${winnerName}</p>
+         </div>
+         
+         <p>Please review the details and proceed with the next steps.</p>
+         <div style="text-align: left; margin: 30px 0;">
+           <a href="${detailUrl}" class="cta-button">
+             Review Hire Request
+           </a>
+         </div>`,
+        emailTheme
+      );
+
+      return this.mail.sendMail({
+        from: fromEmail,
+        to: [recipient.email],
+        subject: `Hire Request Completed: ${hr.title}.`,  
+        html,
+      });
+    });
+
+    // Wait for all emails to be sent
+    const results = await Promise.all(emailPromises);
+    
+    // Return true if at least one email was sent successfully
+    return results.some(result => result === true);
+  }
 }
 
 
