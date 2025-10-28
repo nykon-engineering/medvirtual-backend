@@ -4,7 +4,7 @@ import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects'
 import axios from 'axios';
 import { OrganizationRole, Prisma } from '@prisma/client';
 
-import {  mapHubspotToDb, mapOrganizationToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util'
+import {  mapHubspotToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 
 import { CandidatesService } from '../candidate/candidates.service';
@@ -261,7 +261,7 @@ export class HubspotService {
     }
 
     async createHireRequestInHubspot(data: any): Promise<any> {
-        return await this.hireRequestCreationService.createHireRequest(data);
+        return await this.hireRequestCreationService.execute(data);
     }
 
 
