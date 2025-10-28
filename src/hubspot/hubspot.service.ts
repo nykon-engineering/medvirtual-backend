@@ -29,6 +29,7 @@ import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
+import { HireRequestCreationService } from './creations/hireRequest';
 
 
 
@@ -51,6 +52,8 @@ export class HubspotService {
       private readonly dealPropertyChange: HandlerDealPropertyChange,
       private readonly dealDeletion: HandlerDealDeletion,
       private readonly dealAssociationChange: HandlerDealAssociationChange,
+
+      private readonly hireRequestCreationService: HireRequestCreationService,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -255,6 +258,10 @@ export class HubspotService {
         }catch (error) {
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
+    }
+
+    async createHireRequestInHubspot(data: any): Promise<any> {
+        return await this.hireRequestCreationService.createHireRequest(data);
     }
 
 
