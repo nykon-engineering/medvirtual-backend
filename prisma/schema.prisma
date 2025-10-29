@@ -255,6 +255,7 @@ model HireRequest {
   hubspot_contract_amount  Decimal?
   hubspot_language    String?
   hubspot_numberVA    Int?
+  hubspot_ticket_id   String?            @unique
   panels              CandidatePanel[]
   assigned_user       USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
   organization        Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)

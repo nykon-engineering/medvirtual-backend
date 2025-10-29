@@ -1,10 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { PrismaService } from "../../prisma/prisma.service";
 
 @Injectable()
 
 export class HireRequestCreationService {
-    constructor(){}
+    constructor(
+      private readonly prisma: PrismaService
+    ){}
 
     async execute(data: any): Promise<any> {
       console.log("Creating Hire Request Ticket in HubSpot...");
@@ -60,8 +63,12 @@ export class HireRequestCreationService {
               }
             );
         
-            console.log(" Ticket created successfull");
-            console.log(response.data);
+            //console.log(response.data);
+            //update hireRequest with the hubspot_ticket_id
+            await this.prisma.hireRequest.update({
+              where: { id: data.id },
+              data: { hubspot_ticket_id: response.data.id },
+            });
           } catch (error) {
             if (error.response) {
               console.error("Error to created ticket:", error.response.data);
