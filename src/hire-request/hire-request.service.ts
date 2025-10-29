@@ -160,7 +160,7 @@ export class HireRequestService {
 
     //send request for the hubspot to create the ticket
     try {
-      //await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
+      await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
     } catch (err) {
       console.warn('[hubspot] createHireRequestTicket failed', err?.message || err);
     }
