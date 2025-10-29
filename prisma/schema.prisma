@@ -34,6 +34,7 @@ model USER {
   email_invitations     EmailInvitation[]
   email_verifications   EmailVerification[]
   hireRequestsAssigned  HireRequest[]       @relation("AssignedUser")
+  hireRequestsCreated   HireRequest[]       @relation("HireRequestCreatedBy")
   adminOrganizations    Organization[]      @relation("OrganizationAdmin")
   ownedOrganizations    Organization?       @relation("OrganizationOwner")
   sessions              Session[]
@@ -240,6 +241,8 @@ model HireRequest {
   status              HireRequestStatus  @default(new)
   priority            Priority           @default(medium)
   createdAt           DateTime           @default(now())
+  createdByUserId     String?            // FK para USER.id
+  createdBy           USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
   availability        String
   contract_length     String?
   expected_start_date DateTime?
@@ -248,6 +251,10 @@ model HireRequest {
   specialization      String
   location            String?
   assign_user_id      String?
+  hubspot_role_type    String?
+  hubspot_contract_amount  Decimal?
+  hubspot_language    String?
+  hubspot_numberVA    Int?
   panels              CandidatePanel[]
   assigned_user       USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
   organization        Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
@@ -258,6 +265,7 @@ model HireRequest {
   @@index([status], map: "idx_hire_requests_status")
   @@index([priority], map: "idx_hire_requests_priority")
   @@index([createdAt], map: "idx_hire_requests_createdAt")
+  @@index([createdByUserId], map: "idx_hire_requests_created_by_user_id")
 }
 
 model HireRequestSkill {

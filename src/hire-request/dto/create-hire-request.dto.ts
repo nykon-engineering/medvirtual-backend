@@ -63,6 +63,22 @@ export class CreateHireRequestDto {
     @IsString()
     priority: 'high' | 'medium' | 'low';
 
+    @ApiProperty({ example: 'Jr. Medical General', description: 'The position/role/type of the candidate', required: true,  type: String})
+    @IsString()
+    position: string;
+
+    @ApiProperty({ example: '4500', description: 'The amount of contract', required: true,  type: String})
+    @IsString()
+    contract_amount: string;
+
+    @ApiProperty({ example: 'English', description: 'The language required for this HR', required: true,  type: String})
+    @IsString()
+    language: string;
+
+    @ApiProperty({ example: '1', description: 'The numbers required for this position', required: true,  type: String})
+    @IsString()
+    numberVA: number;
+
     @ApiProperty({ type: [HireRequestSkillDTO], description: 'The skills required for the hire request', required: false })
     @IsArray()
     @IsOptional()

@@ -98,6 +98,7 @@ export class HireRequestService {
       //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
+      createdBy: { connect: { id: user.id } },
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({

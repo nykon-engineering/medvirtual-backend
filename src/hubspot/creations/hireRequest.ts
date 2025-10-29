@@ -7,6 +7,7 @@ export class HireRequestCreationService {
     constructor(){}
 
     async execute(data: any): Promise<any> {
+      console.log("Creating Hire Request Ticket in HubSpot...");
         try {
             const content = `CLIENTS NAME : ${data.organization.name}\n\nBUSINESS NAME: \n\nNATURE OF BUSINESS: ${data.organization.industry}\n\nWEBSITE: ${data.organization.website_url}\n\nSOCIAL MEDIA ACCOUNT: \n\nHOW MANY VA'S NEEDED: 1\n\nWORKING HOURS: \n\nTARGET START DATE: ${data.expected_start_date}\n\nSPECIFIC REQUEST: N/A\n\n﻿﻿NAME: ${data.organization.name}EMAIL: PHONE NO ${data.organization.phone} \n\nDESCRIPTION: ${data.description}\n\nNO. OF VAs: 1\n\nFULL TIME OR PART-TIME: ${data.availability}}\n\nSKILLS: ${data.skills.join(", ")}`;
             const response = await axios.post(
@@ -18,7 +19,11 @@ export class HireRequestCreationService {
                   hs_pipeline: "0", //=>Pairing Pipeline
                   hs_pipeline_stage: "1",  //=> New agent Request
                   ticket_type: "Agent Pairing Request",
-                  priority: data.priority,
+                  hs_ticket_priority: data.priority,
+                  va_type: data.hubspot_role_type,
+                  contract_amount: data.hubspot_contract_amount,
+                  language: data.hubspot_language,
+                  number_of_vas: data.hubspot_numberVA.toString(),
                 },
                 associations: [
                   {
