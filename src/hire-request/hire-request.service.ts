@@ -25,6 +25,7 @@ import {
   findMonthlySalary,
 } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
+import { language } from 'googleapis/build/src/apis/language';
 
 @Injectable()
 export class HireRequestService {
@@ -68,7 +69,7 @@ export class HireRequestService {
   async create(data: CreateHireRequestDto, user: USER):Promise<any> {  
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const {skills, client_id, ...hireRequestData} = data;
+    const {skills, client_id,  ...hireRequestData} = data;
 
     if( user.role.includes('system') && !client_id) throw new BadRequestException('Client ID is required for system users');
 
@@ -99,6 +100,14 @@ export class HireRequestService {
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
       createdBy: { connect: { id: user.id } },
+      hubspot_role_type: hireRequestData.position,
+      hubspot_contract_amount: hireRequestData.contract_amount,
+      hubspot_language: hireRequestData.language,
+      hubspot_numberVA: Number(hireRequestData.numberVA),
+      position: undefined,
+      contract_amount: undefined,
+      language: undefined,
+      numberVA: undefined,
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
@@ -151,7 +160,7 @@ export class HireRequestService {
 
     //send request for the hubspot to create the ticket
     try {
-      await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
+      //await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
     } catch (err) {
       console.warn('[hubspot] createHireRequestTicket failed', err?.message || err);
     }
