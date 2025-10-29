@@ -2179,92 +2179,106 @@ export class OrganizationService {
     return organizations;
   }
 
-  async syncOrganizationsWithDeals(): Promise<Object> {
+  async syncOrganizationsWithDeals(): Promise<Object>{
     const arrayReturn: any[] = [];
-  
     const organizations = await this.prisma.organization.findMany({
-      where: { status: 'active', organization_role: 'client', hubspot_id: { not: null } },
-      select: { id: true, hubspot_id: true, staff: { select: { hubspot_id: true, candidate: { select: { id: true, hubspot_id: true } } } } }
+      where: {
+        status: 'active',
+        organization_role: 'client',
+        hubspot_id: { not: null}
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+        staff: {
+          select: {
+            hubspot_id: true,
+            candidate: {
+              select: {
+                id: true,
+                hubspot_id: true,
+              },
+            },
+          },
+        },
+      },
     });
-  
-    const orgMap = new Map(organizations.map(o => [o.hubspot_id, o]));
-    const staffMap = new Map();
-    organizations.forEach(o => o.staff.forEach(s => staffMap.set(s.hubspot_id, s)));
-  
-    const organizationsId = organizations.map(o => o.hubspot_id);
+
+    const organizationsId = organizations.map(org => org.hubspot_id);
     const chunkSize = 100;
-  
-    // Chunks em paralelo
-    const chunkPromises: Promise<AxiosResponse<any>>[] = [];
+    let staffArray : string[] = [];
+
     for (let i = 0; i < organizationsId.length; i += chunkSize) {
       const chunk = organizationsId.slice(i, i + chunkSize);
-      chunkPromises.push(
-        axios.post(
+
+      try {
+        const response = await axios.post(
           'https://api.hubapi.com/crm/v4/associations/company/deal/batch/read',
           { inputs: chunk.map(id => ({ id })) },
-          { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 10000 }
-        )
-      );
-    }
-  
-    const responses = await Promise.all(chunkPromises);
-  
-    const staffArray: string[] = [];
-    for (const res of responses) {
-      for (const obj of res.data.results) {
-        const org = orgMap.get(obj.from.id);
-        if (!org) {
-          const newOrg = await this.organizationCreation.execute({ objectId: obj.from });
-          if (newOrg) arrayReturn.push(`=> Organization ${obj.from.id} was created.`);
-          continue;
-        }
-  
-        for (const assoc of obj.to) {
-          const dealId = assoc.toObjectId;
-          //const existingStaff = staffMap.get(dealId);
-          const existingStaff = org.staff.find(s => s.hubspot_id == dealId); //Already has this staff on database?
-          if (!existingStaff) {
-            const newStaff = await this.dealCreation.execute({ objectId: dealId });
-            if (newStaff) arrayReturn.push(`=> Staff ${dealId} created for org ${org.hubspot_id}`);
-          } else staffArray.push(dealId);
-        }
-      }
-    }
-  
-    // Buscar candidatos de uma vez
-    const candidates = await this.prisma.candidate.findMany({ select: { id: true, hubspot_id: true } });
-    const candidatesMap = new Map(candidates.map(c => [c.hubspot_id, c]));
-  
-    // Atualizar staff com candidatos
-    const batchCandidatesResponse = await axios.post(
-      `https://api.hubapi.com/crm/v4/associations/deal/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/read`,
-      { inputs: staffArray.map(id => ({ id })) },
-      { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 10000 }
-    );
-  
-    for (const obj of batchCandidatesResponse.data.results) {
-      const dealId = obj.from.id;
-      const staffMember = staffMap.get(dealId);
-      if (!staffMember) continue;
-  
-      for (const assoc of obj.to) {
-        const candidate = candidatesMap.get(assoc.toObjectId);
-        if (!candidate) continue;
-  
-        await this.prisma.staff.update({
-          where: { id: staffMember.candidate ? staffMember.candidate.id : '' },
-          data: { candidate_id: candidate.id, hubspot_candidate_id: candidate.hubspot_id }
-        });
-  
-        arrayReturn.push(`=> Staff ${dealId} updated with candidate ${candidate.hubspot_id}`);
-      }
-    }
-  
-    await this.prisma.sync.create({ data: { role: 'organizations', last_synced_at: new Date() } });
-  
-    return { message: 'Organization sync completed', status: 200, data: { arrayReturn } };
-  }
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
 
+        //console.log(`Batch ${i / chunkSize + 1} response:`, response.data.results?.length || 0);
+        //console.log('Associations:', response.data.results);
+
+        for (let object of response.data.results){
+          //console.log('from: ', object.from , '-> to', object.to);
+          const org = organizations.find(o => o.hubspot_id === object.from.id);
+          if (!org) {
+            const newOrganization = await this.organizationCreation.execute({ objectId: object.from });
+            if (newOrganization){
+              console.log(`=> Organization with HubSpot ID ${object.from.id} not found in local data.`);
+              arrayReturn.push(`=> Organization ${object.from.id} was created.`);
+            }
+            continue;
+          }
+
+
+          for (let association of object.to){
+            
+            const dealHubspotId = association.toObjectId;
+            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId); //Already has this staff on database?
+            if (!existingStaff) {
+              const newStaff = await this.dealCreation.execute({ objectId: dealHubspotId });
+              if (newStaff){
+                console.log(`==>Staff with HubSpot ID ${dealHubspotId} created for organization ${org.hubspot_id}.`);
+                arrayReturn.push(`=> Staff ${dealHubspotId} was created below organization ${org.hubspot_id}.`);
+              }
+            }else{ 
+              staffArray.push(dealHubspotId); //Iterate this arrays to use it later
+            }
+          }
+        }
+
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          console.error('Error in batch', i / chunkSize + 1, error.response?.data);
+        } else {
+          console.error('Unexpected error:', error);
+        }
+      }
+    }
+
+    await this.prisma.sync.create({
+      data: {
+        role: 'organizations',
+        last_synced_at: new Date(),
+      },
+    })
+    //console.log('ArrayReturn: ' , arrayReturn)
+    
+    return {
+      message: 'Organization sync with deals completed',
+      status: 200,
+      data: { arrayReturn }
+    };
+    
+  }
   
   //replaced on 2025-10-28
   async syncOrganizationsWithDealsBKP(): Promise<Object>{
