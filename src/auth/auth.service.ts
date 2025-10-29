@@ -505,6 +505,11 @@ export class AuthService {
 
   async inviteUser(data: AuthInviteUserDto): Promise<string> {
     const authenticationMethod = 'OwnSign';
+
+    if (data.role != 'system_super_admin' && data.role != 'system_admin' && !data.organizationId){
+      throw new BadRequestException('Organization Id not provided')
+    }
+
     const user = await this.userService.findByEmail(data.email);
     if (user) {
       throw new BadRequestException('User already exists');

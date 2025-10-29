@@ -2180,91 +2180,114 @@ export class OrganizationService {
   }
 
   async syncOrganizationsWithDeals(): Promise<Object> {
-    const arrayReturn: any[] = [];
+    const arrayReturn: string[] = [];
+    const chunkSize = 100;
+    const concurrency = 5; // limite de requests simultâneas
   
     const organizations = await this.prisma.organization.findMany({
-      where: { status: 'active', organization_role: 'client', hubspot_id: { not: null } },
-      select: { id: true, hubspot_id: true, staff: { select: { hubspot_id: true, candidate: { select: { id: true, hubspot_id: true } } } } }
+      where: {
+        status: 'active',
+        organization_role: 'client',
+        hubspot_id: { not: null },
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+        staff: {
+          select: {
+            hubspot_id: true,
+            candidate: { select: { id: true, hubspot_id: true } },
+          },
+        },
+      },
     });
   
+    // Map para busca rápida
     const orgMap = new Map(organizations.map(o => [o.hubspot_id, o]));
-    const staffMap = new Map();
-    organizations.forEach(o => o.staff.forEach(s => staffMap.set(s.hubspot_id, s)));
   
-    const organizationsId = organizations.map(o => o.hubspot_id);
-    const chunkSize = 100;
-  
-    // Chunks em paralelo
-    const chunkPromises: Promise<AxiosResponse<any>>[] = [];
+    // Criar chunks
+    const organizationsId = organizations.map(org => org.hubspot_id);
+    const chunks: any[] = [];
     for (let i = 0; i < organizationsId.length; i += chunkSize) {
-      const chunk = organizationsId.slice(i, i + chunkSize);
-      chunkPromises.push(
-        axios.post(
+      chunks.push(organizationsId.slice(i, i + chunkSize));
+    }
+  
+    // Função que processa cada chunk
+    const processChunk = async (chunk: string[], index: number) => {
+      try {
+        const { data } = await axios.post(
           'https://api.hubapi.com/crm/v4/associations/company/deal/batch/read',
           { inputs: chunk.map(id => ({ id })) },
-          { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 10000 }
-        )
-      );
-    }
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 20000, // 20s por segurança
+          },
+        );
   
-    const responses = await Promise.all(chunkPromises);
+        const staffPromises: Promise<any>[] = [];
   
-    const staffArray: string[] = [];
-    for (const res of responses) {
-      for (const obj of res.data.results) {
-        const org = orgMap.get(obj.from.id);
-        if (!org) {
-          const newOrg = await this.organizationCreation.execute({ objectId: obj.from });
-          if (newOrg) arrayReturn.push(`=> Organization ${obj.from.id} was created.`);
-          continue;
+        for (const result of data.results) {
+          const org = orgMap.get(result.from.id);
+  
+          if (!org) {
+            staffPromises.push(
+              this.organizationCreation.execute({ objectId: result.from }).then(newOrg => {
+                if (newOrg) arrayReturn.push(`=> Organization ${result.from.id} created.`);
+              }),
+            );
+            continue;
+          }
+  
+          for (const assoc of result.to) {
+            const dealHubspotId = assoc.toObjectId;
+            const existingStaff = org.staff.find(s => s.hubspot_id === dealHubspotId);
+            if (!existingStaff) {
+              staffPromises.push(
+                this.dealCreation.execute({ objectId: dealHubspotId }).then(newStaff => {
+                  if (newStaff)
+                    arrayReturn.push(
+                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
+                    );
+                }),
+              );
+            }
+          }
         }
   
-        for (const assoc of obj.to) {
-          const dealId = assoc.toObjectId;
-          //const existingStaff = staffMap.get(dealId);
-          const existingStaff = org.staff.find(s => s.hubspot_id == dealId); //Already has this staff on database?
-          if (!existingStaff) {
-            const newStaff = await this.dealCreation.execute({ objectId: dealId });
-            if (newStaff) arrayReturn.push(`=> Staff ${dealId} created for org ${org.hubspot_id}`);
-          } else staffArray.push(dealId);
-        }
+        // Aguarda todas as criações do chunk
+        await Promise.allSettled(staffPromises);
+      } catch (error) {
+        console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
+      }
+    };
+  
+    // Executar chunks com limite de concorrência
+    const queue: Promise<void>[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const task = processChunk(chunks[i], i);
+      queue.push(task);
+      if (queue.length >= concurrency) {
+        await Promise.allSettled(queue);
+        queue.length = 0;
       }
     }
+    if (queue.length) await Promise.allSettled(queue);
   
-    // Buscar candidatos de uma vez
-    const candidates = await this.prisma.candidate.findMany({ select: { id: true, hubspot_id: true } });
-    const candidatesMap = new Map(candidates.map(c => [c.hubspot_id, c]));
+    // Registrar sync
+    await this.prisma.sync.create({
+      data: { role: 'organizations', last_synced_at: new Date() },
+    });
   
-    // Atualizar staff com candidatos
-    const batchCandidatesResponse = await axios.post(
-      `https://api.hubapi.com/crm/v4/associations/deal/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/read`,
-      { inputs: staffArray.map(id => ({ id })) },
-      { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`, 'Content-Type': 'application/json' }, timeout: 10000 }
-    );
-  
-    for (const obj of batchCandidatesResponse.data.results) {
-      const dealId = obj.from.id;
-      const staffMember = staffMap.get(dealId);
-      if (!staffMember) continue;
-  
-      for (const assoc of obj.to) {
-        const candidate = candidatesMap.get(assoc.toObjectId);
-        if (!candidate) continue;
-  
-        await this.prisma.staff.update({
-          where: { id: staffMember.candidate ? staffMember.candidate.id : '' },
-          data: { candidate_id: candidate.id, hubspot_candidate_id: candidate.hubspot_id }
-        });
-  
-        arrayReturn.push(`=> Staff ${dealId} updated with candidate ${candidate.hubspot_id}`);
-      }
-    }
-  
-    await this.prisma.sync.create({ data: { role: 'organizations', last_synced_at: new Date() } });
-  
-    return { message: 'Organization sync completed', status: 200, data: { arrayReturn } };
+    return {
+      message: 'Organization sync with deals completed',
+      status: 200,
+      data: { arrayReturn },
+    };
   }
-
+  
   
   //replaced on 2025-10-28
   async syncOrganizationsWithDealsBKP(): Promise<Object>{

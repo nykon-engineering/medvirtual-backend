@@ -231,6 +231,7 @@ export class AuthController {
     status: 201,
     description: 'Invitation sent successfully to new.user@client.com.',
   })
+  @ApiResponse({ status: 400, description: 'Organization Id not provided' })
   @ApiResponse({ status: 400, description: 'Failed to generate invite code' })
   @ApiResponse({ status: 400, description: 'Failed to send invitation email' })
   @ApiResponse({ status: 400, description: 'Failed to store invite code' })
