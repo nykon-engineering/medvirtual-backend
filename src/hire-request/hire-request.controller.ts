@@ -417,5 +417,17 @@ export class HireRequestController {
   }
 
 
+  @Get('vatypes/options')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get VA Types options' })
+
+  async getVATypesController() {
+    const result = await this.hireRequestService.getVATypes();
+    return {
+      status: 200,
+      message: 'VA Types retrieved successfully',
+      data: result,
+    }
+  };
 
 }

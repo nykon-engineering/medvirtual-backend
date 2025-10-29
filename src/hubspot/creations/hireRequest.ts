@@ -34,8 +34,8 @@ export class HireRequestCreationService {
                   business_unit: data.organization.business_unit || "Not Specified",
                   company_name: data.organization.name,
                   company_url: data.organization.website_url || "Not Specified",
-                  va_deployment_type: data.availability,
-                  hs_ticket_priority: data.priority,
+                  va_deployment_type: data.availability === "part-time" ? "Part-Time" : "Full-Time",
+                  hs_ticket_priority: data.priority.toUpperCase(),
                   va_type: data.hubspot_role_type,
                   contract_amount: data.hubspot_contract_amount,
                   language: data.hubspot_language,
@@ -63,12 +63,13 @@ export class HireRequestCreationService {
               }
             );
         
-            //console.log(response.data);
+            console.log(response.data);
             //update hireRequest with the hubspot_ticket_id
             await this.prisma.hireRequest.update({
               where: { id: data.id },
               data: { hubspot_ticket_id: response.data.id },
             });
+            return true;
           } catch (error) {
             if (error.response) {
               console.error("Error to created ticket:", error.response.data);

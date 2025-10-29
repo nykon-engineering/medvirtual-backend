@@ -26,6 +26,7 @@ import {
 } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { language } from 'googleapis/build/src/apis/language';
+import axios from 'axios';
 
 @Injectable()
 export class HireRequestService {
@@ -1301,8 +1302,6 @@ export class HireRequestService {
     return this.findOne(data.hireRequest_id, user);
   }
 
-
-  
   async panelReady(data: panelReadyDTO, user: USER): Promise<boolean>{
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
@@ -2323,4 +2322,29 @@ export class HireRequestService {
 
     return mappedCandidates;
   }
+
+  async getVATypes () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "va_type"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find types:", error.response?.data || error.message);
+      throw new Error("Failed to find VA types");
+    }
+  };
 }
