@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, ForbiddenException } from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -14,6 +15,10 @@ export class TicketService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  private isSystemAdmin(user: USER) {
+    return user?.role === 'system_admin' || user?.role === 'system_super_admin';
+  }
 
   private async findOne(id: string): Promise<any> {
     const ticket = await this.prisma.ticket.findUnique({
@@ -235,6 +240,8 @@ export class TicketService {
                   { user: { is: { id: user.id } } },
                   { created_by: user.id }
                 ]
+              } : user.role === 'organization_super_admin' ? {
+                organization: user.organization_id ? { id: user.organization_id } : undefined
               } : { user: { is: { id: user.id } } }),
           ...(search ? {
             OR: [
@@ -505,5 +512,182 @@ export class TicketService {
       }
       throw new BadRequestException('Error deleting ticket', error.message);
     }
+  }
+
+  async update(id: string, data: { title?: string; description?: string; priority?: Priority; type?: string; client_id?: string; assigned_user_id?: string }, user: USER): Promise<object> {
+    const currentTicket = await this.prisma.ticket.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!currentTicket) throw new BadRequestException('Ticket not found');
+
+    const payload: any = {};
+    if (typeof data.title === 'string') payload.title = data.title;
+    if (typeof data.description === 'string') payload.description = data.description;
+    if (typeof data.priority === 'string') payload.priority = data.priority as Priority;
+
+    if (typeof data.type === 'string') {
+      const mapped = ticketTypeDictionary[data.type] ?? null;
+      if (!mapped) {
+        throw new BadRequestException('Invalid ticket type');
+      }
+      payload.type = mapped;
+    }
+
+    if (typeof data.client_id === 'string') {
+      const org = await this.prisma.organization.findUnique({ where: { id: data.client_id } });
+      if (!org) throw new BadRequestException('Organization not found');
+      payload.organization = { connect: { id: data.client_id } };
+    }
+
+    if (typeof data.assigned_user_id === 'string') {
+      const assignee = await this.prisma.uSER.findUnique({ where: { id: data.assigned_user_id } });
+      if (!assignee) throw new BadRequestException('User to assign not found');
+      payload.user = { connect: { id: data.assigned_user_id } };
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return await this.findOne(id);
+    }
+
+    try {
+      const updated = await this.prisma.ticket.update({
+        where: { id },
+        data: payload,
+      });
+      if (!updated) throw new BadRequestException('Failed to update ticket');
+
+      const ticket = await this.findOne(id);
+      if (!ticket) throw new BadRequestException('Failed to fetch updated ticket');
+      return ticket;
+    } catch (error) {
+      throw new BadRequestException('Error updating ticket', error.message);
+    }
+  }
+
+  async addNote(ticketId: string, dto: { content: string; is_internal?: boolean }, user: USER) {
+    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      throw new BadRequestException('Ticket not found');
+    }
+
+    if ((dto.is_internal ?? false) && !this.isSystemAdmin(user)) {
+      throw new ForbiddenException('Only system admins can create internal notes');
+    }
+
+    const prismaAny = this.prisma as any;
+    let note: any;
+    if (prismaAny.ticketNotes?.create) {
+      note = await prismaAny.ticketNotes.create({
+        data: {
+          id: uuidv4(),
+          Ticket: { connect: { id: ticketId } },
+          USER: { connect: { id: user.id } },
+          content: dto.content,
+          is_internal: dto.is_internal ?? false,
+        },
+        include: {
+          USER: { select: { id: true, first_name: true, last_name: true, email: true, role: true } },
+        },
+      });
+    } else {
+      const id = uuidv4();
+      await this.prisma.$executeRawUnsafe(
+        `INSERT INTO "TicketNotes" (id, ticket_id, author_id, content, is_internal) VALUES ($1, $2, $3, $4, $5)`,
+        id,
+        ticketId,
+        user.id,
+        dto.content,
+        dto.is_internal ?? false,
+      );
+      const rows: any[] = await this.prisma.$queryRawUnsafe(
+        `SELECT tn.*, u.id as user_id, u.first_name, u.last_name, u.email, u.role
+         FROM "TicketNotes" tn
+         JOIN "USER" u ON u.id = tn.author_id
+         WHERE tn.id = $1`,
+        id,
+      );
+      const r = rows?.[0];
+      note = r
+        ? {
+            ...r,
+            USER: {
+              id: r.user_id,
+              first_name: r.first_name,
+              last_name: r.last_name,
+              email: r.email,
+              role: r.role,
+            },
+          }
+        : null;
+    }
+
+    // If the note is not internal, notify the ticket creator via email (non-blocking)
+    if (!(dto.is_internal ?? false)) {
+      try {
+        await this.notifications.notifyTicketNoteAddedToCreator(ticketId, {
+          content: dto.content,
+          author: {
+            id: note.USER?.id,
+            first_name: note.USER?.first_name,
+            last_name: note.USER?.last_name,
+            email: note.USER?.email,
+          },
+        });
+      } catch (err) {
+        console.warn('[notifications] ticket-note email failed', err?.message || err);
+      }
+    }
+
+    return note;
+  }
+
+  async listNotes(ticketId: string, user: USER) {
+    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      throw new BadRequestException('Ticket not found');
+    }
+
+    const canSeeInternal = this.isSystemAdmin(user);
+
+    let notes: any[];
+    const prismaAnyList = this.prisma as any;
+    if (prismaAnyList.ticketNotes?.findMany) {
+      notes = await prismaAnyList.ticketNotes.findMany({
+        where: {
+          ticket_id: ticketId,
+          ...(canSeeInternal ? {} : { is_internal: false }),
+        },
+        orderBy: { created_at: 'asc' },
+        include: {
+          USER: { select: { id: true, first_name: true, last_name: true, email: true, role: true } },
+        },
+      });
+    } else {
+      const rows: any[] = await this.prisma.$queryRawUnsafe(
+        `SELECT tn.*, u.id as user_id, u.first_name, u.last_name, u.email, u.role
+         FROM "TicketNotes" tn
+         JOIN "USER" u ON u.id = tn.author_id
+         WHERE tn.ticket_id = $1 ${canSeeInternal ? '' : 'AND tn.is_internal = false'}
+         ORDER BY tn.created_at ASC`,
+        ticketId,
+      );
+      notes = rows.map((r) => ({
+        ...r,
+        USER: {
+          id: r.user_id,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          email: r.email,
+          role: r.role,
+        },
+      }));
+    }
+
+    return notes.map((n) => ({
+      ...n,
+      author_name: `${n.USER?.first_name ?? ''} ${n.USER?.last_name ?? ''}`.trim(),
+      author_role: n.USER?.role ?? null,
+    }));
   }
 }

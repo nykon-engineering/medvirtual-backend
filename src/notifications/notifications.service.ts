@@ -581,6 +581,58 @@ export class NotificationsService {
     // Return true if at least one email was sent successfully
     return results.some(result => result === true);
   }
+
+  async notifyTicketNoteAddedToCreator(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: {
+        id: true,
+        title: true,
+        organization: { select: { name: true } },
+        created_by: true,
+      },
+    });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    if (!ticket.created_by) throw new BadRequestException('Ticket has no creator');
+
+    const creator = await this.prisma.uSER.findUnique({
+      where: { id: ticket.created_by },
+      select: { id: true, email: true, first_name: true, last_name: true },
+    });
+    if (!creator?.email) throw new BadRequestException('Ticket creator has no email');
+
+    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
+
+    const emailTheme = await getUserEmailTheme(this.prisma, creator.id);
+
+    const authorName = `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() || 'A user';
+
+    const html = this.buildEmail(
+      `<h2>New Note on Your Ticket</h2>
+       <p>A new note was added to your ticket by <strong>${authorName}</strong>.</p>
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Ticket</h3>
+         <p><strong>Title:</strong> ${ticket.title}</p>
+         <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
+       </div>
+       <div style="background-color: #fff; border: 1px solid #eee; padding: 15px; border-radius: 8px;">
+         <h3 style="margin-top: 0; color: #333;">Note</h3>
+         <p style="white-space: pre-wrap;">${note.content}</p>
+       </div>
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">View Ticket</a>
+       </div>`,
+      emailTheme,
+    );
+
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: [creator.email],
+      subject: `New note on your ticket: ${ticket.title}`,
+      html,
+    });
+  }
 }
 
 
