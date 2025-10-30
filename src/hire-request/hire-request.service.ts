@@ -169,15 +169,7 @@ export class HireRequestService {
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
 
-    const hireRequestWithSkills = await this.prisma.hireRequest.findUnique({
-      where: { id: newHireRequest.id },
-      include: {
-        skills: true,
-        organization: true,
-        assigned_user: true,
-      },
-    });
-
+    const hireRequestWithSkills = await this.findOne(newHireRequest.id, user);
     //send request for the hubspot to create the ticket
     try {
       await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
