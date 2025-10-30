@@ -4,6 +4,7 @@ import { organizationToDbDictionary } from "../dictionaries/organization-diction
 import { CreateOrganizationDto } from "../../organization/dto/createOrganization.dto";
 import { ownerToDbDictionary } from "../dictionaries/owner-dictionary";
 import { dealToDbDictionary } from "../dictionaries/deal-dictionary";
+import { hrTicketToDbDictionary } from "../dictionaries/HRTicket-dicionary";
 
 interface candidateData {
     [key: string]: any;
@@ -18,6 +19,10 @@ interface ownerData {
 }
 
 interface dealData {
+  [key: string]: any;
+}
+
+interface HRTicketData {
   [key: string]: any;
 }
 
@@ -109,6 +114,19 @@ export function mapDealToDb(hubspotData: dealData): any {
   const result: Partial<any> = {};
 
   for (const [hubspotKey, dbKey] of Object.entries(dealToDbDictionary)) {
+      
+      if (hubspotData[hubspotKey] !== undefined) {
+        result[dbKey] = hubspotData[hubspotKey];
+      }
+      
+    }
+  return result as any;
+}
+
+export function mapHRTicketToDb(hubspotData: HRTicketData): any {
+  const result: Partial<any> = {};
+
+  for (const [hubspotKey, dbKey] of Object.entries(hrTicketToDbDictionary)) {
       
       if (hubspotData[hubspotKey] !== undefined) {
         result[dbKey] = hubspotData[hubspotKey];

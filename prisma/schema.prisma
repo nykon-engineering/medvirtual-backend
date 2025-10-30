@@ -252,6 +252,15 @@ model HireRequest {
   specialization      String
   location            String?
   assign_user_id      String?
+
+  hubspot_pipeline    String?
+  hubspot_pipeline_stage    String?
+  hubspot_pairing_request_type    String?
+  hubspot_ticket_type    String?
+  hubspot_business_unit    String?
+  hubspot_company_name    String?
+  hubspot_company_url    String?
+
   hubspot_role_type    String?
   hubspot_contract_amount  Decimal?
   hubspot_language    String?
