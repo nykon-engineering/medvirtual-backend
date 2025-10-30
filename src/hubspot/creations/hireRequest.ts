@@ -63,7 +63,7 @@ export class HireRequestCreationService {
               }
             );
         
-            console.log(response.data);
+            //console.log(response.data);
             //update hireRequest with the hubspot_ticket_id
             await this.prisma.hireRequest.update({
               where: { id: data.id },
