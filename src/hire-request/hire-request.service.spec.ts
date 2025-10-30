@@ -10,7 +10,6 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
-import { find } from 'rxjs';
 
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
@@ -79,6 +78,7 @@ const prismaMock = {
 const hubspotServiceMock = {
   updateManyCandidatesFromHireRequest: jest.fn(),
   updateOneCandidateFromHireRequest: jest.fn(),
+  updateHireRequestInHubspot: jest.fn(),
 };
 
 const notificationsServiceMock = {
@@ -479,6 +479,7 @@ describe('HireRequestService', () => {
         title: 'Updated',
         skills: mockSkills,
       };
+      jest.spyOn(service['hubspot'], 'updateHireRequestInHubspot').mockResolvedValue(true);
       jest.spyOn(service, 'findOne').mockResolvedValue(mockHireRequestWithSkills);
     
       const dto = {

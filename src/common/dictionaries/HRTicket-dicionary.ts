@@ -21,3 +21,17 @@ export const hrTicketToDbDictionary : Record<string, string | string> = {
 export const dbToHrTicketDictionary : Record<string, string> = Object.fromEntries(
     Object.entries(hrTicketToDbDictionary).map(([key, value]) => [value, key])
 );
+
+
+export const HRTicketStatus : Record<string, string> = {
+    1: 'New Agent Request',
+    1186989187: 'Upcoming Pairing Interview',
+    170668147: 'Sourcing Candidates',
+    77766410: 'Candidates Endorsed',
+    29355412: 'Candidates Interview Booked',
+    29357364: 'Interview Done (For Follow-up)',
+    950070186: 'For Onboarding (Paired)',
+    4: 'Endorsed to Ops-Day 1',
+    19668634: 'Pairing Lost'   
+}
+

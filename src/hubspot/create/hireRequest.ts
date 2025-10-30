@@ -12,7 +12,7 @@ export class HireRequestCreationService {
     async execute(data: any): Promise<any> {
       console.log("Creating Hire Request Ticket in HubSpot...");
         try {
-          const content = `CLIENTS NAME : ${data.organization.name}\n\nBUSINESS NAME: \n\nNATURE OF BUSINESS: ${data.organization.industry}\n\nWEBSITE: ${data.organization.website_url}\n\nSOCIAL MEDIA ACCOUNT: \n\nHOW MANY VA'S NEEDED: 1\n\nWORKING HOURS: \n\nTARGET START DATE: ${data.expected_start_date}\n\nSPECIFIC REQUEST: N/A\n\n﻿﻿NAME: ${data.organization.name}EMAIL: PHONE NO ${data.organization.phone} \n\nDESCRIPTION: ${data.description}\n\nNO. OF VAs: 1\n\nFULL TIME OR PART-TIME: ${data.availability}}\n\nSKILLS: ${data.skills.join(", ")}`;
+          
 
           const expectedDate = new Date(data.expected_start_date);
           const PairingDate = expectedDate.getFullYear() +'-'+ (expectedDate.getMonth() + 1) +'-'+ expectedDate.getDate();
@@ -26,7 +26,7 @@ export class HireRequestCreationService {
             {
               properties: {
                 subject: data.title,
-                content,
+                content: data.description,
                 hs_pipeline: "0", //=>Pairing Pipeline
                 hs_pipeline_stage: "1",  //=> New agent Request
                 pairing_request_type: "New Client",

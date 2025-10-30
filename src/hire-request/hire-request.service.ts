@@ -24,9 +24,9 @@ import {
   findHourlySalary,
   findMonthlySalary,
 } from '../common/utils/salary.util';
-import { changeLabelAvailability } from '../common/utils/hubspot.util';
-import { language } from 'googleapis/build/src/apis/language';
+import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
+import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
 
 @Injectable()
 export class HireRequestService {
@@ -89,22 +89,41 @@ export class HireRequestService {
         status: true,
         organization_role: true,
         admin_id: true,
+        name: true,
+        industry: true,
+        website_url: true,
+        phone: true,
+        business_unit: true,
       }
     });
     if (!organizationSQL) throw new NotFoundException(`Organization from client not found`);
 
+    const content = `CLIENTS NAME : ${organizationSQL.name}\n\nBUSINESS NAME: \n\nNATURE OF BUSINESS: ${organizationSQL.industry}\n\nWEBSITE: ${organizationSQL.website_url}\n\nSOCIAL MEDIA ACCOUNT: \n\nHOW MANY VA'S NEEDED: 1\n\nWORKING HOURS: \n\nTARGET START DATE: ${data.expected_start_date}\n\nSPECIFIC REQUEST: N/A\n\n﻿﻿NAME: ${organizationSQL.name}EMAIL: PHONE NO ${organizationSQL.phone} \n\nDESCRIPTION: ${data.description}\n\nNO. OF VAs: 1\n\nFULL TIME OR PART-TIME: ${data.availability}}\n\nSKILLS: ${(data.skills ?? []).map(s => s.name ?? s).join(", ")}`;
+
+    const hubspotMappedFields = mapHRTicketToDb({
+      hs_pipeline: '0',
+      hs_pipeline_stage: Object.keys(HRTicketStatus)[0], //=> New agent Request
+      pairing_request_type: 'New Client',
+      ticket_type: 'Agent Pairing Request',
+      business_unit: organizationSQL.business_unit || "Not Specified",
+      company_name: organizationSQL.name,
+      company_url: organizationSQL.website_url || "Not Specified",
+      va_type: hireRequestData.position,
+      contract_amount: hireRequestData.contract_amount,
+      language: hireRequestData.language,
+      number_of_vas: Number(hireRequestData.numberVA),
+    });
+
     const hireRequest = {
       ...hireRequestData,
+      ...hubspotMappedFields,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
       //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       status: HireRequestStatus.new,
+      description: content,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
       createdBy: { connect: { id: user.id } },
-      hubspot_role_type: hireRequestData.position,
-      hubspot_contract_amount: hireRequestData.contract_amount,
-      hubspot_language: hireRequestData.language,
-      hubspot_numberVA: Number(hireRequestData.numberVA),
       position: undefined,
       contract_amount: undefined,
       language: undefined,
@@ -493,13 +512,16 @@ export class HireRequestService {
     }
 
     // Notify assignee via email when hire request is edited (non-blocking)
+    const newHr = await this.findOne(id, user);
+    await this.hubspot.updateHireRequestInHubspot(newHr);
+
     try {
       await this.notifications.notifyHireRequestClientChange(id, 'edited');
     } catch (err) {
       console.warn('[notifications] hire-request-edited email failed', err?.message || err);
     }
 
-    return this.findOne(id, user);
+    return newHr
   }
 
   async updateStatus(id: string, data: changeStatusHireRequesDTO, user: USER): Promise<boolean> {
@@ -2309,6 +2331,9 @@ export class HireRequestService {
         availableCandidates[0].candidate.id === selectedCandidate.candidate_id) {
       return [];
     }
+
+    
+
     const mappedCandidates = availableCandidates.map(pc => ({
       ...pc.candidate,
       panelStatus: pc.status,

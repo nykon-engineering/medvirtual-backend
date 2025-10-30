@@ -18,7 +18,8 @@ import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
-import { HireRequestCreationService } from './creations/hireRequest';
+import { HireRequestCreationService } from './create/hireRequest';
+import { HireRequestUpdateService } from './update/hireRequest';
 
 
 jest.mock('axios', () => ({
@@ -120,6 +121,9 @@ const hireRequestCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const hireRequestUpdateServiceMock = {
+  execute: jest.fn(),
+};
 
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
@@ -159,7 +163,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock},
         {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
         {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock},
-        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock}
+        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock},
+        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock}
       ],
     }).compile();
 
@@ -219,7 +224,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock},
         {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
         {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock},
-        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock}
+        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock},
+        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock}
       ]
     }).compile();
 
