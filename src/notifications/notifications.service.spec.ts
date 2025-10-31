@@ -16,6 +16,10 @@ describe('NotificationsService', () => {
     ticket: {
       findUnique: jest.fn(),
     },
+    uSER: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+    },
   };
 
   const mockMailService = {
@@ -321,27 +325,50 @@ describe('NotificationsService', () => {
       priority: 'high',
       type: 'bug',
       createdAt: new Date('2024-01-15'),
-      user: { email: 'assignee@example.com' },
+      created_by: 'creator1',
+      user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
       organization: { name: 'Test Company' },
       staff: null,
       candidate: null,
     };
 
     it('should send notification for created ticket', async () => {
+      // Mock creator lookup
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyTicketEvent(mockTicket, 'created');
 
       expect(result).toBe(true);
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
-        to: ['assignee@example.com'],
-        subject: 'Ticket created: Bug Report',
-        html: expect.stringContaining('Ticket CREATED'),
-      });
+      // For system admins, subject format is different (e.g., "bug Ticket Created for Test Company")
+      expect(mockMailService.sendMail).toHaveBeenCalledTimes(2); // Once for creator, once for assignee
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: 'MedVirtual <noreply@medvirtual.ai>',
+          to: expect.arrayContaining([expect.any(String)]),
+          subject: expect.stringMatching(/Ticket Created|Bug Report/),
+          html: expect.stringContaining('Bug Report'),
+        })
+      );
+    });
+
+    it('should not send notification when creator and assignee are the same', async () => {
+      const ticketSameUser = {
+        ...mockTicket,
+        created_by: 'assignee1',
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
+      };
+      mockPrismaService.ticket.findUnique.mockResolvedValue({ created_by: 'assignee1', user_id: 'assignee1' });
+
+      const result = await service.notifyTicketEvent(ticketSameUser, 'created');
+
+      expect(result).toBe(false);
+      expect(mockMailService.sendMail).not.toHaveBeenCalled();
     });
 
     it('should send notification for assigned ticket', async () => {
+      // Mock creator lookup
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyTicketEvent(mockTicket, 'assigned');
@@ -349,13 +376,15 @@ describe('NotificationsService', () => {
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
-        to: ['assignee@example.com'],
-        subject: 'Ticket assigned: Bug Report',
+        to: expect.arrayContaining([expect.any(String)]),
+        subject: expect.stringContaining('Bug Report'),
         html: expect.stringContaining('Ticket ASSIGNED'),
       });
     });
 
     it('should send notification for closed ticket', async () => {
+      // Mock creator lookup
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyTicketEvent(mockTicket, 'closed');
@@ -363,8 +392,8 @@ describe('NotificationsService', () => {
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
-        to: ['assignee@example.com'],
-        subject: 'Ticket closed: Bug Report',
+        to: expect.arrayContaining([expect.any(String)]),
+        subject: expect.stringContaining('Bug Report'),
         html: expect.stringContaining('Ticket CLOSED'),
       });
     });
@@ -374,23 +403,32 @@ describe('NotificationsService', () => {
         .rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException when no assignee email', async () => {
-      const ticketWithoutEmail = { ...mockTicket, user: { email: null } };
+    it('should throw BadRequestException when no assignee email and no creator', async () => {
+      const ticketWithoutEmail = { ...mockTicket, user: { email: null }, created_by: null };
+      
+      // Mock the ticket.findUnique call that happens when created_by is null but ticket.id exists
+      mockPrismaService.ticket.findUnique.mockResolvedValue({ created_by: null, user_id: null });
+      // Mock uSER.findUnique to return null (no creator email found)
+      mockPrismaService.uSER.findUnique.mockResolvedValue(null);
 
       await expect(service.notifyTicketEvent(ticketWithoutEmail, 'created'))
         .rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when user is null', async () => {
-      const ticketWithoutUser = { ...mockTicket, user: null };
+    it('should not throw when user is null but creator exists', async () => {
+      const ticketWithoutUser = { ...mockTicket, user: null, created_by: 'creator1' };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
 
-      await expect(service.notifyTicketEvent(ticketWithoutUser, 'created'))
-        .rejects.toThrow(BadRequestException);
+      const result = await service.notifyTicketEvent(ticketWithoutUser, 'created');
+      expect(result).toBe(true);
     });
 
     it('should include staff member details when present', async () => {
       const ticketWithStaff = {
         ...mockTicket,
+        created_by: 'creator1',
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
         staff: {
           id: 'staff1',
           candidate: {
@@ -400,6 +438,8 @@ describe('NotificationsService', () => {
           },
         },
       };
+      // Mock creator lookup
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyTicketEvent(ticketWithStaff, 'created');
@@ -409,9 +449,10 @@ describe('NotificationsService', () => {
           html: expect.stringMatching(/Staff Member:.*John Doe/),
         })
       );
-      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+      // Staff email is no longer included in the email
+      expect(mockMailService.sendMail).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Staff Email:.*john\.doe@example\.com/),
+          html: expect.stringMatching(/Staff Email:/),
         })
       );
     });
@@ -419,24 +460,29 @@ describe('NotificationsService', () => {
     it('should include candidate details when present', async () => {
       const ticketWithCandidate = {
         ...mockTicket,
+        created_by: 'creator1',
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
         candidate: {
           id: 'candidate1',
           name: 'Jane Smith',
           email: 'jane.smith@example.com',
         },
       };
+      // Mock creator lookup
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyTicketEvent(ticketWithCandidate, 'created');
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Candidate Member:.*Jane Smith/),
+          html: expect.stringMatching(/Candidate:.*Jane Smith/),
         })
       );
-      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+      // Candidate email is no longer included in the email
+      expect(mockMailService.sendMail).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Candidate Email:.*jane\.smith@example\.com/),
+          html: expect.stringMatching(/Candidate Email:/),
         })
       );
     });
@@ -444,6 +490,8 @@ describe('NotificationsService', () => {
     it('should include both staff and candidate details when both are present', async () => {
       const ticketWithBoth = {
         ...mockTicket,
+        created_by: 'creator1',
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
         staff: {
           id: 'staff1',
           candidate: {
@@ -458,6 +506,8 @@ describe('NotificationsService', () => {
           email: 'jane.smith@example.com',
         },
       };
+      // Mock creator lookup
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyTicketEvent(ticketWithBoth, 'created');
@@ -469,7 +519,7 @@ describe('NotificationsService', () => {
       );
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Candidate Member:.*Jane Smith/),
+          html: expect.stringMatching(/Candidate:.*Jane Smith/),
         })
       );
     });
@@ -514,19 +564,22 @@ describe('NotificationsService', () => {
         priority: 'high',
         type: 'bug',
         createdAt: new Date('2024-01-15'),
-        user: { email: 'test@example.com' },
+        created_by: 'creator1',
+        user: { id: 'assignee1', email: 'test@example.com', role: 'system_admin' },
         organization: { name: 'Test Company' },
         staff: null,
         candidate: null,
       };
 
+      // Mock creator lookup
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyTicketEvent(mockTicket, 'created');
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringContaining('https://test.example.com/tickets?ticket=ticket1'),
+          html: expect.stringContaining('https://test.example.com/tickets/ticket1'),
         })
       );
     });

@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
-import { getEmailFooter, getEmailHeader } from '../common/utils/email-templates/components';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { ticketTypeReverseDictionary } from '../common/dictionaries/ticket-type';
 
@@ -437,6 +436,10 @@ export class NotificationsService {
          <a href="${detailUrl}" class="cta-button">
            View Ticket Details
          </a>
+       </div>
+       <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666;">
+         <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
+         <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
        </div>`,
       emailTheme
     );
@@ -452,6 +455,31 @@ export class NotificationsService {
   async notifyTicketEvent(ticket: any, event: 'created' | 'assigned' | 'updated' | 'resolved' | 'closed'): Promise<boolean> {
 
     if (!ticket) throw new NotFoundException('Ticket not found');
+
+    // Get created_by ID (from ticket object or fetch if needed)
+    let createdById: string | null = null;
+    if (ticket.created_by) {
+      createdById = ticket.created_by;
+    } else if (ticket.id) {
+      const ticketData = await this.prisma.ticket.findUnique({
+        where: { id: ticket.id },
+        select: { created_by: true, user_id: true },
+      });
+      createdById = ticketData?.created_by || null;
+      // Also update ticket.user_id if not available in ticket object
+      if (!ticket.user_id && ticketData?.user_id) {
+        ticket.user_id = ticketData.user_id;
+      }
+    }
+    
+    // Get assigned user ID
+    const assignedUserId = ticket.user?.id || ticket.user_id;
+    
+    // Check if creator and assignee are the same user - if so, don't send notification
+    if (createdById && assignedUserId && createdById === assignedUserId) {
+      // Creator and assignee are the same, skip notification
+      return false;
+    }
 
     // Determine recipients: include creator (requested) and keep assignee if present
     const recipients: { email: string; isSystemAdmin: boolean }[] = [];
@@ -488,7 +516,8 @@ export class NotificationsService {
     }
 
     // Assignee (kept for backwards compatibility)
-    if (ticket.user?.email) {
+    // Only add assignee if it's different from creator
+    if (ticket.user?.email && (!createdById || ticket.user.id !== createdById)) {
       const isSystemAdmin = ticket.user.role === 'system_admin' || ticket.user.role === 'system_super_admin';
       recipients.push({ email: ticket.user.email, isSystemAdmin });
       emailThemeUserId = emailThemeUserId || ticket.user.id;
@@ -577,6 +606,10 @@ export class NotificationsService {
              <a href="${detailUrl}" class="cta-button">
                View Ticket Details
              </a>
+           </div>
+           <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666;">
+             <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
+             <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
            </div>`,
           emailTheme
         );
@@ -619,6 +652,10 @@ export class NotificationsService {
              <a href="${detailUrl}" class="cta-button">
                View Ticket Details
              </a>
+           </div>
+           <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666;">
+             <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
+             <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
            </div>`,
           emailTheme
         );
@@ -830,6 +867,10 @@ export class NotificationsService {
        </div>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">View Ticket</a>
+       </div>
+       <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666;">
+         <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
+         <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
        </div>`,
       emailTheme,
     );
@@ -882,6 +923,10 @@ export class NotificationsService {
        </div>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">View Ticket</a>
+       </div>
+       <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666;">
+         <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
+         <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
        </div>`,
       emailTheme,
     );
