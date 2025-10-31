@@ -226,6 +226,13 @@ export class HireRequestService {
               last_name: true,
             }
           },
+          assigned_sourcing: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+            }
+          },
           panels: {
             select: {
               id: true,
@@ -352,6 +359,13 @@ export class HireRequestService {
         skills: true,
         organization: true,
         assigned_user:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        assigned_sourcing: {
           select: {
             id: true,
             first_name: true,
@@ -704,6 +718,14 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      //notify the sourcing assigned user
+      try {
+        await this.notifications.notifyHireRequestSourcingAssignee(id, 'sourcing');
+      } catch (err) {
+        console.warn('[notifications] hire-request-canceled email failed', err?.message || err);
+      }
+
       return this.findOne(id, user);
     
     } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){

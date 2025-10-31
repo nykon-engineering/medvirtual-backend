@@ -245,7 +245,7 @@ export class NotificationsService {
     });
   }
 
-  async notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled'): Promise<boolean> {
+  async notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled' ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -294,6 +294,60 @@ export class NotificationsService {
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: [hr.assigned_user.email],
+      subject: `Hire Request ${verb}: ${hr.title}`,
+      html,
+    });
+  }
+
+  async notifyHireRequestSourcingAssignee(hireRequestId: string, action: 'sourcing'): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        priority: true,
+        specialization: true,
+        assigned_sourcing: { select: { id: true, email: true } },
+        organization: {
+          select: { name: true },
+        },
+      },
+    });
+    if (!hr) throw new NotFoundException('Hire request not found');
+    if (!hr.assigned_sourcing?.email)
+      throw new BadRequestException('Hire request has no assignee email');
+
+    const verb = action ;
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_sourcing.id);
+
+    const html = this.buildEmail(
+      `<h2>Hire Request started to sourcing</h2>
+       <p>The hire request was updated to Start to sourcing stage.</p>
+       
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Organization:</strong> ${hr.organization.name}</p>
+         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Specialization:</strong> ${hr.specialization}</p>
+         <p><strong>Priority:</strong> ${hr.priority}</p>
+       </div>
+       
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           View Hire Request Details
+         </a>
+       </div>`,
+      emailTheme
+    );
+
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: [hr.assigned_sourcing.email],
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
     });
