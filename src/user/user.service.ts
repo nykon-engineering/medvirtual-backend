@@ -649,6 +649,8 @@ export class UserService {
       status,
       sortBy = 'createdAt',
       sortOrder = 'desc',
+      date_created_from,
+      date_created_to,
     } = query;
 
     const skip = (page - 1) * limit;
@@ -676,6 +678,20 @@ export class UserService {
     // Add status filter
     if (status) {
       whereClause.status = status;
+    }
+
+    // Add date filters
+    if (date_created_from || date_created_to) {
+      whereClause.createdAt = {};
+      if (date_created_from) {
+        whereClause.createdAt.gte = new Date(date_created_from);
+      }
+      if (date_created_to) {
+        // Include the entire day by setting time to end of day
+        const endDate = new Date(date_created_to);
+        endDate.setHours(23, 59, 59, 999);
+        whereClause.createdAt.lte = endDate;
+      }
     }
 
     // Build orderBy clause
