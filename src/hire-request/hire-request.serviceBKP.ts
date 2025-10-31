@@ -1,3 +1,8 @@
+/*
+old code before asks by Hanieh to change the hireRequest flow
+
+*/
+
 import {
   BadRequestException,
   Injectable,
@@ -686,9 +691,7 @@ export class HireRequestService {
 
       return this.findOne(id, user);
 
-    } else if (hireRequest.status == 'panel_ready' && data.status === 'sourcing' ||
-      hireRequest.status == 'for_review' && data.status === 'sourcing' ||
-      hireRequest.status == 'cancelled' && data.status === 'sourcing'){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'sourcing' || hireRequest.status == 'cancelled' && data.status === 'sourcing'){
       //update panel to readable=false
       //update the hireRequest Status to sourcing
 
@@ -702,12 +705,6 @@ export class HireRequestService {
       });
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-
-      try {
-        await this.notifications.notifyHireRequestSourcingAssignee(id, 'sourcing');
-      } catch (err) {
-        console.warn('[notifications] hire-request-canceled email failed', err?.message || err);
-      }
       return this.findOne(id, user);
 
       
@@ -736,7 +733,7 @@ export class HireRequestService {
 
       return this.findOne(id, user);
     
-    } else if (hireRequest.status == 'sourcing' && data.status === 'for_review'){
+    } else if (hireRequest.status == 'sourcing' && data.status === 'panel_ready'){
 
       if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
       
@@ -744,22 +741,6 @@ export class HireRequestService {
       if (panelExists.panelCandidates.length < 1) {
         throw new BadRequestException(`Panel must have at least 1 candidates`);
       }
-      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
-      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
-
-      //notify the sourcing assigned user
-      try {
-        await this.notifications.notifyHireRequestConciergeAssigned(id, 'for_review');
-      } catch (err) {
-        console.warn('[notifications] hire-request-canceled email failed', err?.message || err);
-      }
-
-      return this.findOne(id, user);
-    
-    } else if (hireRequest.status == 'for_review' && data.status === 'panel_ready'){
-
-      if (!panelExists) throw new NotFoundException(`Panel for this hire request not found`);
-      
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       return this.findOne(id, user);

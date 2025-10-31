@@ -499,6 +499,7 @@ enum HireRequestStatus {
   new
   pending_signature
   sourcing
+  for_review
   panel_ready
   interview_scheduled
   awaiting_decision
