@@ -392,15 +392,21 @@ export class OrganizationService {
         whereClause.business_unit = business_unit;
       }
 
-      if (hasUser) {
+      // Apply hasUser filter: only organizations with at least one user that is not inactive
+      if (hasUser === true) {
         whereClause.users = {
-          some: {},
+          some: {
+            status: { not: 'inactive' },
+          },
         };
       }
 
-      if (hasStaff) {
+      // Apply hasStaff filter: only organizations with at least one staff that is not terminated
+      if (hasStaff === true) {
         whereClause.staff = {
-          some: {},
+          some: {
+            status: { not: 'terminated' },
+          },
         };
       }
 
@@ -408,7 +414,7 @@ export class OrganizationService {
       const orderBy: any = {};
       orderBy[sortBy] = sortOrder;
 
-      // Get total count
+      // Get total count (after applying all filters including hasUser and hasStaff)
       const total = await this.prisma.organization.count({
         where: whereClause,
       });
@@ -443,11 +449,13 @@ export class OrganizationService {
           users: {
             select: {
               id: true,
+              status: true,
             },
           },
           staff: {
             select: {
               id: true,
+              status: true,
             },
           }
         },
@@ -462,8 +470,59 @@ export class OrganizationService {
         },
       })
 
+      // Calculate counts and track organizations to deactivate
+      const organizationsWithCounts: Array<typeof organizations[0] & { userCount: number; staffCount: number }> = [];
+      const organizationsToDeactivate: string[] = [];
+
+      for (const org of organizations) {
+        // Calculate userCount: exclude inactive, include pending as active
+        // Count users where status !== 'inactive' (includes: active, pending, invited, suspended, etc.)
+        const userCount = org.users.filter(
+          user => user.status !== 'inactive'
+        ).length;
+
+        // Calculate staffCount: exclude terminated
+        // Count staff where status !== 'terminated'
+        const staffCount = org.staff.filter(
+          staff => staff.status !== 'terminated'
+        ).length;
+
+        // Apply hasUser filter: skip organizations that don't meet the criteria
+        if (hasUser === true && userCount === 0) {
+          continue; // Skip this organization as it doesn't have active users
+        }
+
+        // Apply hasStaff filter: skip organizations that don't meet the criteria
+        if (hasStaff === true && staffCount === 0) {
+          continue; // Skip this organization as it doesn't have active staff
+        }
+
+        // Track organizations that need to be deactivated
+        if (staffCount === 0 && org.status === 'active') {
+          organizationsToDeactivate.push(org.id);
+        }
+
+        organizationsWithCounts.push({
+          ...org,
+          userCount,
+          staffCount,
+        });
+      }
+
+      // Desactivate organizations with staffCount === 0
+      if (organizationsToDeactivate.length > 0) {
+        await this.prisma.organization.updateMany({
+          where: {
+            id: { in: organizationsToDeactivate },
+          },
+          data: {
+            status: 'inactive',
+          },
+        });
+      }
+
       // Transform data
-      const data: OrganizationResponseDto[] = organizations.map((org) => ({
+      const data: OrganizationResponseDto[] = organizationsWithCounts.map((org) => ({
         id: org.id,
         hubspot_id: org.hubspot_id || undefined,
         name: org.name,
@@ -483,7 +542,7 @@ export class OrganizationService {
         date_founded: org.date_founded || undefined,
         date_joined: org.date_joined || undefined,
         date_became_client: org.date_became_client || undefined,
-        status: org.status,
+        status: org.status === 'active' && org.staffCount === 0 ? 'inactive' : org.status,
         signed_document_url: org.signed_document_url || undefined,
         signed_document_date: org.signed_document_date || undefined,
         specialties: org.specialties || undefined,
@@ -494,11 +553,15 @@ export class OrganizationService {
         updatedAt: org.updatedAt,
         owner: org.owner || undefined,
         admin: org.admin || undefined,
-        userCount: org.users.length,
-        staffCount: org.staff.length,
+        userCount: org.userCount,
+        staffCount: org.staffCount,
       }));
 
       // Calculate pagination metadata
+      // Since we filter in memory after Prisma query, the total might not be accurate
+      // We use the filtered count for the current page, but keep the original total
+      // for pagination navigation (this is a limitation of filtering in memory)
+      const filteredCount = organizationsWithCounts.length;
       const totalPages = Math.ceil(total / limit);
       const hasNext = page < totalPages;
       const hasPrev = page > 1;

@@ -144,6 +144,18 @@ export class OrganizationController {
     enum: ['asc', 'desc'],
     description: 'Sort order (default: desc)',
   })
+  @ApiQuery({
+    name: 'hasUser',
+    required: false,
+    type: Boolean,
+    description: 'Filter to show only organizations with at least one active user (userCount > 0)',
+  })
+  @ApiQuery({
+    name: 'hasStaff',
+    required: false,
+    type: Boolean,
+    description: 'Filter to show only organizations with at least one active staff (staffCount > 0)',
+  })
   async getAllPaginated(
     @CurrentUser() user: USER,
     @Query() query: GetOrganizationsDto,
