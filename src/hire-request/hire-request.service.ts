@@ -102,7 +102,8 @@ export class HireRequestService {
 
     const hubspotMappedFields = mapHRTicketToDb({
       hs_pipeline: '0',
-      hs_pipeline_stage: Object.keys(HRTicketStatus)[0], //=> New agent Request
+      hs_pipeline_stage: Object.keys(HRTicketStatus)
+      .find(key => HRTicketStatus[key] === 'New Agent Request'), //=> New agent Request
       pairing_request_type: 'New Client',
       ticket_type: 'Agent Pairing Request',
       business_unit: organizationSQL.business_unit || "Not Specified",
@@ -437,7 +438,7 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const formatted = {
       ...hireRequest,
-      panels: hireRequest.panels.map(panel => ({
+      panels: (hireRequest.panels ?? []).map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
         interview_link: panel.interviews[0]?.link || null,
@@ -534,6 +535,7 @@ export class HireRequestService {
       },
       select:{
         status: true,
+        hubspot_ticket_id: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -601,6 +603,19 @@ export class HireRequestService {
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
+      //update hr ticket on hubspot
+      try {
+        
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Pairing Lost'), //=> Pairing Lost
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
+      }
+
       // Notify assignee via email when hire request is canceled (non-blocking)
       try {
         await this.notifications.notifyHireRequestClientChange(id, 'canceled');
@@ -642,6 +657,19 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      //update hr ticket on hubspot
+      try {
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'New Agent Request'), //=> New
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
+      }
+
       return this.findOne(id, user);
 
     } else if (hireRequest.status == 'panel_ready' && data.status === 'sourcing' || hireRequest.status == 'cancelled' && data.status === 'sourcing'){

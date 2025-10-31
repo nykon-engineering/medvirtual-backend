@@ -18,11 +18,16 @@ export class HireRequestUpdateService {
             }
 
             hubspotProperties.va_deployment_type = 
-                data.availability === "part-time" ? "Part-Time" : "Full-Time";
+                data.availability ?
+                  data.availability === "part-time" ? "Part-Time" : "Full-Time"
+                : undefined;
                 //find key by value in HRTicketStatus
-            hubspotProperties.hs_ticket_priority = data.priority.toUpperCase();
+            hubspotProperties.hs_ticket_priority = 
+              data.priority ?
+                data.priority.toUpperCase()
+              : undefined;
             
-          
+            //console.log(hubspotProperties)
             const response = await axios.patch(
             `https://api.hubapi.com/crm/v3/objects/tickets/${Number(data.hubspot_ticket_id)}`,
             {

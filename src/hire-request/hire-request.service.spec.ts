@@ -185,6 +185,7 @@ describe('HireRequestService', () => {
       expect(result).toEqual({
         id: 'hr1',
         skills: [{ skill_name: 'JS' }, { skill_name: 'TS' }],
+        panels: [],
       });
       expect(prismaMock.hireRequest.create).toHaveBeenCalled();
       expect(prismaMock.hireRequestSkill.createMany).toHaveBeenCalled();
@@ -201,7 +202,7 @@ describe('HireRequestService', () => {
   
       const result = await service.create(dto as any, user);
   
-      expect(result).toEqual({ id: 'hr1', skills: [] });
+      expect(result).toEqual({ id: 'hr1', skills: [], panels: [] });
       expect(prismaMock.hireRequestSkill.createMany).not.toHaveBeenCalled();
       expect(prismaMock.candidatePanel.create).toHaveBeenCalled();
     });
