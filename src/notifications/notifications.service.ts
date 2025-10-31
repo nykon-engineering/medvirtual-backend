@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { getEmailFooter, getEmailHeader } from '../common/utils/email-templates/components';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
+import { ticketTypeReverseDictionary } from '../common/dictionaries/ticket-type';
 
 @Injectable()
 export class NotificationsService {
@@ -372,41 +373,54 @@ export class NotificationsService {
     });
   }
 
-  async notifyTicketEvent(ticket: any, event: 'created' | 'assigned' | 'closed'): Promise<boolean> {
-
+  async notifyTicketStatusChangeToCreator(ticket: any, newStatus: 'in_progress' | 'resolved' | 'closed'): Promise<boolean> {
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    const to = ticket.user?.email ? [ticket.user.email] : undefined;
-    if (!to || to.length === 0) throw new BadRequestException('Ticket has no assignee email');
+    // Only notify the creator
+    let creatorEmail: string | undefined;
+    let emailThemeUserId: string | undefined;
+
+    if (ticket.created_by) {
+      const creator = await this.prisma.uSER.findUnique({
+        where: { id: ticket.created_by },
+        select: { id: true, email: true },
+      });
+      if (creator?.email) {
+        creatorEmail = creator.email;
+        emailThemeUserId = creator.id;
+      }
+    } else if (ticket.id) {
+      // Fallback to fetch created_by
+      const withCreator = await this.prisma.ticket.findUnique({
+        where: { id: ticket.id },
+        select: { created_by: true },
+      });
+      if (withCreator?.created_by) {
+        const creator = await this.prisma.uSER.findUnique({
+          where: { id: withCreator.created_by },
+          select: { id: true, email: true },
+        });
+        if (creator?.email) {
+          creatorEmail = creator.email;
+          emailThemeUserId = creator.id;
+        }
+      }
+    }
+
+    if (!creatorEmail) throw new BadRequestException('Ticket creator has no email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme
-    const emailTheme = ticket.user ? await getUserEmailTheme(this.prisma, ticket.user.id) : null;
+    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
 
-    // Build staff member details if available
-    let staffDetails = '';
-    if (ticket.staff?.candidate) {
-      const staffName = `${ticket.staff.candidate.name}`.trim() || 'Unknown';
-      staffDetails = `
-         <p><strong>Staff Member:</strong> ${staffName}</p>
-         <p><strong>Staff Email:</strong> ${ticket.staff.candidate.email || 'N/A'}</p>`;
-    }
-
-    // Build candidate details if available
-    let candidateDetails = '';
-    if (ticket.candidate) {
-      const staffName = `${ticket.candidate.name || ' '}`.trim() || 'Unknown';
-      candidateDetails = `
-         <p><strong>Candidate Member:</strong> ${staffName}</p>
-         <p><strong>Candidate Email:</strong> ${ticket.candidate.email || 'N/A'}</p>`;
-    }
-
+    // Format status for display
+    const statusDisplay = newStatus.replace('_', ' ').toUpperCase();
 
     const html = this.buildEmail(
-      `<h2>Ticket ${event.toUpperCase()}</h2>
-       <p>The ticket was ${event}.</p>
+      `<h2>Your Ticket Changed to ${statusDisplay} Status</h2>
+       <p>Your ticket has been updated to <strong>${statusDisplay}</strong> status.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
@@ -415,8 +429,8 @@ export class NotificationsService {
          <p><strong>Description:</strong> ${ticket.description}</p>
          <p><strong>Type:</strong> ${ticket.type}</p>
          <p><strong>Priority:</strong> ${ticket.priority}</p>
-         <p><strong>Status:</strong> ${ticket.status}</p>
-         <p><strong>Created:</strong> ${createdDate}</p>${staffDetails}${candidateDetails}
+         <p><strong>Status:</strong> ${statusDisplay}</p>
+         <p><strong>Created:</strong> ${createdDate}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -429,10 +443,200 @@ export class NotificationsService {
 
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to,
-      subject: `Ticket ${event}: ${ticket.title}`,
+      to: [creatorEmail],
+      subject: `Your ticket changed to ${statusDisplay} status: ${ticket.title}`,
       html,
     });
+  }
+
+  async notifyTicketEvent(ticket: any, event: 'created' | 'assigned' | 'updated' | 'resolved' | 'closed'): Promise<boolean> {
+
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    // Determine recipients: include creator (requested) and keep assignee if present
+    const recipients: { email: string; isSystemAdmin: boolean }[] = [];
+
+    // Creator
+    let emailThemeUserId: string | undefined = undefined;
+    if (ticket.created_by) {
+      const creator = await this.prisma.uSER.findUnique({
+        where: { id: ticket.created_by },
+        select: { id: true, email: true, role: true },
+      });
+      if (creator?.email) {
+        const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
+        recipients.push({ email: creator.email, isSystemAdmin });
+        emailThemeUserId = emailThemeUserId || creator.id;
+      }
+    } else if (ticket.id) {
+      // Fallback to fetch created_by
+      const withCreator = await this.prisma.ticket.findUnique({
+        where: { id: ticket.id },
+        select: { created_by: true },
+      });
+      if (withCreator?.created_by) {
+        const creator = await this.prisma.uSER.findUnique({
+          where: { id: withCreator.created_by },
+          select: { id: true, email: true, role: true },
+        });
+        if (creator?.email) {
+          const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
+          recipients.push({ email: creator.email, isSystemAdmin });
+          emailThemeUserId = emailThemeUserId || creator.id;
+        }
+      }
+    }
+
+    // Assignee (kept for backwards compatibility)
+    if (ticket.user?.email) {
+      const isSystemAdmin = ticket.user.role === 'system_admin' || ticket.user.role === 'system_super_admin';
+      recipients.push({ email: ticket.user.email, isSystemAdmin });
+      emailThemeUserId = emailThemeUserId || ticket.user.id;
+    }
+
+    // Remove duplicates but keep system admin flag
+    const uniqueRecipients = recipients.filter((recipient, index, self) =>
+      index === self.findIndex(r => r.email === recipient.email)
+    );
+
+    if (uniqueRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
+
+    const detailUrl = `${process.env.FRONTEND_URL}/tickets/${ticket.id}`;
+    const createdDate = new Date(ticket.createdAt).toLocaleDateString();
+
+    // Get user email theme (based on creator or assignee, in that order)
+    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+
+    // Get ticket type display name
+    const ticketTypeDisplay = ticketTypeReverseDictionary[ticket.type] || ticket.type;
+
+    // Build staff member name (only name, no email)
+    const staffName = ticket.staff?.candidate?.name?.trim() || null;
+
+    // Build candidate name if available
+    const candidateName = ticket.candidate?.name?.trim() || 
+                         (ticket.candidate?.first_name && ticket.candidate?.last_name 
+                          ? `${ticket.candidate.first_name} ${ticket.candidate.last_name}`.trim() 
+                          : null);
+
+    // Send emails to each recipient with appropriate formatting
+    const emailPromises = uniqueRecipients.map(async (recipient) => {
+      const isSystemAdmin = recipient.isSystemAdmin;
+      
+      // For system admins and "created" event, use enhanced format
+      if (isSystemAdmin && event === 'created') {
+        // Build descriptive title based on ticket type
+        let emailTitle = '';
+        let emailSubject = '';
+        
+        if (ticketTypeDisplay === 'Bonus' && staffName && ticket.organization?.name) {
+          emailTitle = `Bonus Ticket Created for ${ticket.organization.name}`;
+          emailSubject = `Bonus Ticket Created for ${ticket.organization.name}`;
+        } else if (ticketTypeDisplay === 'Bonus' && staffName) {
+          emailTitle = `Bonus Ticket Created for ${staffName}`;
+          emailSubject = `Bonus Ticket Created for ${staffName}`;
+        } else if (ticket.organization?.name) {
+          emailTitle = `${ticketTypeDisplay} Ticket Created for ${ticket.organization.name}`;
+          emailSubject = `${ticketTypeDisplay} Ticket Created for ${ticket.organization.name}`;
+        } else {
+          emailTitle = `${ticketTypeDisplay} Ticket Created`;
+          emailSubject = `${ticketTypeDisplay} Ticket Created`;
+        }
+
+        // Build type badge
+        const typeBadge = `<span style="display: inline-block; background-color: #01546B; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-bottom: 10px;">${ticketTypeDisplay}</span>`;
+
+        // Build staff info if available (only name)
+        let staffInfo = '';
+        if (staffName) {
+          staffInfo = `<p><strong>Staff Member:</strong> ${staffName}</p>`;
+        }
+
+        // Build candidate info if available
+        let candidateInfo = '';
+        if (candidateName) {
+          candidateInfo = `<p><strong>Candidate:</strong> ${candidateName}</p>`;
+        }
+
+        const html = this.buildEmail(
+          `<h2>${emailTitle}</h2>
+           <div style="margin-bottom: 20px;">
+             ${typeBadge}
+           </div>
+           
+           <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+             <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
+             <p><strong>Title:</strong> ${ticket.title}</p>
+             <p><strong>Description:</strong> ${ticket.description}</p>
+             <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
+             ${staffInfo}
+             ${candidateInfo}
+           </div>
+           
+           <div style="text-align: left; margin: 30px 0;">
+             <a href="${detailUrl}" class="cta-button">
+               View Ticket Details
+             </a>
+           </div>`,
+          emailTheme
+        );
+
+        return this.mail.sendMail({
+          from: 'MedVirtual <noreply@medvirtual.ai>',
+          to: [recipient.email],
+          subject: emailSubject,
+          html,
+        });
+      } else {
+        // Standard format for non-system admins or other events
+        // Build staff member details if available (without email)
+        let staffDetails = '';
+        if (staffName) {
+          staffDetails = `<p><strong>Staff Member:</strong> ${staffName}</p>`;
+        }
+
+        // Build candidate details if available
+        let candidateDetails = '';
+        if (candidateName) {
+          candidateDetails = `<p><strong>Candidate:</strong> ${candidateName}</p>`;
+        }
+
+        const html = this.buildEmail(
+          `<h2>Ticket ${event.toUpperCase()}</h2>
+           <p>The ticket was ${event}.</p>
+           
+           <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+             <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
+             <p><strong>Title:</strong> ${ticket.title}</p>
+             <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
+             <p><strong>Description:</strong> ${ticket.description}</p>
+             <p><strong>Type:</strong> ${ticketTypeDisplay}</p>
+             <p><strong>Priority:</strong> ${ticket.priority}</p>
+             ${staffDetails}${candidateDetails}
+           </div>
+           
+           <div style="text-align: left; margin: 30px 0;">
+             <a href="${detailUrl}" class="cta-button">
+               View Ticket Details
+             </a>
+           </div>`,
+          emailTheme
+        );
+
+        return this.mail.sendMail({
+          from: 'MedVirtual <noreply@medvirtual.ai>',
+          to: [recipient.email],
+          subject: `Ticket ${event}: ${ticket.title}`,
+          html,
+        });
+      }
+    });
+
+    // Wait for all emails to be sent
+    const results = await Promise.all(emailPromises);
+    
+    // Return true if at least one email was sent successfully
+    return results.some(result => result === true);
   }
 
   async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
@@ -582,6 +786,62 @@ export class NotificationsService {
     return results.some(result => result === true);
   }
 
+  async notifyTicketNoteAddedToAssignee(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: {
+        id: true,
+        title: true,
+        organization: { select: { name: true } },
+        user_id: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            first_name: true,
+            last_name: true,
+          },
+        },
+      },
+    });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    if (!ticket.user_id || !ticket.user?.email) {
+      throw new BadRequestException('Ticket has no assigned user with email');
+    }
+
+    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
+
+    const emailTheme = await getUserEmailTheme(this.prisma, ticket.user.id);
+
+    const authorName = `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() || 'A user';
+
+    const html = this.buildEmail(
+      `<h2>You Received a Response on Your Ticket</h2>
+       <p>You received a response on your ticket from <strong>${authorName}</strong>.</p>
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Ticket</h3>
+         <p><strong>Title:</strong> ${ticket.title}</p>
+         <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
+       </div>
+       <div style="background-color: #fff; border: 1px solid #eee; padding: 15px; border-radius: 8px;">
+         <h3 style="margin-top: 0; color: #333;">Response</h3>
+         <p style="white-space: pre-wrap;">${note.content}</p>
+       </div>
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">View Ticket</a>
+       </div>`,
+      emailTheme,
+    );
+
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: [ticket.user.email],
+      subject: `You received a response on your ticket: ${ticket.title}`,
+      html,
+    });
+  }
+
   async notifyTicketNoteAddedToCreator(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
@@ -609,15 +869,15 @@ export class NotificationsService {
     const authorName = `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() || 'A user';
 
     const html = this.buildEmail(
-      `<h2>New Note on Your Ticket</h2>
-       <p>A new note was added to your ticket by <strong>${authorName}</strong>.</p>
+      `<h2>You Received a Response on Your Ticket</h2>
+       <p>You received a response on your ticket from <strong>${authorName}</strong>.</p>
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Ticket</h3>
          <p><strong>Title:</strong> ${ticket.title}</p>
          <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
        </div>
        <div style="background-color: #fff; border: 1px solid #eee; padding: 15px; border-radius: 8px;">
-         <h3 style="margin-top: 0; color: #333;">Note</h3>
+         <h3 style="margin-top: 0; color: #333;">Response</h3>
          <p style="white-space: pre-wrap;">${note.content}</p>
        </div>
        <div style="text-align: left; margin: 30px 0;">
@@ -629,7 +889,7 @@ export class NotificationsService {
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: [creator.email],
-      subject: `New note on your ticket: ${ticket.title}`,
+      subject: `You received a response on your ticket: ${ticket.title}`,
       html,
     });
   }

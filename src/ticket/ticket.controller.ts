@@ -8,6 +8,7 @@ import {
   Patch,
   UseGuards,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -71,22 +72,6 @@ export class TicketController {
     };
   }
 
-  @Get(':ticketId/notes')
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'List notes for a ticket' })
-  @ApiParam({ name: 'ticketId', type: String })
-  async listNotes(
-    @Param('ticketId') ticketId: string,
-    @CurrentUser() user: USER,
-  ) {
-    const notes = await this.ticketService.listNotes(ticketId, user);
-    return {
-      status: 200,
-      message: 'Notes retrieved',
-      data: notes,
-    };
-  }
-
   @Get()
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
@@ -134,6 +119,41 @@ export class TicketController {
     return {
       status: 200,
       message: 'List of tickets retrieved successfully',
+      data: result,
+    };
+  }
+
+  @Get(':ticketId/notes')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'List notes for a ticket' })
+  @ApiParam({ name: 'ticketId', type: String })
+  async listNotes(
+    @Param('ticketId') ticketId: string,
+    @CurrentUser() user: USER,
+  ) {
+    const notes = await this.ticketService.listNotes(ticketId, user);
+    return {
+      status: 200,
+      message: 'Notes retrieved',
+      data: notes,
+    };
+  }
+
+  @Get(':id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
+  @ApiOperation({ summary: 'Get a ticket by ID' })
+  @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
+  @ApiResponse({ status: 200, description: 'Ticket retrieved successfully.' })
+  @ApiResponse({ status: 400, description: 'Ticket not found.' })
+  async findOne(@Param('id') id: string): Promise<object> {
+    const result = await this.ticketService.findOne(id);
+    if (!result) {
+      throw new BadRequestException('Ticket not found');
+    }
+    return {
+      status: 200,
+      message: 'Ticket retrieved successfully',
       data: result,
     };
   }

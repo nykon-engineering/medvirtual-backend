@@ -5,3 +5,8 @@ export const ticketTypeDictionary : Record<string, string> ={
     "Support":  "support",
     "Referral":  "referral",
 }
+
+// Reverse dictionary to convert backend type to frontend display name
+export const ticketTypeReverseDictionary: Record<string, string> = Object.fromEntries(
+    Object.entries(ticketTypeDictionary).map(([key, value]) => [value, key])
+);

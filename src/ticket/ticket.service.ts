@@ -20,7 +20,7 @@ export class TicketService {
     return user?.role === 'system_admin' || user?.role === 'system_super_admin';
   }
 
-  private async findOne(id: string): Promise<any> {
+  async findOne(id: string): Promise<any> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id },
       select: {
@@ -31,6 +31,7 @@ export class TicketService {
         status: true,
         priority: true,
         createdAt: true,
+        created_by: true,
         organization: {
           select: {
             id: true,
@@ -49,6 +50,18 @@ export class TicketService {
             role: true,
             status: true,
             email: true,
+          },
+        },
+        // @ts-ignore - createdBy relation will be available after prisma generate
+        createdBy: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            job_title: true,
+            role: true,
+            status: true,
           },
         },
         candidate: {
@@ -178,26 +191,32 @@ export class TicketService {
     }
 
     try {
+      const data: any = {
+        type: typeBE,
+        title: createTicketDto.title,
+        description: createTicketDto.description,
+        priority: createTicketDto.priority,
+        createdBy: { connect: { id: user.id } },
+      };
+
+      if (assignedValidatedOrg) {
+        data.organization = { connect: { id: assignedValidatedOrg } };
+      }
+
+      if (assignedValidatedUser) {
+        data.user = { connect: { id: assignedValidatedUser } };
+      }
+
+      if (createTicketDto.candidate_id) {
+        data.candidate = { connect: { id: createTicketDto.candidate_id } };
+      }
+
+      if (createTicketDto.staff_id) {
+        data.staff = { connect: { id: createTicketDto.staff_id } };
+      }
+
       const ticket = await this.prisma.ticket.create({
-        data: {
-          organization: assignedValidatedOrg 
-            ? { connect: { id: assignedValidatedOrg } }
-            : undefined,
-          type: typeBE,
-          title: createTicketDto.title,
-          description: createTicketDto.description,
-          priority: createTicketDto.priority,
-          user: assignedValidatedUser 
-            ? { connect: { id: assignedValidatedUser } }
-            : undefined,
-          candidate: createTicketDto.candidate_id
-            ? { connect: { id: createTicketDto.candidate_id } }
-            : undefined,
-          staff: createTicketDto.staff_id
-            ? { connect: { id: createTicketDto.staff_id } }
-            : undefined,
-          created_by: user.id,
-        },
+        data,
       });
       if (!ticket) throw new BadRequestException('Failed to create ticket');
 
@@ -284,6 +303,18 @@ export class TicketService {
               email: true,
             },
           },
+          // @ts-ignore - createdBy relation will be available after prisma generate
+          createdBy: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              job_title: true,
+              role: true,
+              status: true,
+            },
+          },
           candidate: {
             select: {
               id: true,
@@ -320,7 +351,7 @@ export class TicketService {
       });
       if (!tickets) throw new BadRequestException('Failed to fetch tickets');
 
-      const filteredTickets = tickets.map((ticket) => ({
+      const filteredTickets = tickets.map((ticket: any) => ({
         ...ticket,
         candidate: ticket.candidate ? {
           ...ticket.candidate,
@@ -452,13 +483,13 @@ export class TicketService {
       if (!ticket)
         throw new BadRequestException('Failed to fetch reassigned ticket');
 
-      // Notify assignee via email when ticket is closed (non-blocking)
-      if (data.status === 'closed') {
-        try {
-          await this.notifications.notifyTicketEvent(ticket, 'closed');
-        } catch (err) {
-          console.warn('[notifications] ticket-closed email failed', err?.message || err);
+      // Notify creator on status change to in_progress, resolved, or closed (non-blocking)
+      try {
+        if (data.status === 'in_progress' || data.status === 'resolved' || data.status === 'closed') {
+          await this.notifications.notifyTicketStatusChangeToCreator(ticket, data.status as 'in_progress' | 'resolved' | 'closed');
         }
+      } catch (err) {
+        console.warn('[notifications] ticket-status-change email failed', err?.message || err);
       }
 
       return ticket;
@@ -559,6 +590,12 @@ export class TicketService {
 
       const ticket = await this.findOne(id);
       if (!ticket) throw new BadRequestException('Failed to fetch updated ticket');
+      // Notify on generic updates (non-blocking)
+      try {
+        await this.notifications.notifyTicketEvent(ticket, 'updated');
+      } catch (err) {
+        console.warn('[notifications] ticket-updated email failed', err?.message || err);
+      }
       return ticket;
     } catch (error) {
       throw new BadRequestException('Error updating ticket', error.message);
@@ -622,18 +659,32 @@ export class TicketService {
         : null;
     }
 
-    // If the note is not internal, notify the ticket creator via email (non-blocking)
+    // If the note is not internal, notify via email (non-blocking)
     if (!(dto.is_internal ?? false)) {
       try {
-        await this.notifications.notifyTicketNoteAddedToCreator(ticketId, {
-          content: dto.content,
-          author: {
-            id: note.USER?.id,
-            first_name: note.USER?.first_name,
-            last_name: note.USER?.last_name,
-            email: note.USER?.email,
-          },
-        });
+        if (ticket.created_by === user.id) {
+          // If creator adds a note, notify the assigned user
+          await this.notifications.notifyTicketNoteAddedToAssignee(ticketId, {
+            content: dto.content,
+            author: {
+              id: note.USER?.id,
+              first_name: note.USER?.first_name,
+              last_name: note.USER?.last_name,
+              email: note.USER?.email,
+            },
+          });
+        } else {
+          // If someone else adds a note, notify the ticket creator
+          await this.notifications.notifyTicketNoteAddedToCreator(ticketId, {
+            content: dto.content,
+            author: {
+              id: note.USER?.id,
+              first_name: note.USER?.first_name,
+              last_name: note.USER?.last_name,
+              email: note.USER?.email,
+            },
+          });
+        }
       } catch (err) {
         console.warn('[notifications] ticket-note email failed', err?.message || err);
       }

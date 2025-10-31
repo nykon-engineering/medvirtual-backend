@@ -39,6 +39,7 @@ model USER {
   ownedOrganizations    Organization?       @relation("OrganizationOwner")
   sessions              Session[]
   tickets               Ticket[]
+  ticketsCreated        Ticket[]            @relation("TicketCreatedBy")
   createdBy             USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
   createdUsers          USER[]              @relation("UserCreatedBy")
   organization          Organization?       @relation(fields: [organization_id], references: [id])
@@ -361,6 +362,7 @@ model Ticket {
   organization Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff        Staff?        @relation(fields: [staff_id], references: [id])
   user         USER?         @relation(fields: [user_id], references: [id])
+  createdBy    USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
