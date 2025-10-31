@@ -34,6 +34,7 @@ model USER {
   email_invitations     EmailInvitation[]
   email_verifications   EmailVerification[]
   hireRequestsAssigned  HireRequest[]       @relation("AssignedUser")
+  hireRequestsSourcingAssigned  HireRequest[]       @relation("AssignedSourcing")
   hireRequestsCreated   HireRequest[]       @relation("HireRequestCreatedBy")
   adminOrganizations    Organization[]      @relation("OrganizationAdmin")
   ownedOrganizations    Organization?       @relation("OrganizationOwner")
@@ -250,6 +251,7 @@ model HireRequest {
   specialization               String
   location                     String?
   assign_user_id               String?
+  assign_sourcing_id           String?
   createdByUserId              String?
   hubspot_contract_amount      Decimal?
   hubspot_language             String?
@@ -265,6 +267,7 @@ model HireRequest {
   hubspot_ticket_type          String?
   panels                       CandidatePanel[]
   assigned_user                USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
+  assigned_sourcing            USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
   createdBy                    USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
   organization                 Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
   skills                       HireRequestSkill[]

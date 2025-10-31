@@ -912,18 +912,31 @@ export class HireRequestService {
     }
   }
 
-  async reassign(id: string, user: USER, data: reassignDTO): Promise<any> {
+  async reassign(id: string, user: USER, data: reassignDTO, type: string): Promise<any> {
     if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+    if(!type) throw new BadRequestException('Type of reassignment is required');
+
+    let fieldToUpdate = {};
+    if (type === 'concierge'){
+      fieldToUpdate = {
+        assigned_user: data.user_id
+        ? { connect: { id: data.user_id } }
+        : { disconnect: true },
+      }
+    }else if (type === 'sourcing'){
+      fieldToUpdate = {
+        assigned_sourcing: data.user_id
+        ? { connect: { id: data.user_id } }
+        : { disconnect: true },
+      }
+    }
 
     const hireRequest = await this.prisma.hireRequest.update({
       where: {
         id: id
       },
-      data:{
-        assigned_user: data.user_id
-        ? { connect: { id: data.user_id } }
-        : { disconnect: true },
-      }
+      data: fieldToUpdate
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
