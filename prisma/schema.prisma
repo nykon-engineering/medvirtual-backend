@@ -41,6 +41,7 @@ model USER {
   sessions              Session[]
   tickets               Ticket[]
   ticketsCreated        Ticket[]            @relation("TicketCreatedBy")
+  TicketNotes           TicketNotes[]
   createdBy             USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
   createdUsers          USER[]              @relation("UserCreatedBy")
   organization          Organization?       @relation(fields: [organization_id], references: [id])
@@ -366,6 +367,7 @@ model Ticket {
   staff        Staff?        @relation(fields: [staff_id], references: [id])
   user         USER?         @relation(fields: [user_id], references: [id])
   createdBy    USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
+  TicketNotes  TicketNotes[]
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
@@ -446,6 +448,19 @@ model Sync {
   id             String   @id @default(uuid())
   role           String
   last_synced_at DateTime
+}
+
+model TicketNotes {
+  id          String    @id
+  ticket_id   String
+  author_id   String
+  content     String
+  is_internal Boolean   @default(false)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime  @default(now()) @db.Timestamptz(6)
+  deleted_at  DateTime? @db.Timestamptz(6)
+  USER        USER      @relation(fields: [author_id], references: [id], onUpdate: NoAction)
+  Ticket      Ticket    @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 enum Role {
