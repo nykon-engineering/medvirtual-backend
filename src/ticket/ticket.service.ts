@@ -190,6 +190,24 @@ export class TicketService {
       }
     }
 
+    // Validate that the user creating the ticket exists
+    const creatorUser = await this.prisma.uSER.findUnique({
+      where: { id: user.id },
+    });
+    if (!creatorUser) {
+      throw new BadRequestException(`User with ID ${user.id} not found. Cannot create ticket.`);
+    }
+
+    // Validate that the assigned user exists (if provided)
+    if (assignedValidatedUser) {
+      const assignedUser = await this.prisma.uSER.findUnique({
+        where: { id: assignedValidatedUser },
+      });
+      if (!assignedUser) {
+        throw new BadRequestException(`Assigned user with ID ${assignedValidatedUser} not found.`);
+      }
+    }
+
     try {
       const data: any = {
         type: typeBE,
@@ -261,6 +279,8 @@ export class TicketService {
                 ]
               } : user.role === 'organization_super_admin' ? {
                 organization: user.organization_id ? { id: user.organization_id } : undefined
+              } : user.role === 'organization_admin' ? {
+                created_by: user.id
               } : { user: { is: { id: user.id } } }),
           ...(search ? {
             OR: [

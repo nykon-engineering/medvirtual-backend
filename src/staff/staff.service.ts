@@ -154,6 +154,24 @@ export class StaffService {
       assignedValidated = undefined;
     }
 
+    // Validate that the user creating the ticket exists
+    const creatorUser = await this.prisma.uSER.findUnique({
+      where: { id: user.id },
+    });
+    if (!creatorUser) {
+      throw new BadRequestException(`User with ID ${user.id} not found. Cannot create ticket.`);
+    }
+
+    // Validate that the assigned user exists (if provided)
+    if (assignedValidated) {
+      const assignedUser = await this.prisma.uSER.findUnique({
+        where: { id: assignedValidated },
+      });
+      if (!assignedUser) {
+        throw new BadRequestException(`Assigned user with ID ${assignedValidated} not found.`);
+      }
+    }
+
     const [bonus, ticket] = await this.prisma.$transaction([
       this.prisma.bonus.create({
         data: {
@@ -171,6 +189,7 @@ export class StaffService {
           title: `Bonus Added: $${data.bonus} to ${staff.hubspot_deal_name ? staff.hubspot_deal_name :  staff?.candidate?.first_name+` `+staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'medium',
+          createdBy: { connect: { id: user.id } },
           user: assignedValidated
             ? { connect: { id: assignedValidated } }
             : undefined,
@@ -216,6 +235,24 @@ export class StaffService {
       assignedValidated = undefined;
     }
 
+    // Validate that the user creating the ticket exists
+    const creatorUser = await this.prisma.uSER.findUnique({
+      where: { id: user.id },
+    });
+    if (!creatorUser) {
+      throw new BadRequestException(`User with ID ${user.id} not found. Cannot create ticket.`);
+    }
+
+    // Validate that the assigned user exists (if provided)
+    if (assignedValidated) {
+      const assignedUser = await this.prisma.uSER.findUnique({
+        where: { id: assignedValidated },
+      });
+      if (!assignedUser) {
+        throw new BadRequestException(`Assigned user with ID ${assignedValidated} not found.`);
+      }
+    }
+
     const [staffStatus, ticket] = await this.prisma.$transaction([
       this.prisma.staff.update({
         where: { id: staff.id },
@@ -229,6 +266,7 @@ export class StaffService {
           title: `Termination Requested: ${staff.hubspot_deal_name ? staff.hubspot_deal_name :  staff?.candidate?.first_name+` `+staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'high',
+          createdBy: { connect: { id: user.id } },
           user: assignedValidated
             ? { connect: { id: assignedValidated } }
             : undefined,

@@ -74,7 +74,7 @@ export class TicketController {
 
   @Get()
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
   @ApiOperation({ summary: 'Get all tickets' })
   @ApiQuery({
     name: 'type',
@@ -141,7 +141,7 @@ export class TicketController {
 
   @Get(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
   @ApiOperation({ summary: 'Get a ticket by ID' })
   @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
   @ApiResponse({ status: 200, description: 'Ticket retrieved successfully.' })
