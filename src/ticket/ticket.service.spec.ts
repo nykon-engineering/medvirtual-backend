@@ -192,7 +192,7 @@ describe('TicketService', () => {
         where: {
           type: undefined,
           priority: undefined,
-          user: { is: { id: "1" } },
+          created_by: "1",
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
             AND: [
