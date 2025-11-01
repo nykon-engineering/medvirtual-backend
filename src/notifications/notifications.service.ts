@@ -526,9 +526,8 @@ export class NotificationsService {
     const statusDisplay = newStatus.replace('_', ' ').toUpperCase();
 
     const html = this.buildEmail(
-      `<h2>Your Ticket Changed to ${statusDisplay} Status</h2>
+      `
        <p>Your ticket has been updated to <strong>${statusDisplay}</strong> status.</p>
-       
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
          <p><strong>Title:</strong> ${ticket.title}</p>
