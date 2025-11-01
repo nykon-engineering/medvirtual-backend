@@ -474,7 +474,12 @@ export class UserService {
           where: { userId: id },
         });
 
-        // 4. Handle organization relationships (has RESTRICT constraints)
+        // 4. Delete ticket notes created by this user (has RESTRICT constraint)
+        await tx.ticketNotes.deleteMany({
+          where: { author_id: id },
+        });
+
+        // 5. Handle organization relationships (has RESTRICT constraints)
         // Update organizations where this user is admin_id
         await tx.organization.updateMany({
           where: { admin_id: id },
@@ -493,19 +498,19 @@ export class UserService {
           data: { admin_id: null },
         });
 
-        // 5. Update hire requests where this user is assigned (has SET NULL constraint)
+        // 6. Update hire requests where this user is assigned (has SET NULL constraint)
         await tx.hireRequest.updateMany({
           where: { assign_user_id: id },
           data: { assign_user_id: null },
         });
 
-        // 6. Update tickets where this user is the user (has SET NULL constraint)
+        // 7. Update tickets where this user is the user (has SET NULL constraint)
         await tx.ticket.updateMany({
           where: { user_id: id },
           data: { user_id: null },
         });
 
-        // 7. Finally, delete the user
+        // 8. Finally, delete the user
         return await tx.uSER.delete({
           where: { id },
         });
