@@ -579,7 +579,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringContaining('https://test.example.com/tickets/ticket1'),
+          html: expect.stringContaining('https://test.example.com/tickets?ticket=ticket1'),
         })
       );
     });

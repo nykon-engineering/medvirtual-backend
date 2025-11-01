@@ -638,7 +638,7 @@ export class NotificationsService {
 
     if (uniqueRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
 
-    const detailUrl = `${process.env.FRONTEND_URL}/tickets/${ticket.id}`;
+    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme (based on creator or assignee, in that order)
