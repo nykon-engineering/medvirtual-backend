@@ -141,23 +141,37 @@ const MailMock ={
         hourly_pay_rate: 5,
         employment_type: 'Full-time',
         educations: [{ degree: 'BSc', institution: 'University', year: '2020' }],
-        approved_positions_pairings: ["Test"],
+        approved_positions_pairing: ['Test'],
         experiences: [
           {
             company: 'Company A',
             position: 'Developer',
             start_date: '2021-01-01',
             end_date: '2022-01-01',
-            responsibilities: 'Developing software',
+            responsabilities: 'Developing software',
           },
         ],
         skills: [{ skill_name: 'JavaScript', skill_type: 'technical' }],
         languages: [{ name: 'English' }],
+        panelCandidates: [
+          {
+            id: 'pc-1',
+            panel: {
+              hire_request_id: 'hr-1',
+              hireRequest: {
+                id: 'hr-1',
+                title: 'Hire Request 1',
+                organization: { id: 'org-1', name: 'Org 1' },
+              },
+            },
+          },
+        ],
       };
+    
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
-
+    
       const result = await service.findOne('1', mockUser);
-
+    
       expect(prisma.candidate.findUnique).toHaveBeenCalledWith({
         where: {
           id: '1',
@@ -208,10 +222,46 @@ const MailMock ={
               name: true,
             },
           },
-        }
+          panelCandidates: {
+            select: {
+              id: true,
+              panel: {
+                select: {
+                  hire_request_id: true,
+                  hireRequest: {
+                    select: {
+                      id: true,
+                      title: true,
+                      organization: {
+                        select: {
+                          id: true,
+                          name: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
-      expect(result).toEqual(mockCandidate);
+  
+      const expectedResult = {
+        ...mockCandidate,
+        pipeline_status: 'Unknown Stage',
+        employment_type: 'Full-time',
+        panelCandidates: [
+          {
+            title: 'Hire Request 1',
+            organization_name: 'Org 1',
+          },
+        ],
+      };
+    
+      expect(result).toEqual(expectedResult);
     });
+    
 
     it('should return 400 if the candidate Id is empty', async () => {
       await expect(service.findOne('', mockUser)).rejects.toThrow(BadRequestException);

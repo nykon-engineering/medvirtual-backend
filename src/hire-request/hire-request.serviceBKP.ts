@@ -1978,7 +1978,7 @@ export class HireRequestService {
     return this.findOne(id, user);
   }
 
-  async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<any> {
+  async changeWinner(id: string, data: any, user: USER): Promise<any> {
     if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371

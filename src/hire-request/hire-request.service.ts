@@ -27,6 +27,7 @@ import {
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
+import { title } from 'process';
 
 @Injectable()
 export class HireRequestService {
@@ -833,6 +834,7 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+     
       return this.findOne(id, user);
 
     /* It was removed on 10-17-2025 asked by Pauli and fouond by Liz - https://regenta-company.monday.com/boards/9328303960/pulses/18193994589
@@ -931,7 +933,8 @@ export class HireRequestService {
       return this.findOne(id, user);
 
     
-    } else if (hireRequest.status == 'panel_ready' && data.status === 'awaiting_decision' || hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'awaiting_decision' 
+      || hireRequest.status == 'interview_scheduled' && data.status === 'awaiting_decision' ){
       
       if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
@@ -941,6 +944,7 @@ export class HireRequestService {
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
+      //change the status panel
       const updatedPanel = await this.prisma.candidatePanel.update({
         where: {
           id: panelExists.id,
@@ -1085,7 +1089,33 @@ export class HireRequestService {
             year: true,
           },
         },
-        
+        panelCandidates: {
+          where:{
+            panel: {
+              hire_request_id: { not: id},
+            }
+          },
+          select:{
+            id: true,
+            panel:{
+              select:{
+                hire_request_id: true,
+                hireRequest:{
+                  select:{
+                    id: true,
+                    title: true,
+                    organization:{
+                      select:{
+                        id: true,
+                        name: true,
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       
     });
@@ -1140,6 +1170,11 @@ export class HireRequestService {
       ...c,
       salary: findMonthlySalary(c.hourly_pay_rate?.toNumber() || 0),
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
+      panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
+        title: pc.panel.hireRequest.title,
+        organization_name: pc.panel.hireRequest.organization.name,
+        
+      })) : []
     }))
   
     return candidatesWithSalary;
@@ -1239,7 +1274,7 @@ export class HireRequestService {
 
 
     // === Transaction Prisma ===
-    const { currentPanel, oldCandidatesSnapshot, newCandidatesSnapshot } = await this.prisma.$transaction(async (tx) => {
+    const { currentPanel} = await this.prisma.$transaction(async (tx) => {
 
       let panel = await tx.candidatePanel.findFirst({
         where: { hire_request_id: data.hireRequest_id },
@@ -1258,31 +1293,6 @@ export class HireRequestService {
         if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       }
 
-      // Update old candidates to  "Available Candidates"
-      const oldCandidates = await tx.panelCandidate.findMany({
-        where: { panel_id: panel.id },
-        select: {
-          candidate_id: true,
-          candidate: {
-            select: {
-              id: true,
-              hubspot_id: true,
-              pipeline_status: true,
-              pipeline_status_origin: true,
-            },
-          },
-        },
-      });
-
-      await Promise.all(
-        oldCandidates.map(async (c) => {
-          const pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatusOldCandidates;
-          await tx.candidate.update({
-            where: { id: c.candidate.id },
-            data: { pipeline_status: pipeline_treated },
-          });
-        })
-      );
 
       await tx.panelCandidate.deleteMany({
         where: { panel_id: panel.id },
@@ -1296,110 +1306,12 @@ export class HireRequestService {
         })),
       });
 
-      // update pipeline_status on the candidate table
-      const newCandidates = await tx.candidate.findMany({
-        where: { id: { in: data.candidates_id } },
-        select: {
-          id: true,
-          hubspot_id: true,
-          pipeline_status: true,
-        },
-      });
-
-      await Promise.all(
-        newCandidates.map((c) =>
-          tx.candidate.update({
-            where: { id: c.id },
-            data: {
-              pipeline_status_origin: c.pipeline_status,
-              pipeline_status: pipelineStatus,
-            },
-          })
-        )
-      );
-
       return { 
         currentPanel: panel,
-        oldCandidatesSnapshot: oldCandidates.map(o => ({
-          id: o.candidate.id,
-          pipeline_status: o.candidate.pipeline_status,
-          pipeline_status_origin: o.candidate.pipeline_status_origin,
-          hubspot_id: o.candidate.hubspot_id,
-        })),
-        newCandidatesSnapshot: newCandidates.map(n => ({
-          id: n.id,
-          pipeline_status: n.pipeline_status,
-          hubspot_id: n.hubspot_id,
-        })),
       };
     });
 
-    try {
-      
-      // Update old candidates to Available Candidates
-      await Promise.all(
-        oldCandidatesSnapshot.map((c) =>
-          this.hubspot.updateOneCandidateFromHireRequest(
-            c.hubspot_id,
-            pipelineStatusOldCandidates
-          )
-        )
-      );
-
-      // update new candidates to Endorsed via Platform
-      const hubspotUpdated = await this.hubspot.updateManyCandidatesFromHireRequest(
-        newCandidatesSnapshot,
-        pipelineStatus
-      );
-
-      if (!hubspotUpdated)
-        throw new BadRequestException(`Candidates not updated on HubSpot`);
-    } catch (error) {
-      
-      console.error('HubSpot update failed. Starting rollback...', error.message);
-
-      // === Manual roolback ===
-      await this.prisma.$transaction(async (tx) => {
-        // Revert old candidates status
-        await Promise.all(
-          oldCandidatesSnapshot.map((c) =>
-            tx.candidate.update({
-              where: { id: c.id },
-              data: {
-                pipeline_status: c.pipeline_status,
-                pipeline_status_origin: c.pipeline_status_origin,
-              },
-            })
-          )
-        );
-
-        // Revert new candidates status
-        await Promise.all(
-          newCandidatesSnapshot.map((c) =>
-            tx.candidate.update({
-              where: { id: c.id },
-              data: {
-                pipeline_status: c.pipeline_status,
-                pipeline_status_origin: null,
-              },
-            })
-          )
-        );
-
-        // Remove the new candidates from the panel and restore old candidates
-        await tx.panelCandidate.deleteMany({
-          where: { panel_id: currentPanel.id },
-        });
-
-        await tx.panelCandidate.createMany({
-          data: oldCandidatesSnapshot.map((c) => ({
-            candidate_id: c.id,
-            panel_id: currentPanel.id,
-          })),
-        });
-      });
-      throw new BadRequestException('Transaction rolled back due to HubSpot sync failure');
-    }
+    
     return this.findOne(data.hireRequest_id, user);
   }
 
@@ -1413,6 +1325,7 @@ export class HireRequestService {
       },
       include: {
         panelCandidates: true,
+        
       },
     });
 
@@ -1478,6 +1391,27 @@ export class HireRequestService {
       },
     });
     if (!panelUpdated) throw new BadRequestException(`Panel not updated to readable`);
+
+    //Business logical changed on 2025-11-03 asked by Hanieh and did by Paulo
+    const candidates = await this.prisma.candidate.findMany({
+      where: { id: {in: candidateIds}},
+      select:{
+        id: true,
+        hubspot_id: true,
+        pipeline_status: true,
+        pipeline_status_origin: true
+      }
+    })
+    console.log(candidates)
+    candidates.forEach( async c => {
+      console.log('updating candidate ', c.id)
+      await this.prisma.candidate.update({
+        where: { id: c.id },
+        data: { pipeline_status: c.pipeline_status_origin || c.pipeline_status},
+      });
+      await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status);
+    })
+
 
     return this.findOne(data.hireRequest_id, user);
   }
@@ -1925,9 +1859,22 @@ export class HireRequestService {
       },
       select:{
         id: true,
+        panelCandidates: {
+          select: {
+            candidate: {
+              select: {
+                id: true,
+                hubspot_id: true,
+                pipeline_status: true,
+                pipeline_status_origin: true
+              },
+            },
+          },
+        },
       }
     });
     if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
+   
 
     const updatedDate = new Date(`${data.date_time}`);
 
@@ -1943,6 +1890,7 @@ export class HireRequestService {
     if (!hireRequestUpdated) throw new BadRequestException(`Panel not updated to decision_pending`);
 
     //update hire request status to 'awaiting_decision'
+    const candidates = panelExists.panelCandidates.map(pc => pc.candidate);
     const hireRequestStatusUpdated = await this.prisma.hireRequest.update({
       where: {
         id: hireRequest.id,
@@ -1952,6 +1900,20 @@ export class HireRequestService {
       },
     });
     if (!hireRequestStatusUpdated) throw new BadRequestException(`Hire request status not updated to awaiting decision`);
+
+
+    //Business logical changed on 2025-11-03 asked by Hanieh and did by Paulo
+    const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+      return dbToStageDictionary[key] === 'Endorsed via Platform';
+    })
+    if (!pipelineStatus) throw new BadRequestException(`Pipeline status mapping not found`);
+
+    //console.log('Showing the candidates: ', candidates)
+
+    const hubspotUpdated = await this.hubspot.updateManyCandidatesFromHireRequest(
+      candidates,
+      pipelineStatus
+    );
 
     return this.findOne(id, user);
   }
@@ -2036,10 +1998,10 @@ export class HireRequestService {
     if( !panelExists) throw new NotFoundException(`Panel for this hire request not found`);
 
     //check if winner exists inside the panel
-    const winnerExists = await this.prisma.panelCandidate.findFirst({
+    const winnerExists = await this.prisma.panelCandidate.findMany({
       where: {
         panel_id: panelExists.id,
-        candidate_id: data.winner_id,
+        candidate_id: {in : data.winner_id},
       },
       select: {
         id: true,
@@ -2051,7 +2013,7 @@ export class HireRequestService {
       where: {
         panel_id: panelExists.id,
         NOT: {
-          candidate_id: data.winner_id,
+          candidate_id: { in: data.winner_id},
         },
       },
       select: {
@@ -2094,7 +2056,7 @@ export class HireRequestService {
     const winner = await this.prisma.panelCandidate.updateMany({
       where: {
         panel_id: panelExists.id,
-        candidate_id: data.winner_id
+        candidate_id: { in : data.winner_id}
       },
       data: {
         status: 'selected_by_client',
@@ -2108,7 +2070,7 @@ export class HireRequestService {
       where: {
         panel_id: panelExists.id,
         NOT: {
-          candidate_id: data.winner_id
+          candidate_id: { in : data.winner_id}
         }
       },
       data: {
@@ -2162,7 +2124,7 @@ export class HireRequestService {
     
     // Fire placement completed notification (non-blocking)
     try {
-      await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id, data.winner_id);
+      await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id); //without second parameter to get all winner candidates
     } catch (err) {
       console.warn('[notifications] placement-completed email failed', err?.message || err);
     }
@@ -2260,7 +2222,10 @@ export class HireRequestService {
   async showMatchHireRequests(candidateId: string): Promise<any> {
     const candidate = await this.prisma.candidate.findUnique({
       where: { id: candidateId },
-      include: { skills: true },
+      include: { 
+        skills: true,
+        panelCandidates: true
+       },
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
   

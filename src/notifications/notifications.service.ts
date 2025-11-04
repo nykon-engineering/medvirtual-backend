@@ -881,53 +881,46 @@ export class NotificationsService {
       ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
       : 'Not specified';
 
-    // Send notification to each recipient
-    const emailPromises = uniqueRecipients.map(async (recipient) => {
-      // Get user email theme
-      const emailTheme = await getUserEmailTheme(this.prisma, recipient.id);
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, hr.organization.id);
+    // Determine company name based on organization business unit
+    const companyName = hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual';
+    const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
 
-      // Determine company name based on organization business unit
-      const companyName = hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual';
-      const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
-
-      const html = this.buildEmail(
-        `<h2>Hire Request Status Update</h2>
-         <p>Your hire request has been completed.</p>
-         
-         <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
-           <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
-           <p><strong>Title:</strong> ${hr.title}</p>
-           <p><strong>Organization:</strong> ${hr.organization.name}</p>
-           <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
-           <p><strong>Specialization:</strong> ${hr.specialization}</p>
-           <p><strong>Priority:</strong> ${hr.priority}</p>
-           <p><strong>Salary Range:</strong> ${salaryRange}</p>
-           <p><strong>Expected Start Date:</strong> ${startDate}</p>
-           <p><strong>Selected Candidate:</strong> ${winnerName}</p>
-         </div>
-         
-         <p>Please review the details and proceed with the next steps.</p>
-         <div style="text-align: left; margin: 30px 0;">
-           <a href="${detailUrl}" class="cta-button">
-             Review Hire Request
-           </a>
-         </div>`,
-        emailTheme
-      );
-
-      return this.mail.sendMail({
-        from: fromEmail,
-        to: [recipient.email],
-        subject: `Hire Request Completed: ${hr.title}.`,  
-        html,
-      });
+    const html = this.buildEmail(
+      `<h2>Hire Request Status Update</h2>
+       <p>Your hire request has been completed.</p>
+       
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Organization:</strong> ${hr.organization.name}</p>
+         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Specialization:</strong> ${hr.specialization}</p>
+         <p><strong>Priority:</strong> ${hr.priority}</p>
+         <p><strong>Salary Range:</strong> ${salaryRange}</p>
+         <p><strong>Expected Start Date:</strong> ${startDate}</p>
+         <p><strong>Selected Candidate:</strong> ${winnerName}</p>
+       </div>
+       
+       <p>Please review the details and proceed with the next steps.</p>
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           Review Hire Request
+         </a>
+       </div>`,
+      emailTheme
+    );
+    const results = this.mail.sendMail({
+      from: fromEmail,
+      to: "paulo@regenta.ai",
+      bcc: [uniqueRecipients],
+      subject: `Hire Request Completed: ${hr.title}.`,  
+      html,
     });
-
-    // Wait for all emails to be sent
-    const results = await Promise.all(emailPromises);
     
     // Return true if at least one email was sent successfully
-    return results.some(result => result === true);
+    return results;
   }
 
   async notifyTicketNoteAddedToAssignee(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {

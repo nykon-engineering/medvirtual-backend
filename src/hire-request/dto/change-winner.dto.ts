@@ -1,8 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsString } from "class-validator";
+import { IsArray, IsString } from "class-validator";
 
 export class changeWinnerDTO{
-    @ApiProperty({ description: 'ID of the candidate selected', required: true, type: String })
-    @IsString()
-    winner_id: string
+    @ApiProperty({ description: 'IDs of the candidate selected', required: true, type: [String] })
+    @IsArray()
+    @IsString({ each: true })
+    winner_id: string[];
 }

@@ -264,6 +264,28 @@ export class CandidatesService {
         select: {
           scheduled_date: true,
         }
+      },
+      panelCandidates: {
+        select:{
+          id: true,
+          panel:{
+            select:{
+              hire_request_id: true,
+              hireRequest:{
+                select:{
+                  id: true,
+                  title: true,
+                  organization:{
+                    select:{
+                      id: true,
+                      name: true,
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
       
     }
@@ -332,6 +354,11 @@ export class CandidatesService {
         selectedInInterviews: undefined,
         salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
+        panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
+          title: pc.panel.hireRequest.title,
+          organization_name: pc.panel.hireRequest.organization.name,
+          
+        })) : []
       }));
 
       return {
@@ -403,6 +430,28 @@ export class CandidatesService {
           end_date: true,
           responsabilities: true
         }
+      },
+      panelCandidates: {
+        select:{
+          id: true,
+          panel:{
+            select:{
+              hire_request_id: true,
+              hireRequest:{
+                select:{
+                  id: true,
+                  title: true,
+                  organization:{
+                    select:{
+                      id: true,
+                      name: true,
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
       
     }
@@ -422,8 +471,17 @@ export class CandidatesService {
       candidate.pipeline_status = stageName || 'Unknown Stage';
     }
     candidate.employment_type = changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type;
-
-    return candidate;
+    
+    const formattedCandidate = {
+      ...candidate, // mantém os outros campos do candidato
+      panelCandidates: candidate.panelCandidates && candidate.panelCandidates.length > 0
+        ? candidate.panelCandidates.map(pc => ({
+            title: pc.panel?.hireRequest?.title || '',
+            organization_name: pc.panel?.hireRequest?.organization?.name || '',
+          }))
+        : [],
+    };
+    return formattedCandidate;
     
   }
 
