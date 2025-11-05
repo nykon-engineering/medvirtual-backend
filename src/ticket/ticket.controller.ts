@@ -146,11 +146,9 @@ export class TicketController {
   @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
   @ApiResponse({ status: 200, description: 'Ticket retrieved successfully.' })
   @ApiResponse({ status: 400, description: 'Ticket not found.' })
-  async findOne(@Param('id') id: string): Promise<object> {
-    const result = await this.ticketService.findOne(id);
-    if (!result) {
-      throw new BadRequestException('Ticket not found');
-    }
+  @ApiResponse({ status: 403, description: 'Access denied.' })
+  async findOne(@Param('id') id: string, @CurrentUser() user: USER): Promise<object> {
+    const result = await this.ticketService.findOne(id, user);
     return {
       status: 200,
       message: 'Ticket retrieved successfully',
@@ -244,12 +242,13 @@ export class TicketController {
 
   @Patch(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
   @ApiOperation({ summary: 'Edit a ticket (title, description, priority)' })
   @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
   @ApiBody({ type: UpdateTicketDto })
   @ApiResponse({ status: 200, description: 'Ticket updated successfully.' })
   @ApiResponse({ status: 400, description: 'Ticket not found or invalid input.' })
+  @ApiResponse({ status: 403, description: 'Access denied.' })
   async patch(
     @Param('id') id: string,
     @Body() body: UpdateTicketDto,

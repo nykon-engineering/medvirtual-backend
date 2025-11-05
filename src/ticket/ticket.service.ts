@@ -20,7 +20,7 @@ export class TicketService {
     return user?.role === 'system_admin' || user?.role === 'system_super_admin';
   }
 
-  async findOne(id: string): Promise<any> {
+  async findOne(id: string, user?: USER): Promise<any> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id },
       select: {
@@ -98,6 +98,28 @@ export class TicketService {
         },
       },
     });
+
+    if (!ticket) {
+      throw new BadRequestException('Ticket not found');
+    }
+
+    // Access control: Organization admins can only see tickets they created
+    if (user) {
+      const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+      if (isOrganizationAdmin) {
+        // For organization_super_admin, allow tickets from their organization
+        // For organization_admin, only allow tickets they created
+        if (user.role === 'organization_admin' && ticket.created_by !== user.id) {
+          throw new ForbiddenException('You can only view tickets you created');
+        }
+        if (user.role === 'organization_super_admin') {
+          // Allow if ticket belongs to their organization OR if they created it
+          if (ticket.organization?.id !== user.organization_id && ticket.created_by !== user.id) {
+            throw new ForbiddenException('You can only view tickets from your organization or tickets you created');
+          }
+        }
+      }
+    }
 
     return ticket;
   }
@@ -568,34 +590,56 @@ export class TicketService {
   async update(id: string, data: { title?: string; description?: string; priority?: Priority; type?: string; client_id?: string; assigned_user_id?: string }, user: USER): Promise<object> {
     const currentTicket = await this.prisma.ticket.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, created_by: true, organization: { select: { id: true } } },
     });
     if (!currentTicket) throw new BadRequestException('Ticket not found');
 
+    // Access control: Organization admins can only update tickets they created
+    const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+    if (isOrganizationAdmin) {
+      if (user.role === 'organization_admin' && currentTicket.created_by !== user.id) {
+        throw new ForbiddenException('You can only update tickets you created');
+      }
+      if (user.role === 'organization_super_admin') {
+        // Allow if ticket belongs to their organization OR if they created it
+        if (currentTicket.organization?.id !== user.organization_id && currentTicket.created_by !== user.id) {
+          throw new ForbiddenException('You can only update tickets from your organization or tickets you created');
+        }
+      }
+    }
+
     const payload: any = {};
+    const isSystemAdmin = this.isSystemAdmin(user);
+    
+    // All users can update title, description, and priority
     if (typeof data.title === 'string') payload.title = data.title;
     if (typeof data.description === 'string') payload.description = data.description;
     if (typeof data.priority === 'string') payload.priority = data.priority as Priority;
 
-    if (typeof data.type === 'string') {
-      const mapped = ticketTypeDictionary[data.type] ?? null;
-      if (!mapped) {
-        throw new BadRequestException('Invalid ticket type');
+    // Only system admins can update type, client_id, or assigned_user_id
+    if (isSystemAdmin) {
+      if (typeof data.type === 'string' && data.type.trim() !== '') {
+        const mapped = ticketTypeDictionary[data.type] ?? null;
+        if (!mapped) {
+          throw new BadRequestException('Invalid ticket type');
+        }
+        payload.type = mapped;
       }
-      payload.type = mapped;
-    }
 
-    if (typeof data.client_id === 'string') {
-      const org = await this.prisma.organization.findUnique({ where: { id: data.client_id } });
-      if (!org) throw new BadRequestException('Organization not found');
-      payload.organization = { connect: { id: data.client_id } };
-    }
+      if (typeof data.client_id === 'string' && data.client_id.trim() !== '') {
+        const org = await this.prisma.organization.findUnique({ where: { id: data.client_id } });
+        if (!org) throw new BadRequestException('Organization not found');
+        payload.organization = { connect: { id: data.client_id } };
+      }
 
-    if (typeof data.assigned_user_id === 'string') {
-      const assignee = await this.prisma.uSER.findUnique({ where: { id: data.assigned_user_id } });
-      if (!assignee) throw new BadRequestException('User to assign not found');
-      payload.user = { connect: { id: data.assigned_user_id } };
+      if (typeof data.assigned_user_id === 'string' && data.assigned_user_id.trim() !== '') {
+        const assignee = await this.prisma.uSER.findUnique({ where: { id: data.assigned_user_id } });
+        if (!assignee) throw new BadRequestException('User to assign not found');
+        payload.user = { connect: { id: data.assigned_user_id } };
+      }
     }
+    // For organization admins, we simply ignore type, client_id, and assigned_user_id
+    // They can only update title, description, and priority
 
     if (Object.keys(payload).length === 0) {
       return await this.findOne(id);
@@ -623,9 +667,26 @@ export class TicketService {
   }
 
   async addNote(ticketId: string, dto: { content: string; is_internal?: boolean }, user: USER) {
-    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    const ticket = await this.prisma.ticket.findUnique({ 
+      where: { id: ticketId },
+      select: { id: true, created_by: true, organization: { select: { id: true } } },
+    });
     if (!ticket) {
       throw new BadRequestException('Ticket not found');
+    }
+
+    // Access control: Organization admins can only add notes to tickets they created
+    const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+    if (isOrganizationAdmin) {
+      if (user.role === 'organization_admin' && ticket.created_by !== user.id) {
+        throw new ForbiddenException('You can only add notes to tickets you created');
+      }
+      if (user.role === 'organization_super_admin') {
+        // Allow if ticket belongs to their organization OR if they created it
+        if (ticket.organization?.id !== user.organization_id && ticket.created_by !== user.id) {
+          throw new ForbiddenException('You can only add notes to tickets from your organization or tickets you created');
+        }
+      }
     }
 
     if ((dto.is_internal ?? false) && !this.isSystemAdmin(user)) {
@@ -714,9 +775,26 @@ export class TicketService {
   }
 
   async listNotes(ticketId: string, user: USER) {
-    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    const ticket = await this.prisma.ticket.findUnique({ 
+      where: { id: ticketId },
+      select: { id: true, created_by: true, organization: { select: { id: true } } },
+    });
     if (!ticket) {
       throw new BadRequestException('Ticket not found');
+    }
+
+    // Access control: Organization admins can only view notes for tickets they created
+    const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+    if (isOrganizationAdmin) {
+      if (user.role === 'organization_admin' && ticket.created_by !== user.id) {
+        throw new ForbiddenException('You can only view notes for tickets you created');
+      }
+      if (user.role === 'organization_super_admin') {
+        // Allow if ticket belongs to their organization OR if they created it
+        if (ticket.organization?.id !== user.organization_id && ticket.created_by !== user.id) {
+          throw new ForbiddenException('You can only view notes for tickets from your organization or tickets you created');
+        }
+      }
     }
 
     const canSeeInternal = this.isSystemAdmin(user);
