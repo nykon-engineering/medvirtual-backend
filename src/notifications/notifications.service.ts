@@ -342,7 +342,7 @@ export class NotificationsService {
     console.log('Candidate Emails:', candidateEmails);
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: "paulo@regenta.ai",
+      to: "noreply@regenta.ai",
       bcc: candidateEmails,
       subject: `Interview Invite: ${hr.title}`,
       html,
