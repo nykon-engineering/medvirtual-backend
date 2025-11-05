@@ -5,46 +5,44 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL | DATABASE_URL | PROD_DATABASE_URL
+  url               = env("DATABASE_URL") //LOCAL_DATABASE_URL // DATABASE_URL // PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model USER {
-  id                    String              @id @default(uuid())
-  email                 String              @unique
-  organization_id       String?
-  organization_name     String
-  first_name            String
-  last_name             String
-  phone                 String
-  avatar                String
-  job_title             String
-  role                  String
-  workos_id             String
-  password              String              @db.VarChar(255)
-  authentication_method String
-  status                String
-  verified              Boolean             @default(false)
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  is_organization_owner Boolean             @default(false)
-  createdByMethod       String              @default("self_signup")
-  createdByUserId       String?
-  hubspot_id            String?             @unique
-  email_invitations     EmailInvitation[]
-  email_verifications   EmailVerification[]
-  hireRequestsAssigned  HireRequest[]       @relation("AssignedUser")
-  hireRequestsSourcingAssigned  HireRequest[]       @relation("AssignedSourcing")
-  hireRequestsCreated   HireRequest[]       @relation("HireRequestCreatedBy")
-  adminOrganizations    Organization[]      @relation("OrganizationAdmin")
-  ownedOrganizations    Organization?       @relation("OrganizationOwner")
-  sessions              Session[]
-  tickets               Ticket[]
-  ticketsCreated        Ticket[]            @relation("TicketCreatedBy")
-  TicketNotes           TicketNotes[]
-  createdBy             USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
-  createdUsers          USER[]              @relation("UserCreatedBy")
-  organization          Organization?       @relation(fields: [organization_id], references: [id])
+  id                           String              @id @default(uuid())
+  email                        String              @unique
+  organization_id              String?
+  organization_name            String
+  first_name                   String
+  last_name                    String
+  phone                        String
+  avatar                       String
+  job_title                    String
+  role                         String
+  workos_id                    String
+  password                     String              @db.VarChar(255)
+  authentication_method        String
+  status                       String
+  verified                     Boolean             @default(false)
+  createdAt                    DateTime            @default(now())
+  updatedAt                    DateTime            @updatedAt
+  is_organization_owner        Boolean             @default(false)
+  createdByMethod              String              @default("self_signup")
+  createdByUserId              String?
+  hubspot_id                   String?             @unique
+  email_invitations            EmailInvitation[]
+  email_verifications          EmailVerification[]
+  hireRequestsSourcingAssigned HireRequest[]       @relation("AssignedSourcing")
+  hireRequestsAssigned         HireRequest[]       @relation("AssignedUser")
+  hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
+  adminOrganizations           Organization[]      @relation("OrganizationAdmin")
+  ownedOrganizations           Organization?       @relation("OrganizationOwner")
+  tickets                      Ticket[]
+  TicketNotes                  TicketNotes[]
+  createdBy                    USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
+  createdUsers                 USER[]              @relation("UserCreatedBy")
+  organization                 Organization?       @relation(fields: [organization_id], references: [id])
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -62,7 +60,6 @@ model Session {
   createdAt DateTime @default(now())
   expiresAt DateTime
   isRevoked Boolean  @default(false)
-  user      USER     @relation(fields: [userId], references: [id])
 }
 
 model EmailVerification {
@@ -252,7 +249,6 @@ model HireRequest {
   specialization               String
   location                     String?
   assign_user_id               String?
-  assign_sourcing_id           String?
   createdByUserId              String?
   hubspot_contract_amount      Decimal?
   hubspot_language             String?
@@ -266,9 +262,10 @@ model HireRequest {
   hubspot_pipeline             String?
   hubspot_pipeline_stage       String?
   hubspot_ticket_type          String?
+  assign_sourcing_id           String?
   panels                       CandidatePanel[]
-  assigned_user                USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
   assigned_sourcing            USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
+  assigned_user                USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
   createdBy                    USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
   organization                 Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
   skills                       HireRequestSkill[]
@@ -366,7 +363,6 @@ model Ticket {
   organization Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff        Staff?        @relation(fields: [staff_id], references: [id])
   user         USER?         @relation(fields: [user_id], references: [id])
-  createdBy    USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
   TicketNotes  TicketNotes[]
 
   @@index([user_id], map: "idx_tickets_user_id")
@@ -514,12 +510,12 @@ enum HireRequestStatus {
   new
   pending_signature
   sourcing
-  for_review
   panel_ready
   interview_scheduled
   awaiting_decision
   placement_completed
   cancelled
+  for_review
 }
 
 enum Priority {
@@ -566,4 +562,11 @@ enum OrganizationRole {
 enum OrganizationStatus {
   active
   inactive
+}
+
+enum Priority_new {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
