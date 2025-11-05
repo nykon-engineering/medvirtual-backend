@@ -245,6 +245,110 @@ export class NotificationsService {
     });
   }
 
+  async notifyInterviewScheduled(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        specialization: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        expected_start_date: true,
+        assigned_user: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
+        organization: {
+          select: { name: true },
+        },
+        panels: {
+          select: {
+            id: true,
+            interviews: {
+              select: {
+                id: true,
+                scheduled_date: true,
+                link: true,
+              },
+            },
+            panelCandidates: {
+              select: {
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!hr) throw new NotFoundException('Hire request not found');
+    if (!hr.assigned_user?.email)
+      throw new BadRequestException('Hire request has no assignee email');
+
+    const startDate = hr.expected_start_date
+      ? new Date(hr.expected_start_date).toLocaleDateString()
+      : 'Not specified';
+
+    // Get the link and date of the scheduled interview
+    const interviewDate = hr.panels?.[0]?.interviews?.[0]?.scheduled_date
+    const interviewLink = hr.panels?.[0]?.interviews?.[0]?.link || '#';
+    const interviewDateFormatted = interviewDate
+      ? new Date(interviewDate).toLocaleString()
+      : 'Not specified';
+
+    const bodyLine = interviewLink !== '#' ? `<p><strong>Interview Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>` : '';
+    const bodyLink = interviewLink !== '#' ? `<div style="text-align: left; margin: 30px 0;">
+          <a href="${interviewLink}" class="cta-button">
+            Join meeting
+          </a>
+        </div>` : '';
+   
+    //get emails from candidates
+    const candidateEmails = hr.panels?.[0]?.panelCandidates
+      ?.map(c => c.candidate?.email)
+      .filter(Boolean) || [];
+
+
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+
+    const html = this.buildEmail(
+      `<h4>There</h4>
+       <p>You were invited for an <strong>Interview</strong>.</p>
+       
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Position Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Company:</strong> ${hr.organization.name}</p>
+         <p><strong>Expected Start Date:</strong> ${startDate}</p>
+         <p>&nbsp;</p>
+         <p><strong>Interview Date:</strong> ${interviewDateFormatted}</p>
+         ${bodyLine}
+       </div>
+       
+       ${bodyLink}`,
+      emailTheme
+    );
+    console.log('Candidate Emails:', candidateEmails);
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: "paulo@regenta.ai",
+      bcc: candidateEmails,
+      subject: `Interview Invite: ${hr.title}`,
+      html,
+    });
+  }
+
   async notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled' ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },

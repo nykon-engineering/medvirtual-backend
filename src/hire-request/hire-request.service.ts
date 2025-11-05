@@ -1402,9 +1402,7 @@ export class HireRequestService {
         pipeline_status_origin: true
       }
     })
-    console.log(candidates)
     candidates.forEach( async c => {
-      console.log('updating candidate ', c.id)
       await this.prisma.candidate.update({
         where: { id: c.id },
         data: { pipeline_status: c.pipeline_status_origin || c.pipeline_status},
@@ -1791,6 +1789,11 @@ export class HireRequestService {
     });
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
 
+    try{
+      await this.notifications.notifyInterviewScheduled(hireRequest.id);
+    }catch(err){
+      console.error('[notifications] notifyInterviewScheduled email failed', err?.message || err);
+    }
     
     return this.findOne(id, user);
 
