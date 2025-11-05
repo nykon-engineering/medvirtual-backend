@@ -913,7 +913,7 @@ export class NotificationsService {
     );
     const results = this.mail.sendMail({
       from: fromEmail,
-      to: "paulo@regenta.ai",
+      to: "noreply@regenta.ai",
       bcc: [uniqueRecipients],
       subject: `Hire Request Completed: ${hr.title}.`,  
       html,

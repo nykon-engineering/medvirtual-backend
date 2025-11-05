@@ -886,13 +886,40 @@ export class CandidatesService {
         }
 
         if (field === 'specialization') {
-          result[field] = [
+          /*result[field] = [
             ...new Set(
               returned.flatMap(item =>
                 item.specialization.split(';').map(s => s.trim()).filter(s => s !== 'N/A')
               )
             )
           ];
+          */
+
+          
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            });
+        
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === "career_highlights_relevant_job_experiences"
+            );
+        
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedSpecializations = vaTypeProperty.options.map((option) => option.value);
+            result[field]=returnedSpecializations || [];
+            //return vaTypeProperty.options || [];
+          } catch (error) {
+            console.error("Failed to find types:", error.response?.data || error.message);
+            throw new Error("Failed to find VA types");
+          }
+          
         }else{
           result[field]=returned;
         }
