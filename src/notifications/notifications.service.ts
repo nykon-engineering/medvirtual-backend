@@ -312,7 +312,7 @@ export class NotificationsService {
             Join meeting
           </a>
         </div>` : '';
-   
+
     //get emails from candidates
     const candidateEmails = hr.panels?.[0]?.panelCandidates
       ?.map(c => c.candidate?.email)
@@ -349,7 +349,7 @@ export class NotificationsService {
     });
   }
 
-  async notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled' ): Promise<boolean> {
+  async notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled'): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -422,7 +422,7 @@ export class NotificationsService {
     if (!hr.assigned_sourcing?.email)
       throw new BadRequestException('Hire request has no assignee email');
 
-    const verb = action ;
+    const verb = action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
     // Get user email theme
@@ -476,7 +476,7 @@ export class NotificationsService {
     if (!hr.assigned_user?.email)
       throw new BadRequestException('Hire request has no assignee email');
 
-    const verb = action === 'for_review' ? 'For Review' : action ;
+    const verb = action === 'for_review' ? 'For Review' : action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
     // Get user email theme
@@ -590,15 +590,17 @@ export class NotificationsService {
     // Only notify the creator
     let creatorEmail: string | undefined;
     let emailThemeUserId: string | undefined;
+    let creatorRole: string | undefined;
 
     if (ticket.created_by) {
       const creator = await this.prisma.uSER.findUnique({
         where: { id: ticket.created_by },
-        select: { id: true, email: true },
+        select: { id: true, email: true, role: true },
       });
       if (creator?.email) {
         creatorEmail = creator.email;
         emailThemeUserId = creator.id;
+        creatorRole = creator.role;
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
@@ -609,16 +611,29 @@ export class NotificationsService {
       if (withCreator?.created_by) {
         const creator = await this.prisma.uSER.findUnique({
           where: { id: withCreator.created_by },
-          select: { id: true, email: true },
+          select: { id: true, email: true, role: true },
         });
         if (creator?.email) {
           creatorEmail = creator.email;
           emailThemeUserId = creator.id;
+          creatorRole = creator.role;
         }
       }
     }
 
     if (!creatorEmail) throw new BadRequestException('Ticket creator has no email');
+
+    // Filter: Only send to clients (organization admins) if ticket type is "Support"
+    // System admins always receive notifications for all ticket types
+    const isSystemAdmin = creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
+    const isClient = !isSystemAdmin; // Organization admins are considered clients
+    const ticketType = ticket.type?.toLowerCase();
+    const isSupportTicket = ticketType === 'support';
+
+    // Skip notification if creator is a client and ticket is not a Support ticket
+    if (isClient && !isSupportTicket) {
+      return false; // Don't send notification to clients for non-Support tickets
+    }
 
     const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
@@ -629,6 +644,16 @@ export class NotificationsService {
     // Format status for display
     const statusDisplay = newStatus.replace('_', ' ').toUpperCase();
 
+    // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
+    const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
+    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+
+    // Parse Referral ticket description format
+    let descriptionContent = '';
+    if (isReferralTicket && ticket.description) {
+      descriptionContent = this.formatReferralDescription(ticket.description);
+    }
+
     const html = this.buildEmail(
       `
        <p>Your ticket has been updated to <strong>${statusDisplay}</strong> status.</p>
@@ -636,12 +661,13 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
          <p><strong>Title:</strong> ${ticket.title}</p>
          <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
-         <p><strong>Description:</strong> ${ticket.description}</p>
+         ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
          <p><strong>Type:</strong> ${ticket.type}</p>
          <p><strong>Priority:</strong> ${ticket.priority}</p>
          <p><strong>Status:</strong> ${statusDisplay}</p>
          <p><strong>Created:</strong> ${createdDate}</p>
        </div>
+       ${isReferralTicket ? descriptionContent : ''}
        
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
@@ -667,6 +693,10 @@ export class NotificationsService {
 
     if (!ticket) throw new NotFoundException('Ticket not found');
 
+    // Get ticket type early to check if it's Support
+    const ticketType = ticket.type?.toLowerCase();
+    const isSupportTicket = ticketType === 'support';
+
     // Get created_by ID (from ticket object or fetch if needed)
     let createdById: string | null = null;
     if (ticket.created_by) {
@@ -682,10 +712,10 @@ export class NotificationsService {
         ticket.user_id = ticketData.user_id;
       }
     }
-    
+
     // Get assigned user ID
     const assignedUserId = ticket.user?.id || ticket.user_id;
-    
+
     // Check if creator and assignee are the same user - if so, don't send notification
     if (createdById && assignedUserId && createdById === assignedUserId) {
       // Creator and assignee are the same, skip notification
@@ -695,7 +725,7 @@ export class NotificationsService {
     // Determine recipients: include creator (requested) and keep assignee if present
     const recipients: { email: string; isSystemAdmin: boolean }[] = [];
 
-    // Creator
+    // Creator - only add if ticket is Support OR creator is system admin
     let emailThemeUserId: string | undefined = undefined;
     if (ticket.created_by) {
       const creator = await this.prisma.uSER.findUnique({
@@ -704,8 +734,11 @@ export class NotificationsService {
       });
       if (creator?.email) {
         const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
-        recipients.push({ email: creator.email, isSystemAdmin });
-        emailThemeUserId = emailThemeUserId || creator.id;
+        // Only add creator if ticket is Support OR creator is system admin
+        if (isSupportTicket || isSystemAdmin) {
+          recipients.push({ email: creator.email, isSystemAdmin });
+          emailThemeUserId = emailThemeUserId || creator.id;
+        }
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
@@ -720,8 +753,11 @@ export class NotificationsService {
         });
         if (creator?.email) {
           const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
-          recipients.push({ email: creator.email, isSystemAdmin });
-          emailThemeUserId = emailThemeUserId || creator.id;
+          // Only add creator if ticket is Support OR creator is system admin
+          if (isSupportTicket || isSystemAdmin) {
+            recipients.push({ email: creator.email, isSystemAdmin });
+            emailThemeUserId = emailThemeUserId || creator.id;
+          }
         }
       }
     }
@@ -739,7 +775,18 @@ export class NotificationsService {
       index === self.findIndex(r => r.email === recipient.email)
     );
 
-    if (uniqueRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
+    // Filter: For status change events (resolved, closed), only send to clients if ticket type is "Support"
+    // System admins always receive notifications for all ticket types
+    // Note: 'in_progress' status changes are handled by notifyTicketStatusChangeToCreator
+    const isStatusChangeEvent = event === 'resolved' || event === 'closed';
+
+    let filteredRecipients = uniqueRecipients;
+    if (isStatusChangeEvent && !isSupportTicket) {
+      // Filter out client recipients (non-system-admins) for non-Support ticket status changes
+      filteredRecipients = uniqueRecipients.filter(recipient => recipient.isSystemAdmin);
+    }
+
+    if (filteredRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
@@ -750,25 +797,35 @@ export class NotificationsService {
     // Get ticket type display name
     const ticketTypeDisplay = ticketTypeReverseDictionary[ticket.type] || ticket.type;
 
+    // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
+    const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
+    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+
     // Build staff member name (only name, no email)
     const staffName = ticket.staff?.candidate?.name?.trim() || null;
 
     // Build candidate name if available
-    const candidateName = ticket.candidate?.name?.trim() || 
-                         (ticket.candidate?.first_name && ticket.candidate?.last_name 
-                          ? `${ticket.candidate.first_name} ${ticket.candidate.last_name}`.trim() 
-                          : null);
+    const candidateName = ticket.candidate?.name?.trim() ||
+      (ticket.candidate?.first_name && ticket.candidate?.last_name
+        ? `${ticket.candidate.first_name} ${ticket.candidate.last_name}`.trim()
+        : null);
 
     // Send emails to each recipient with appropriate formatting
-    const emailPromises = uniqueRecipients.map(async (recipient) => {
+    const emailPromises = filteredRecipients.map(async (recipient) => {
       const isSystemAdmin = recipient.isSystemAdmin;
-      
+
+      // Parse Referral ticket description format
+      let descriptionContent = '';
+      if (isReferralTicket && ticket.description) {
+        descriptionContent = this.formatReferralDescription(ticket.description);
+      }
+
       // For system admins and "created" event, use enhanced format
       if (isSystemAdmin && event === 'created') {
         // Build descriptive title based on ticket type
         let emailTitle = '';
         let emailSubject = '';
-        
+
         if (ticketTypeDisplay === 'Bonus' && staffName && ticket.organization?.name) {
           emailTitle = `Bonus Ticket Created for ${ticket.organization.name}`;
           emailSubject = `Bonus Ticket Created for ${ticket.organization.name}`;
@@ -807,11 +864,12 @@ export class NotificationsService {
            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
              <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
              <p><strong>Title:</strong> ${ticket.title}</p>
-             <p><strong>Description:</strong> ${ticket.description}</p>
+             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
              <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
              ${staffInfo}
              ${candidateInfo}
            </div>
+           ${isReferralTicket ? descriptionContent : ''}
            
            <div style="text-align: left; margin: 30px 0;">
              <a href="${detailUrl}" class="cta-button">
@@ -846,18 +904,18 @@ export class NotificationsService {
         }
 
         const html = this.buildEmail(
-          `<h2>Ticket ${event.toUpperCase()}</h2>
-           <p>The ticket was ${event}.</p>
+          `<p>The ticket was <strong>${event}</strong>.</p>
            
            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
              <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
              <p><strong>Title:</strong> ${ticket.title}</p>
              <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
-             <p><strong>Description:</strong> ${ticket.description}</p>
+             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
              <p><strong>Type:</strong> ${ticketTypeDisplay}</p>
              <p><strong>Priority:</strong> ${ticket.priority}</p>
              ${staffDetails}${candidateDetails}
            </div>
+           ${isReferralTicket ? descriptionContent : ''}
            
            <div style="text-align: left; margin: 30px 0;">
              <a href="${detailUrl}" class="cta-button">
@@ -882,7 +940,7 @@ export class NotificationsService {
 
     // Wait for all emails to be sent
     const results = await Promise.all(emailPromises);
-    
+
     // Return true if at least one email was sent successfully
     return results.some(result => result === true);
   }
@@ -901,7 +959,7 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         organization: {
-          select: { 
+          select: {
             id: true,
             name: true,
             business_unit: true,
@@ -963,7 +1021,7 @@ export class NotificationsService {
 
     // Combine all recipients and remove duplicates
     const allRecipients = [...organizationAdmins, ...additionalRecipients];
-    const uniqueRecipients = allRecipients.filter((recipient, index, self) => 
+    const uniqueRecipients = allRecipients.filter((recipient, index, self) =>
       index === self.findIndex(r => r.email === recipient.email)
     );
 
@@ -1019,10 +1077,10 @@ export class NotificationsService {
       from: fromEmail,
       to: "noreply@regenta.ai",
       bcc: [uniqueRecipients],
-      subject: `Hire Request Completed: ${hr.title}.`,  
+      subject: `Hire Request Completed: ${hr.title}.`,
       html,
     });
-    
+
     // Return true if at least one email was sent successfully
     return results;
   }
@@ -1141,6 +1199,75 @@ export class NotificationsService {
       subject: `You received a response on your ticket: ${ticket.title}`,
       html,
     });
+  }
+
+  private formatReferralDescription(description: string): string {
+    // Parse the format: Name: ...\nEmail: ...\nMessage: ...
+    const lines = description.split('\n');
+    const parsed: { name?: string; email?: string; message?: string } = {};
+
+    let currentField: 'name' | 'email' | 'message' | null = null;
+    let messageLines: string[] = [];
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+
+      if (trimmed.toLowerCase().startsWith('name:')) {
+        // Save previous field if exists
+        if (currentField === 'message' && messageLines.length > 0) {
+          parsed.message = messageLines.join('\n').trim();
+        }
+        currentField = 'name';
+        parsed.name = trimmed.replace(/^name:\s*/i, '').trim();
+        messageLines = [];
+      } else if (trimmed.toLowerCase().startsWith('email:')) {
+        // Save previous field if exists
+        if (currentField === 'message' && messageLines.length > 0) {
+          parsed.message = messageLines.join('\n').trim();
+        }
+        currentField = 'email';
+        parsed.email = trimmed.replace(/^email:\s*/i, '').trim();
+        messageLines = [];
+      } else if (trimmed.toLowerCase().startsWith('message:')) {
+        // Save previous field if exists
+        if (currentField === 'message' && messageLines.length > 0) {
+          parsed.message = messageLines.join('\n').trim();
+        }
+        currentField = 'message';
+        const messageContent = trimmed.replace(/^message:\s*/i, '').trim();
+        if (messageContent) {
+          messageLines.push(messageContent);
+        }
+      } else if (currentField === 'message') {
+        messageLines.push(trimmed);
+      }
+    });
+
+    // Save final message if we were collecting it
+    if (currentField === 'message' && messageLines.length > 0) {
+      parsed.message = messageLines.join('\n').trim();
+    }
+
+    // Build simple formatted HTML
+    let html = '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">';
+    html += '<h3 style="margin-top: 0; color: #333;">Candidate Details</h3>';
+
+    if (parsed.name) {
+      html += `<p><strong>Name:</strong> ${parsed.name}</p>`;
+    }
+
+    if (parsed.email) {
+      html += `<p><strong>Email:</strong> <a href="mailto:${parsed.email}" style="color: #01546B; text-decoration: none;">${parsed.email}</a></p>`;
+    }
+
+    if (parsed.message) {
+      html += `<p><strong>Message:</strong></p>`;
+      html += `<p style="white-space: pre-wrap; margin-top: 5px;">${parsed.message}</p>`;
+    }
+
+    html += '</div>';
+
+    return html;
   }
 }
 
