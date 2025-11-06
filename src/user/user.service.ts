@@ -545,7 +545,7 @@ export class UserService {
   }
 
   async searchUsers(query: SearchUsersDto): Promise<any[]> {
-    const { search, role, status, organization_id, limit = 10 } = query;
+    const { search, role, status, organization_id, limit } = query;
 
     const whereClause: Prisma.USERWhereInput = {};
 
@@ -594,9 +594,8 @@ export class UserService {
       whereClause.organization_id = organization_id;
     }
 
-    const users = await this.prisma.uSER.findMany({
+    const queryOptions: Prisma.USERFindManyArgs = {
       where: whereClause,
-      take: limit,
       select: {
         id: true,
         email: true,
@@ -615,7 +614,14 @@ export class UserService {
       orderBy: {
         createdAt: 'desc',
       },
-    });
+    };
+
+    // Only add pagination if limit is provided
+    if (limit) {
+      queryOptions.take = limit;
+    }
+
+    const users = await this.prisma.uSER.findMany(queryOptions);
 
     // Transform users to handle empty avatars
     return users.map((user) => ({
