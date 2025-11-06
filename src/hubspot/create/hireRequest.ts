@@ -12,7 +12,7 @@ export class HireRequestCreationService {
     async execute(data: any): Promise<any> {
         try {
           const expectedDate = new Date(data.expected_start_date);
-          const PairingDate = expectedDate.getFullYear() +'-'+ (expectedDate.getMonth() + 1) +'-'+ expectedDate.getDate();
+          const PairingDate = expectedDate.getFullYear() +'-'+ String(expectedDate.getMonth() + 1).padStart(2,"0") +'-'+ String(expectedDate.getDate()).padStart(2,"0");
           const hours = String(expectedDate.getHours()).padStart(2, "0");
           const minutes = String(expectedDate.getMinutes()).padStart(2, "0");
           const seconds = String(expectedDate.getSeconds()).padStart(2, "0");

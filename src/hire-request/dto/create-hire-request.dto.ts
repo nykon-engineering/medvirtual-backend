@@ -46,12 +46,14 @@ export class CreateHireRequestDto {
     @IsOptional()
     contract_length: string;
 
-    @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: true,  type: String })
+    @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     salary_range_from: string;
 
-    @ApiProperty({ example: '70000', description: 'The salary range to for the hire request', required: true,  type: String })
+    @ApiProperty({ example: '70000', description: 'The salary range to for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     salary_range_to: string;
 
     @ApiProperty({ example: 'New York, Remote', description: 'The work location for the hire request', required: false,  type: String })
@@ -59,16 +61,18 @@ export class CreateHireRequestDto {
     @IsOptional()
     location: string;
 
-    @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: true,  type: String, enum: ['high', 'medium', 'low'] })
+    @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: false,  type: String, enum: ['high', 'medium', 'low'] })
     @IsString()
+    @IsOptional()
     priority: 'high' | 'medium' | 'low';
 
     @ApiProperty({ example: 'Jr. Medical General', description: 'The position/role/type of the candidate', required: true,  type: String})
     @IsString()
     position: string;
 
-    @ApiProperty({ example: '4500', description: 'The amount of contract', required: true,  type: String})
+    @ApiProperty({ example: '4500', description: 'The amount of contract', required: false,  type: String})
     @IsString()
+    @IsOptional()
     contract_amount: string;
 
     @ApiProperty({ example: 'English', description: 'The language required for this HR', required: true,  type: String})

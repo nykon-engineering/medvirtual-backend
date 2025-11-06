@@ -173,8 +173,7 @@ export class HireRequestService {
       }
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
-
-    const hireRequestWithSkills = await this.findOne(newHireRequest.id, user);
+    const hireRequestWithSkills = await this.findOne(newHireRequest.id, user);    
     //send request for the hubspot to create the ticket
     try {
       await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
@@ -182,7 +181,8 @@ export class HireRequestService {
       console.warn('[hubspot] createHireRequestTicket failed', err?.message || err);
     }
 
-    return hireRequestWithSkills;
+    const hireRequestWithHubspotID = await this.findOne(newHireRequest.id, user);
+    return hireRequestWithHubspotID;
   }
 
   async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10): Promise<any> {
