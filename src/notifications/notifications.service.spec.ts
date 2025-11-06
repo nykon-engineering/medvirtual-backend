@@ -378,7 +378,7 @@ describe('NotificationsService', () => {
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: expect.arrayContaining([expect.any(String)]),
         subject: expect.stringContaining('Bug Report'),
-        html: expect.stringContaining('Ticket ASSIGNED'),
+        html: expect.stringContaining('The ticket was <strong>assigned</strong>'),
       });
     });
 
@@ -394,7 +394,7 @@ describe('NotificationsService', () => {
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: expect.arrayContaining([expect.any(String)]),
         subject: expect.stringContaining('Bug Report'),
-        html: expect.stringContaining('Ticket CLOSED'),
+        html: expect.stringContaining('The ticket was <strong>closed</strong>'),
       });
     });
 
