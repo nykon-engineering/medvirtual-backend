@@ -1047,15 +1047,18 @@ export class NotificationsService {
       ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
       : 'Not specified';
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.organization.id);
-    // Determine company name based on organization business unit
-    const companyName = hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual';
+    // Get user email theme using the first admin's ID
+    const firstAdminId = uniqueRecipients[0]?.id;
+    const emailTheme = firstAdminId 
+      ? await getUserEmailTheme(this.prisma, firstAdminId)
+      : null;
+    
+    // Determine company name from theme or fallback to business unit
+    const companyName = emailTheme?.companyName || (hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual');
     const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
 
     const html = this.buildEmail(
-      `<h2>Hire Request Status Update</h2>
-       <p>Your hire request has been completed.</p>
+      `<p>Your hire request has been completed.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
