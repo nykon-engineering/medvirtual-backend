@@ -116,6 +116,9 @@ export class OrganizationResponseDto {
 
   @ApiProperty({ description: 'Number of users in organization' })
   userCount: number;
+
+  @ApiProperty({ description: 'Number of active staff in organization' })
+  staffCount: number;
 }
 
 export class PaginatedOrganizationsResponseDto {

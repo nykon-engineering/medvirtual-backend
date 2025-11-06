@@ -410,21 +410,26 @@ export class OrganizationService {
         };
       }
 
-      // Build orderBy clause
+      // Check if sorting by calculated fields (userCount or activeStaffCount)
+      const isCalculatedFieldSort = sortBy === 'userCount' || sortBy === 'activeStaffCount';
+
+      // Build orderBy clause (only for non-calculated fields)
       const orderBy: any = {};
-      orderBy[sortBy] = sortOrder;
+      if (!isCalculatedFieldSort) {
+        orderBy[sortBy] = sortOrder;
+      }
 
       // Get total count (after applying all filters including hasUser and hasStaff)
       const total = await this.prisma.organization.count({
         where: whereClause,
       });
 
-      // Get paginated results
+      // Get organizations - if sorting by calculated field, get all, otherwise use pagination
       const organizations = await this.prisma.organization.findMany({
         where: whereClause,
-        skip,
-        take: limit,
-        orderBy,
+        skip: isCalculatedFieldSort ? 0 : skip, // Skip pagination if sorting by calculated field
+        take: isCalculatedFieldSort ? undefined : limit, // Get all if sorting by calculated field
+        orderBy: isCalculatedFieldSort ? undefined : orderBy, // Don't use orderBy for calculated fields
         include: {
           owner: {
             select: {
@@ -507,6 +512,35 @@ export class OrganizationService {
           userCount,
           staffCount,
         });
+      }
+
+      // Sort by calculated fields if needed
+      if (isCalculatedFieldSort) {
+        organizationsWithCounts.sort((a, b) => {
+          let aValue: number;
+          let bValue: number;
+
+          if (sortBy === 'userCount') {
+            aValue = a.userCount;
+            bValue = b.userCount;
+          } else if (sortBy === 'activeStaffCount') {
+            aValue = a.staffCount;
+            bValue = b.staffCount;
+          } else {
+            return 0;
+          }
+
+          if (sortOrder === 'asc') {
+            return aValue - bValue;
+          } else {
+            return bValue - aValue;
+          }
+        });
+
+        // Apply pagination after sorting
+        const paginatedOrganizations = organizationsWithCounts.slice(skip, skip + limit);
+        organizationsWithCounts.length = 0;
+        organizationsWithCounts.push(...paginatedOrganizations);
       }
 
       // Desactivate organizations with staffCount === 0

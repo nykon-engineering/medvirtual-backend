@@ -127,7 +127,7 @@ export class GetOrganizationsDto {
   @ApiProperty({
     required: false,
     description: 'Sort field',
-    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],
+    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees', 'userCount', 'activeStaffCount'],
     default: 'createdAt',
   })
   @IsOptional()

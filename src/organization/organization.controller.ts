@@ -135,7 +135,7 @@ export class OrganizationController {
   @ApiQuery({
     name: 'sortBy',
     required: false,
-    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],
+    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees', 'userCount', 'activeStaffCount'],
     description: 'Sort field (default: createdAt)',
   })
   @ApiQuery({
