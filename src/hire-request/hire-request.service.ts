@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -27,12 +29,12 @@ import {
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
-import { title } from 'process';
 
 @Injectable()
 export class HireRequestService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
   ) {}
@@ -68,7 +70,7 @@ export class HireRequestService {
     return true;
   }
 
-  async create(data: CreateHireRequestDto, user: USER):Promise<any> {  
+  async create(data: CreateHireRequestDto, user?: USER):Promise<any> {   //user is option because the webhook use this function without user
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const {skills, client_id,  ...hireRequestData} = data;

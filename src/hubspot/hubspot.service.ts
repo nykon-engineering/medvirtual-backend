@@ -31,6 +31,8 @@ import { organizationToDbDictionary } from '../common/dictionaries/organization-
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
 import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
+import { HandlerTicketCreation } from './handlers/ticketCreation';
+import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 
 
 
@@ -53,6 +55,9 @@ export class HubspotService {
       private readonly dealPropertyChange: HandlerDealPropertyChange,
       private readonly dealDeletion: HandlerDealDeletion,
       private readonly dealAssociationChange: HandlerDealAssociationChange,
+
+      private readonly ticketCreation: HandlerTicketCreation,
+      private readonly ticketDeletion: HandlerTicketDeletion,
 
       private readonly hireRequestCreationService: HireRequestCreationService,
       private readonly hireRequestUpdateService: HireRequestUpdateService,
@@ -172,24 +177,17 @@ export class HubspotService {
                 case 'deal.associationChange':
                     await this.dealAssociationChange.execute(event);
                     break;
-                /*
-                [{
-                    eventId: 872635545,
-                    subscriptionId: 4328151,
-                    portalId: 20630393,
-                    appId: 17008354,
-                    occurredAt: 1758637869029,
-                    subscriptionType: 'company.associationChange',
-                    attemptNumber: 0,
-                    changeSource: 'USER',
-                    associationType: 'COMPANY_TO_DEAL', //COMPANY_TO_CONTACT
-                    fromObjectId: 39895238437,
-                    toObjectId: 44166736144,
-                    associationRemoved: false,
-                    isPrimaryAssociation: false,
-                    sourceId: 'userId:69965733'
-                }]
-                */
+
+                //case 'ticket.creation': =. just comment because we dont have rules 
+                case 'ticket.restore':
+                    await this.ticketCreation.execute(event);
+                    break;
+
+                case 'ticket.deletion':
+                    await this.ticketDeletion.execute(event);
+                    break;
+
+                
             }
         }
 

@@ -23,6 +23,9 @@ import { HandlerOrganizationAssociationChange } from './handlers/organizationAss
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
+import { HandlerTicketCreation } from './handlers/ticketCreation';
+import { HandlerTicketDeletion } from './handlers/ticketDeletion';
+import { HireRequestModule } from '../hire-request/hire-request.module';
 
 
 
@@ -43,10 +46,12 @@ import { HireRequestUpdateService } from './update/hireRequest';
     HandlerDealPropertyChange,
     HandlerDealDeletion,
     HandlerDealAssociationChange,
+    HandlerTicketCreation,
+    HandlerTicketDeletion,
     HireRequestCreationService,
     HireRequestUpdateService
   ],
-  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule)],
+  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule), forwardRef(() => HireRequestModule) ],
   exports: [HubspotService, 
     HandlerOrganizationCreation, 
     HandlerObjectCreation, 

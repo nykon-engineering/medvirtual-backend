@@ -20,6 +20,8 @@ import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
+import { HandlerTicketCreation } from './handlers/ticketCreation';
+import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 
 
 jest.mock('axios', () => ({
@@ -117,6 +119,15 @@ const HandlerDealDeletionMock = {
 const HandlerDealAssociationChangeMock = {
   execute: jest.fn(),
 }
+
+const HandlerTicketCreationMock = {
+  execute: jest.fn(),
+};
+
+const HandlerTicketDeletionMock = {
+  execute: jest.fn(),
+};
+
 const hireRequestCreationServiceMock = {
   execute: jest.fn(),
 };
@@ -164,7 +175,9 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
         {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock},
         {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock},
-        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock}
+        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
+        {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
+        {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock}
       ],
     }).compile();
 
@@ -225,7 +238,9 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
         {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock},
         {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock},
-        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock}
+        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
+        {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
+        {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock}
       ]
     }).compile();
 

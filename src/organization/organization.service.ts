@@ -510,7 +510,8 @@ export class OrganizationService {
       }
 
       // Desactivate organizations with staffCount === 0
-      if (organizationsToDeactivate.length > 0) {
+      //removed on 2025-11-06 by Paulo because I got issue when the user update the organization status manually
+      /*if (organizationsToDeactivate.length > 0) {
         await this.prisma.organization.updateMany({
           where: {
             id: { in: organizationsToDeactivate },
@@ -519,7 +520,7 @@ export class OrganizationService {
             status: 'inactive',
           },
         });
-      }
+      }*/
 
       // Transform data
       const data: OrganizationResponseDto[] = organizationsWithCounts.map((org) => ({
@@ -542,7 +543,8 @@ export class OrganizationService {
         date_founded: org.date_founded || undefined,
         date_joined: org.date_joined || undefined,
         date_became_client: org.date_became_client || undefined,
-        status: org.status === 'active' && org.staffCount === 0 ? 'inactive' : org.status,
+        //status: org.status === 'active' && org.staffCount === 0 ? 'inactive' : org.status,
+        status: org.status,
         signed_document_url: org.signed_document_url || undefined,
         signed_document_date: org.signed_document_date || undefined,
         specialties: org.specialties || undefined,
@@ -769,6 +771,7 @@ export class OrganizationService {
 
   async update(id: string, data: UpdateOrganizationDto): Promise<Organization> {
     try {
+      console.log('Organization ID to update:', id);
       const updateData: any = {};
 
       // Map the fields from DTO to database fields
@@ -816,15 +819,31 @@ export class OrganizationService {
         updateData.signed_document_date = new Date();
       }
 
-      return await this.prisma.organization.update({
+      if(data.status === 'active'){
+        updateData.status = OrganizationStatus.active
+      }else if(data.status === 'inactive'){
+        updateData.status = OrganizationStatus.inactive
+      }else{
+        console.log('Status not updated, invalid value:', data.status);
+      }
+      console.log('Prepared updateData:', updateData);
+      console.log('Tipo de status:', typeof updateData.status, updateData.status);
+
+      const res = await this.prisma.organization.update({
         where: { id },
-        data: updateData,
+        data: 
+        {
+          status: updateData.status as OrganizationStatus,
+          admin_id: updateData.admin_id,
+        },
         include: {
           owner: true,
           admin: true,
           users: true,
         },
       });
+      //console.log('Update result:', res);
+      return res;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
