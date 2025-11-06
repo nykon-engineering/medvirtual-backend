@@ -834,6 +834,20 @@ export class HireRequestService {
         console.warn('[hubspot] updateHireRequestInHubspot in Awaiting decision failed', err?.message || err);
       }
 
+      // Fire placement completed notification (non-blocking)
+      try {
+        await this.notifications.notifyHireRequestPlacementCompleted(id);
+      } catch (err) {
+        console.warn('[notifications] placement-completed email failed', err?.message || err);
+      }
+
+      // Fire select winner notification to organization admins (non-blocking)
+      try {
+        await this.notifications.notifyHireRequestSelectWinner(id);
+      } catch (err) {
+        console.warn('[notifications] select-winner email failed', err?.message || err);
+      }
+
       return this.findOne(id, user);
     
     } else if (hireRequest.status == 'interview_scheduled' && data.status === 'panel_ready' ){
@@ -1989,6 +2003,13 @@ export class HireRequestService {
       candidates,
       pipelineStatus
     );
+
+    // Fire awaiting decision notification to organization admins (non-blocking)
+    try {
+      await this.notifications.notifyHireRequestAwaitingDecision(hireRequest.id);
+    } catch (err) {
+      console.warn('[notifications] awaiting-decision email failed', err?.message || err);
+    }
 
     return this.findOne(id, user);
   }

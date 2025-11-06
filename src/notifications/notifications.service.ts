@@ -211,6 +211,10 @@ export class NotificationsService {
 
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    
+    // Determine company name from theme
+    const companyName = emailTheme?.companyName || 'MedVirtual';
+    const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
 
     const html = this.buildEmail(
       `<h2>Placement Completed</h2>
@@ -238,7 +242,7 @@ export class NotificationsService {
     );
 
     return await this.mail.sendMail({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: fromEmail,
       to: [hr.assigned_user.email],
       subject: `Placement completed: ${hr.title}`,
       html,
@@ -1075,9 +1079,112 @@ export class NotificationsService {
     );
     const results = this.mail.sendMail({
       from: fromEmail,
-      to: "noreply@regenta.ai",
-      bcc: [uniqueRecipients],
+      to: uniqueRecipients.map(r => r.email),
       subject: `Hire Request Completed: ${hr.title}.`,
+      html,
+    });
+
+    // Return true if at least one email was sent successfully
+    return results;
+  }
+
+  async notifyHireRequestAwaitingDecision(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        panels: {
+          where: {
+            status: 'decision_pending',
+          },
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+          },
+          take: 1,
+        },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            business_unit: true,
+          },
+        },
+      },
+    });
+
+    if (!hr) throw new NotFoundException('Hire request not found');
+
+    // Get organization admin and super admin users (clients)
+    const organizationAdmins = await this.prisma.uSER.findMany({
+      where: {
+        organization_id: hr.organization.id,
+        role: { in: ['organization_admin', 'organization_super_admin'] },
+        status: 'active',
+      },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+      },
+    });
+
+    // Remove duplicates by email
+    const uniqueRecipients = organizationAdmins.filter((recipient, index, self) =>
+      index === self.findIndex(r => r.email === recipient.email)
+    );
+
+    if (uniqueRecipients.length === 0) {
+      throw new BadRequestException('No organization admins found to notify');
+    }
+
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+
+    // Get panel information
+    const panel = hr.panels?.[0];
+    const scheduledDate = panel?.scheduled_date
+      ? new Date(panel.scheduled_date).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : 'Not specified';
+
+    // Get user email theme using the first admin's ID
+    const firstAdminId = uniqueRecipients[0]?.id;
+    const emailTheme = firstAdminId 
+      ? await getUserEmailTheme(this.prisma, firstAdminId)
+      : null;
+    
+    // Determine company name from theme or fallback to business unit
+    const companyName = emailTheme?.companyName || (hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual');
+    const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
+
+    const html = this.buildEmail(
+      `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
+      
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <p><strong>Scheduled Date:</strong> ${scheduledDate}</p>
+      </div>
+      
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${detailUrl}" class="cta-button">
+          Review Hire Request
+        </a>
+      </div>`,
+      emailTheme
+    );
+    const results = this.mail.sendMail({
+      from: fromEmail,
+      to: uniqueRecipients.map(r => r.email),
+      subject: `Your hire request has been marked as awaiting decision: ${hr.title}`,
       html,
     });
 
