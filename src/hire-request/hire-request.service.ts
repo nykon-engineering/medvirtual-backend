@@ -95,11 +95,12 @@ export class HireRequestService {
         website_url: true,
         phone: true,
         business_unit: true,
+
       }
     });
     if (!organizationSQL) throw new NotFoundException(`Organization from client not found`);
 
-    const content = `CLIENTS NAME : ${organizationSQL.name}\n\nBUSINESS NAME: \n\nNATURE OF BUSINESS: ${organizationSQL.industry}\n\nWEBSITE: ${organizationSQL.website_url}\n\nSOCIAL MEDIA ACCOUNT: \n\nHOW MANY VA'S NEEDED: 1\n\nWORKING HOURS: \n\nTARGET START DATE: ${data.expected_start_date}\n\nSPECIFIC REQUEST: N/A\n\n﻿﻿NAME: ${organizationSQL.name}EMAIL: PHONE NO ${organizationSQL.phone} \n\nDESCRIPTION: ${data.description}\n\nNO. OF VAs: 1\n\nFULL TIME OR PART-TIME: ${data.availability}}\n\nSKILLS: ${(data.skills ?? []).map(s => s.name ?? s).join(", ")}`;
+    const content = `CLIENT : ${organizationSQL.name} ${organizationSQL.industry && `\n\nINDUSTRY: `+organizationSQL.industry} ${organizationSQL.website_url && `\n\nWEBSITE:`+organizationSQL.website_url}  ${data.numberVA && `\n\nHOW MANY VA'S NEEDED:`+data.numberVA} \n\nTARGET START DATE: ${new Date(data.expected_start_date).toLocaleDateString()}\n\nTITLE: ${organizationSQL.name} ${data.description && `\n\nDESCRIPTION: `+data.description}\n\nAVAILABILITY: ${data.availability}${data.skills && `\n\nSKILLS: `+(data.skills ?? []).map(s => s.name ?? s).join(", ")}`;
 
     const hubspotMappedFields = mapHRTicketToDb({
       hs_pipeline: '0',
@@ -123,7 +124,7 @@ export class HireRequestService {
       //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
       //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       status: HireRequestStatus.new,
-      description: content,
+      description: data.description,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
       createdBy: { connect: { id: user.id } },
       position: undefined,
@@ -619,8 +620,7 @@ export class HireRequestService {
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
       //update hr ticket on hubspot
-      try {
-        
+      try {  
         const dataForHubspot = {
           hubspot_ticket_id: hireRequest.hubspot_ticket_id,
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
@@ -704,6 +704,18 @@ export class HireRequestService {
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
+      //update hr ticket on hubspot
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Sourcing Candidates'),
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
+      }
+
       try {
         await this.notifications.notifyHireRequestSourcingAssignee(id, 'sourcing');
       } catch (err) {
@@ -727,6 +739,17 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Sourcing Candidates'),
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
+      }
 
       //notify the sourcing assigned user
       try {
@@ -763,6 +786,18 @@ export class HireRequestService {
       
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
+      }
+
       return this.findOne(id, user);
     
     } else if (hireRequest.status == 'panel_ready' && data.status === 'placement_completed' 
@@ -785,6 +820,17 @@ export class HireRequestService {
         }
       })
       if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'For Onboarding (Paired)'),
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Awaiting decision failed', err?.message || err);
+      }
 
       return this.findOne(id, user);
     
@@ -810,6 +856,19 @@ export class HireRequestService {
           scheduled_date: null,
         }
       })
+
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
+      }
+
+
       return this.findOne(id, user);
 
     } else if (hireRequest.status == 'awaiting_decision' && data.status === 'panel_ready' ){ 
@@ -954,6 +1013,17 @@ export class HireRequestService {
         }
       })
       if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Interview Done (For Follow-up)'),
+        }
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Awaiting decision failed', err?.message || err);
+      }
 
 
       return this.findOne(id, user);

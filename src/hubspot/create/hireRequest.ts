@@ -10,16 +10,15 @@ export class HireRequestCreationService {
     ){}
 
     async execute(data: any): Promise<any> {
-      console.log("Creating Hire Request Ticket in HubSpot...");
         try {
-          
-
           const expectedDate = new Date(data.expected_start_date);
           const PairingDate = expectedDate.getFullYear() +'-'+ (expectedDate.getMonth() + 1) +'-'+ expectedDate.getDate();
           const hours = String(expectedDate.getHours()).padStart(2, "0");
           const minutes = String(expectedDate.getMinutes()).padStart(2, "0");
           const seconds = String(expectedDate.getSeconds()).padStart(2, "0");
           const PairingTime = `${hours}:${minutes}:${seconds}`;
+
+          const hubspotTitle = `Platform Created - ${data.organization.name} - ${data.hubspot_numberVA.toString()} - ${data.hubspot_role_type} - ${data.availability.toUpperCase()}`;
           
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/tickets",
