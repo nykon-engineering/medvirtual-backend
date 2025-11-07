@@ -1183,6 +1183,12 @@ export class HireRequestService {
           where:{
             panel: {
               hire_request_id: { not: id},
+              hireRequest:{
+                OR: [
+                  { status: 'placement_completed' },
+                  { status: 'awaiting_decision' },
+                ]
+              }
             }
           },
           select:{
