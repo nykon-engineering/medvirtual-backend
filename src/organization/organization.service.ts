@@ -860,8 +860,6 @@ export class OrganizationService {
       }else{
         console.log('Status not updated, invalid value:', data.status);
       }
-      console.log('Prepared updateData:', updateData);
-      console.log('Tipo de status:', typeof updateData.status, updateData.status);
 
       const res = await this.prisma.organization.update({
         where: { id },

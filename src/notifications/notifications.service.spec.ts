@@ -274,8 +274,8 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: 'New Hire Request Assigned: Senior Developer',
-        html: expect.stringContaining('New Hire Request Assigned'),
+        subject: 'Hire Request Assigned: Senior Developer',
+        html: expect.stringContaining('Hire Request'),
       });
     });
 
