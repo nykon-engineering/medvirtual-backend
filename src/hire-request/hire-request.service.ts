@@ -198,13 +198,17 @@ export class HireRequestService {
       case 'organization_admin':
         baseWhere = { organization: { id: user.organization_id } };
         break
+      
+      /* => https://regenta-company.monday.com/boards/9328303960/pulses/18312697982/posts/4649194899?reply=reply-4651095908
       case 'system_admin':
         baseWhere={ OR: [
           { organization: { admin_id: user.id }},
           { assigned_user: {id: user.id}}
         ]}
         break;
+      */
       case 'system_super_admin':
+      case 'system_admin':
         baseWhere = {};
         break;
     }
@@ -719,9 +723,9 @@ export class HireRequestService {
       }
 
       try {
-        await this.notifications.notifyHireRequestSourcingAssignee(id, 'sourcing');
+        await this.notifications.notifyHireRequestBackToSourcing(id);
       } catch (err) {
-        console.warn('[notifications] hire-request-canceled email failed', err?.message || err);
+        console.warn('[notifications] hire-request Back to sourcing', err?.message || err);
       }
       return this.findOne(id, user);
 
@@ -1080,7 +1084,7 @@ export class HireRequestService {
     if (data.user_id) {
       console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user ${data.user_id}`);
       try {
-        const result = await this.notifications.notifyHireRequestCreated(id);
+        const result = await this.notifications.notifyHireRequestCreated(id, type);
         console.log(`[notifications] Hire request reassigned notification sent successfully:`, result);
       } catch (err) {
         console.error('[notifications] hire-request-reassigned email failed', err?.message || err);
@@ -1496,6 +1500,12 @@ export class HireRequestService {
       await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status);
     })
 
+    try {
+      const result = await this.notifications.notifyHireRequestPanelReady(data.hireRequest_id);
+      console.log(`[notifications] Hire request Panel Ready notification sent successfully:`, result);
+    } catch (err) {
+      console.error('[notifications] hire request Panel Ready failed', err?.message || err);
+    }
 
     return this.findOne(data.hireRequest_id, user);
   }
@@ -1922,6 +1932,12 @@ export class HireRequestService {
     });
     
     if (!editInterview) throw new BadRequestException(`Interview not updated`);
+
+    try{
+      await this.notifications.notifyInterviewScheduled(hireRequest.id);
+    }catch(err){
+      console.error('[notifications] notifyInterviewScheduled email failed', err?.message || err);
+    }
 
     return this.findOne(id, user);
 

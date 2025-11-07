@@ -226,7 +226,6 @@ export class NotificationsService {
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
-         <p><strong>Priority:</strong> ${hr.priority}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Selected Candidate:</strong> ${winnerName}</p>
@@ -343,7 +342,6 @@ export class NotificationsService {
        ${bodyLink}`,
       emailTheme
     );
-    console.log('Candidate Emails:', candidateEmails);
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: "noreply@regenta.ai",
@@ -388,7 +386,6 @@ export class NotificationsService {
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
-         <p><strong>Priority:</strong> ${hr.priority}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -416,7 +413,7 @@ export class NotificationsService {
         description: true,
         priority: true,
         specialization: true,
-        assigned_sourcing: { select: { id: true, email: true } },
+        assigned_sourcing: { select: { id: true, email: true, first_name: true, last_name: true } },
         organization: {
           select: { name: true },
         },
@@ -433,7 +430,7 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_sourcing.id);
 
     const html = this.buildEmail(
-      `<h2>Hire Request started to sourcing</h2>
+      `<h2>${hr.assigned_sourcing.first_name ?? hr.assigned_sourcing.first_name} ${hr.assigned_sourcing.last_name ?? hr.assigned_sourcing.last_name}</h2>
        <p>The hire request was updated to Start to sourcing stage.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
@@ -442,7 +439,6 @@ export class NotificationsService {
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
-         <p><strong>Priority:</strong> ${hr.priority}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -470,7 +466,7 @@ export class NotificationsService {
         description: true,
         priority: true,
         specialization: true,
-        assigned_user: { select: { id: true, email: true } },
+        assigned_user: { select: { id: true, email: true, first_name: true, last_name: true } },
         organization: {
           select: { name: true },
         },
@@ -487,7 +483,7 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
 
     const html = this.buildEmail(
-      `<h2>Hire Request started to sourcing</h2>
+      `<h2>${hr.assigned_user.first_name ?? hr.assigned_user.first_name} ${hr.assigned_user.last_name ?? hr.assigned_user.last_name}</h2>
        <p>The hire request was updated to ${verb} stage.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
@@ -496,7 +492,6 @@ export class NotificationsService {
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
-         <p><strong>Priority:</strong> ${hr.priority}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -515,7 +510,7 @@ export class NotificationsService {
     });
   }
 
-  async notifyHireRequestCreated(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestCreated(hireRequestId: string, type?: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -533,13 +528,22 @@ export class NotificationsService {
         assigned_user: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
+        assigned_sourcing: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
         organization: {
           select: { name: true },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    if (!hr.assigned_user?.email)
+    let destin;
+    if (type === 'sourcing'){
+      destin = hr.assigned_sourcing;
+    }else{
+      destin = hr.assigned_user;
+    }
+    if (!destin?.email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
@@ -551,11 +555,11 @@ export class NotificationsService {
       : 'Not specified';
 
     // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
 
     const html = this.buildEmail(
-      `<h2>New Hire Request Assigned</h2>
-       <p>You have been assigned a new hire request that requires your attention.</p>
+      `<h2>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</h2>
+       <p>You have been assigned ${type==='sourcing' && `as Sourcing assignee`} a hire request that requires your attention.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
@@ -563,7 +567,6 @@ export class NotificationsService {
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
-         <p><strong>Priority:</strong> ${hr.priority}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
          <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
@@ -582,8 +585,162 @@ export class NotificationsService {
 
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: [hr.assigned_user.email],
-      subject: `New Hire Request Assigned: ${hr.title}`,
+      to: [destin.email],
+      subject: `Hire Request Assigned: ${hr.title}`,
+      html,
+    });
+  }
+
+  async notifyHireRequestBackToSourcing(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        specialization: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        expected_start_date: true,
+        availability: true,
+        contract_length: true,
+        assigned_user: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
+        assigned_sourcing: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
+        organization: {
+          select: { name: true },
+        },
+      },
+    });
+    if (!hr) throw new NotFoundException('Hire request not found');
+    let destin = hr.assigned_sourcing;
+    
+    if (!destin?.email)
+      throw new BadRequestException('Hire request has no assignee email');
+
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    const salaryRange = hr.salary_range_from && hr.salary_range_to
+      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+      : 'Not specified';
+    const startDate = hr.expected_start_date
+      ? new Date(hr.expected_start_date).toLocaleDateString()
+      : 'Not specified';
+
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
+
+    const html = this.buildEmail(
+      `<h2>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</h2>
+       <p>The Hire Request below was updated and returned to Sourcing stage.</p>
+       
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Organization:</strong> ${hr.organization.name}</p>
+         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Specialization:</strong> ${hr.specialization}</p>
+         <p><strong>Availability:</strong> ${hr.availability}</p>
+         <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
+         <p><strong>Salary Range:</strong> ${salaryRange}</p>
+         <p><strong>Expected Start Date:</strong> ${startDate}</p>
+         <p><strong>Status:</strong> ${hr.status}</p>
+       </div>
+       
+       <p>Please review the details and take appropriate action.</p>
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           View Hire Request Details
+         </a>
+       </div>`,
+      emailTheme
+    );
+
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: [destin.email],
+      subject: `Hire Request Assigned: ${hr.title}`,
+      html,
+    });
+  }
+
+  async notifyHireRequestPanelReady(hireRequestId: string,): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        specialization: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        expected_start_date: true,
+        availability: true,
+        contract_length: true,
+        assigned_user: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
+        assigned_sourcing: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
+        organization: {
+          select: { name: true },
+        },
+      },
+    });
+    if (!hr) throw new NotFoundException('Hire request not found');
+    let destin=hr.assigned_sourcing;
+    
+    if (!destin?.email)
+      throw new BadRequestException('Hire request has no assignee email');
+
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    const salaryRange = hr.salary_range_from && hr.salary_range_to
+      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+      : 'Not specified';
+    const startDate = hr.expected_start_date
+      ? new Date(hr.expected_start_date).toLocaleDateString()
+      : 'Not specified';
+
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
+
+    const html = this.buildEmail(
+      `<h2>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</h2>
+       <p>The Panel below was reviewed and now, it is <strong>Ready</strong>.</p>
+       
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Organization:</strong> ${hr.organization.name}</p>
+         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Specialization:</strong> ${hr.specialization}</p>
+         <p><strong>Availability:</strong> ${hr.availability}</p>
+         <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
+         <p><strong>Salary Range:</strong> ${salaryRange}</p>
+         <p><strong>Expected Start Date:</strong> ${startDate}</p>
+         <p><strong>Status:</strong> ${hr.status}</p>
+       </div>
+       
+       <p>Please review the details and take appropriate action.</p>
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           View Hire Request Details
+         </a>
+       </div>`,
+      emailTheme
+    );
+
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: [destin.email],
+      subject: `Panel Reviewed and Ready: ${hr.title}`,
       html,
     });
   }
@@ -667,7 +824,6 @@ export class NotificationsService {
          <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
          ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
          <p><strong>Type:</strong> ${ticket.type}</p>
-         <p><strong>Priority:</strong> ${ticket.priority}</p>
          <p><strong>Status:</strong> ${statusDisplay}</p>
          <p><strong>Created:</strong> ${createdDate}</p>
        </div>
@@ -916,7 +1072,6 @@ export class NotificationsService {
              <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
              ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
              <p><strong>Type:</strong> ${ticketTypeDisplay}</p>
-             <p><strong>Priority:</strong> ${ticket.priority}</p>
              ${staffDetails}${candidateDetails}
            </div>
            ${isReferralTicket ? descriptionContent : ''}
@@ -1066,7 +1221,6 @@ export class NotificationsService {
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
          <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
-         <p><strong>Priority:</strong> ${hr.priority}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Selected Candidate:</strong> ${winnerName}</p>
