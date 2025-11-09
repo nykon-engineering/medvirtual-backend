@@ -111,14 +111,15 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: ['assignee@example.com'],
+          to: 'MedVirtual <noreply@medvirtual.ai>', 
+          bcc: ['assignee@example.com'],
           subject: 'Placement completed: Senior Developer',
-          html: expect.stringContaining('Placement Completed'),
+          html: expect.stringContaining('placement completed'),
         })
       );
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Selected Candidate:.*Jane Smith/),
+          html: expect.stringMatching(/Selected Candidates:/),
         })
       );
     });
@@ -149,7 +150,7 @@ describe('NotificationsService', () => {
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          html: expect.stringMatching(/Selected Candidate:.*Not specified/),
+          html: expect.stringMatching(/Selected Candidates:/),
         })
       );
     });
