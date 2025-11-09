@@ -248,6 +248,9 @@ export class HireRequestService {
               scheduled_date: true,
               readable: true,
               panelCandidates: {
+                where: {},
+                
+
                 select: {
                   status: true,
                   candidate: {
@@ -288,6 +291,38 @@ export class HireRequestService {
                           end_date: true,
                         },
                       },
+                      panelCandidates: {
+                        /*where:{
+                          panel: {
+                            hireRequest:{
+                              OR: [
+                                { status: 'placement_completed' },
+                                { status: 'awaiting_decision' },
+                              ]
+                            }
+                          }
+                        },*/
+                        select:{
+                          id: true,
+                          panel:{
+                            select:{
+                              hire_request_id: true,
+                              hireRequest:{
+                                select:{
+                                  id: true,
+                                  title: true,
+                                  organization:{
+                                    select:{
+                                      id: true,
+                                      name: true,
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
                     },
                   },
                 },
@@ -2182,7 +2217,6 @@ export class HireRequestService {
     });
     if (!winner) throw new BadRequestException(`Panel not updated to reset winners`);
 
-
     //update all other candidates as not_selected
     const others = await this.prisma.panelCandidate.updateMany({
       where: {
@@ -2196,7 +2230,6 @@ export class HireRequestService {
       },
     });
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
-
     
     if (loserExists){
       const candidateLosers = loserExists.map(c => c.candidate);
@@ -2213,8 +2246,6 @@ export class HireRequestService {
         )
       );
     }
-    
-    
     
     //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
     //change the Candidate pipeline status to 'Hired' and send it for the hubspot
@@ -2245,13 +2276,6 @@ export class HireRequestService {
       await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id); //without second parameter to get all winner candidates
     } catch (err) {
       console.warn('[notifications] placement-completed email failed', err?.message || err);
-    }
-
-    // Fire select winner notification to organization admins (non-blocking)
-    try {
-      await this.notifications.notifyHireRequestSelectWinner(hireRequest.id);
-    } catch (err) {
-      console.warn('[notifications] select-winner email failed', err?.message || err);
     }
 
     // =========== return object requested by Lucas

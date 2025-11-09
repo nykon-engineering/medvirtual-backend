@@ -2143,7 +2143,7 @@ export class HireRequestService {
     
     // Fire placement completed notification (non-blocking)
     try {
-      await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id, data.winner_id);
+      await this.notifications.notifyHireRequestPlacementCompleted(hireRequest.id);
     } catch (err) {
       console.warn('[notifications] placement-completed email failed', err?.message || err);
     }

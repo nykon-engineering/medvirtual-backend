@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { ticketTypeReverseDictionary } from '../common/dictionaries/ticket-type';
+import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
 
 @Injectable()
 export class NotificationsService {
@@ -152,7 +153,7 @@ export class NotificationsService {
 </html>`;
   }
 
-  async notifyHireRequestPlacementCompleted(hireRequestId: string, winnerCandidateId?: string): Promise<boolean> {
+  async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -168,14 +169,17 @@ export class NotificationsService {
         assigned_user: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
+        assigned_sourcing: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
         organization: {
-          select: { name: true },
+          select: { name: true, business_unit: true },
         },
         panels: {
           select: {
             id: true,
             panelCandidates: {
-              where: winnerCandidateId ? { candidate_id: winnerCandidateId } : { status: 'selected_by_client' },
+              where: { status: 'selected_by_client' }, //get all selected candidates since right now we can have mmore than one
               select: {
                 candidate: {
                   select: {
@@ -183,6 +187,8 @@ export class NotificationsService {
                     first_name: true,
                     last_name: true,
                     name: true,
+                    specialization: true,
+                    country: true,
                   },
                 },
               },
@@ -194,6 +200,7 @@ export class NotificationsService {
     if (!hr) throw new NotFoundException('Hire request not found');
     if (!hr.assigned_user?.email)
       throw new BadRequestException('Hire request has no assignee email');
+    
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
     const salaryRange = hr.salary_range_from && hr.salary_range_to
@@ -204,21 +211,28 @@ export class NotificationsService {
       : 'Not specified';
 
     // Get winner candidate name
-    const winnerCandidate = hr.panels?.[0]?.panelCandidates?.[0]?.candidate;
-    const winnerName = winnerCandidate
-      ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
-      : 'Not specified';
-
+    const winners = hr.panels?.[0]?.panelCandidates.length > 0 
+    ? 
+      hr.panels?.[0].panelCandidates.map(pa=> 
+        `<p><div style='margin-left:3px; border-radius:8px; background-color:#CCC; padding:3px;'>
+        <strong>${pa.candidate.name || `${pa.candidate.first_name || ''} ${pa.candidate.last_name || ''}`.trim()}</strong><br/>
+        Specialization: <strong>${pa.candidate.specialization || 'Specialization not specified'}</strong><br/>
+        Location: <strong>${pa.candidate.country || 'Location not specified'}</strong>
+        </div></p>`
+      )
+      .join('')
+    : '';
     // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    //const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    //here, I'm calling direct the function to get theme by business unit since I have the business unit on organization
+    const emailTheme = await getEmailThemeByBusinessUnit(hr.organization.business_unit);
     
     // Determine company name from theme
     const companyName = emailTheme?.companyName || 'MedVirtual';
     const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
 
     const html = this.buildEmail(
-      `<h2>Placement Completed</h2>
-       <p>The hire request has been marked as <strong>placement completed</strong>.</p>
+      `<p>The hire request has been marked as <strong>placement completed</strong>.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
@@ -228,7 +242,8 @@ export class NotificationsService {
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
-         <p><strong>Selected Candidate:</strong> ${winnerName}</p>
+         <p><strong>Selected Candidates:</strong> </p>
+         ${winners}
        </div>
        
         <p>Please proceed with onboarding steps.</p>
@@ -240,12 +255,23 @@ export class NotificationsService {
       emailTheme
     );
 
+    const recipients = [
+      hr.assigned_user?.email,
+      hr.assigned_sourcing?.email,
+    ].filter(Boolean);
+    
+    if (recipients.length === 0) {
+      throw new BadRequestException('No valid recipient emails found');
+    }
+    
     return await this.mail.sendMail({
       from: fromEmail,
-      to: [hr.assigned_user.email],
+      to: fromEmail,
+      bcc: recipients,
       subject: `Placement completed: ${hr.title}`,
       html,
     });
+    
   }
 
   async notifyInterviewScheduled(hireRequestId: string): Promise<boolean> {
