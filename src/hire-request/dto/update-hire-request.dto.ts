@@ -46,12 +46,14 @@ export class UpdateHireRequestDto {
     @IsOptional()
     contract_length: string;
 
-    @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: true,  type: String })
+    @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     salary_range_from: string;
 
-    @ApiProperty({ example: '70000', description: 'The salary range to for the hire request', required: true,  type: String })
+    @ApiProperty({ example: '70000', description: 'The salary range to for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     salary_range_to: string;
 
     @ApiProperty({ example: 'New York, Remote', description: 'The work location for the hire request', required: false,  type: String })
@@ -79,8 +81,9 @@ export class UpdateHireRequestDto {
     @IsOptional()
     hubspot_role_type: string;
 
-    @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: true,  type: String, enum: ['high', 'medium', 'low'] })
+    @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: false,  type: String, enum: ['high', 'medium', 'low'] })
     @IsString()
+    @IsOptional()
     priority: 'high' | 'medium' | 'low';
 
     @ApiProperty({ type: [HireRequestSkillDTO], description: 'The skills required for the hire request', required: false })
