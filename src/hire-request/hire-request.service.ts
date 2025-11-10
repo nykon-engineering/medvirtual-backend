@@ -248,9 +248,6 @@ export class HireRequestService {
               scheduled_date: true,
               readable: true,
               panelCandidates: {
-                where: {},
-                
-
                 select: {
                   status: true,
                   candidate: {
@@ -292,7 +289,7 @@ export class HireRequestService {
                         },
                       },
                       panelCandidates: {
-                        /*where:{
+                        where:{
                           panel: {
                             hireRequest:{
                               OR: [
@@ -301,7 +298,7 @@ export class HireRequestService {
                               ]
                             }
                           }
-                        },*/
+                        },
                         select:{
                           id: true,
                           panel:{
@@ -370,6 +367,10 @@ export class HireRequestService {
             ...pc.candidate,
             salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates.map(pcc => ({
+              title: pcc.panel.hireRequest.title,
+              organization_name: pcc.panel.hireRequest.organization.name,
+            })) : [],
           }
         }))
       }))
@@ -2115,12 +2116,11 @@ export class HireRequestService {
   async changeWinner(id: string, data: changeWinnerDTO, user: USER): Promise<any> {
     if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    //removed by requested Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18069150933?notification=6971532371
-    /*const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
-      return dbToStageDictionary[key] === 'Hired';
+    const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
+      return dbToStageDictionary[key] === 'Endorsed via Platform';
     })
     if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
-    */
+    
 
     const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
       return dbToStageDictionary[key] === 'Available Candidates';
@@ -2158,6 +2158,12 @@ export class HireRequestService {
       },
       select: {
         id: true,
+        candidate_id: true,
+        candidate:{
+          select:{
+            hubspot_id: true,
+          }
+        }
       },
     });
     if(!winnerExists) throw new NotFoundException(`Winner candidate not found in the panel`);
@@ -2242,6 +2248,19 @@ export class HireRequestService {
             data: { pipeline_status: pipeline_treated},
           });
           await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+        }
+        )
+      );
+    }
+
+    if (winnerExists){
+      await Promise.all(
+        winnerExists.map(async c =>{
+          await this.prisma.candidate.update({
+            where: { id: c.candidate_id },
+            data: { pipeline_status: pipelineStatus},
+          });
+          await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipelineStatus);
         }
         )
       );
@@ -2501,7 +2520,7 @@ export class HireRequestService {
             where: {
               candidate_id: pc.candidate.id,
               panel_id: { not: pc.panel_id },
-              status: {not: 'returned_to_pool'}
+              status: 'selected_by_client', //Dont allow get candidates already selected in other panels
             },
           });
     
