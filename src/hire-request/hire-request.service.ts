@@ -119,6 +119,10 @@ export class HireRequestService {
       number_of_vas: Number(hireRequestData.numberVA),
     });
 
+    const sanitizeDecimal = (value?: string | null) => {
+      return value && value.trim() !== "" ? value : null;
+    };
+
     const hireRequest = {
       ...hireRequestData,
       ...hubspotMappedFields,
@@ -133,6 +137,8 @@ export class HireRequestService {
       contract_amount: undefined,
       language: undefined,
       numberVA: undefined,
+      salary_range_from: sanitizeDecimal(hireRequestData.salary_range_from),
+      salary_range_to: sanitizeDecimal(hireRequestData.salary_range_to),
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
