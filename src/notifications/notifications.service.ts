@@ -509,8 +509,9 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
 
     const html = this.buildEmail(
-      `<h2>${hr.assigned_user.first_name ?? hr.assigned_user.first_name} ${hr.assigned_user.last_name ?? hr.assigned_user.last_name}</h2>
-       <p>The hire request was updated to ${verb} stage.</p>
+      `<p>${hr.assigned_user.first_name ?? hr.assigned_user.first_name},</p>
+       <p><strong>Hire Request Ready For Review</strong></p>
+       <p>This request requires your attention:</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
