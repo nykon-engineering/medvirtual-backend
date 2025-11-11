@@ -662,8 +662,9 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
 
     const html = this.buildEmail(
-      `<h2>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</h2>
-       <p>The Hire Request below was updated and returned to Sourcing stage.</p>
+      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name},</p>
+       <p><strong>Back to sourcing</strong></p>
+       <p>A hire request requires your attention since it has been put back to sourcing:</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
