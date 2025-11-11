@@ -26,6 +26,17 @@ export class HireRequestUpdateService {
               data.priority ?
                 data.priority.toUpperCase()
               : undefined;
+
+            //used to allow update datas on hubspot when the user schedule an interview on our side
+            hubspotProperties.pairing_date = 
+              data.pairing_date ?
+                data.pairing_date
+              : undefined;
+
+            hubspotProperties.pairing_time =
+              data.pairing_time ?
+                data.pairing_time
+              : undefined;
             
             //console.log(hubspotProperties)
             const response = await axios.patch(

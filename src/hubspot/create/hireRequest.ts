@@ -13,10 +13,6 @@ export class HireRequestCreationService {
         try {
           const expectedDate = new Date(data.expected_start_date);
           const PairingDate = expectedDate.getFullYear() +'-'+ String(expectedDate.getMonth() + 1).padStart(2,"0") +'-'+ String(expectedDate.getDate()).padStart(2,"0");
-          const hours = String(expectedDate.getHours()).padStart(2, "0");
-          const minutes = String(expectedDate.getMinutes()).padStart(2, "0");
-          const seconds = String(expectedDate.getSeconds()).padStart(2, "0");
-          const PairingTime = `${hours}:${minutes}:${seconds}`;
 
           const hubspotTitle = `Platform Created - ${data.organization.name} - ${data.hubspot_numberVA.toString()} - ${data.hubspot_role_type} - ${data.availability.toUpperCase()}`;
           
@@ -24,7 +20,7 @@ export class HireRequestCreationService {
             "https://api.hubapi.com/crm/v3/objects/tickets",
             {
               properties: {
-                subject: data.title,
+                subject: hubspotTitle,
                 content: data.description,
                 hs_pipeline: "0", //=>Pairing Pipeline
                 hs_pipeline_stage: "1",  //=> New agent Request
@@ -39,8 +35,7 @@ export class HireRequestCreationService {
                 contract_amount: data.hubspot_contract_amount,
                 language: data.hubspot_language,
                 number_of_vas: data.hubspot_numberVA.toString(),
-                pairing_date: PairingDate,
-                pairing_time: PairingTime,
+                hire_date__start_of_employment_: PairingDate,
               },
               associations: [
                 {

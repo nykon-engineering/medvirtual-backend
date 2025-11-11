@@ -1350,7 +1350,7 @@ describe('HireRequestService', () => {
           id: baseId,
           organization: { id: user.organization_id },
         },
-        select: { id: true },
+        select: { id: true, hubspot_ticket_id: true },
       });
     });
   

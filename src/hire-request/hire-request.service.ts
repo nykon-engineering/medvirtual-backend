@@ -1886,6 +1886,7 @@ export class HireRequestService {
       },
       select:{
         id: true,
+        hubspot_ticket_id: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -1934,6 +1935,20 @@ export class HireRequestService {
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
 
     try{
+      const updatedDate = new Date(`${data.date_time}`);
+      const updateDateTime = {
+        hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+        pairing_date:updatedDate.toISOString().split("T")[0],
+        pairing_time:updatedDate.toTimeString().split(" ")[0],
+      }
+      await this.hubspot.updateHireRequestInHubspot(updateDateTime);
+    }catch(err){
+      console.error('[hubspot] updateHireRequestInHubspot failed', err?.message || err);
+    }
+    
+
+
+    try{
       await this.notifications.notifyInterviewScheduled(hireRequest.id);
     }catch(err){
       console.error('[notifications] notifyInterviewScheduled email failed', err?.message || err);
@@ -1953,6 +1968,7 @@ export class HireRequestService {
       },
       select:{
         id: true,
+        hubspot_ticket_id: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -1980,6 +1996,18 @@ export class HireRequestService {
     });
     
     if (!editInterview) throw new BadRequestException(`Interview not updated`);
+
+    try{
+      const updatedDate = new Date(`${data.date_time}`);
+      const updateDateTime = {
+        hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+        pairing_date:updatedDate.toISOString().split("T")[0],
+        pairing_time:updatedDate.toTimeString().split(" ")[0],
+      }
+      await this.hubspot.updateHireRequestInHubspot(updateDateTime);
+    }catch(err){
+      console.error('[hubspot] updateHireRequestInHubspot failed', err?.message || err);
+    }
 
     try{
       await this.notifications.notifyInterviewScheduled(hireRequest.id);

@@ -15,7 +15,7 @@ export const hrTicketToDbDictionary : Record<string, string | string> = {
     contract_amount: 'hubspot_contract_amount',
     language: 'hubspot_language',
     number_of_vas: 'hubspot_numberVA',
-    pairing_date: 'expected_start_date',
+    hire_date__start_of_employment_: 'expected_start_date',
 }
 
 export const dbToHrTicketDictionary : Record<string, string> = Object.fromEntries(
