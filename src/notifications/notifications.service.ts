@@ -584,8 +584,8 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
 
     const html = this.buildEmail(
-      `<h2>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</h2>
-       <p>You have been assigned ${type==='sourcing' ? `as Sourcing assignee` : `as Hire Request assignee`} to a hire request that requires your attention.</p>
+      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
+       <p>You have been assigned ${type==='sourcing' ? `to source` : `to`} this hire request.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
