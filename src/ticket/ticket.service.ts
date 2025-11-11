@@ -480,6 +480,9 @@ export class TicketService {
         `Ticket is already in status: ${data.status}`,
       );
 
+    // Store old status before update for notification logic
+    const oldStatus = ticket.status;
+
     if (ticket.status === 'closed' && data.status === 'resolved')
       throw new BadRequestException(
         'Cannot change status from CLOSED to RESOLVED',
@@ -529,6 +532,9 @@ export class TicketService {
       try {
         if (data.status === 'in_progress' || data.status === 'resolved' || data.status === 'closed') {
           await this.notifications.notifyTicketStatusChangeToCreator(ticket, data.status as 'in_progress' | 'resolved' | 'closed');
+        } else if (oldStatus === 'closed' && data.status === 'new') {
+          // Notify when ticket is reopened from closed to new
+          await this.notifications.notifyTicketReopened(ticket);
         }
       } catch (err) {
         console.warn('[notifications] ticket-status-change email failed', err?.message || err);

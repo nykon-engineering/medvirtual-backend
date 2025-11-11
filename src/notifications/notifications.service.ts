@@ -875,6 +875,107 @@ export class NotificationsService {
     });
   }
 
+  async notifyTicketReopened(ticket: any): Promise<boolean> {
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    // Only notify the creator
+    let creatorEmail: string | undefined;
+    let emailThemeUserId: string | undefined;
+    let creatorRole: string | undefined;
+
+    if (ticket.created_by) {
+      const creator = await this.prisma.uSER.findUnique({
+        where: { id: ticket.created_by },
+        select: { id: true, email: true, role: true },
+      });
+      if (creator?.email) {
+        creatorEmail = creator.email;
+        emailThemeUserId = creator.id;
+        creatorRole = creator.role;
+      }
+    } else if (ticket.id) {
+      // Fallback to fetch created_by
+      const withCreator = await this.prisma.ticket.findUnique({
+        where: { id: ticket.id },
+        select: { created_by: true },
+      });
+      if (withCreator?.created_by) {
+        const creator = await this.prisma.uSER.findUnique({
+          where: { id: withCreator.created_by },
+          select: { id: true, email: true, role: true },
+        });
+        if (creator?.email) {
+          creatorEmail = creator.email;
+          emailThemeUserId = creator.id;
+          creatorRole = creator.role;
+        }
+      }
+    }
+
+    if (!creatorEmail) throw new BadRequestException('Ticket creator has no email');
+
+    // Filter: Only send to clients (organization admins) if ticket type is "Support"
+    // System admins always receive notifications for all ticket types
+    const isSystemAdmin = creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
+    const isClient = !isSystemAdmin; // Organization admins are considered clients
+    const ticketType = ticket.type?.toLowerCase();
+    const isSupportTicket = ticketType === 'support';
+
+    // Skip notification if creator is a client and ticket is not a Support ticket
+    if (isClient && !isSupportTicket) {
+      return false; // Don't send notification to clients for non-Support tickets
+    }
+
+    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
+    const createdDate = new Date(ticket.createdAt).toLocaleDateString();
+
+    // Get user email theme
+    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+
+    // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
+    const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
+    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+
+    // Parse Referral ticket description format
+    let descriptionContent = '';
+    if (isReferralTicket && ticket.description) {
+      descriptionContent = this.formatReferralDescription(ticket.description);
+    }
+
+    const html = this.buildEmail(
+      `
+       <p>Your ticket has been <strong>reopened</strong> and is now back to <strong>NEW</strong> status.</p>
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
+         <p><strong>Title:</strong> ${ticket.title}</p>
+         <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
+         ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> <br>${this.formatDescription(ticket.description)}</p>`}
+         <p><strong>Type:</strong> ${ticket.type}</p>
+         <p><strong>Status:</strong> NEW</p>
+         <p><strong>Created:</strong> ${createdDate}</p>
+       </div>
+       ${isReferralTicket ? descriptionContent : ''}
+       
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           View Ticket Details
+         </a>
+       </div>
+       <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; font-size: 12px; color: #666;">
+         <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
+         <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
+       </div>`,
+      emailTheme
+    );
+
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: [creatorEmail],
+      subject: `Your ticket has been reopened: ${ticket.title}`,
+      html,
+    });
+  }
+
   async notifyTicketEvent(ticket: any, event: 'created' | 'assigned' | 'updated' | 'resolved' | 'closed'): Promise<boolean> {
 
     if (!ticket) throw new NotFoundException('Ticket not found');
