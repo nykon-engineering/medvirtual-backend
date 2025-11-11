@@ -848,7 +848,7 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
          <p><strong>Title:</strong> ${ticket.title}</p>
          <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
-         ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
+         ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> <br>${this.formatDescription(ticket.description)}</p>`}
          <p><strong>Type:</strong> ${ticket.type}</p>
          <p><strong>Status:</strong> ${statusDisplay}</p>
          <p><strong>Created:</strong> ${createdDate}</p>
@@ -1050,7 +1050,7 @@ export class NotificationsService {
            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
              <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
              <p><strong>Title:</strong> ${ticket.title}</p>
-             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
+             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${this.formatDescription(ticket.description)}</p>`}
              <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
              ${staffInfo}
              ${candidateInfo}
@@ -1096,7 +1096,7 @@ export class NotificationsService {
              <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
              <p><strong>Title:</strong> ${ticket.title}</p>
              <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
-             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${ticket.description}</p>`}
+             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${this.formatDescription(ticket.description)}</p>`}
              <p><strong>Type:</strong> ${ticketTypeDisplay}</p>
              ${staffDetails}${candidateDetails}
            </div>
@@ -1489,6 +1489,28 @@ export class NotificationsService {
       subject: `You received a response on your ticket: ${ticket.title}`,
       html,
     });
+  }
+
+  /**
+   * Formats a plain text description to preserve formatting in HTML emails.
+   * Preserves line breaks, spaces, and indentation using white-space: pre-wrap.
+   * Also escapes HTML special characters to prevent XSS.
+   */
+  private formatDescription(description: string | null | undefined): string {
+    if (!description) {
+      return '';
+    }
+
+    // Escape HTML special characters to prevent XSS
+    const escaped = description
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    // Return formatted description with white-space: pre-wrap to preserve formatting
+    return `<span style="white-space: pre-wrap;">${escaped}</span>`;
   }
 
   private formatReferralDescription(description: string): string {
