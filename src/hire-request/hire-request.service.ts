@@ -664,7 +664,7 @@ export class HireRequestService {
                 id: true,
               }
             });
-            if (thereOtherPanels.length = 0) {
+            if (thereOtherPanels.length === 0) {
               //only update candidate if he is not in other panels
               const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
               await this.prisma.candidate.update({
