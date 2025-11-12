@@ -12,6 +12,16 @@ export class NotificationsService {
     private readonly mail: MailService,
   ) { }
 
+  /**
+   * Builds the correct ticket detail URL based on user role
+   * Clients (organization admins) use /profile?ticket=, system admins use /tickets?ticket=
+   */
+  private getTicketDetailUrl(ticketId: string, userRole?: string): string {
+    const isClient = userRole === 'organization_admin' || userRole === 'organization_super_admin';
+    const path = isClient ? '/profile' : '/tickets';
+    return `${process.env.FRONTEND_URL}${path}?ticket=${ticketId}`;
+  }
+
   private buildEmail(htmlInner: string, theme?: any): string {
     const primaryColor = theme?.primaryColor || '#01546B';
     const companyName = theme?.companyName || 'MedVirtual';
@@ -848,7 +858,7 @@ export class NotificationsService {
       return false; // Don't send notification to clients for non-Support tickets
     }
 
-    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
+    const detailUrl = this.getTicketDetailUrl(ticket.id, creatorRole);
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme
@@ -952,7 +962,7 @@ export class NotificationsService {
       return false; // Don't send notification to clients for non-Support tickets
     }
 
-    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
+    const detailUrl = this.getTicketDetailUrl(ticket.id, creatorRole);
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme
@@ -1101,7 +1111,6 @@ export class NotificationsService {
 
     if (filteredRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
 
-    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme (based on creator or assignee, in that order)
@@ -1126,6 +1135,14 @@ export class NotificationsService {
     // Send emails to each recipient with appropriate formatting
     const emailPromises = filteredRecipients.map(async (recipient) => {
       const isSystemAdmin = recipient.isSystemAdmin;
+      
+      // Get recipient role to build correct URL
+      const recipientUser = await this.prisma.uSER.findUnique({
+        where: { email: recipient.email },
+        select: { role: true },
+      });
+      const recipientRole = recipientUser?.role;
+      const detailUrl = this.getTicketDetailUrl(ticket.id, recipientRole);
 
       // Parse Referral ticket description format
       let descriptionContent = '';
@@ -1528,7 +1545,12 @@ export class NotificationsService {
       throw new BadRequestException('Ticket has no assigned user with email');
     }
 
-    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
+    // Get user role to build correct URL
+    const assigneeUser = await this.prisma.uSER.findUnique({
+      where: { id: ticket.user.id },
+      select: { role: true },
+    });
+    const detailUrl = this.getTicketDetailUrl(ticket.id, assigneeUser?.role);
 
     const emailTheme = await getUserEmailTheme(this.prisma, ticket.user.id);
 
@@ -1580,11 +1602,11 @@ export class NotificationsService {
 
     const creator = await this.prisma.uSER.findUnique({
       where: { id: ticket.created_by },
-      select: { id: true, email: true, first_name: true, last_name: true },
+      select: { id: true, email: true, first_name: true, last_name: true, role: true },
     });
     if (!creator?.email) throw new BadRequestException('Ticket creator has no email');
 
-    const detailUrl = `${process.env.FRONTEND_URL}/tickets?ticket=${ticket.id}`;
+    const detailUrl = this.getTicketDetailUrl(ticket.id, creator.role);
 
     const emailTheme = await getUserEmailTheme(this.prisma, creator.id);
 
