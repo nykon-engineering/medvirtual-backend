@@ -523,6 +523,7 @@ enum HireRequestStatus {
   placement_completed
   cancelled
   for_review
+  deleted
 }
 
 enum Priority {
