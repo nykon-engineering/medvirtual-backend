@@ -469,7 +469,7 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_sourcing.id);
 
     const html = this.buildEmail(
-      `<h2>${hr.assigned_sourcing.first_name ?? hr.assigned_sourcing.first_name} ${hr.assigned_sourcing.last_name ?? hr.assigned_sourcing.last_name}</h2>
+      `<p>${hr.assigned_sourcing.first_name ?? hr.assigned_sourcing.first_name} ${hr.assigned_sourcing.last_name ?? hr.assigned_sourcing.last_name}</p>
        <p>The hire request was updated to Start to sourcing stage.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
@@ -524,7 +524,7 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
 
     const html = this.buildEmail(
-      `<p>${hr.assigned_user.first_name ?? hr.assigned_user.first_name},</p>
+      `<p>${hr.assigned_user.first_name ?? hr.assigned_user.first_name}</p>
        <p><strong>Hire Request Ready For Review</strong></p>
        <p>This request requires your attention:</p>
        
@@ -681,7 +681,7 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
 
     const html = this.buildEmail(
-      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name},</p>
+      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
        <p><strong>Back to sourcing</strong></p>
        <p>A hire request requires your attention since it has been put back to sourcing:</p>
        
@@ -761,7 +761,7 @@ export class NotificationsService {
     const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
 
     const html = this.buildEmail(
-      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name},</p>
+      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
        <p><strong>Panel Ready</strong></p>
        <p>The panel of the following hire request has been reviewed and now it is ready:</p>
        
