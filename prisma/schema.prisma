@@ -244,6 +244,7 @@ model HireRequest {
   title                        String
   description                  String?
   status                       HireRequestStatus  @default(new)
+  old_status                   HireRequestStatus?
   priority                     Priority           @default(medium)
   createdAt                    DateTime           @default(now())
   availability                 String
