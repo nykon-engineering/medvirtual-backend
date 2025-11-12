@@ -237,6 +237,13 @@ export class HireRequestService {
         include: {
           skills: true,
           organization: true,
+          createdBy:{
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+            }
+          },
           assigned_user:{
             select: {
               id: true,
@@ -407,6 +414,13 @@ export class HireRequestService {
       include: {
         skills: true,
         organization: true,
+        createdBy:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
         assigned_user:{
           select: {
             id: true,

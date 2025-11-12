@@ -166,6 +166,9 @@ export class NotificationsService {
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
+        createdBy:{
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
         assigned_user: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -259,6 +262,7 @@ export class NotificationsService {
     const recipients = [
       hr.assigned_user?.email,
       hr.assigned_sourcing?.email,
+      hr.createdBy?.email,
     ].filter(Boolean);
     
     if (recipients.length === 0) {
