@@ -52,7 +52,7 @@ export class HandlerTicketCreation {
 
             const ticketData = mapHRTicketToDb(getObject.data.results[0].properties);
 
-            console.log('Mapped Ticket data:', ticketData);
+            //console.log('Mapped Ticket data:', ticketData);
 
 
             ticketData.status='new';

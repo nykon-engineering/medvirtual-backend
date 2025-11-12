@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 
 @Injectable()
-export class HandlerTicketDeletion {
+export class HandlerTicketRestore {
     constructor(
     private readonly prisma: PrismaService
     ){}
@@ -10,14 +10,14 @@ export class HandlerTicketDeletion {
     async execute(event){
         try {
             
-            
             const ticketExists = await this.prisma.hireRequest.findUnique({
                 where: {
-                    hubspot_ticket_id: String(event.objectId)
+                    hubspot_ticket_id: String(event.objectId),
+                    status: 'deleted'
                 },
                 select: {
                     id: true,
-                    status: true
+                    old_status: true
                 }
             })
             if(!ticketExists) return;
@@ -27,13 +27,12 @@ export class HandlerTicketDeletion {
                     id: ticketExists.id
                 },
                 data: {
-                    old_status: ticketExists.status,
-                    status: 'deleted',
+                    status: ticketExists.old_status ?? 'new',
                 }
             })
 
         }catch (error) {
-            throw new BadRequestException('Error deleting ticket', error);
+            throw new BadRequestException('Error Restoring ticket', error);
         }
         
     }

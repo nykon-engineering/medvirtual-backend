@@ -72,7 +72,6 @@ export class HireRequestService {
   }
 
   async create(data: CreateHireRequestDto, user?: USER):Promise<any> {   //user is option because the webhook use this function without user
-    console.log('Creating hire request with data:', data, 'and user:', user);
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const {skills, client_id,  ...hireRequestData} = data;

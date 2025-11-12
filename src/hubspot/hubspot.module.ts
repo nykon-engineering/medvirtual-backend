@@ -24,8 +24,10 @@ import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
 import { HandlerTicketCreation } from './handlers/ticketCreation';
+import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HireRequestModule } from '../hire-request/hire-request.module';
+
 
 
 
@@ -47,6 +49,7 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
     HandlerDealDeletion,
     HandlerDealAssociationChange,
     HandlerTicketCreation,
+    HandlerTicketRestore,
     HandlerTicketDeletion,
     HireRequestCreationService,
     HireRequestUpdateService

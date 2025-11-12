@@ -31,8 +31,8 @@ import { organizationToDbDictionary } from '../common/dictionaries/organization-
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
 import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
-import { HandlerTicketCreation } from './handlers/ticketCreation';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
+import { HandlerTicketRestore } from './handlers/ticketRestore';
 
 
 
@@ -56,7 +56,7 @@ export class HubspotService {
       private readonly dealDeletion: HandlerDealDeletion,
       private readonly dealAssociationChange: HandlerDealAssociationChange,
 
-      private readonly ticketCreation: HandlerTicketCreation,
+      private readonly ticketRestore: HandlerTicketRestore,
       private readonly ticketDeletion: HandlerTicketDeletion,
 
       private readonly hireRequestCreationService: HireRequestCreationService,
@@ -180,7 +180,7 @@ export class HubspotService {
 
                 //case 'ticket.creation': =. just comment because we dont have rules 
                 case 'ticket.restore':
-                    await this.ticketCreation.execute(event);
+                    await this.ticketRestore.execute(event);
                     break;
 
                 case 'ticket.deletion':
