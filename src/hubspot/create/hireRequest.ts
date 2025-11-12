@@ -14,13 +14,14 @@ export class HireRequestCreationService {
           const expectedDate = new Date(data.expected_start_date);
           const PairingDate = expectedDate.getFullYear() +'-'+ String(expectedDate.getMonth() + 1).padStart(2,"0") +'-'+ String(expectedDate.getDate()).padStart(2,"0");
 
-          const hubspotTitle = `Platform Created - ${data.organization.name} - ${data.hubspot_numberVA.toString()} - ${data.hubspot_role_type} - ${data.availability.toUpperCase()}`;
+          const pay_range=`${data.salary_range_from} - ${data.salary_range_to}`;
+          
           
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/tickets",
             {
               properties: {
-                subject: hubspotTitle,
+                subject: data.title,
                 content: data.description,
                 hs_pipeline: "0", //=>Pairing Pipeline
                 hs_pipeline_stage: "1",  //=> New agent Request
@@ -28,6 +29,7 @@ export class HireRequestCreationService {
                 ticket_type: "Agent Pairing Request",
                 business_unit: data.organization.business_unit || "Not Specified",
                 company_name: data.organization.name,
+                client_name: data.organization.name,
                 company_url: data.organization.website_url || "Not Specified",
                 va_deployment_type: data.availability === "part-time" ? "Part-Time" : "Full-Time",
                 hs_ticket_priority: data.priority.toUpperCase(),
@@ -35,7 +37,8 @@ export class HireRequestCreationService {
                 contract_amount: data.hubspot_contract_amount,
                 language: data.hubspot_language,
                 number_of_vas: data.hubspot_numberVA.toString(),
-                hire_date__start_of_employment_: PairingDate,
+                va_pay_rate_range: pay_range.toString(),
+                //hire_date__start_of_employment_: PairingDate, 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 
               },
               associations: [
                 {

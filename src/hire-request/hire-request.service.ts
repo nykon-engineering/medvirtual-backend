@@ -29,6 +29,7 @@ import {
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
+import { title } from 'process';
 
 @Injectable()
 export class HireRequestService {
@@ -112,6 +113,7 @@ export class HireRequestService {
       ticket_type: 'Agent Pairing Request',
       business_unit: organizationSQL.business_unit || "Not Specified",
       company_name: organizationSQL.name,
+      client_name: organizationSQL.name,
       company_url: organizationSQL.website_url || "Not Specified",
       va_type: hireRequestData.position,
       contract_amount: hireRequestData.contract_amount,
@@ -122,10 +124,12 @@ export class HireRequestService {
     const sanitizeDecimal = (value?: string | null) => {
       return value && value.trim() !== "" ? value : null;
     };
+    const hubspotTitle = `HR - ${organizationSQL.name} - ${hireRequestData.numberVA.toString()} - ${hireRequestData.position} - ${data.availability.toUpperCase()}`;
 
     const hireRequest = {
       ...hireRequestData,
       ...hubspotMappedFields,
+      title: hubspotTitle,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
       //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
@@ -255,7 +259,7 @@ export class HireRequestService {
               readable: true,
               panelCandidates: {
                 select: {
-                  status: true,
+                  id:true,
                   candidate: {
                     select: {
                       id: true,
@@ -295,20 +299,12 @@ export class HireRequestService {
                         },
                       },
                       panelCandidates: {
-                        where:{
-                          panel: {
-                            hireRequest:{
-                              OR: [
-                                { status: 'placement_completed' },
-                                { status: 'awaiting_decision' },
-                              ]
-                            }
-                          }
-                        },
                         select:{
                           id: true,
+                          status: true,
                           panel:{
                             select:{
+                              id: true,
                               hire_request_id: true,
                               hireRequest:{
                                 select:{
@@ -373,9 +369,12 @@ export class HireRequestService {
             ...pc.candidate,
             salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates.map(pcc => ({
+            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
+            .filter(pcc => pcc.panel?.id && pcc.panel.id !== panel.id)
+            .map(pcc => ({
               title: pcc.panel.hireRequest.title,
               organization_name: pcc.panel.hireRequest.organization.name,
+              status: pcc.status,
             })) : [],
           }
         }))
@@ -573,7 +572,9 @@ export class HireRequestService {
     await this.hubspot.updateHireRequestInHubspot(newHr);
 
     try {
-      await this.notifications.notifyHireRequestClientChange(id, 'edited');
+      if (user.role.includes('organization')) {
+        await this.notifications.notifyHireRequestClientChange(id, 'edited');
+      }
     } catch (err) {
       console.warn('[notifications] hire-request-edited email failed', err?.message || err);
     }
@@ -636,12 +637,7 @@ export class HireRequestService {
 
     if (data.status === 'cancelled'){
 
-      //remove all candidates from the panel
-      await this.prisma.candidatePanel.deleteMany({
-        where: {
-          hire_request_id: id,
-        },
-      })
+
       
       if (candidates.length > 0) {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
@@ -652,17 +648,43 @@ export class HireRequestService {
         //update candidates for their original status or 'Available Candidates' on database and hubspot
         await Promise.all(
           candidates.map(async c =>{
-            const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
-            await this.prisma.candidate.update({
-              where: { id: c.candidate.id },
-              data: { pipeline_status: pipeline_treated},
+            const thereOtherPanels = await this.prisma.panelCandidate.findMany({
+              where: {
+                candidate_id: c.candidate.id,
+                status: {
+                  in: ['selected_by_client', 'blocked']
+                },
+                panel: {
+                  hire_request_id: {
+                    not: id,
+                  },
+                },
+              },
+              select: {
+                id: true,
+              }
             });
-            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+            if (thereOtherPanels.length = 0) {
+              //only update candidate if he is not in other panels
+              const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
+              await this.prisma.candidate.update({
+                where: { id: c.candidate.id },
+                data: { pipeline_status: pipeline_treated},
+              });
+              await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+            }
+            
           }
           )
         );
-      
       }
+
+      //remove all candidates from the panel
+      await this.prisma.candidatePanel.deleteMany({
+        where: {
+          hire_request_id: id,
+        },
+      })
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
@@ -681,7 +703,9 @@ export class HireRequestService {
 
       // Notify assignee via email when hire request is canceled (non-blocking)
       try {
-        await this.notifications.notifyHireRequestClientChange(id, 'canceled');
+        if (user.role.includes('organization')) { //just notify if this action is from client
+          await this.notifications.notifyHireRequestClientChange(id, 'canceled');
+        }
       } catch (err) {
         console.warn('[notifications] hire-request-canceled email failed', err?.message || err);
       }
@@ -1225,12 +1249,6 @@ export class HireRequestService {
           where:{
             panel: {
               hire_request_id: { not: id},
-              hireRequest:{
-                OR: [
-                  { status: 'placement_completed' },
-                  { status: 'awaiting_decision' },
-                ]
-              }
             }
           },
           select:{
@@ -2089,7 +2107,15 @@ export class HireRequestService {
     })
     if (!pipelineStatus) throw new BadRequestException(`Pipeline status mapping not found`);
 
-    //console.log('Showing the candidates: ', candidates)
+    //update candidate as 'blocked' on Panel
+    const panelCandidatesUpdated = await this.prisma.panelCandidate.updateMany({
+      where: {
+        panel_id: panelExists.id,
+      },
+      data: {
+        status: 'blocked',
+      },
+    });
 
     const hubspotUpdated = await this.hubspot.updateManyCandidatesFromHireRequest(
       candidates,
@@ -2554,7 +2580,9 @@ export class HireRequestService {
             where: {
               candidate_id: pc.candidate.id,
               panel_id: { not: pc.panel_id },
-              status: 'selected_by_client', //Dont allow get candidates already selected in other panels
+              status: {
+                in: ['selected_by_client', 'blocked'],
+              }, //Dont allow get candidates already selected in other panels
             },
           });
     

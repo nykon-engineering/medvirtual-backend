@@ -546,6 +546,7 @@ enum PanelCandidateStatus {
   interviewed
   selected_by_client
   returned_to_pool
+  blocked
 }
 
 enum InterviewStatus {

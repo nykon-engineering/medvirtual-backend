@@ -268,6 +268,7 @@ export class CandidatesService {
       panelCandidates: {
         select:{
           id: true,
+          status: true,
           panel:{
             select:{
               hire_request_id: true,
@@ -355,11 +356,10 @@ export class CandidatesService {
         selectedInInterviews: undefined,
         salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
-        panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.filter(pc =>
-        ['placement_completed', 'awaiting_decision'].includes(pc.panel?.hireRequest?.status)
-        ).map(pc => ({
+        panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
           organization_name: pc.panel.hireRequest.organization.name,
+          status: 'test',
           
         })) : []
       }));

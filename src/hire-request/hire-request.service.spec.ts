@@ -139,6 +139,9 @@ describe('HireRequestService', () => {
     const baseDto = {
       title: 'Dev',
       description: 'Job description',
+      numberVA: 1,
+      position: 'Developer',
+      availability: 'full-time',
     };
   
     beforeEach(() => {
