@@ -202,7 +202,7 @@ export class HireRequestService {
     }
     if(!user.role) throw new NotFoundException('User role not found');
 
-    let baseWhere = {};
+    let baseWhere = { };
     switch (user.role) {
       case 'organization_super_admin':
       case 'organization_admin':
@@ -226,14 +226,17 @@ export class HireRequestService {
     //this code was updated for the switch above
     // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search ? { title: { contains: search, mode: 'insensitive' as const } } : {};
-    const whereClause =  { ...baseWhere, ...searchWhere } ;
+    const whereClause =  { ...baseWhere, ...searchWhere }; ;
 
     const skip = (page - 1) * perPage;
     const take = perPage;
 
     const [hireRequests, total] = await this.prisma.$transaction([
       this.prisma.hireRequest.findMany({
-        where: whereClause,
+        where: {
+          ...whereClause,
+          status: { not: 'deleted' }
+        },
         include: {
           skills: true,
           organization: true,
