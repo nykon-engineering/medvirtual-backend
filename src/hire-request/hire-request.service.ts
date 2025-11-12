@@ -650,8 +650,6 @@ export class HireRequestService {
 
 
     if (data.status === 'cancelled'){
-
-
       
       if (candidates.length > 0) {
         const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
@@ -809,7 +807,13 @@ export class HireRequestService {
       }
       return this.findOne(id, user);
 
+    } else if (hireRequest.status == 'panel_ready' && data.status === 'for_review'){
       
+      const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
+      if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      return this.findOne(id, user);
+
     } else if (hireRequest.status == 'new' && data.status === 'sourcing'){
       //verify if there panel created with this hire_request_id
 
