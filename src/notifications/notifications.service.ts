@@ -242,7 +242,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong> 
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
@@ -419,7 +421,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong> 
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
        </div>
        
@@ -472,7 +476,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong> 
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
        </div>
        
@@ -526,7 +532,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong>
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
        </div>
        
@@ -601,7 +609,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong>
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
          <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
@@ -679,7 +689,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong> 
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
          <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
@@ -757,7 +769,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong>
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
          <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
@@ -1358,7 +1372,9 @@ export class NotificationsService {
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> ${hr.description || 'No description provided'}</p>
+         <p><strong>Description:</strong>
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
