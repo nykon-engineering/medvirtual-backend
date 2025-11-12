@@ -1958,8 +1958,11 @@ export class HireRequestService {
         hubspot_ticket_id: hireRequest.hubspot_ticket_id,
         pairing_date:updatedDate.toISOString().split("T")[0],
         pairing_time:updatedDate.toTimeString().split(" ")[0],
+        hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+        .find(key => HRTicketStatus[key] === 'Candidates Interview Booked'),
       }
       await this.hubspot.updateHireRequestInHubspot(updateDateTime);
+
     }catch(err){
       console.error('[hubspot] updateHireRequestInHubspot failed', err?.message || err);
     }
@@ -2047,6 +2050,7 @@ export class HireRequestService {
       },
       select:{
         id: true,
+        hubspot_ticket_id: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -2122,6 +2126,17 @@ export class HireRequestService {
       pipelineStatus
     );
 
+    try {  
+      const dataForHubspot = {
+        hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+        hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+        .find(key => HRTicketStatus[key] === 'Interview Done (For Follow-up)'),
+      }
+      const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+    } catch (err) {
+      console.warn('[hubspot] updateHireRequestInHubspot in Awaiting decision failed', err?.message || err);
+    }
+
     // Fire awaiting decision notification to organization admins (non-blocking)
     try {
       await this.notifications.notifyHireRequestAwaitingDecision(hireRequest.id);
@@ -2195,6 +2210,7 @@ export class HireRequestService {
       },
       select:{
         id: true,
+        hubspot_ticket_id: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -2349,6 +2365,13 @@ export class HireRequestService {
       throw new BadRequestException(`Error updating candidate in HubSpot`);
     }
     */
+
+    const dataForHubspot = {
+      hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+      hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+      .find(key => HRTicketStatus[key] === 'For Onboarding (Paired)'),
+    }
+    await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
     
     // Fire placement completed notification (non-blocking)
     try {

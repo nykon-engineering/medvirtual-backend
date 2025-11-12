@@ -232,7 +232,8 @@ export class NotificationsService {
     const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
 
     const html = this.buildEmail(
-      `<p>The hire request has been marked as <strong>placement completed</strong>.</p>
+      `<h2>Placement Completed</h2>
+      <p>The hire request has been marked as <strong>placement completed</strong>.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
@@ -266,8 +267,7 @@ export class NotificationsService {
     
     return await this.mail.sendMail({
       from: fromEmail,
-      to: fromEmail,
-      bcc: recipients,
+      to: recipients,
       subject: `Placement completed: ${hr.title}`,
       html,
     });
@@ -291,7 +291,7 @@ export class NotificationsService {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
-          select: { name: true },
+          select: { name: true, id: true  },
         },
         panels: {
           select: {
@@ -342,10 +342,16 @@ export class NotificationsService {
           </a>
         </div>` : '';
 
-    //get emails from candidates
-    const candidateEmails = hr.panels?.[0]?.panelCandidates
-      ?.map(c => c.candidate?.email)
-      .filter(Boolean) || [];
+    //get all users from organization for send emails to them
+    const emailsUsers = await this.prisma.uSER.findMany({
+      where: {
+        organization_id: hr.organization.id,
+        status: 'active',
+      },
+      select: {
+        email: true,
+      },
+    });
 
 
     // Get user email theme
@@ -370,8 +376,7 @@ export class NotificationsService {
     );
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: "noreply@regenta.ai",
-      bcc: candidateEmails,
+      to: emailsUsers.map(u => u.email),
       subject: `Interview Invite: ${hr.title}`,
       html,
     });

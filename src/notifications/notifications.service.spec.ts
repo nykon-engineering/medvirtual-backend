@@ -111,8 +111,7 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: 'MedVirtual <noreply@medvirtual.ai>', 
-          bcc: ['assignee@example.com'],
+          to: ['assignee@example.com'],
           subject: 'Placement completed: Senior Developer',
           html: expect.stringContaining('placement completed'),
         })
