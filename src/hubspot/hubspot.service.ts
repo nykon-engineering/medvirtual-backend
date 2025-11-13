@@ -179,9 +179,10 @@ export class HubspotService {
                     break;
 
                 //case 'ticket.creation': =. just comment because we dont have rules 
-                case 'ticket.restore':
-                    await this.ticketRestore.execute(event);
-                    break;
+                
+                //case 'ticket.restore':
+                //    await this.ticketRestore.execute(event);
+                //    break;
 
                 case 'ticket.deletion':
                     await this.ticketDeletion.execute(event);
