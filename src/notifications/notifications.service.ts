@@ -376,7 +376,7 @@ export class NotificationsService {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
-          select: { name: true, id: true  },
+          select: { name: true, id: true, business_unit: true },
         },
         panels: {
           select: {
@@ -439,8 +439,7 @@ export class NotificationsService {
     });
 
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    const emailTheme = await getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<h4>There</h4>
