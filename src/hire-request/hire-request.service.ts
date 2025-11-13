@@ -380,8 +380,8 @@ export class HireRequestService {
             salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
             panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
-            .filter(pcc => pcc.panel?.id && pcc.panel.id !== panel.id)
             .map(pcc => ({
+              panel_id: pcc.panel.id,
               title: pcc.panel.hireRequest.title,
               organization_name: pcc.panel.hireRequest.organization.name,
               status: pcc.status,
@@ -560,8 +560,8 @@ export class HireRequestService {
               years_of_experience: years_of_experience,
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
-              .filter(pcc => pcc.panel?.id && pcc.panel.id !== panel.id)
               .map(pcc => ({
+                 panel_id: pcc.panel.id,
                 title: pcc.panel.hireRequest.title,
                 organization_name: pcc.panel.hireRequest.organization.name,
                 status: pcc.status,
@@ -2763,4 +2763,48 @@ export class HireRequestService {
       throw new Error("Failed to find VA types");
     }
   };
+
+  async backStage(): Promise <any>{
+    try{
+      const candidates = await this.prisma.candidate.findMany({
+        where: {
+          panelCandidates: {
+            some: {
+              panel: {
+                hireRequest: {
+                    status: {not: {in: ['awaiting_decision', 'placement_completed']}},
+                }
+              }
+            }
+          }
+        },
+        select:{
+          id: true,
+          name: true,
+          first_name: true,
+          last_name : true,
+          pipeline_status: true,
+          pipeline_status_origin: true,
+          panelCandidates: {
+            select:{
+              panel:{
+                select:{
+                  hireRequest:{
+                    select:{
+                      title: true,
+                      status: true,
+                    }
+                  }
+                }
+              }
+            }
+        }
+      },
+      });
+
+      return candidates;
+    }catch(err){
+      console.error('Backstage service failed', err?.message || err);
+    }
+  }
 }

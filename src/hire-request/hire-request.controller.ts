@@ -431,4 +431,18 @@ export class HireRequestController {
     }
   };
 
+  @Get('candidates/back-stage')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ description: 'Backing candidates to origin stage' })
+
+  async backStage() {
+    const result = await this.hireRequestService.backStage();
+    return {
+      status: 200,
+      message: 'Processed successfully',
+      data: result,
+    }
+  };
+
 }
