@@ -499,6 +499,30 @@ export class HireRequestService {
                         scheduled_date: true,
                       },
                     },
+                    panelCandidates: {
+                      select:{
+                        id: true,
+                        status: true,
+                        panel:{
+                          select:{
+                            id: true,
+                            hire_request_id: true,
+                            hireRequest:{
+                              select:{
+                                id: true,
+                                title: true,
+                                organization:{
+                                  select:{
+                                    id: true,
+                                    name: true,
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
                   },
                 },
               },
@@ -535,6 +559,13 @@ export class HireRequestService {
               salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
               years_of_experience: years_of_experience,
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+              panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
+              .filter(pcc => pcc.panel?.id && pcc.panel.id !== panel.id)
+              .map(pcc => ({
+                title: pcc.panel.hireRequest.title,
+                organization_name: pcc.panel.hireRequest.organization.name,
+                status: pcc.status,
+              })) : [],
             }}
         })
       }))
@@ -711,7 +742,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Pairing Lost'), //=> Pairing Lost
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
@@ -767,7 +798,8 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'New Agent Request'), //=> New
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        console.log('Hubspot hire request updated to New status');
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
@@ -776,7 +808,8 @@ export class HireRequestService {
 
     } else if (hireRequest.status == 'panel_ready' && data.status === 'sourcing' ||
       hireRequest.status == 'for_review' && data.status === 'sourcing' ||
-      hireRequest.status == 'cancelled' && data.status === 'sourcing'){
+      hireRequest.status == 'cancelled' && data.status === 'sourcing' ||
+      hireRequest.status == 'interview_scheduled' && data.status === 'sourcing'){
       //update panel to readable=false
       //update the hireRequest Status to sourcing
 
@@ -798,7 +831,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Sourcing Candidates'),
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
@@ -886,7 +919,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
       }
@@ -963,6 +996,17 @@ export class HireRequestService {
           scheduled_date: null,
         }
       })
+
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
+        }
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
+      }
 
       try {  
         const dataForHubspot = {
@@ -1586,6 +1630,17 @@ export class HireRequestService {
       });
       await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status);
     })
+
+    try {  
+      const dataForHubspot = {
+        hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+        hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+        .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
+      }
+      await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+    } catch (err) {
+      console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
+    }
 
     try {
       const result = await this.notifications.notifyHireRequestPanelReady(data.hireRequest_id);
