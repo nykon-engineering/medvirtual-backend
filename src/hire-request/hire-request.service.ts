@@ -758,7 +758,10 @@ export class HireRequestService {
 
       return this.findOne(id, user);
       
-    }else if (hireRequest.status == 'sourcing' && data.status === 'new' || hireRequest.status == 'cancelled' && data.status === 'new' || hireRequest.status == 'placement_completed' && data.status === 'new'){
+    }else if (
+      hireRequest.status == 'sourcing' && data.status === 'new' ||
+      hireRequest.status == 'cancelled' && data.status === 'new' || 
+      hireRequest.status == 'placement_completed' && data.status === 'new'){
       //REOPEN AS NEW
       const pipelineStatus = Object.keys(dbToStageDictionary).find(key => {
         return dbToStageDictionary[key] === 'Available Candidates';
@@ -1044,6 +1047,17 @@ export class HireRequestService {
 
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
+
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
+        }
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
+      }
      
       return this.findOne(id, user);
 
@@ -1138,6 +1152,17 @@ export class HireRequestService {
         }
       })
       if( !updatedPanel) throw new BadRequestException(`Panel not updated`);
+
+      try { 
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Candidates Interview Booked'),
+        }
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
+      }
 
       
       return this.findOne(id, user);
