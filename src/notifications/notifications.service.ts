@@ -1550,7 +1550,9 @@ export class NotificationsService {
       throw new BadRequestException('No organization admins found to notify');
     }
 
-    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    //removed on 2025-11-13 asked by Pauli on medvirtual group
+    //const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    const detailUrl = `${process.env.FRONTEND_URL}/interview-panels`;
 
     // Get panel information
     const panel = hr.panels?.[0];
