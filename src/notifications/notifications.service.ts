@@ -442,7 +442,7 @@ export class NotificationsService {
     const emailTheme = await getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
-      `<h4>There</h4>
+      `<h4>${hr.organization.name}</h4>
        <p>You were invited for an <strong>Interview</strong>.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
