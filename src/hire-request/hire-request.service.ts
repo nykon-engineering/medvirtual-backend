@@ -103,7 +103,8 @@ export class HireRequestService {
     });
     if (!organizationSQL) throw new NotFoundException(`Organization from client not found`);
 
-    const content = `CLIENT : ${organizationSQL.name} ${organizationSQL.industry && `\n\nINDUSTRY: `+organizationSQL.industry} ${organizationSQL.website_url && `\n\nWEBSITE:`+organizationSQL.website_url}  ${data.numberVA && `\n\nHOW MANY VA'S NEEDED:`+data.numberVA} \n\nTARGET START DATE: ${new Date(data.expected_start_date).toLocaleDateString()}\n\nTITLE: ${organizationSQL.name} ${data.description && `\n\nDESCRIPTION: `+data.description}\n\nAVAILABILITY: ${data.availability}${data.skills && `\n\nSKILLS: `+(data.skills ?? []).map(s => s.name ?? s).join(", ")}`;
+    //removed on 2025-11-13 asked by Pauli => https://regenta-company.monday.com/boards/9328303960/pulses/18374055394
+    //const content = `CLIENT : ${organizationSQL.name} ${organizationSQL.industry && `\n\nINDUSTRY: `+organizationSQL.industry} ${organizationSQL.website_url && `\n\nWEBSITE:`+organizationSQL.website_url}  ${data.numberVA && `\n\nHOW MANY VA'S NEEDED:`+data.numberVA} \n\nTARGET START DATE: ${new Date(data.expected_start_date).toLocaleDateString()}\n\nTITLE: ${organizationSQL.name} ${data.description && `\n\nDESCRIPTION: `+data.description}\n\nAVAILABILITY: ${data.availability}${data.skills && `\n\nSKILLS: `+(data.skills ?? []).map(s => s.name ?? s).join(", ")}`;
 
     const hubspotMappedFields = mapHRTicketToDb({
       hs_pipeline: '0',
@@ -134,7 +135,6 @@ export class HireRequestService {
       //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
       //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       status: HireRequestStatus.new,
-      description: content,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
       createdBy: { connect: { id: user.id } },
       position: undefined,
