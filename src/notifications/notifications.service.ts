@@ -163,6 +163,73 @@ export class NotificationsService {
 </html>`;
   }
 
+  /**
+   * Determines the correct fromEmail based on company name and recipient roles.
+   * System admins always receive emails from MedVirtual, never from Berry Virtual.
+   * If any organization admin recipient belongs to Berry Virtual organization, use Berry Virtual.
+   */
+  private async getFromEmail(
+    companyName: string,
+    recipientEmails: string[]
+  ): Promise<string> {
+    // Check recipients with their roles and organizations
+    const recipients = await this.prisma.uSER.findMany({
+      where: {
+        email: { in: recipientEmails },
+      },
+      select: {
+        email: true,
+        role: true,
+        organization_id: true,
+      },
+    });
+
+    const hasSystemAdmin = recipients.some(
+      (r) => r.role === 'system_admin' || r.role === 'system_super_admin'
+    );
+
+    // If there are system admins, always use MedVirtual
+    if (hasSystemAdmin) {
+      return 'MedVirtual <noreply@medvirtual.ai>';
+    }
+
+    // Check if any organization admin recipient belongs to Berry Virtual organization
+    const organizationAdminRecipients = recipients.filter(
+      (r) => r.role === 'organization_admin' || r.role === 'organization_super_admin'
+    );
+
+    if (organizationAdminRecipients.length > 0) {
+      const recipientOrgIds = organizationAdminRecipients
+        .map(r => r.organization_id)
+        .filter((id): id is string => Boolean(id));
+
+      if (recipientOrgIds.length > 0) {
+        const organizations = await this.prisma.organization.findMany({
+          where: {
+            id: { in: recipientOrgIds },
+          },
+          select: {
+            id: true,
+            business_unit: true,
+          },
+        });
+
+        const hasBerryVirtual = organizations.some(
+          org => org.business_unit === 'Berry Virtual'
+        );
+
+        if (hasBerryVirtual) {
+          return 'Berry Virtual <noreply@medvirtual.ai>';
+        }
+      }
+    }
+
+    // Otherwise, use the company name from theme
+    return companyName === 'Berry Virtual'
+      ? 'Berry Virtual <noreply@medvirtual.ai>'
+      : 'MedVirtual <noreply@medvirtual.ai>';
+  }
+
   async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
@@ -242,7 +309,19 @@ export class NotificationsService {
     
     // Determine company name from theme
     const companyName = emailTheme?.companyName || 'MedVirtual';
-    const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
+    
+    const recipients = [
+      hr.assigned_user?.email,
+      hr.assigned_sourcing?.email,
+      hr.createdBy?.email,
+    ].filter((email): email is string => Boolean(email));
+    
+    if (recipients.length === 0) {
+      throw new BadRequestException('No valid recipient emails found');
+    }
+
+    // Get fromEmail considering recipient roles
+    const fromEmail = await this.getFromEmail(companyName, recipients);
 
     const html = this.buildEmail(
       `<h2>Placement Completed</h2>
@@ -271,16 +350,6 @@ export class NotificationsService {
       emailTheme
     );
 
-    const recipients = [
-      hr.assigned_user?.email,
-      hr.assigned_sourcing?.email,
-      hr.createdBy?.email,
-    ].filter(Boolean);
-    
-    if (recipients.length === 0) {
-      throw new BadRequestException('No valid recipient emails found');
-    }
-    
     return await this.mail.sendMail({
       from: fromEmail,
       to: recipients,
@@ -613,7 +682,8 @@ export class NotificationsService {
 
     const html = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
-       <p>You have been assigned ${type==='sourcing' ? `to source` : `to`} this hire request.</p>
+      ${type==='sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
+       <p>You have been assigned ${type==='sourcing' ? `to source` : `to`} this hire request:</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
@@ -1378,9 +1448,19 @@ export class NotificationsService {
       ? await getUserEmailTheme(this.prisma, firstAdminId)
       : null;
     
-    // Determine company name from theme or fallback to business unit
-    const companyName = emailTheme?.companyName || (hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual');
-    const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
+    // Determine company name: prioritize organization business_unit if Berry Virtual,
+    // otherwise use theme from user, fallback to MedVirtual
+    let companyName = 'MedVirtual';
+    if (hr.organization.business_unit === 'Berry Virtual') {
+      // If organization is Berry Virtual, use Berry Virtual theme
+      companyName = 'Berry Virtual';
+    } else if (emailTheme?.companyName) {
+      // Otherwise, use the theme from the user
+      companyName = emailTheme.companyName;
+    }
+    
+    // Get fromEmail considering recipient roles
+    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
 
     const html = this.buildEmail(
       `<p>Your hire request has been completed.</p>
@@ -1492,9 +1572,19 @@ export class NotificationsService {
       ? await getUserEmailTheme(this.prisma, firstAdminId)
       : null;
     
-    // Determine company name from theme or fallback to business unit
-    const companyName = emailTheme?.companyName || (hr.organization.business_unit === 'Berry Virtual' ? 'Berry Virtual' : 'MedVirtual');
-    const fromEmail = companyName === 'Berry Virtual' ? 'Berry Virtual <noreply@medvirtual.ai>' : 'MedVirtual <noreply@medvirtual.ai>';
+    // Determine company name: prioritize organization business_unit if Berry Virtual,
+    // otherwise use theme from user, fallback to MedVirtual
+    let companyName = 'MedVirtual';
+    if (hr.organization.business_unit === 'Berry Virtual') {
+      // If organization is Berry Virtual, use Berry Virtual theme
+      companyName = 'Berry Virtual';
+    } else if (emailTheme?.companyName) {
+      // Otherwise, use the theme from the user
+      companyName = emailTheme.companyName;
+    }
+    
+    // Get fromEmail considering recipient roles
+    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
 
     const html = this.buildEmail(
       `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
