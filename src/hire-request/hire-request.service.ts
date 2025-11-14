@@ -851,6 +851,17 @@ export class HireRequestService {
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
+      try {  
+        const dataForHubspot = {
+          hubspot_ticket_id: hireRequest.hubspot_ticket_id,
+          hubspot_pipeline_stage: Object.keys(HRTicketStatus)
+          .find(key => HRTicketStatus[key] === 'Sourcing Candidates'),
+        }
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      } catch (err) {
+        console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
+      }
+
       return this.findOne(id, user);
 
     } else if (hireRequest.status == 'new' && data.status === 'sourcing'){
@@ -2768,6 +2779,7 @@ export class HireRequestService {
     try{
       const candidates = await this.prisma.candidate.findMany({
         where: {
+          pipeline_status: '1172847191',
           panelCandidates: {
             some: {
               panel: {
@@ -2782,6 +2794,7 @@ export class HireRequestService {
           id: true,
           name: true,
           first_name: true,
+          hubspot_id: true,
           last_name : true,
           pipeline_status: true,
           pipeline_status_origin: true,
@@ -2802,6 +2815,16 @@ export class HireRequestService {
       },
       });
 
+      //update all candidates that the pipeline status to the origin status
+      await Promise.all(
+        candidates.map(async c =>{
+          await this.prisma.candidate.update({
+            where: { id: c.id },
+            data: { pipeline_status: c.pipeline_status_origin || c.pipeline_status},
+          });
+          await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status);
+        })
+      );
       return candidates;
     }catch(err){
       console.error('Backstage service failed', err?.message || err);
