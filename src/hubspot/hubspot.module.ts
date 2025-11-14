@@ -60,7 +60,8 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
     HandlerObjectCreation, 
     HandlerDealCreation, 
     HireRequestCreationService,
-    HireRequestUpdateService
+    HireRequestUpdateService,
+  
   ],
 })
 export class HubspotModule {}
