@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEnum, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsInt, Min, Max, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
@@ -95,27 +95,39 @@ export class GetOrganizationsDto {
   @ApiProperty({
     required: false,
     description:
-      'Filter if has user',
+      'Filter if has user (true = only organizations with userCount > 0)',
+    type: Boolean,
   })
   @IsOptional()
-  @IsString()
-  hasUser?: string;
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  @IsBoolean()
+  hasUser?: boolean;
 
   @ApiProperty({
     required: false,
     description:
-      'Filter if has staff',
+      'Filter if has staff (true = only organizations with staffCount > 0)',
+    type: Boolean,
   })
   @IsOptional()
-  @IsString()
-  hasStaff?: string;
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  @IsBoolean()
+  hasStaff?: boolean;
 
 
 
   @ApiProperty({
     required: false,
     description: 'Sort field',
-    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],
+    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees', 'userCount', 'activeStaffCount'],
     default: 'createdAt',
   })
   @IsOptional()

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { HireRequestService } from './hire-request.service';
 import { HireRequestController } from './hire-request.controller';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -8,7 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 @Module({
   controllers: [HireRequestController],
   providers: [HireRequestService],
-  imports: [PrismaModule, HubspotModule, NotificationsModule],
+  imports: [PrismaModule, NotificationsModule, forwardRef(() => HubspotModule)],
   exports: [HireRequestService],
 })
 export class HireRequestModule {}

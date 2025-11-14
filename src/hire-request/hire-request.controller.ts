@@ -137,18 +137,19 @@ export class HireRequestController {
     }
   }
 
-  @Post('reassign/:id')
+  @Post('reassign/:id/:type')
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
   @ApiOperation({ description: 'Reassign specific hire request/Panel to another user' })
-  @ApiQuery({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiParam({ name: 'id', required: true, description: 'ID of the hire request' })
+  @ApiParam({ name: 'type', required: true, description: 'Type of request: concierge or sourcing' })
   @ApiBody({ type: reassignDTO } )
   @ApiResponse({ status: 200, description: 'Hire request reassigned successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
   @ApiResponse({ status: 404, description: 'Hire request not found' })
-  async reassign(@Param('id') id: string, @CurrentUser() user: USER, @Body() data: reassignDTO) {
-    const result = await this.hireRequestService.reassign(id, user, data);
+  async reassign(@Param('id') id: string, @CurrentUser() user: USER, @Body() data: reassignDTO, @Param('type') type: string) {
+    const result = await this.hireRequestService.reassign(id, user, data, type);
     return {
       status: 200,
       message: 'Hire request reassigned successfully',
@@ -417,5 +418,31 @@ export class HireRequestController {
   }
 
 
+  @Get('vatypes/options')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get VA Types options' })
+
+  async getVATypesController() {
+    const result = await this.hireRequestService.getVATypes();
+    return {
+      status: 200,
+      message: 'VA Types retrieved successfully',
+      data: result,
+    }
+  };
+
+  @Get('candidates/back-stage')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ description: 'Backing candidates to origin stage' })
+
+  async backStage() {
+    const result = await this.hireRequestService.backStage();
+    return {
+      status: 200,
+      message: 'Processed successfully',
+      data: result,
+    }
+  };
 
 }

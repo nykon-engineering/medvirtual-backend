@@ -18,7 +18,11 @@ import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
-import { HireRequestCreationService } from './creations/hireRequest';
+import { HireRequestCreationService } from './create/hireRequest';
+import { HireRequestUpdateService } from './update/hireRequest';
+import { HandlerTicketCreation } from './handlers/ticketCreation';
+import { HandlerTicketDeletion } from './handlers/ticketDeletion';
+import { HandlerTicketRestore } from './handlers/ticketRestore';
 
 
 jest.mock('axios', () => ({
@@ -116,10 +120,26 @@ const HandlerDealDeletionMock = {
 const HandlerDealAssociationChangeMock = {
   execute: jest.fn(),
 }
+
+const HandlerTicketCreationMock = {
+  execute: jest.fn(),
+};
+
+const HandlerTicketRestoreMock = {
+  execute: jest.fn(),
+};
+
+const HandlerTicketDeletionMock = {
+  execute: jest.fn(),
+};
+
 const hireRequestCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const hireRequestUpdateServiceMock = {
+  execute: jest.fn(),
+};
 
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
@@ -159,7 +179,11 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock},
         {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
         {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock},
-        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock}
+        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock},
+        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
+        {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
+        {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
+        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock}
       ],
     }).compile();
 
@@ -219,7 +243,11 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock},
         {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
         {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock},
-        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock}
+        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock},
+        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
+        {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
+        {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
+        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock}
       ]
     }).compile();
 

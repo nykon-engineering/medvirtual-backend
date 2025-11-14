@@ -29,7 +29,10 @@ import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
-import { HireRequestCreationService } from './creations/hireRequest';
+import { HireRequestCreationService } from './create/hireRequest';
+import { HireRequestUpdateService } from './update/hireRequest';
+import { HandlerTicketDeletion } from './handlers/ticketDeletion';
+import { HandlerTicketRestore } from './handlers/ticketRestore';
 
 
 
@@ -53,7 +56,11 @@ export class HubspotService {
       private readonly dealDeletion: HandlerDealDeletion,
       private readonly dealAssociationChange: HandlerDealAssociationChange,
 
+      private readonly ticketRestore: HandlerTicketRestore,
+      private readonly ticketDeletion: HandlerTicketDeletion,
+
       private readonly hireRequestCreationService: HireRequestCreationService,
+      private readonly hireRequestUpdateService: HireRequestUpdateService,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -170,24 +177,18 @@ export class HubspotService {
                 case 'deal.associationChange':
                     await this.dealAssociationChange.execute(event);
                     break;
-                /*
-                [{
-                    eventId: 872635545,
-                    subscriptionId: 4328151,
-                    portalId: 20630393,
-                    appId: 17008354,
-                    occurredAt: 1758637869029,
-                    subscriptionType: 'company.associationChange',
-                    attemptNumber: 0,
-                    changeSource: 'USER',
-                    associationType: 'COMPANY_TO_DEAL', //COMPANY_TO_CONTACT
-                    fromObjectId: 39895238437,
-                    toObjectId: 44166736144,
-                    associationRemoved: false,
-                    isPrimaryAssociation: false,
-                    sourceId: 'userId:69965733'
-                }]
-                */
+
+                //case 'ticket.creation': =. just comment because we dont have rules 
+                
+                //case 'ticket.restore':
+                //    await this.ticketRestore.execute(event);
+                //    break;
+
+                case 'ticket.deletion':
+                    await this.ticketDeletion.execute(event);
+                    break;
+
+                
             }
         }
 
@@ -262,6 +263,10 @@ export class HubspotService {
 
     async createHireRequestInHubspot(data: any): Promise<any> {
         return await this.hireRequestCreationService.execute(data);
+    }
+
+    async updateHireRequestInHubspot(data: any): Promise<any> {
+        return await this.hireRequestUpdateService.execute(data);
     }
 
 

@@ -57,6 +57,7 @@ describe('TicketService', () => {
     markAsRead: jest.fn(),
     deleteNotification: jest.fn(),
     notifyTicketEvent: jest.fn(),
+    notifyTicketStatusChangeToCreator: jest.fn(),
   }
 
   beforeEach(async () => {
@@ -191,7 +192,7 @@ describe('TicketService', () => {
         where: {
           type: undefined,
           priority: undefined,
-          user: { is: { id: "1" } },
+          created_by: "1",
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
             AND: [
@@ -209,6 +210,17 @@ describe('TicketService', () => {
           priority: true,
           createdAt: true,
           created_by: true,
+          createdBy: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              job_title: true,
+              role: true,
+              status: true,
+            },
+          },
           organization: {
             select: {
               id: true,

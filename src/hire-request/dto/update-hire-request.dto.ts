@@ -1,6 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsArray, IsDate, IsOptional, IsString } from "class-validator";
+import { IsArray, IsDate, IsNumber, IsOptional, IsString } from "class-validator";
 
 export class HireRequestSkillDTO {
     @ApiProperty({ example: 'JavaScript', description: 'The name of the skill', required: true, type: String })
@@ -46,12 +46,14 @@ export class UpdateHireRequestDto {
     @IsOptional()
     contract_length: string;
 
-    @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: true,  type: String })
+    @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     salary_range_from: string;
 
-    @ApiProperty({ example: '70000', description: 'The salary range to for the hire request', required: true,  type: String })
+    @ApiProperty({ example: '70000', description: 'The salary range to for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     salary_range_to: string;
 
     @ApiProperty({ example: 'New York, Remote', description: 'The work location for the hire request', required: false,  type: String })
@@ -59,8 +61,29 @@ export class UpdateHireRequestDto {
     @IsOptional()
     location: string;
 
-    @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: true,  type: String, enum: ['high', 'medium', 'low'] })
+    @ApiProperty({ example: '6000', description: 'The contract amount', required: false,  type: String })
     @IsString()
+    @IsOptional()
+    hubspot_contract_amount: string;
+
+    @ApiProperty({ example: 'English', description: 'The language required for this position', required: false,  type: String })
+    @IsString()
+    @IsOptional()
+    hubspot_language: string;
+
+    @ApiProperty({ example: '1', description: 'The number of candidates required on this position', required: false,  type: Number })
+    @IsNumber()
+    @IsOptional()
+    hubspot_numberVA: number;
+
+    @ApiProperty({ example: 'Medical General', description: 'The position required on this position', required: false,  type: String })
+    @IsString()
+    @IsOptional()
+    hubspot_role_type: string;
+
+    @ApiProperty({ example: 'high, medium, low', description: 'The priority of the hire request', required: false,  type: String, enum: ['high', 'medium', 'low'] })
+    @IsString()
+    @IsOptional()
     priority: 'high' | 'medium' | 'low';
 
     @ApiProperty({ type: [HireRequestSkillDTO], description: 'The skills required for the hire request', required: false })

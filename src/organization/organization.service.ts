@@ -392,33 +392,44 @@ export class OrganizationService {
         whereClause.business_unit = business_unit;
       }
 
-      if (hasUser) {
+      // Apply hasUser filter: only organizations with at least one user that is not inactive
+      if (hasUser === true) {
         whereClause.users = {
-          some: {},
+          some: {
+            status: { not: 'inactive' },
+          },
         };
       }
 
-      if (hasStaff) {
+      // Apply hasStaff filter: only organizations with at least one staff that is not terminated
+      if (hasStaff === true) {
         whereClause.staff = {
-          some: {},
+          some: {
+            status: { not: 'terminated' },
+          },
         };
       }
 
-      // Build orderBy clause
-      const orderBy: any = {};
-      orderBy[sortBy] = sortOrder;
+      // Check if sorting by calculated fields (userCount or activeStaffCount)
+      const isCalculatedFieldSort = sortBy === 'userCount' || sortBy === 'activeStaffCount';
 
-      // Get total count
+      // Build orderBy clause (only for non-calculated fields)
+      const orderBy: any = {};
+      if (!isCalculatedFieldSort) {
+        orderBy[sortBy] = sortOrder;
+      }
+
+      // Get total count (after applying all filters including hasUser and hasStaff)
       const total = await this.prisma.organization.count({
         where: whereClause,
       });
 
-      // Get paginated results
+      // Get organizations - if sorting by calculated field, get all, otherwise use pagination
       const organizations = await this.prisma.organization.findMany({
         where: whereClause,
-        skip,
-        take: limit,
-        orderBy,
+        skip: isCalculatedFieldSort ? 0 : skip, // Skip pagination if sorting by calculated field
+        take: isCalculatedFieldSort ? undefined : limit, // Get all if sorting by calculated field
+        orderBy: isCalculatedFieldSort ? undefined : orderBy, // Don't use orderBy for calculated fields
         include: {
           owner: {
             select: {
@@ -443,11 +454,13 @@ export class OrganizationService {
           users: {
             select: {
               id: true,
+              status: true,
             },
           },
           staff: {
             select: {
               id: true,
+              status: true,
             },
           }
         },
@@ -462,8 +475,89 @@ export class OrganizationService {
         },
       })
 
+      // Calculate counts and track organizations to deactivate
+      const organizationsWithCounts: Array<typeof organizations[0] & { userCount: number; staffCount: number }> = [];
+      const organizationsToDeactivate: string[] = [];
+
+      for (const org of organizations) {
+        // Calculate userCount: exclude inactive, include pending as active
+        // Count users where status !== 'inactive' (includes: active, pending, invited, suspended, etc.)
+        const userCount = org.users.filter(
+          user => user.status !== 'inactive'
+        ).length;
+
+        // Calculate staffCount: exclude terminated
+        // Count staff where status !== 'terminated'
+        const staffCount = org.staff.filter(
+          staff => staff.status !== 'terminated'
+        ).length;
+
+        // Apply hasUser filter: skip organizations that don't meet the criteria
+        if (hasUser === true && userCount === 0) {
+          continue; // Skip this organization as it doesn't have active users
+        }
+
+        // Apply hasStaff filter: skip organizations that don't meet the criteria
+        if (hasStaff === true && staffCount === 0) {
+          continue; // Skip this organization as it doesn't have active staff
+        }
+
+        // Track organizations that need to be deactivated
+        if (staffCount === 0 && org.status === 'active') {
+          organizationsToDeactivate.push(org.id);
+        }
+
+        organizationsWithCounts.push({
+          ...org,
+          userCount,
+          staffCount,
+        });
+      }
+
+      // Sort by calculated fields if needed
+      if (isCalculatedFieldSort) {
+        organizationsWithCounts.sort((a, b) => {
+          let aValue: number;
+          let bValue: number;
+
+          if (sortBy === 'userCount') {
+            aValue = a.userCount;
+            bValue = b.userCount;
+          } else if (sortBy === 'activeStaffCount') {
+            aValue = a.staffCount;
+            bValue = b.staffCount;
+          } else {
+            return 0;
+          }
+
+          if (sortOrder === 'asc') {
+            return aValue - bValue;
+          } else {
+            return bValue - aValue;
+          }
+        });
+
+        // Apply pagination after sorting
+        const paginatedOrganizations = organizationsWithCounts.slice(skip, skip + limit);
+        organizationsWithCounts.length = 0;
+        organizationsWithCounts.push(...paginatedOrganizations);
+      }
+
+      // Desactivate organizations with staffCount === 0
+      //removed on 2025-11-06 by Paulo because I got issue when the user update the organization status manually
+      /*if (organizationsToDeactivate.length > 0) {
+        await this.prisma.organization.updateMany({
+          where: {
+            id: { in: organizationsToDeactivate },
+          },
+          data: {
+            status: 'inactive',
+          },
+        });
+      }*/
+
       // Transform data
-      const data: OrganizationResponseDto[] = organizations.map((org) => ({
+      const data: OrganizationResponseDto[] = organizationsWithCounts.map((org) => ({
         id: org.id,
         hubspot_id: org.hubspot_id || undefined,
         name: org.name,
@@ -483,6 +577,7 @@ export class OrganizationService {
         date_founded: org.date_founded || undefined,
         date_joined: org.date_joined || undefined,
         date_became_client: org.date_became_client || undefined,
+        //status: org.status === 'active' && org.staffCount === 0 ? 'inactive' : org.status,
         status: org.status,
         signed_document_url: org.signed_document_url || undefined,
         signed_document_date: org.signed_document_date || undefined,
@@ -494,11 +589,15 @@ export class OrganizationService {
         updatedAt: org.updatedAt,
         owner: org.owner || undefined,
         admin: org.admin || undefined,
-        userCount: org.users.length,
-        staffCount: org.staff.length,
+        userCount: org.userCount,
+        staffCount: org.staffCount,
       }));
 
       // Calculate pagination metadata
+      // Since we filter in memory after Prisma query, the total might not be accurate
+      // We use the filtered count for the current page, but keep the original total
+      // for pagination navigation (this is a limitation of filtering in memory)
+      const filteredCount = organizationsWithCounts.length;
       const totalPages = Math.ceil(total / limit);
       const hasNext = page < totalPages;
       const hasPrev = page > 1;
@@ -706,6 +805,7 @@ export class OrganizationService {
 
   async update(id: string, data: UpdateOrganizationDto): Promise<Organization> {
     try {
+      console.log('Organization ID to update:', id);
       const updateData: any = {};
 
       // Map the fields from DTO to database fields
@@ -753,15 +853,29 @@ export class OrganizationService {
         updateData.signed_document_date = new Date();
       }
 
-      return await this.prisma.organization.update({
+      if(data.status === 'active'){
+        updateData.status = OrganizationStatus.active
+      }else if(data.status === 'inactive'){
+        updateData.status = OrganizationStatus.inactive
+      }else{
+        console.log('Status not updated, invalid value:', data.status);
+      }
+
+      const res = await this.prisma.organization.update({
         where: { id },
-        data: updateData,
+        data: 
+        {
+          status: updateData.status as OrganizationStatus,
+          admin_id: updateData.admin_id,
+        },
         include: {
           owner: true,
           admin: true,
           users: true,
         },
       });
+      //console.log('Update result:', res);
+      return res;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -2182,7 +2296,7 @@ export class OrganizationService {
   async syncOrganizationsWithDeals(): Promise<Object> {
     const arrayReturn: string[] = [];
     const chunkSize = 100;
-    const concurrency = 5; // limite de requests simultâneas
+    const concurrency = 5;
   
     const organizations = await this.prisma.organization.findMany({
       where: {
@@ -2202,17 +2316,14 @@ export class OrganizationService {
       },
     });
   
-    // Map para busca rápida
     const orgMap = new Map(organizations.map(o => [o.hubspot_id, o]));
-  
-    // Criar chunks
     const organizationsId = organizations.map(org => org.hubspot_id);
+
     const chunks: any[] = [];
     for (let i = 0; i < organizationsId.length; i += chunkSize) {
       chunks.push(organizationsId.slice(i, i + chunkSize));
     }
   
-    // Função que processa cada chunk
     const processChunk = async (chunk: string[], index: number) => {
       try {
         const { data } = await axios.post(
@@ -2257,14 +2368,12 @@ export class OrganizationService {
           }
         }
   
-        // Aguarda todas as criações do chunk
         await Promise.allSettled(staffPromises);
       } catch (error) {
         console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
       }
     };
   
-    // Executar chunks com limite de concorrência
     const queue: Promise<void>[] = [];
     for (let i = 0; i < chunks.length; i++) {
       const task = processChunk(chunks[i], i);
@@ -2276,7 +2385,7 @@ export class OrganizationService {
     }
     if (queue.length) await Promise.allSettled(queue);
   
-    // Registrar sync
+
     await this.prisma.sync.create({
       data: { role: 'organizations', last_synced_at: new Date() },
     });
@@ -2289,14 +2398,16 @@ export class OrganizationService {
   }
   
   
-  //replaced on 2025-10-28
-  async syncOrganizationsWithDealsBKP(): Promise<Object>{
-    const arrayReturn: any[] = [];
+  async syncOrganizationsWithDealsNEW(): Promise<Object> { //created on 2025-10-30
+    const arrayReturn: string[] = [];
+    const chunkSize = 100;
+    const concurrency = 5;
+  
     const organizations = await this.prisma.organization.findMany({
       where: {
         status: 'active',
         organization_role: 'client',
-        hubspot_id: { not: null}
+        hubspot_id: { not: null },
       },
       select: {
         id: true,
@@ -2304,26 +2415,24 @@ export class OrganizationService {
         staff: {
           select: {
             hubspot_id: true,
-            candidate: {
-              select: {
-                id: true,
-                hubspot_id: true,
-              },
-            },
+            candidate: { select: { id: true, hubspot_id: true } },
           },
         },
       },
     });
-
+  
+    const orgMap = new Map(organizations.map(o => [o.hubspot_id, o]));
     const organizationsId = organizations.map(org => org.hubspot_id);
-    const chunkSize = 100;
-    let staffArray : string[] = [];
 
+    const chunks: any[] = [];
     for (let i = 0; i < organizationsId.length; i += chunkSize) {
-      const chunk = organizationsId.slice(i, i + chunkSize);
-
+      chunks.push(organizationsId.slice(i, i + chunkSize));
+    }
+  
+    let staffArray : string[] = [];
+    const processChunk = async (chunk: string[], index: number) => {
       try {
-        const response = await axios.post(
+        const { data } = await axios.post(
           'https://api.hubapi.com/crm/v4/associations/company/deal/batch/read',
           { inputs: chunk.map(id => ({ id })) },
           {
@@ -2331,121 +2440,143 @@ export class OrganizationService {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
+            timeout: 20000,
           },
         );
-
-        //console.log(`Batch ${i / chunkSize + 1} response:`, response.data.results?.length || 0);
-        //console.log('Associations:', response.data.results);
-
-        for (let object of response.data.results){
-          //console.log('from: ', object.from , '-> to', object.to);
-          const org = organizations.find(o => o.hubspot_id === object.from.id);
+  
+        const staffPromises: Promise<any>[] = [];
+  
+        for (const result of data.results) {
+          const org = orgMap.get(result.from.id);
+  
           if (!org) {
-            const newOrganization = await this.organizationCreation.execute({ objectId: object.from });
-            if (newOrganization){
-              console.log(`=> Organization with HubSpot ID ${object.from.id} not found in local data.`);
-              arrayReturn.push(`=> Organization ${object.from.id} was created.`);
-            }
+            staffPromises.push(
+              this.organizationCreation.execute({ objectId: result.from }).then(newOrg => {
+                if (newOrg) arrayReturn.push(`=> Organization ${result.from.id} created.`);
+              }),
+            );
             continue;
           }
+  
+          for (const assoc of result.to) {
+            const dealHubspotId = assoc.toObjectId;
+            const existingStaff = org.staff.find(s => s.hubspot_id === dealHubspotId);
 
-
-          for (let association of object.to){
-            
-            const dealHubspotId = association.toObjectId;
-            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId); //Already has this staff on database?
             if (!existingStaff) {
-              const newStaff = await this.dealCreation.execute({ objectId: dealHubspotId });
-              if (newStaff){
-                console.log(`==>Staff with HubSpot ID ${dealHubspotId} created for organization ${org.hubspot_id}.`);
-                arrayReturn.push(`=> Staff ${dealHubspotId} was created below organization ${org.hubspot_id}.`);
-              }
-            }else{ 
-              staffArray.push(dealHubspotId); //Iterate this arrays to use it later
+              staffPromises.push(
+                this.dealCreation.execute({ objectId: dealHubspotId }).then(newStaff => {
+                  if (newStaff)
+                    arrayReturn.push(
+                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
+                    );
+                }),
+              );
+            }else{
+              staffArray.push(dealHubspotId); 
             }
           }
         }
-
+  
+        await Promise.allSettled(staffPromises);
       } catch (error) {
-        if (axios.isAxiosError(error)) {
-          console.error('Error in batch', i / chunkSize + 1, error.response?.data);
-        } else {
-          console.error('Unexpected error:', error);
-        }
+        console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
+      }
+    };
+  
+    const queue: Promise<void>[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const task = processChunk(chunks[i], i);
+      queue.push(task);
+      if (queue.length >= concurrency) {
+        await Promise.allSettled(queue);
+        queue.length = 0;
       }
     }
-
-    //=>start with hubspot request to check Candidates associated: 
-    const candidatesAssociated = await axios.post(
-      `https://api.hubapi.com/crm/v4/associations/deal/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/read`,
-      { inputs: staffArray.map(id => ({ id })) },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
-
-    for (let object of candidatesAssociated.data.results){
-      //console.log('from: ', object.from , '-> to', object.to);
-      const dealHubspotId = object.from.id;
-      const org = organizations.find(o => o.staff.some(s => s.hubspot_id === dealHubspotId));
-      if (!org) continue;
-      const staffMember = org.staff.find(s => s.hubspot_id === dealHubspotId);
-      if (!staffMember) continue;
-
-      for (let association of object.to){
-        const candidateHubspotId = association.toObjectId;
-        //console.log(`--> Deal ${dealHubspotId} has associated candidate ${candidateHubspotId} on HubSpot.`);
-        if (staffMember.candidate && staffMember.candidate.hubspot_id == candidateHubspotId){
-          //all good, candidate is associated
-          //console.log(`==> Staff ${dealHubspotId} already has associated candidate ${candidateHubspotId}.`);
-        }else{
-          //console.log(`==> Staff ${dealHubspotId} doenst has associated candidate ${candidateHubspotId}.`);
-          //update staff with candidate
-          
-          const candidate = await this.prisma.candidate.findFirst({
-            where: { hubspot_id: candidateHubspotId.toString() },
-            select: { 
-              id: true,
-              hubspot_id: true
-            }
-          });
-          if (candidate){
-            await this.prisma.staff.update({
-              where: { 
-                id: staffMember.candidate ? staffMember.candidate.id : '' },
-                data: { 
-                  candidate_id: candidate.id,
-                  hubspot_candidate_id: candidate.hubspot_id,
-                },
-            });
-            console.log(`==> Staff ${dealHubspotId} updated with associated candidate ${candidateHubspotId}.`);
-            arrayReturn.push(`=> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
-          }else{
-            console.log(`==> Candidate with HubSpot ID ${candidateHubspotId} not found in local DB.`);
-          }
-          
-        }
-      }
-    }
+    if (queue.length) await Promise.allSettled(queue);
+    
+    //here is the new function to handle with the candidates associated
+    await this.syncCandidatesAssociated(staffArray, orgMap, arrayReturn);
 
     await this.prisma.sync.create({
-      data: {
-        role: 'organizations',
-        last_synced_at: new Date(),
-      },
-    })
-    console.log('ArrayReturn: ' , arrayReturn)
-    
+      data: { role: 'organizations', last_synced_at: new Date() },
+    });
+  
     return {
       message: 'Organization sync with deals completed',
       status: 200,
-      data: { arrayReturn }
+      data: { arrayReturn },
     };
-    
   }
+
+  //function used  to handle with candidates associated inside the function above
+  private async syncCandidatesAssociated(
+    staffArray: string[],
+    orgMap: Map<any, any>,
+    arrayReturn: string[],
+  ): Promise<void> {
+    if (!staffArray.length) {
+      console.log('Nenhum staff encontrado para sincronizar candidatos.');
+      return;
+    }
+  
+    try {
+      const { data } = await axios.post(
+        `https://api.hubapi.com/crm/v4/associations/deal/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/read`,
+        { inputs: staffArray.map(id => ({ id })) },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 20000,
+        },
+      );
+  
+      for (const result of data.results) {
+        const dealHubspotId = result.from.id;
+        const org = [...orgMap.values()].find(o =>
+          o.staff.some((s: any) => s.hubspot_id === dealHubspotId),
+        );
+        if (!org) continue;
+  
+        const staffMember = org.staff.find((s: any) => s.hubspot_id === dealHubspotId);
+        if (!staffMember) continue;
+  
+        for (const assoc of result.to) {
+          const candidateHubspotId = assoc.toObjectId;
+  
+          if (staffMember.candidate && staffMember.candidate.hubspot_id === candidateHubspotId) {
+            continue; // já está associado
+          }
+  
+          const candidate = await this.prisma.candidate.findFirst({
+            where: { hubspot_id: candidateHubspotId.toString() },
+            select: { id: true, hubspot_id: true },
+          });
+  
+          if (candidate) {
+            await this.prisma.staff.update({
+              where: { id: staffMember.id },
+              data: {
+                candidate_id: candidate.id,
+                hubspot_candidate_id: candidate.hubspot_id,
+              },
+            });
+            console.log(`==> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
+            arrayReturn.push(`=> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
+          } else {
+            console.log(`==> Candidate ${candidateHubspotId} not found in local DB.`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        'Error while syncing candidates:',
+        axios.isAxiosError(error) ? error.response?.data : error,
+      );
+    }
+  }
+
   
 
 }

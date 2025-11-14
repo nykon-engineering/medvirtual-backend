@@ -135,7 +135,7 @@ export class OrganizationController {
   @ApiQuery({
     name: 'sortBy',
     required: false,
-    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees'],
+    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees', 'userCount', 'activeStaffCount'],
     description: 'Sort field (default: createdAt)',
   })
   @ApiQuery({
@@ -143,6 +143,18 @@ export class OrganizationController {
     required: false,
     enum: ['asc', 'desc'],
     description: 'Sort order (default: desc)',
+  })
+  @ApiQuery({
+    name: 'hasUser',
+    required: false,
+    type: Boolean,
+    description: 'Filter to show only organizations with at least one active user (userCount > 0)',
+  })
+  @ApiQuery({
+    name: 'hasStaff',
+    required: false,
+    type: Boolean,
+    description: 'Filter to show only organizations with at least one active staff (staffCount > 0)',
   })
   async getAllPaginated(
     @CurrentUser() user: USER,

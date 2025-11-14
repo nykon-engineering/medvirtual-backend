@@ -5,8 +5,10 @@ import {
   Body,
   Param,
   Delete,
+  Patch,
   UseGuards,
   Query,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -25,6 +27,8 @@ import { reassignTicketDto } from './dto/reassign-ticket.dto';
 import { updateStatusTicketDto } from './dto/update-status-ticket.dto';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { USER } from '@prisma/client';
+import { CreateTicketNoteDto } from './dto/create-ticket-note.dto';
+import { UpdateTicketDto } from './dto/update-ticket.dto';
 
 @Controller('tickets')
 export class TicketController {
@@ -49,9 +53,28 @@ export class TicketController {
     };
   }
 
+  @Post(':ticketId/notes')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Create a note for a ticket' })
+  @ApiParam({ name: 'ticketId', type: String })
+  @ApiBody({ type: CreateTicketNoteDto })
+  @ApiResponse({ status: 200, description: 'Note created' })
+  async addNote(
+    @Param('ticketId') ticketId: string,
+    @Body() dto: CreateTicketNoteDto,
+    @CurrentUser() user: USER,
+  ) {
+    const result = await this.ticketService.addNote(ticketId, dto, user);
+    return {
+      status: 200,
+      message: 'Note created',
+      data: result,
+    };
+  }
+
   @Get()
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
   @ApiOperation({ summary: 'Get all tickets' })
   @ApiQuery({
     name: 'type',
@@ -96,6 +119,39 @@ export class TicketController {
     return {
       status: 200,
       message: 'List of tickets retrieved successfully',
+      data: result,
+    };
+  }
+
+  @Get(':ticketId/notes')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'List notes for a ticket' })
+  @ApiParam({ name: 'ticketId', type: String })
+  async listNotes(
+    @Param('ticketId') ticketId: string,
+    @CurrentUser() user: USER,
+  ) {
+    const notes = await this.ticketService.listNotes(ticketId, user);
+    return {
+      status: 200,
+      message: 'Notes retrieved',
+      data: notes,
+    };
+  }
+
+  @Get(':id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
+  @ApiOperation({ summary: 'Get a ticket by ID' })
+  @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
+  @ApiResponse({ status: 200, description: 'Ticket retrieved successfully.' })
+  @ApiResponse({ status: 400, description: 'Ticket not found.' })
+  @ApiResponse({ status: 403, description: 'Access denied.' })
+  async findOne(@Param('id') id: string, @CurrentUser() user: USER): Promise<object> {
+    const result = await this.ticketService.findOne(id, user);
+    return {
+      status: 200,
+      message: 'Ticket retrieved successfully',
       data: result,
     };
   }
@@ -180,6 +236,28 @@ export class TicketController {
     return {
       status: 200,
       message: 'Ticket deleted successfully',
+      data: result,
+    };
+  }
+
+  @Patch(':id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
+  @ApiOperation({ summary: 'Edit a ticket (title, description, priority)' })
+  @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
+  @ApiBody({ type: UpdateTicketDto })
+  @ApiResponse({ status: 200, description: 'Ticket updated successfully.' })
+  @ApiResponse({ status: 400, description: 'Ticket not found or invalid input.' })
+  @ApiResponse({ status: 403, description: 'Access denied.' })
+  async patch(
+    @Param('id') id: string,
+    @Body() body: UpdateTicketDto,
+    @CurrentUser() user: USER,
+  ) {
+    const result = await this.ticketService.update(id, body, user);
+    return {
+      status: 200,
+      message: 'Ticket updated successfully',
       data: result,
     };
   }

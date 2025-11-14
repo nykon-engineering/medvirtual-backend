@@ -232,6 +232,18 @@ export class UserController {
     type: String,
     description: 'Sort order',
   })
+  @ApiQuery({
+    name: 'date_created_from',
+    required: false,
+    type: String,
+    description: 'Filter by creation date from (ISO date string, e.g., 2025-01-01)',
+  })
+  @ApiQuery({
+    name: 'date_created_to',
+    required: false,
+    type: String,
+    description: 'Filter by creation date to (ISO date string, e.g., 2025-10-09)',
+  })
   async getOrganizationUsersPaginated(
     @Param('organizationId') organizationId: string,
     @Query() query: GetOrganizationUsersDto,

@@ -21,6 +21,7 @@ export class MailService {
         from: options.from,
         to: options.to,
         cc: options.cc,
+        bcc: options.bcc,
         subject: options.subject,
         html: options.html,
         headers: options.headers || {},

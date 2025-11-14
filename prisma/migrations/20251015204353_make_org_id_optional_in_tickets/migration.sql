@@ -1,0 +1,2 @@
+-- This migration exists in production but is missing locally.
+-- It has been manually recreated as a placeholder to restore migration history consistency.

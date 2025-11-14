@@ -21,7 +21,13 @@ import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
-import { HireRequestCreationService } from './creations/hireRequest';
+import { HireRequestCreationService } from './create/hireRequest';
+import { HireRequestUpdateService } from './update/hireRequest';
+import { HandlerTicketCreation } from './handlers/ticketCreation';
+import { HandlerTicketRestore } from './handlers/ticketRestore';
+import { HandlerTicketDeletion } from './handlers/ticketDeletion';
+import { HireRequestModule } from '../hire-request/hire-request.module';
+
 
 
 
@@ -42,9 +48,19 @@ import { HireRequestCreationService } from './creations/hireRequest';
     HandlerDealPropertyChange,
     HandlerDealDeletion,
     HandlerDealAssociationChange,
-    HireRequestCreationService
+    HandlerTicketCreation,
+    HandlerTicketRestore,
+    HandlerTicketDeletion,
+    HireRequestCreationService,
+    HireRequestUpdateService
   ],
-  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule)],
-  exports: [HubspotService, HandlerOrganizationCreation, HandlerObjectCreation, HandlerDealCreation, HireRequestCreationService],
+  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule), forwardRef(() => HireRequestModule) ],
+  exports: [HubspotService, 
+    HandlerOrganizationCreation, 
+    HandlerObjectCreation, 
+    HandlerDealCreation, 
+    HireRequestCreationService,
+    HireRequestUpdateService
+  ],
 })
 export class HubspotModule {}

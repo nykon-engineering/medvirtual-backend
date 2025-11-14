@@ -1,0 +1,1 @@
+-- baseline migration for schema sync
