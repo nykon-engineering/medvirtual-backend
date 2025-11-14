@@ -125,12 +125,14 @@ export class HireRequestService {
     const sanitizeDecimal = (value?: string | null) => {
       return value && value.trim() !== "" ? value : null;
     };
-    const hubspotTitle = `HR - ${organizationSQL.name} - ${hireRequestData.numberVA.toString()} - ${hireRequestData.position} - ${data.availability.toUpperCase()}`;
+
+    // Note: The title is now received from the frontend with the required format
+    // Previously used: const hubspotTitle = `HR - ${organizationSQL.name} - ${hireRequestData.numberVA.toString()} - ${hireRequestData.position} - ${data.availability.toUpperCase()}`;
+    // The title from hireRequestData (which comes from the frontend) is used directly
 
     const hireRequest = {
       ...hireRequestData,
       ...hubspotMappedFields,
-      title: hubspotTitle,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
       //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
