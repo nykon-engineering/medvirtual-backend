@@ -27,6 +27,7 @@ import { HandlerTicketCreation } from './handlers/ticketCreation';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HireRequestModule } from '../hire-request/hire-request.module';
+import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 
 
 
@@ -51,6 +52,7 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
     HandlerTicketCreation,
     HandlerTicketRestore,
     HandlerTicketDeletion,
+    HandlerTicketPropertyChange,
     HireRequestCreationService,
     HireRequestUpdateService
   ],

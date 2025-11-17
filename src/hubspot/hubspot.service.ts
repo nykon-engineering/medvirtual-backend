@@ -33,6 +33,7 @@ import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
+import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 
 
 
@@ -58,6 +59,7 @@ export class HubspotService {
 
       private readonly ticketRestore: HandlerTicketRestore,
       private readonly ticketDeletion: HandlerTicketDeletion,
+      private readonly ticketPropertyChange: HandlerTicketPropertyChange,
 
       private readonly hireRequestCreationService: HireRequestCreationService,
       private readonly hireRequestUpdateService: HireRequestUpdateService,
@@ -186,6 +188,10 @@ export class HubspotService {
 
                 case 'ticket.deletion':
                     await this.ticketDeletion.execute(event);
+                    break;
+                
+                case 'ticket.propertyChange':
+                    await this.ticketPropertyChange.execute(event);
                     break;
 
                 

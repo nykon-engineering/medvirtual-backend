@@ -23,6 +23,7 @@ import { HireRequestUpdateService } from './update/hireRequest';
 import { HandlerTicketCreation } from './handlers/ticketCreation';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
+import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 
 
 jest.mock('axios', () => ({
@@ -133,6 +134,10 @@ const HandlerTicketDeletionMock = {
   execute: jest.fn(),
 };
 
+const HandlerTicketPropertyChangeMock = {
+  execute: jest.fn(),
+};
+
 const hireRequestCreationServiceMock = {
   execute: jest.fn(),
 };
@@ -183,7 +188,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
         {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
         {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
-        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock}
+        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
+        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock}
       ],
     }).compile();
 
@@ -247,7 +253,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
         {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
         {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
-        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock}
+        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
+        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock}
       ]
     }).compile();
 
