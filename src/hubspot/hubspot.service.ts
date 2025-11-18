@@ -34,6 +34,7 @@ import { HireRequestUpdateService } from './update/hireRequest';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
+import { OrganizationCreationService } from './create/Organization';
 
 
 
@@ -63,6 +64,8 @@ export class HubspotService {
 
       private readonly hireRequestCreationService: HireRequestCreationService,
       private readonly hireRequestUpdateService: HireRequestUpdateService,
+
+      private readonly organizationCreationService: OrganizationCreationService,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -275,6 +278,9 @@ export class HubspotService {
         return await this.hireRequestUpdateService.execute(data);
     }
 
+    async createOrganizationInHubspot(data: any): Promise<any> {
+        return await this.organizationCreationService.execute(data);
+    }
 
     ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot
     async createCandidates(pipeline_stage: string): Promise<string> {

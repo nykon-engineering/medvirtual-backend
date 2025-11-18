@@ -640,7 +640,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto): Promise<Organization> {
+  async create(data: CreateOrganizationDto, user?: USER): Promise<Organization> {
     try {
       // // Check if the organization already exists
       // const existingOrganization = await this.prisma.organization.findUnique({
@@ -682,7 +682,7 @@ export class OrganizationService {
 
         if (existingUser) {
           throw new BadRequestException(
-            'User with this email already exists. Please select "existing" owner type.',
+            'User with this email already exists.',
           );
         }
 
@@ -700,21 +700,26 @@ export class OrganizationService {
       // Assign a random admin if not specified
       let adminId: string | undefined = data.admin_id;
       if (!adminId) {
-        const availableAdmins = await this.prisma.uSER.findMany({
-          where: {
-            email: 'hanieh@medvirtual.ai', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
-            role: 'system_super_admin',
-            status: 'active',
-          },
-        });
-
-        if (availableAdmins.length > 0) {
-          // Simple round-robin assignment - could be enhanced with load balancing
-          const randomIndex = Math.floor(
-            Math.random() * availableAdmins.length,
-          );
-          adminId = availableAdmins[randomIndex].id;
+        if (user){
+          adminId= user.id; // Added on 2025-11-18 by Paulo to get the logged in user as default admin
+        }else{
+          const availableAdmins = await this.prisma.uSER.findMany({
+            where: {
+              email: 'hanieh@medvirtual.ai', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
+              role: 'system_super_admin',
+              status: 'active',
+            },
+          });
+  
+          if (availableAdmins.length > 0) {
+            // Simple round-robin assignment - could be enhanced with load balancing
+            const randomIndex = Math.floor(
+              Math.random() * availableAdmins.length,
+            );
+            adminId = availableAdmins[randomIndex].id;
+          }
         }
+        
       }
       let specialtiesArray: string[] = [];
       let servicesArray: string[] = [];
@@ -794,7 +799,11 @@ export class OrganizationService {
         await this.auth.inviteUser(inviteData);
       }
 
-      return organization;
+      const newOrganization = await this.getById(organization.id);
+
+      await this.hubspot.createOrganizationInHubspot(newOrganization);
+      console.log('passou...')
+      return newOrganization;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -2577,6 +2586,29 @@ export class OrganizationService {
     }
   }
 
+  async getOrganizationIndustryTypes () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/companies";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
   
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "industry"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find industry types:", error.response?.data || error.message);
+      throw new Error("Failed to find Organization Industry types");
+    }
+  };
 
 }

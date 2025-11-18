@@ -28,6 +28,7 @@ import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HireRequestModule } from '../hire-request/hire-request.module';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
+import { OrganizationCreationService } from './create/Organization';
 
 
 
@@ -54,7 +55,8 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
     HandlerTicketDeletion,
     HandlerTicketPropertyChange,
     HireRequestCreationService,
-    HireRequestUpdateService
+    HireRequestUpdateService,
+    OrganizationCreationService,
   ],
   imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule), forwardRef(() => HireRequestModule) ],
   exports: [HubspotService, 

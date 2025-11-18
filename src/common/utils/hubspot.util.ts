@@ -1,6 +1,6 @@
 import { OrganizationRole, Prisma } from "@prisma/client";
 import { candidadeToDbDictionary, dbToCandidateDictionary } from "../dictionaries/candidate-dictionary";
-import { organizationToDbDictionary } from "../dictionaries/organization-dictionary";
+import { dbToOrganizationDictionary, organizationToDbDictionary } from "../dictionaries/organization-dictionary";
 import { CreateOrganizationDto } from "../../organization/dto/createOrganization.dto";
 import { ownerToDbDictionary } from "../dictionaries/owner-dictionary";
 import { dealToDbDictionary } from "../dictionaries/deal-dictionary";
@@ -77,6 +77,23 @@ export function mapOrganizationToDb(hubspotData: organizationData): CreateOrgani
         
       }
     return result as CreateOrganizationDto;
+}
+
+export function mapDbToOrganization(dbData: CreateOrganizationDto): organizationData {
+  const result: Partial<organizationData> = {};
+
+  for (const [dbKey, hubspotKey] of Object.entries(dbToOrganizationDictionary)) {
+    const value = dbData[dbKey];
+      if (value === undefined) continue;
+
+      if (dbKey === "organization_role") {
+        result[hubspotKey] = value === OrganizationRole.prospect ? "PROSPECT" : "Current Client";
+      } else {
+        result[hubspotKey] = value;
+      }
+      
+    }
+  return result as CreateOrganizationDto;
 }
 
 export function mapOrganizationToDbHubspot(hubspotData: organizationData): any {

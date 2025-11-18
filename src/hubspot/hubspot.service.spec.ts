@@ -24,6 +24,7 @@ import { HandlerTicketCreation } from './handlers/ticketCreation';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
+import { OrganizationCreationService } from './create/Organization';
 
 
 jest.mock('axios', () => ({
@@ -146,6 +147,10 @@ const hireRequestUpdateServiceMock = {
   execute: jest.fn(),
 };
 
+const organizationCreationServiceMock = {
+  execute: jest.fn(),
+};
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -189,7 +194,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
         {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
         {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
-        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock}
+        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
+        {provide: OrganizationCreationService, useValue: organizationCreationServiceMock}
       ],
     }).compile();
 
@@ -254,7 +260,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
         {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
         {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
-        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock}
+        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
+        {provide: OrganizationCreationService, useValue: organizationCreationServiceMock}
       ]
     }).compile();
 
