@@ -22,6 +22,7 @@ import { TicketModule } from './ticket/ticket.module';
 import { StaffModule } from './staff/staff.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { EmailTestModule } from './email-test/email-test.module';
+import { PanelModule } from './panel/panel.module';
 
 @Module({
   imports: [
@@ -46,7 +47,8 @@ import { EmailTestModule } from './email-test/email-test.module';
     TicketModule,
     StaffModule,
     NotificationsModule,
-    EmailTestModule
+    EmailTestModule,
+    PanelModule
   ],
   controllers: [AppController],
   providers: [AppService, WorkosService],
