@@ -20,6 +20,14 @@ export class HandlerOrganizationDeletion {
             })
             if(!organizationExists) return;
 
+            await this.prisma.uSER.updateMany({
+                where: {
+                    organization_id: organizationExists.id
+                },
+                data:{
+                    status: 'inactive'
+                }
+            })
             
             await this.prisma.organization.update({
                 where: {
