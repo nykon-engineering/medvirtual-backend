@@ -49,6 +49,7 @@ export class OrganizationCreationService {
             where: { id: data.id },
             data: { hubspot_id: response.data.id },
           });
+          
           return true;
         
         } catch (error) {

@@ -27,7 +27,9 @@ export class HandlerOrganizationPropertyChange {
         if(!organization ) return await this.organizationCreation.execute(event);
 
         //Here I need to delete the organization if the business_unit property is changed to a value different than MedVirtual
-        if(organization && event.propertyName === 'business_unit' && event.propertyValue !== 'MedVirtual') return await this.organizationDeletion.execute(event);
+        if(organization && event.propertyName === 'business_unit' && event.propertyValue !== 'MedVirtual' &&
+            organization && event.propertyName === 'business_unit' && event.propertyValue !== 'Berry Virtual'
+        ) return await this.organizationDeletion.execute(event);
 
             const fieldExists = Object.keys(organizationToDbDictionary).includes(event.propertyName);
             if(!fieldExists) return;
