@@ -801,8 +801,8 @@ export class OrganizationService {
 
       const newOrganization = await this.getById(organization.id);
 
-      await this.hubspot.createOrganizationInHubspot(newOrganization);
-      //console.log('passou...')
+      //await this.hubspot.createOrganizationInHubspot(newOrganization);
+
       return newOrganization;
     } catch (error) {
       if (error instanceof BadRequestException) {
