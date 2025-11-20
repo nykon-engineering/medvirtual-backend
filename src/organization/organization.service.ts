@@ -801,7 +801,10 @@ export class OrganizationService {
 
       const newOrganization = await this.getById(organization.id);
 
-      //await this.hubspot.createOrganizationInHubspot(newOrganization);
+      //if (user){ //this rule avoid re-call on hubspot. If this flow came from hubspot, we dont have logged user and then we avoid send new organization for hubspot
+        await this.hubspot.createOrganizationInHubspot(newOrganization);
+      //}
+      
 
       return newOrganization;
     } catch (error) {
