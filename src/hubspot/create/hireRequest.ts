@@ -11,11 +11,9 @@ export class HireRequestCreationService {
 
     async execute(data: any): Promise<any> {
         try {
-          const expectedDate = new Date(data.expected_start_date);
-          const PairingDate = expectedDate.getFullYear() +'-'+ String(expectedDate.getMonth() + 1).padStart(2,"0") +'-'+ String(expectedDate.getDate()).padStart(2,"0");
-
-          const pay_range=`${data.salary_range_from} - ${data.salary_range_to}`;
-          
+          const pay_range= data.salary_range_from && data.salary_range_to 
+          ? `${data.salary_range_from} - ${data.salary_range_to}` 
+          : '';
           
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/tickets",

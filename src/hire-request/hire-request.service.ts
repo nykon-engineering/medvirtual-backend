@@ -619,7 +619,7 @@ export class HireRequestService {
 
     
     const newHr = await this.findOne(id, user);
-    //await this.hubspot.updateHireRequestInHubspot(newHr);
+    await this.hubspot.updateHireRequestInHubspot(newHr);
     
     // Notify assignee via email when hire request is edited (non-blocking)
     try {
@@ -2068,7 +2068,6 @@ export class HireRequestService {
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
 
     try{
-      const updatedDate = new Date(`${data.date_time}`);
       const updateDateTime = {
         hubspot_ticket_id: hireRequest.hubspot_ticket_id,
         pairing_date:updatedDate.toISOString().split("T")[0],
@@ -2134,7 +2133,6 @@ export class HireRequestService {
     if (!editInterview) throw new BadRequestException(`Interview not updated`);
 
     try{
-      const updatedDate = new Date(`${data.date_time}`);
       const updateDateTime = {
         hubspot_ticket_id: hireRequest.hubspot_ticket_id,
         pairing_date:updatedDate.toISOString().split("T")[0],
