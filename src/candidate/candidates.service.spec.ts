@@ -452,7 +452,196 @@ const MailMock ={
     });
   });
 
+  describe('getRandomTalentPoolCandidates', () => {
+    it('should return 10 random candidates from talent pool', async () => {
+      const mockCandidates = Array.from({ length: 15 }, (_, i) => ({
+        id: `candidate-${i}`,
+        first_name: `John${i}`,
+        last_name: `Doe${i}`,
+        name: `John${i} Doe${i}`,
+        country: 'USA',
+        employment_type: 'Full-time',
+        years_of_experience: 5,
+        about_me: 'Test about me',
+        specialization: 'Software Development',
+        tools: 'JavaScript, TypeScript',
+        medical_tools: 'None',
+        avatar_url: 'https://example.com/avatar.jpg',
+        gender: 'male',
+        languages: [{ name: 'English' }],
+        skills: [{ skill_name: 'JavaScript', skill_type: 'technical' }],
+        educations: [{ institution: 'University', degree: 'BSc', year: '2020' }],
+        experiences: [{
+          company: 'Company A',
+          position: 'Developer',
+          start_date: new Date('2021-01-01'),
+          end_date: new Date('2022-01-01'),
+          responsabilities: 'Development'
+        }],
+        approved_positions_pairing: ['Developer'],
+      }));
 
+      mockPrisma.candidate.findMany.mockResolvedValue(mockCandidates);
 
+      const result = await service.getRandomTalentPoolCandidates();
+
+      expect(mockPrisma.candidate.findMany).toHaveBeenCalledWith({
+        where: {
+          AND: [
+            {
+              OR: [
+                { pipeline_status: '261075105' },
+                { pipeline_status: '1087596819' }
+              ]
+            },
+            { avatar_url: { not: null } },
+            { specialization: { not: null, notIn: ['n/a', 'N/A', 'N/a', 'n/A'] } },
+            { years_of_experience: { not: null } },
+          ]
+        },
+        select: expect.objectContaining({
+          id: true,
+          first_name: true,
+          last_name: true,
+          name: true,
+          country: true,
+          employment_type: true,
+          years_of_experience: true,
+          about_me: true,
+          specialization: true,
+          tools: true,
+          medical_tools: true,
+          avatar_url: true,
+          gender: true,
+          languages: expect.any(Object),
+          skills: expect.any(Object),
+          educations: expect.any(Object),
+          experiences: expect.any(Object),
+          approved_positions_pairing: true,
+        }),
+      });
+
+      expect(result).toHaveLength(10);
+      expect(result[0]).toHaveProperty('id');
+      expect(result[0]).toHaveProperty('name');
+      expect(result[0]).toHaveProperty('avatar_url');
+    });
+
+    it('should return fewer than 10 candidates if less available', async () => {
+      const mockCandidates = Array.from({ length: 5 }, (_, i) => ({
+        id: `candidate-${i}`,
+        first_name: `John${i}`,
+        last_name: `Doe${i}`,
+        name: `John${i} Doe${i}`,
+        country: 'USA',
+        employment_type: 'Full-time',
+        years_of_experience: 5,
+        about_me: 'Test about me',
+        specialization: 'Software Development',
+        tools: 'JavaScript',
+        medical_tools: 'None',
+        avatar_url: 'https://example.com/avatar.jpg',
+        gender: 'male',
+        languages: [{ name: 'English' }],
+        skills: [{ skill_name: 'JavaScript', skill_type: 'technical' }],
+        educations: [],
+        experiences: [],
+        approved_positions_pairing: [],
+      }));
+
+      mockPrisma.candidate.findMany.mockResolvedValue(mockCandidates);
+
+      const result = await service.getRandomTalentPoolCandidates();
+
+      expect(result).toHaveLength(5);
+    });
+
+    it('should return empty array if no candidates available', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([]);
+
+      const result = await service.getRandomTalentPoolCandidates();
+
+      expect(result).toHaveLength(0);
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('should handle database errors', async () => {
+      mockPrisma.candidate.findMany.mockRejectedValue(new Error('Database error'));
+
+      await expect(service.getRandomTalentPoolCandidates())
+        .rejects.toThrow('Database error');
+    });
+
+    it('should exclude candidates with specialization "n/a"', async () => {
+      const mockCandidates = [
+        {
+          id: 'candidate-1',
+          first_name: 'John',
+          last_name: 'Doe',
+          name: 'John Doe',
+          country: 'USA',
+          employment_type: 'Full-time',
+          years_of_experience: 5,
+          about_me: 'Test about me',
+          specialization: 'Software Development',
+          tools: 'JavaScript',
+          medical_tools: 'None',
+          avatar_url: 'https://example.com/avatar.jpg',
+          gender: 'male',
+          languages: [{ name: 'English' }],
+          skills: [{ skill_name: 'JavaScript', skill_type: 'technical' }],
+          educations: [],
+          experiences: [],
+          approved_positions_pairing: [],
+        },
+        {
+          id: 'candidate-2',
+          first_name: 'Jane',
+          last_name: 'Smith',
+          name: 'Jane Smith',
+          country: 'USA',
+          employment_type: 'Full-time',
+          years_of_experience: 3,
+          about_me: 'Test about me',
+          specialization: 'n/a',
+          tools: 'Python',
+          medical_tools: 'None',
+          avatar_url: 'https://example.com/avatar2.jpg',
+          gender: 'female',
+          languages: [{ name: 'Spanish' }],
+          skills: [{ skill_name: 'Python', skill_type: 'technical' }],
+          educations: [],
+          experiences: [],
+          approved_positions_pairing: [],
+        },
+      ];
+
+      mockPrisma.candidate.findMany.mockResolvedValue([mockCandidates[0]]); // Only the first one should be returned
+
+      const result = await service.getRandomTalentPoolCandidates();
+
+      expect(mockPrisma.candidate.findMany).toHaveBeenCalledWith({
+        where: {
+          AND: [
+            {
+              OR: [
+                { pipeline_status: '261075105' },
+                { pipeline_status: '1087596819' }
+              ]
+            },
+            { avatar_url: { not: null } },
+            { specialization: { not: null, notIn: ['n/a', 'N/A', 'N/a', 'n/A'] } },
+            { years_of_experience: { not: null } },
+          ]
+        },
+        select: expect.any(Object),
+      });
+
+      // Should only return candidate without "n/a" specialization
+      expect(result).toHaveLength(1);
+      expect(result[0].specialization).not.toBe('n/a');
+      expect(result[0].specialization).not.toBe('N/A');
+    });
+  });
 
 });

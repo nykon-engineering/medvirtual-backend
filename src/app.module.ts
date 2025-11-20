@@ -23,12 +23,19 @@ import { StaffModule } from './staff/staff.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { EmailTestModule } from './email-test/email-test.module';
 import { PanelModule } from './panel/panel.module';
+import { TalentPoolLeadsModule } from './talent-pool-leads/talent-pool-leads.module';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ThrottlerModule.forRoot([{
+      ttl: 60000, // 1 minute
+      limit: 100, // 100 requests per minute (global default, can be overridden per endpoint)
+    }]),
     UserModule,
     PrismaModule,
     WorkosModule,
@@ -48,10 +55,18 @@ import { PanelModule } from './panel/panel.module';
     StaffModule,
     NotificationsModule,
     EmailTestModule,
-    PanelModule
+    PanelModule,
+    TalentPoolLeadsModule
   ],
   controllers: [AppController],
-  providers: [AppService, WorkosService],
+  providers: [
+    AppService, 
+    WorkosService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
 

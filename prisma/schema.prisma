@@ -38,14 +38,12 @@ model USER {
   hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
   adminOrganizations           Organization[]      @relation("OrganizationAdmin")
   ownedOrganizations           Organization?       @relation("OrganizationOwner")
+  sessions                     Session[]
   tickets                      Ticket[]
-  createdTickets               Ticket[]            @relation("TicketCreatedByUser")
   TicketNotes                  TicketNotes[]
   createdBy                    USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
   createdUsers                 USER[]              @relation("UserCreatedBy")
   organization                 Organization?       @relation(fields: [organization_id], references: [id])
-
-  sessions                     Session[]
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -63,8 +61,7 @@ model Session {
   createdAt DateTime @default(now())
   expiresAt DateTime
   isRevoked Boolean  @default(false)
-
-  user       USER     @relation(fields: [userId], references: [id])
+  user      USER     @relation(fields: [userId], references: [id])
 }
 
 model EmailVerification {
@@ -244,7 +241,6 @@ model HireRequest {
   title                        String
   description                  String?
   status                       HireRequestStatus  @default(new)
-  old_status                   HireRequestStatus?
   priority                     Priority           @default(medium)
   createdAt                    DateTime           @default(now())
   availability                 String
@@ -269,6 +265,7 @@ model HireRequest {
   hubspot_pipeline_stage       String?
   hubspot_ticket_type          String?
   assign_sourcing_id           String?
+  old_status                   HireRequestStatus?
   panels                       CandidatePanel[]
   assigned_sourcing            USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
   assigned_user                USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
@@ -354,7 +351,6 @@ model Interview {
 model Ticket {
   id           String        @id @default(uuid())
   user_id      String?
-  created_by   String?
   title        String
   description  String
   status       TicketStatus  @default(new)
@@ -365,12 +361,11 @@ model Ticket {
   staff_id     String?
   candidate_id String?
   updatedAt    DateTime      @updatedAt
+  created_by   String?
   candidate    Candidate?    @relation(fields: [candidate_id], references: [id])
   organization Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff        Staff?        @relation(fields: [staff_id], references: [id])
   user         USER?         @relation(fields: [user_id], references: [id])
-  createdBy    USER?         @relation("TicketCreatedByUser", fields: [created_by], references: [id])
-
   TicketNotes  TicketNotes[]
 
   @@index([user_id], map: "idx_tickets_user_id")
@@ -465,6 +460,23 @@ model TicketNotes {
   deleted_at  DateTime? @db.Timestamptz(6)
   USER        USER      @relation(fields: [author_id], references: [id], onUpdate: NoAction)
   Ticket      Ticket    @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model TalentPoolLead {
+  id                  String    @id
+  name                String    @db.VarChar(255)
+  email               String    @db.VarChar(255)
+  organization        String    @db.VarChar(255)
+  main_need           String?
+  additional_details  String?
+  source              String    @db.VarChar(50)
+  type                String    @default("Talent Pool Inquiry") @db.VarChar(50)
+  status              String    @default("new") @db.VarChar(50)
+  assigned_to_user_id String?
+  notes               String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now())
+  contacted_at        DateTime?
 }
 
 enum Role {
