@@ -133,6 +133,14 @@ describe('TalentPoolLeadsService', () => {
         data: expect.objectContaining({
           name: expect.stringContaining('&lt;script&gt;'),
         }),
+        select: expect.objectContaining({
+          id: true,
+          name: true,
+          email: true,
+          organization: true,
+          status: true,
+          created_at: true,
+        }),
       });
     });
 
@@ -164,6 +172,14 @@ describe('TalentPoolLeadsService', () => {
       expect(mockPrisma.talentPoolLead.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           email: 'john@healthcare.com',
+        }),
+        select: expect.objectContaining({
+          id: true,
+          name: true,
+          email: true,
+          organization: true,
+          status: true,
+          created_at: true,
         }),
       });
     });

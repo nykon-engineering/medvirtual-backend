@@ -276,6 +276,12 @@ const MailMock ={
   });
 
   describe('getProperties', () => {
+    beforeEach(() => {
+      mockPrisma.candidate.findMany.mockReset();
+      mockPrisma.candidateLanguage.findMany.mockReset();
+      mockPrisma.candidateSkill.findMany.mockReset();
+    });
+
     it('should return distinct languages when field is "languages"', async () => {
       const mockLanguages = [{ name: 'English' }, { name: 'Spanish' }];
       mockPrisma.candidateLanguage = { findMany: jest.fn().mockResolvedValue(mockLanguages) };
@@ -369,8 +375,11 @@ const MailMock ={
     });
   
     it('should throw BadRequestException on error', async () => {
-      mockPrisma.candidate.findMany.mockRejectedValue(new Error('DB error'));
-  
+      mockPrisma.candidate.findMany.mockReset();
+      mockPrisma.candidate.findMany.mockImplementation(() => {
+        return Promise.reject(new Error('DB error'));
+      });
+
       await expect(service.getProperties({ fields: 'country' })).rejects.toThrow(BadRequestException);
     });
   });
@@ -453,6 +462,14 @@ const MailMock ={
   });
 
   describe('getRandomTalentPoolCandidates', () => {
+    beforeEach(() => {
+      mockPrisma.candidate.findMany.mockReset();
+      mockPrisma.candidate.findMany.mockResolvedValue([]);
+      mockPrisma.candidate.count.mockReset();
+      mockPrisma.candidate.count.mockResolvedValue(0);
+      mockPrisma.$transaction.mockReset();
+    });
+
     it('should return 10 random candidates from talent pool', async () => {
       const mockCandidates = Array.from({ length: 15 }, (_, i) => ({
         id: `candidate-${i}`,
