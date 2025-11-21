@@ -2133,13 +2133,14 @@ export class HireRequestService {
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
     const updatedDate = this.toFixedDate(`${data.date_time}`);
+    const localDate = new Date(updatedDate.getTime() - updatedDate.getTimezoneOffset() * 60000);
     //console.log('updatedDate', updatedDate);
     const editInterview = await this.prisma.interview.updateMany({
       where: {
         panel_id: panel.id,
       },
       data: {
-        scheduled_date: updatedDate.toISOString(),
+        scheduled_date: localDate,
         link: data.interview_link,
       },
     });
