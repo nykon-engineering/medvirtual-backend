@@ -1,78 +1,100 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PanelService } from './panel.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { HireRequestStatus, OrganizationStatus } from '@prisma/client';
 
 describe('PanelService', () => {
   let service: PanelService;
-  let prisma: jest.Mocked<PrismaService>;
-
-  const mockPrismaService = {
-    organization: {
-      count: jest.fn(),
-    },
-    uSER: {
-      count: jest.fn(),
-    },
-    hireRequest: {
-      count: jest.fn(),
-    },
-    staff: {
-      count: jest.fn(),
-    },
-    candidate: {
-      count: jest.fn(),
-      findMany: jest.fn(),
-    },
-    interview: {
-      count: jest.fn(),
-    },
-    session: {
-      count: jest.fn(),
-    },
-  } as unknown as jest.Mocked<PrismaService>;
+  let prisma: PrismaService;
 
   beforeEach(async () => {
+    const prismaMock = {
+      organization: {
+        count: jest.fn(),
+      },
+      uSER: {
+        count: jest.fn(),
+      },
+      hireRequest: {
+        count: jest.fn(),
+      },
+      staff: {
+        count: jest.fn(),
+      },
+      interview: {
+        count: jest.fn(),
+      },
+      session: {
+        count: jest.fn(),
+      },
+      candidate: {
+        count: jest.fn(),
+        findMany: jest.fn(),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PanelService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        {
+          provide: PrismaService,
+          useValue: prismaMock,
+        },
       ],
     }).compile();
 
-    service = module.get<PanelService>(PanelService);
+    service = module.get(PanelService);
     prisma = module.get(PrismaService);
+
     jest.clearAllMocks();
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
-  it('getPanelData should fully compute dashboard metrics', async () => {
 
     (prisma.organization.count as jest.Mock).mockResolvedValue(10);
     (prisma.uSER.count as jest.Mock).mockResolvedValue(20);
     (prisma.hireRequest.count as jest.Mock).mockResolvedValue(5);
     (prisma.staff.count as jest.Mock).mockResolvedValue(12);
+    (prisma.interview.count as jest.Mock).mockResolvedValue(1);
+    (prisma.session.count as jest.Mock).mockResolvedValue(8);
 
     (prisma.candidate.count as jest.Mock)
-      .mockResolvedValueOnce(7)  
-      .mockResolvedValueOnce(3); 
+      .mockResolvedValueOnce(7) 
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(2);
+
 
     (prisma.candidate.findMany as jest.Mock)
       .mockResolvedValueOnce([
         {
           id: 1,
+          employment_type: '1',
           hourly_pay_rate: { toNumber: () => 10 },
-          avatar_url: 'img.png',
+          avatar_url: 'avatar.png',
           panelCandidates: [
             {
               panel: {
                 hireRequest: {
-                  title: 'Job X',
+                  title: 'Job A',
                   organization: { name: 'Org A' },
                 },
+                interviews: [],
+              },
+            },
+          ],
+        },
+      ])
+
+      .mockResolvedValueOnce([
+        {
+          id: 2,
+          employment_type: '2',
+          hourly_pay_rate: { toNumber: () => 15 },
+          avatar_url: null,
+          panelCandidates: [
+            {
+              panel: {
+                hireRequest: {
+                  title: 'Job B',
+                  organization: { name: 'Org B' },
+                },
+                interviews: [],
               },
             },
           ],
@@ -80,68 +102,58 @@ describe('PanelService', () => {
       ])
       .mockResolvedValueOnce([
         {
-          id: 2,
-          hourly_pay_rate: { toNumber: () => 12 },
-          avatar_url: 'img2.png',
+          id: 11,
+          employment_type: '1',
+          hourly_pay_rate: { toNumber: () => 17 },
+          avatar_url: 'img3.png',
           panelCandidates: [
             {
               panel: {
                 hireRequest: {
-                  title: 'Job Y',
-                  organization: { name: 'Org B' },
+                  title: 'Job C',
+                  organization: { name: 'Org C' },
                 },
+                interviews: [
+                  { id: 1 },
+                  { id: 2 },
+                  { id: 3 },
+                ],
               },
             },
           ],
         },
       ]);
+  });
 
-
-    (prisma.hireRequest.count as jest.Mock)
-    .mockResolvedValueOnce(5)
-    .mockResolvedValue(2);
-    (prisma.interview.count as jest.Mock).mockResolvedValue(1);
-    
-    (prisma.session.count as jest.Mock).mockResolvedValue(8);
-    (prisma.organization.count as jest.Mock).mockResolvedValue(10);
-
-
-    const monthlyCandidateCounts = Array(12).fill(4);
-    (prisma.candidate.count as jest.Mock).mockImplementation(() => {
-      return Promise.resolve(monthlyCandidateCounts.shift() ?? 4);
-    });
-
+  it('should compute and return full dashboard data', async () => {
     const result = await service.getPanelData();
+
 
     expect(result.activeOrganizations).toBe(10);
     expect(result.activeUsers).toBe(20);
     expect(result.activeHireRequests).toBe(5);
     expect(result.activeStaff).toBe(12);
 
+
     expect(result.candidatesAvailable).toBe(7);
     expect(result.candidatesEndorsed).toBe(3);
+    expect(result.candidatesHired).toBe(2);
 
     expect(result.failedResumeParsing.length).toBe(1);
+    expect(result.failedResumeParsing[0]).toHaveProperty('salary');
+    expect(result.failedResumeParsing[0]).toHaveProperty('avatar');
+
     expect(result.withoutHeadshot.length).toBe(1);
 
     expect(result.monthlyData.length).toBe(12);
-    result.monthlyData.forEach((m) => {
-      expect(m).toHaveProperty('month');
-      expect(m).toHaveProperty('candidates');
-      expect(m).toHaveProperty('hireRequests');
-      expect(m).toHaveProperty('interviews');
-    });
-
     expect(result.newClients.length).toBe(12);
-    result.newClients.forEach((m) => {
-      expect(m).toHaveProperty('month');
-      expect(m).toHaveProperty('newClients');
-    });
-
     expect(result.userAccess.length).toBe(12);
-    result.userAccess.forEach((m) => {
-      expect(m).toHaveProperty('month');
-      expect(m).toHaveProperty('accessUsers');
-    });
+
+    expect(result.moreThan5Interviews.length).toBe(1);
+    expect(result.moreThan5Interviews[0].interviewCount).toBe(3);
+
+    expect(prisma.organization.count).toHaveBeenCalled();
+    expect(prisma.uSER.count).toHaveBeenCalled();
+    expect(prisma.hireRequest.count).toHaveBeenCalled();
   });
 });

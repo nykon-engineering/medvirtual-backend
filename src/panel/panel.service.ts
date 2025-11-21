@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { HireRequestStatus, OrganizationStatus } from '@prisma/client';
+import { HireRequestStatus, OrganizationStatus, PanelCandidateStatus } from '@prisma/client';
 import { findMonthlySalary } from '../common/utils/salary.util';
+import { changeLabelAvailability } from '../common/utils/hubspot.util';
+import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 
 @Injectable()
 export class PanelService {
@@ -11,6 +13,84 @@ export class PanelService {
     ){}
 
     async getPanelData(): Promise<any> {
+
+        const selectCandidates = {
+            id: true,
+            first_name: true,
+            last_name: true,
+            name: true,
+            email: true,
+            country: true,
+            employment_type: true,
+            hourly_pay_rate: true,
+            years_of_experience: true,
+            pipeline_status: true,
+            about_me: true,
+            specialization: true,
+            tools: true,
+            medical_tools: true,
+            gender: true,
+            hubspot_id: true,
+            headshot_url: true,
+            processing_error: true,
+            avatar_url: true,
+            languages: {
+                select: {
+                name: true,
+                }
+            },
+            skills: {
+                select: {
+                skill_name: true,
+                skill_type: true
+                }
+            },
+            educations: {
+                select: {
+                institution: true,
+                degree: true,
+                year: true
+                }
+            },
+            approved_positions_pairing: true,
+            experiences: {
+                orderBy: { start_date: 'desc' as const },
+                select: {
+                company: true,
+                position: true,
+                start_date: true,
+                end_date: true,
+                responsabilities: true
+                }
+            },
+            panelCandidates: {
+                select:{
+                id: true,
+                panel:{
+                    select:{
+                    hire_request_id: true,
+                        hireRequest:{
+                            select:{
+                            id: true,
+                            title: true,
+                            organization:{
+                                select:{
+                                id: true,
+                                name: true,
+                                }
+                            }
+                            }
+                        },
+                        interviews:{
+                            select:{
+                                id: true
+                            }
+                        }
+                    }
+                }
+                }
+            }
+        }
 
         const result: any = {};
 
@@ -55,13 +135,26 @@ export class PanelService {
 
         const candidatesEndorsed = await this.prisma.candidate.count({
             where:{
-                pipeline_status: '1172847191'
+                pipeline_status: '1172847191',
+                panelCandidates: {
+                    none:{
+                        status:  PanelCandidateStatus.selected_by_client
+                    }
+                }
             }
         })
         result.candidatesEndorsed = candidatesEndorsed;
 
-
-        result.candidatesHired = 0;
+        const candidatesHired = await this.prisma.candidate.count({
+            where:{
+                panelCandidates:{
+                    some:{
+                        status: PanelCandidateStatus.selected_by_client
+                    }
+                }
+            }
+        })
+        result.candidatesHired = candidatesHired;
 
         const failedResumeParsing = await this.prisma.candidate.findMany({
             where: {
@@ -71,83 +164,12 @@ export class PanelService {
                 processing_status: 'failed',
                 resume_url: { not: null },
             },
-            select: {
-                id: true,
-                first_name: true,
-                last_name: true,
-                name: true,
-                email: true,
-                country: true,
-                employment_type: true,
-                hourly_pay_rate: true,
-                years_of_experience: true,
-                pipeline_status: true, // This will be converted to name later
-                about_me: true,
-                specialization: true,
-                tools: true,
-                medical_tools: true,
-                gender: true,
-                hubspot_id: true,
-                headshot_url: true,
-                processing_error: true,
-                avatar_url: true,
-                languages: {
-                    select: {
-                    name: true,
-                    }
-                },
-                skills: {
-                    select: {
-                    skill_name: true,
-                    skill_type: true
-                    }
-                },
-                educations: {
-                    select: {
-                    institution: true,
-                    degree: true,
-                    year: true
-                    }
-                },
-                approved_positions_pairing: true,
-                experiences: {
-                    orderBy: { start_date: 'desc' },
-                    select: {
-                    company: true,
-                    position: true,
-                    start_date: true,
-                    end_date: true,
-                    responsabilities: true
-                    }
-                },
-                panelCandidates: {
-                    select:{
-                    id: true,
-                    panel:{
-                        select:{
-                        hire_request_id: true,
-                        hireRequest:{
-                            select:{
-                            id: true,
-                            title: true,
-                            organization:{
-                                select:{
-                                id: true,
-                                name: true,
-                                }
-                            }
-                            }
-                        }
-                        }
-                    }
-                    }
-                }
-                
-            }
+            select: selectCandidates
         });
 
         const failedResume = failedResumeParsing.map(candidate => ({
             ...candidate,
+            employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
             salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
@@ -170,83 +192,12 @@ export class PanelService {
                     { headshot_url: 'N/A' },
                 ],              
             },
-            select: {
-                id: true,
-                first_name: true,
-                last_name: true,
-                name: true,
-                email: true,
-                country: true,
-                employment_type: true,
-                hourly_pay_rate: true,
-                years_of_experience: true,
-                pipeline_status: true, // This will be converted to name later
-                about_me: true,
-                specialization: true,
-                tools: true,
-                medical_tools: true,
-                gender: true,
-                hubspot_id: true,
-                headshot_url: true,
-                processing_error: true,
-                avatar_url: true,
-                languages: {
-                    select: {
-                    name: true,
-                    }
-                },
-                skills: {
-                    select: {
-                    skill_name: true,
-                    skill_type: true
-                    }
-                },
-                educations: {
-                    select: {
-                    institution: true,
-                    degree: true,
-                    year: true
-                    }
-                },
-                approved_positions_pairing: true,
-                experiences: {
-                    orderBy: { start_date: 'desc' },
-                    select: {
-                    company: true,
-                    position: true,
-                    start_date: true,
-                    end_date: true,
-                    responsabilities: true
-                    }
-                },
-                panelCandidates: {
-                    select:{
-                    id: true,
-                    panel:{
-                        select:{
-                        hire_request_id: true,
-                        hireRequest:{
-                            select:{
-                            id: true,
-                            title: true,
-                            organization:{
-                                select:{
-                                id: true,
-                                name: true,
-                                }
-                            }
-                            }
-                        }
-                        }
-                    }
-                    }
-                }
-                
-            }
+            select: selectCandidates
         });
 
         const CandwithoutHeadshot = withoutHeadshot.map(candidate => ({
             ...candidate,
+            employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
             salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
@@ -347,7 +298,39 @@ export class PanelService {
         }
 
 
+        const candidatesWithInterviews = await this.prisma.candidate.findMany({
+            where:{
+                panelCandidates:{
+                    some:{
+                        panel:{
+                            interviews:{
+                                some:{}
+                            }
+                        }
+                    }
+                }
+            },
+            select: selectCandidates
+        });
 
+        const processed = candidatesWithInterviews.map(candidate => ({
+            ...candidate,
+            employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+            salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+            avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
+            panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
+              title: pc.panel.hireRequest.title,
+              organization_name: pc.panel.hireRequest.organization.name,
+              status: 'test',
+            })) : [],
+            interviewCount: candidate.panelCandidates.reduce((total, pc) => {
+                const count = pc.panel.interviews.length;
+                return total + count;
+              }, 0)
+
+          }));
+
+        result.moreThan5Interviews = processed.filter(c => c.interviewCount > 1);
 
         return result;
     }
