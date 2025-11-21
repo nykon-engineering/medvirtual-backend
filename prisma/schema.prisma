@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") //LOCAL_DATABASE_URL // DATABASE_URL // PROD_DATABASE_URL
+  url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -40,10 +40,12 @@ model USER {
   ownedOrganizations           Organization?       @relation("OrganizationOwner")
   sessions                     Session[]
   tickets                      Ticket[]
+  ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
   TicketNotes                  TicketNotes[]
   createdBy                    USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
   createdUsers                 USER[]              @relation("UserCreatedBy")
   organization                 Organization?       @relation(fields: [organization_id], references: [id])
+  talentPoolLeads              TalentPoolLead[]
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -366,6 +368,7 @@ model Ticket {
   organization Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff        Staff?        @relation(fields: [staff_id], references: [id])
   user         USER?         @relation(fields: [user_id], references: [id])
+  createdBy    USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
   TicketNotes  TicketNotes[]
 
   @@index([user_id], map: "idx_tickets_user_id")
@@ -374,6 +377,7 @@ model Ticket {
   @@index([createdAt], map: "idx_tickets_createdAt")
   @@index([updatedAt], map: "idx_tickets_updatedAt")
   @@index([candidate_id], map: "idx_tickets_candidate_id")
+  @@index([created_by], map: "idx_tickets_created_by")
 }
 
 model GoogleToken {
@@ -463,7 +467,7 @@ model TicketNotes {
 }
 
 model TalentPoolLead {
-  id                  String    @id
+  id                  String    @id @default(uuid())
   name                String    @db.VarChar(255)
   email               String    @db.VarChar(255)
   organization        String    @db.VarChar(255)
@@ -477,6 +481,12 @@ model TalentPoolLead {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now())
   contacted_at        DateTime?
+  assignedTo          USER?     @relation(fields: [assigned_to_user_id], references: [id])
+
+  @@index([assigned_to_user_id], map: "idx_talent_pool_leads_assigned_to_user_id")
+  @@index([email], map: "idx_talent_pool_leads_email")
+  @@index([status], map: "idx_talent_pool_leads_status")
+  @@index([source], map: "idx_talent_pool_leads_source")
 }
 
 enum Role {

@@ -52,7 +52,6 @@ export class TicketService {
             email: true,
           },
         },
-        // @ts-ignore - createdBy relation will be available after prisma generate
         createdBy: {
           select: {
             id: true,
@@ -345,7 +344,6 @@ export class TicketService {
               email: true,
             },
           },
-          // @ts-ignore - createdBy relation will be available after prisma generate
           createdBy: {
             select: {
               id: true,
