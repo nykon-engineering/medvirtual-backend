@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, UseGuards, Query, HttpCode } from '@nestjs/common';
 import { USER } from '@prisma/client';
-import { ApiBody, ApiParam, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiBody, ApiParam, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import { CandidatesService } from './candidates.service';
 
@@ -226,6 +227,32 @@ export class CandidatesController {
       message: 'Avatar processing initiated successfully',
       data: result
     }
+  }
+
+  @Get('talent-pool/random')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per minute
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Get 10 random candidates from talent pool (public endpoint)',
+    description: 'Returns 10 random candidates from the talent pool without sensitive information. No authentication required. Rate limited to 10 requests per minute.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Random candidates retrieved successfully' 
+  })
+  @ApiResponse({ 
+    status: 429, 
+    description: 'Too many requests. Rate limit exceeded.' 
+  })
+  async getRandomTalentPoolCandidates() {
+    const result = await this.candidatesService.getRandomTalentPoolCandidates();
+    return {
+      status: 200,
+      message: 'Random candidates retrieved successfully',
+      data: result.candidates,
+      count: result.candidates.length,
+      totalTable: result.totalTable
+    };
   }
 
 }
