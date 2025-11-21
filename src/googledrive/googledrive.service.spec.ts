@@ -20,6 +20,7 @@ jest.mock('axios', () => {
 });
 
 import axios from 'axios';
+import { MailService } from '../mail/mail.service';
 const mockAxios = jest.requireMock('axios') as jest.Mocked<typeof axios>;
 const mockAxiosGet = mockAxios.get as jest.Mock;
 
@@ -30,6 +31,10 @@ const prismaMock = {
     update: jest.fn(),
     create: jest.fn(),
   },
+};
+
+const MailServiceMock = {
+  sendMail: jest.fn(),
 };
 
 describe.skip('GoogledriveService', () => {
@@ -43,6 +48,7 @@ describe.skip('GoogledriveService', () => {
       providers: [
         GoogledriveService,
         { provide: PrismaService, useValue: prismaMock },
+        { provide: MailService, useValue: MailServiceMock},
       ],
     }).compile();
 

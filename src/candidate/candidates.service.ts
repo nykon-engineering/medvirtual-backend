@@ -16,6 +16,7 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { Console } from 'console';
 
 
 @Injectable()
@@ -696,9 +697,6 @@ export class CandidatesService {
         return false;
       }
 
-
-
-      
 
 
       console.log('starting with the openAi step...');

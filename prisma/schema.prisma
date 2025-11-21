@@ -3,6 +3,7 @@ generator client {
   binaryTargets = ["native"]
 }
 
+
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL") //LOCAL_DATABASE_URL // DATABASE_URL // PROD_DATABASE_URL

@@ -166,18 +166,7 @@ export class HireRequestService {
     })
     if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
     
-    // Notify assigned user via email (non-blocking)
-    if (newHireRequest.assign_user_id) {
-      console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
-      try {
-        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
-        console.log(`[notifications] Hire request created notification sent successfully:`, result);
-      } catch (err) {
-        console.error('[notifications] hire-request-created email failed', err?.message || err);
-      }
-    } else {
-      console.log(`[notifications] No assigned user for hire request ${newHireRequest.id}, skipping notification`);
-    }
+    
     
     if (skills && skills.length > 0) {
       const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
@@ -205,6 +194,19 @@ export class HireRequestService {
       await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
     } catch (err) {
       console.warn('[hubspot] createHireRequestTicket failed', err?.message || err);
+    }
+
+    // Notify assigned user via email (non-blocking)
+    if (newHireRequest.assign_user_id) {
+      console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
+      try {
+        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        console.log(`[notifications] Hire request created notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] hire-request-created email failed', err?.message || err);
+      }
+    } else {
+      console.log(`[notifications] No assigned user for hire request ${newHireRequest.id}, skipping notification`);
     }
 
     const hireRequestWithHubspotID = await this.findOne(newHireRequest.id, user);
@@ -2133,7 +2135,7 @@ export class HireRequestService {
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
     const updatedDate = new Date(`${data.date_time}`);
-    console.log('updatedDate', updatedDate);
+    //console.log('updatedDate', updatedDate);
     const editInterview = await this.prisma.interview.updateMany({
       where: {
         panel_id: panel.id,
