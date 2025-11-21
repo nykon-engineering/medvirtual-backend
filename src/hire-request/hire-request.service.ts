@@ -39,6 +39,20 @@ export class HireRequestService {
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
   ) {}
+  private toFixedDate(dateStr: string): Date {
+    const [datePart, timePart] = dateStr.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = timePart.split(":").map(Number);
+  
+    return new Date(
+      year,
+      month - 1,
+      day,
+      hour,
+      minute,
+      second || 0,
+    );
+  }
 
   private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
     const hireRequest = await this.prisma.hireRequest.findUnique({
@@ -2118,8 +2132,8 @@ export class HireRequestService {
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
-    const updatedDate = new Date(`${data.date_time}`);
-
+    const updatedDate = this.toFixedDate(`${data.date_time}`);
+    //console.log('updatedDate', updatedDate);
     const editInterview = await this.prisma.interview.updateMany({
       where: {
         panel_id: panel.id,
