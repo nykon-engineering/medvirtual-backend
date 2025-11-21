@@ -7,6 +7,7 @@ describe('PanelService', () => {
   let prisma: PrismaService;
 
   beforeEach(async () => {
+
     const prismaMock = {
       organization: {
         count: jest.fn(),
@@ -55,12 +56,12 @@ describe('PanelService', () => {
     (prisma.session.count as jest.Mock).mockResolvedValue(8);
 
     (prisma.candidate.count as jest.Mock)
-      .mockResolvedValueOnce(7) 
-      .mockResolvedValueOnce(3)
-      .mockResolvedValueOnce(2);
-
+      .mockResolvedValueOnce(7)   // candidatesAvailable
+      .mockResolvedValueOnce(3)   // candidatesEndorsed
+      .mockResolvedValueOnce(2);  // candidatesHired
 
     (prisma.candidate.findMany as jest.Mock)
+
       .mockResolvedValueOnce([
         {
           id: 1,
@@ -117,6 +118,9 @@ describe('PanelService', () => {
                   { id: 1 },
                   { id: 2 },
                   { id: 3 },
+                  { id: 4 },
+                  { id: 5 },
+                  { id: 6 },
                 ],
               },
             },
@@ -128,12 +132,10 @@ describe('PanelService', () => {
   it('should compute and return full dashboard data', async () => {
     const result = await service.getPanelData();
 
-
     expect(result.activeOrganizations).toBe(10);
     expect(result.activeUsers).toBe(20);
     expect(result.activeHireRequests).toBe(5);
     expect(result.activeStaff).toBe(12);
-
 
     expect(result.candidatesAvailable).toBe(7);
     expect(result.candidatesEndorsed).toBe(3);
@@ -150,10 +152,12 @@ describe('PanelService', () => {
     expect(result.userAccess.length).toBe(12);
 
     expect(result.moreThan5Interviews.length).toBe(1);
-    expect(result.moreThan5Interviews[0].interviewCount).toBe(3);
+    expect(result.moreThan5Interviews[0].interviewCount).toBe(6);
+
 
     expect(prisma.organization.count).toHaveBeenCalled();
     expect(prisma.uSER.count).toHaveBeenCalled();
     expect(prisma.hireRequest.count).toHaveBeenCalled();
+    expect(prisma.candidate.findMany).toHaveBeenCalled();
   });
 });
