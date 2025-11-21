@@ -330,7 +330,7 @@ export class PanelService {
 
           }));
 
-        result.moreThan5Interviews = processed.filter(c => c.interviewCount > 1);
+        result.moreThan5Interviews = processed.filter(c => c.interviewCount > 5);
 
         return result;
     }
