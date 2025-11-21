@@ -228,4 +228,63 @@ export class CandidatesController {
     }
   }
 
+  @Get('talent-pool/random')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per minute
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Get 10 random candidates from talent pool (public endpoint)',
+    description: 'Returns 10 random candidates from the talent pool without sensitive information. No authentication required. Rate limited to 10 requests per minute.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Random candidates retrieved successfully' 
+  })
+  @ApiResponse({ 
+    status: 429, 
+    description: 'Too many requests. Rate limit exceeded.' 
+  })
+  async getRandomTalentPoolCandidates() {
+    const result = await this.candidatesService.getRandomTalentPoolCandidates();
+    return {
+      status: 200,
+      message: 'Random candidates retrieved successfully',
+      data: result.candidates,
+      count: result.candidates.length,
+      totalTable: result.totalTable
+    };
+  }
+
+  @Get('talent-pool/:id')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per minute
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Get a specific candidate from talent pool by ID (public endpoint)',
+    description: 'Returns a specific candidate from the talent pool by ID without sensitive information. No authentication required. Rate limited to 10 requests per minute.'
+  })
+  @ApiParam({ name: 'id', required: true, type: String, description: 'Candidate ID' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Candidate retrieved successfully' 
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Invalid candidate ID' 
+  })
+  @ApiResponse({ 
+    status: 404, 
+    description: 'Candidate not found or not available in talent pool' 
+  })
+  @ApiResponse({ 
+    status: 429, 
+    description: 'Too many requests. Rate limit exceeded.' 
+  })
+  async getTalentPoolCandidateById(@Param('id') id: string) {
+    const candidate = await this.candidatesService.getTalentPoolCandidateById(id);
+    return {
+      status: 200,
+      message: 'Candidate retrieved successfully',
+      data: candidate
+    };
+  }
+
 }

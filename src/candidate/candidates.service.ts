@@ -1189,6 +1189,222 @@ export class CandidatesService {
     }
     return true;
   }
+
+  async getRandomTalentPoolCandidates(): Promise<any> {
+    // Get candidates from talent pool (available candidates)
+    // Pipeline status '261075105' or '1087596819' represent available candidates
+    const whereClause = {
+      AND: [
+        {
+          OR: [
+            { pipeline_status: '261075105' },
+            { pipeline_status: '1087596819' }
+          ]
+        },
+        {
+          avatar_url: { not: null }
+        },
+        {
+          specialization: { 
+            not: null
+          }
+        },
+        {
+          specialization: { 
+            not: 'N/A'
+          }
+        },
+        {
+          years_of_experience: { not: null }
+        },
+      ]
+    };
+
+    // Get total count of available candidates and total count of all candidates
+    const [candidates, totalCount, totalTableCount] = await this.prisma.$transaction([
+      this.prisma.candidate.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          name: true,
+          country: true,
+          employment_type: true,
+          hourly_pay_rate: true,
+          years_of_experience: true,
+          about_me: true,
+          specialization: true,
+          tools: true,
+          medical_tools: true,
+          avatar_url: true,
+          gender: true,
+          languages: {
+            select: {
+              name: true,
+            }
+          },
+          skills: {
+            select: {
+              skill_name: true,
+              skill_type: true
+            }
+          },
+          educations: {
+            select: {
+              institution: true,
+              degree: true,
+              year: true
+            }
+          },
+          experiences: {
+            orderBy: { start_date: Prisma.SortOrder.desc },
+            select: {
+              company: true,
+              position: true,
+              start_date: true,
+              end_date: true,
+              responsabilities: true
+            }
+          },
+          approved_positions_pairing: true,
+        },
+      }),
+      this.prisma.candidate.count({
+        where: whereClause,
+      }),
+      this.prisma.candidate.count()
+    ]);
+
+    // Shuffle array to get random candidates
+    const shuffled = candidates.sort(() => 0.5 - Math.random());
+    
+    // Get first 10 candidates
+    const randomCandidates = shuffled.slice(0, 10);
+
+    // Map pipeline_status to readable format if needed
+    // Note: We're not including pipeline_status in the select, so it won't be in the response
+    
+    // Construct full avatar URL for each candidate and calculate salary
+    const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => ({
+      ...candidate,
+      avatar_url: candidate.avatar_url 
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+        : null,
+      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+    }));
+    
+    return {
+      candidates: candidatesWithFullAvatarUrl,
+      total: totalCount,
+      totalTable: totalTableCount
+    };
+  }
+
+  async getTalentPoolCandidateById(id: string): Promise<any> {
+    // Validate ID
+    if (!id || id.trim() === '') {
+      throw new BadRequestException('Invalid candidate ID');
+    }
+
+    // Get candidates from talent pool (available candidates)
+    // Pipeline status '261075105' or '1087596819' represent available candidates
+    const whereClause = {
+      AND: [
+        {
+          id: id.trim()
+        },
+        {
+          OR: [
+            { pipeline_status: '261075105' },
+            { pipeline_status: '1087596819' }
+          ]
+        },
+        {
+          avatar_url: { not: null }
+        },
+        {
+          specialization: { 
+            not: null
+          }
+        },
+        {
+          specialization: { 
+            not: 'N/A'
+          }
+        },
+        {
+          years_of_experience: { not: null }
+        },
+      ]
+    };
+
+    const candidate = await this.prisma.candidate.findFirst({
+      where: whereClause,
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        country: true,
+        employment_type: true,
+        hourly_pay_rate: true,
+        years_of_experience: true,
+        about_me: true,
+        specialization: true,
+        tools: true,
+        medical_tools: true,
+        avatar_url: true,
+        gender: true,
+        languages: {
+          select: {
+            name: true,
+          }
+        },
+        skills: {
+          select: {
+            skill_name: true,
+            skill_type: true
+          }
+        },
+        educations: {
+          select: {
+            institution: true,
+            degree: true,
+            year: true
+          }
+        },
+        experiences: {
+          orderBy: { start_date: Prisma.SortOrder.desc },
+          select: {
+            company: true,
+            position: true,
+            start_date: true,
+            end_date: true,
+            responsabilities: true
+          }
+        },
+        approved_positions_pairing: true,
+      },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found or not available in talent pool');
+    }
+
+    // Construct full avatar URL and calculate salary
+    const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+    const candidateWithFullAvatarUrl = {
+      ...candidate,
+      avatar_url: candidate.avatar_url 
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+        : null,
+      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+    };
+
+    return candidateWithFullAvatarUrl;
+  }
 }
 
 
