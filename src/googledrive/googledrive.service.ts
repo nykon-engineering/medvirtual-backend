@@ -88,7 +88,7 @@ export class GoogledriveService {
       const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: 'paulo@regenta.ai',
-      bcc: 'shayan@regenta.ai',
+      cc: 'shayan@regenta.ai',
       subject: 'Google Token Expired',
       html: emailBody,
       });
