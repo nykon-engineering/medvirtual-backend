@@ -9,7 +9,6 @@ export class HireRequestUpdateService {
 
     async execute(data: any): Promise<any> {
         try {
-          
             const hubspotProperties: Record<string, any> = {};
             for (const [dbKey, hubspotKey] of Object.entries(dbToHrTicketDictionary)) {
                 if (data[dbKey] !== undefined && data[dbKey] !== null) {
@@ -38,7 +37,9 @@ export class HireRequestUpdateService {
                 data.pairing_time
               : undefined;
 
-            hubspotProperties.va_pay_rate_range = `${data.salary_range_from} - ${data.salary_range_to}`
+            hubspotProperties.va_pay_rate_range = data.salary_range_from && data.salary_range_to 
+            ? `${data.salary_range_from} - ${data.salary_range_to}`
+            : '';
             
             //console.log(hubspotProperties)
             const response = await axios.patch(

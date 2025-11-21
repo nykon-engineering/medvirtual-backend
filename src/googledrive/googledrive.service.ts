@@ -4,12 +4,16 @@ import * as path from 'path';
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
+import googleTokenExpired from '../common/utils/email-templates/googleTokenExpired';
 
 @Injectable()
 export class GoogledriveService {
   private readonly oauth2Client: OAuth2Client;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService) {
     this.oauth2Client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -57,26 +61,49 @@ export class GoogledriveService {
   }
 
   async getValidAccessToken(): Promise<string> {
-    const token = await this.prisma.googleToken.findFirst({ orderBy: { createdAt: 'desc' } });
-    if (!token || !token.accessToken || !token.expiryDate)
-      throw new BadRequestException('Google tokens not found. Please authenticate first.');
-
-    const now = Date.now();
-    if (now < Number(token.expiryDate) - 60 * 1000) return token.accessToken;
-
-    const newTokens = await this.refreshAccessToken(token.refreshToken || '');
-    if (!newTokens || !newTokens.access_token)
-      throw new BadRequestException('Failed to refresh access token.');
-
-    await this.prisma.googleToken.update({
-      where: { id: token.id },
-      data: {
-        accessToken: newTokens.access_token,
-        expiryDate: newTokens.expiry_date ? new Date(newTokens.expiry_date).getTime() : null,
-      },
-    });
-
-    return newTokens.access_token;
+    try{
+      const token = await this.prisma.googleToken.findFirst({ orderBy: { createdAt: 'desc' } });
+      if (!token || !token.accessToken || !token.expiryDate)
+        throw new BadRequestException('Google tokens not found. Please authenticate first.');
+  
+      const now = Date.now();
+      if (now < Number(token.expiryDate) - 60 * 1000) return token.accessToken;
+  
+      const newTokens = await this.refreshAccessToken(token.refreshToken || '');
+      if (!newTokens || !newTokens.access_token)
+        throw new BadRequestException('Failed to refresh access token.');
+  
+      await this.prisma.googleToken.update({
+        where: { id: token.id },
+        data: {
+          accessToken: newTokens.access_token,
+          expiryDate: newTokens.expiry_date ? new Date(newTokens.expiry_date).getTime() : null,
+        },
+      });
+  
+      return newTokens.access_token;
+    }catch(error:any){
+      // Send google token expired via email
+      const emailBody = googleTokenExpired();
+      const mailSent = await this.mailService.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: 'paulo@regenta.ai',
+      cc: 'shayan@regenta.ai',
+      subject: 'Google Token Expired',
+      html: emailBody,
+      });
+      if (!mailSent) {
+          console.log('Failed to send google token expired email notification.');
+      }
+      //Here I save in the database that I sent the email
+      await this.prisma.mail_Settings.create({
+          data: {
+            title: 'google_token_expired',
+          },
+      });
+      throw new BadRequestException(`Error getting valid access token: ${error.message}`);
+    }
+   
   }
 
 

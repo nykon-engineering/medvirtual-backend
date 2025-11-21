@@ -39,6 +39,20 @@ export class HireRequestService {
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
   ) {}
+  private toFixedDate(dateStr: string): Date {
+    const [datePart, timePart] = dateStr.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = timePart.split(":").map(Number);
+  
+    return new Date(
+      year,
+      month - 1,
+      day,
+      hour,
+      minute,
+      second || 0,
+    );
+  }
 
   private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
     const hireRequest = await this.prisma.hireRequest.findUnique({
@@ -152,18 +166,7 @@ export class HireRequestService {
     })
     if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
     
-    // Notify assigned user via email (non-blocking)
-    if (newHireRequest.assign_user_id) {
-      console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
-      try {
-        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
-        console.log(`[notifications] Hire request created notification sent successfully:`, result);
-      } catch (err) {
-        console.error('[notifications] hire-request-created email failed', err?.message || err);
-      }
-    } else {
-      console.log(`[notifications] No assigned user for hire request ${newHireRequest.id}, skipping notification`);
-    }
+    
     
     if (skills && skills.length > 0) {
       const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
@@ -191,6 +194,19 @@ export class HireRequestService {
       await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
     } catch (err) {
       console.warn('[hubspot] createHireRequestTicket failed', err?.message || err);
+    }
+
+    // Notify assigned user via email (non-blocking)
+    if (newHireRequest.assign_user_id) {
+      console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
+      try {
+        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        console.log(`[notifications] Hire request created notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] hire-request-created email failed', err?.message || err);
+      }
+    } else {
+      console.log(`[notifications] No assigned user for hire request ${newHireRequest.id}, skipping notification`);
     }
 
     const hireRequestWithHubspotID = await this.findOne(newHireRequest.id, user);
@@ -619,7 +635,7 @@ export class HireRequestService {
 
     
     const newHr = await this.findOne(id, user);
-    //await this.hubspot.updateHireRequestInHubspot(newHr);
+    await this.hubspot.updateHireRequestInHubspot(newHr);
     
     // Notify assignee via email when hire request is edited (non-blocking)
     try {
@@ -2068,7 +2084,6 @@ export class HireRequestService {
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
 
     try{
-      const updatedDate = new Date(`${data.date_time}`);
       const updateDateTime = {
         hubspot_ticket_id: hireRequest.hubspot_ticket_id,
         pairing_date:updatedDate.toISOString().split("T")[0],
@@ -2120,7 +2135,7 @@ export class HireRequestService {
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
     const updatedDate = new Date(`${data.date_time}`);
-
+    //console.log('updatedDate', updatedDate);
     const editInterview = await this.prisma.interview.updateMany({
       where: {
         panel_id: panel.id,
@@ -2134,7 +2149,6 @@ export class HireRequestService {
     if (!editInterview) throw new BadRequestException(`Interview not updated`);
 
     try{
-      const updatedDate = new Date(`${data.date_time}`);
       const updateDateTime = {
         hubspot_ticket_id: hireRequest.hubspot_ticket_id,
         pairing_date:updatedDate.toISOString().split("T")[0],
