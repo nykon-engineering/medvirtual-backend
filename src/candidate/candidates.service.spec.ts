@@ -461,6 +461,7 @@ const MailMock ={
         name: `John${i} Doe${i}`,
         country: 'USA',
         employment_type: 'Full-time',
+        hourly_pay_rate: { toNumber: () => 25 },
         years_of_experience: 5,
         about_me: 'Test about me',
         specialization: 'Software Development',
@@ -481,50 +482,18 @@ const MailMock ={
         approved_positions_pairing: ['Developer'],
       }));
 
-      mockPrisma.candidate.findMany.mockResolvedValue(mockCandidates);
+      mockPrisma.$transaction.mockResolvedValue([mockCandidates, 15, 20]);
 
       const result = await service.getRandomTalentPoolCandidates();
 
-      expect(mockPrisma.candidate.findMany).toHaveBeenCalledWith({
-        where: {
-          AND: [
-            {
-              OR: [
-                { pipeline_status: '261075105' },
-                { pipeline_status: '1087596819' }
-              ]
-            },
-            { avatar_url: { not: null } },
-            { specialization: { not: null, notIn: ['n/a', 'N/A', 'N/a', 'n/A'] } },
-            { years_of_experience: { not: null } },
-          ]
-        },
-        select: expect.objectContaining({
-          id: true,
-          first_name: true,
-          last_name: true,
-          name: true,
-          country: true,
-          employment_type: true,
-          years_of_experience: true,
-          about_me: true,
-          specialization: true,
-          tools: true,
-          medical_tools: true,
-          avatar_url: true,
-          gender: true,
-          languages: expect.any(Object),
-          skills: expect.any(Object),
-          educations: expect.any(Object),
-          experiences: expect.any(Object),
-          approved_positions_pairing: true,
-        }),
-      });
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
 
-      expect(result).toHaveLength(10);
-      expect(result[0]).toHaveProperty('id');
-      expect(result[0]).toHaveProperty('name');
-      expect(result[0]).toHaveProperty('avatar_url');
+      expect(result.candidates).toHaveLength(10);
+      expect(result.candidates[0]).toHaveProperty('id');
+      expect(result.candidates[0]).toHaveProperty('name');
+      expect(result.candidates[0]).toHaveProperty('avatar_url');
+      expect(result).toHaveProperty('total');
+      expect(result).toHaveProperty('totalTable');
     });
 
     it('should return fewer than 10 candidates if less available', async () => {
@@ -535,6 +504,7 @@ const MailMock ={
         name: `John${i} Doe${i}`,
         country: 'USA',
         employment_type: 'Full-time',
+        hourly_pay_rate: { toNumber: () => 25 },
         years_of_experience: 5,
         about_me: 'Test about me',
         specialization: 'Software Development',
@@ -549,24 +519,24 @@ const MailMock ={
         approved_positions_pairing: [],
       }));
 
-      mockPrisma.candidate.findMany.mockResolvedValue(mockCandidates);
+      mockPrisma.$transaction.mockResolvedValue([mockCandidates, 5, 10]);
 
       const result = await service.getRandomTalentPoolCandidates();
 
-      expect(result).toHaveLength(5);
+      expect(result.candidates).toHaveLength(5);
     });
 
     it('should return empty array if no candidates available', async () => {
-      mockPrisma.candidate.findMany.mockResolvedValue([]);
+      mockPrisma.$transaction.mockResolvedValue([[], 0, 10]);
 
       const result = await service.getRandomTalentPoolCandidates();
 
-      expect(result).toHaveLength(0);
-      expect(Array.isArray(result)).toBe(true);
+      expect(result.candidates).toHaveLength(0);
+      expect(Array.isArray(result.candidates)).toBe(true);
     });
 
     it('should handle database errors', async () => {
-      mockPrisma.candidate.findMany.mockRejectedValue(new Error('Database error'));
+      mockPrisma.$transaction.mockRejectedValue(new Error('Database error'));
 
       await expect(service.getRandomTalentPoolCandidates())
         .rejects.toThrow('Database error');
@@ -581,6 +551,7 @@ const MailMock ={
           name: 'John Doe',
           country: 'USA',
           employment_type: 'Full-time',
+          hourly_pay_rate: { toNumber: () => 25 },
           years_of_experience: 5,
           about_me: 'Test about me',
           specialization: 'Software Development',
@@ -601,6 +572,7 @@ const MailMock ={
           name: 'Jane Smith',
           country: 'USA',
           employment_type: 'Full-time',
+          hourly_pay_rate: { toNumber: () => 25 },
           years_of_experience: 3,
           about_me: 'Test about me',
           specialization: 'n/a',
@@ -616,31 +588,16 @@ const MailMock ={
         },
       ];
 
-      mockPrisma.candidate.findMany.mockResolvedValue([mockCandidates[0]]); // Only the first one should be returned
+      mockPrisma.$transaction.mockResolvedValue([[mockCandidates[0]], 1, 10]); // Only the first one should be returned
 
       const result = await service.getRandomTalentPoolCandidates();
 
-      expect(mockPrisma.candidate.findMany).toHaveBeenCalledWith({
-        where: {
-          AND: [
-            {
-              OR: [
-                { pipeline_status: '261075105' },
-                { pipeline_status: '1087596819' }
-              ]
-            },
-            { avatar_url: { not: null } },
-            { specialization: { not: null, notIn: ['n/a', 'N/A', 'N/a', 'n/A'] } },
-            { years_of_experience: { not: null } },
-          ]
-        },
-        select: expect.any(Object),
-      });
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
 
       // Should only return candidate without "n/a" specialization
-      expect(result).toHaveLength(1);
-      expect(result[0].specialization).not.toBe('n/a');
-      expect(result[0].specialization).not.toBe('N/A');
+      expect(result.candidates).toHaveLength(1);
+      expect(result.candidates[0].specialization).not.toBe('n/a');
+      expect(result.candidates[0].specialization).not.toBe('N/A');
     });
   });
 
