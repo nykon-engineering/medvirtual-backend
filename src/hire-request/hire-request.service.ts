@@ -2139,7 +2139,7 @@ export class HireRequestService {
         panel_id: panel.id,
       },
       data: {
-        scheduled_date: updatedDate,
+        scheduled_date: updatedDate.toISOString(),
         link: data.interview_link,
       },
     });
