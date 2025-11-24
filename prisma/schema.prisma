@@ -267,6 +267,13 @@ model HireRequest {
   hubspot_pipeline             String?
   hubspot_pipeline_stage       String?
   hubspot_ticket_type          String?
+  hubspot_tasks                String?
+  hubspot_n2_monitors_required String?
+  hubspot_va_shift_hours       String?
+  hubspot_special_sourcing_needed String?
+  hubspot_special_requirements String?
+  additional_training_requested String?
+
   assign_sourcing_id           String?
   old_status                   HireRequestStatus?
   panels                       CandidatePanel[]
