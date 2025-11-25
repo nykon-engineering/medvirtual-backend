@@ -22,6 +22,8 @@ export const hrTicketToDbDictionary : Record<string, string | string> = {
     special_sourcing_needed: 'hubspot_special_sourcing_needed',
     special_requirements: 'hubspot_special_requirements',
     additional_training_requested: 'hubspot_additional_training_requested',
+    pairing_date: 'hubspot_pairing_date',
+    pairing_time: 'hubspot_pairing_time',
     //hire_date__start_of_employment_: 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 
 }
 

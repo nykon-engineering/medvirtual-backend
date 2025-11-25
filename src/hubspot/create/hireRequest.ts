@@ -36,6 +36,14 @@ export class HireRequestCreationService {
                 language: data.hubspot_language,
                 number_of_vas: data.hubspot_numberVA.toString(),
                 va_pay_rate_range: pay_range.toString(),
+                tasks: data.hubspot_tasks,
+                n2_monitors_required_: data.hubspot_n2_monitors_required,
+                va_shift_hours: data.hubspot_va_shift_hours,
+                special_sourcing_needed: data.hubspot_special_sourcing_needed,
+                special_requirements: data.hubspot_special_requirements,
+                additional_training_requested: data.hubspot_additional_training_requested,
+                pairing_date: data.hubspot_pairing_date,
+                pairing_time: data.hubspot_pairing_time,
                 //hire_date__start_of_employment_: PairingDate, 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 
               },
               associations: [

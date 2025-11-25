@@ -431,6 +431,19 @@ export class HireRequestController {
     }
   };
 
+  @Get('va-shift-hours/options')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get VA Types options' })
+
+  async getVAShiftHoursController() {
+    const result = await this.hireRequestService.getVAShiftHours();
+    return {
+      status: 200,
+      message: 'VA Shift hours retrieved successfully',
+      data: result,
+    }
+  };
+
   @Get('candidates/back-stage')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')

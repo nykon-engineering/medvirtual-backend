@@ -2792,6 +2792,31 @@ export class HireRequestService {
     }
   };
 
+  async getVAShiftHours () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "va_shift_hours"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Shift Hours:", error.response?.data || error.message);
+      throw new Error("Failed to find VA Shift Hours");
+    }
+  };
+
   async backStage(): Promise <any>{
     try{
       const candidates = await this.prisma.candidate.findMany({

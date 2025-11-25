@@ -272,7 +272,9 @@ model HireRequest {
   hubspot_va_shift_hours       String?
   hubspot_special_sourcing_needed String?
   hubspot_special_requirements String?
-  additional_training_requested String?
+  hubspot_additional_training_requested String?
+  hubspot_pairing_date         String? //String for avoid misunderstanding about timeZone
+  hubspot_pairing_time         String?
 
   assign_sourcing_id           String?
   old_status                   HireRequestStatus?

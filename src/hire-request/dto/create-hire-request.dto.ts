@@ -118,6 +118,16 @@ export class CreateHireRequestDto {
     @IsString()
     @IsOptional()
     hubspot_additional_training_requested: string
+
+    @ApiProperty({ type: String, description: 'Pairing Date', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_pairing_date: string
+
+    @ApiProperty({ type: String, description: 'Pairing Time', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_pairing_time: string
     
 }
 
