@@ -16,6 +16,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { HandlerObjectDeletion } from './handlers/objectDeletion';
+import { HandlerObjectMerge } from './handlers/objectMerge';
+
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
@@ -39,6 +41,7 @@ import { OrganizationCreationService } from './create/Organization';
 
 
 
+
 @Injectable()
 export class HubspotService {
 
@@ -48,6 +51,8 @@ export class HubspotService {
       private readonly objectCreation: HandlerObjectCreation,
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
       private readonly objectDeletion: HandlerObjectDeletion,
+      private readonly objectMerge: HandlerObjectMerge,
+
       private readonly organizationCreation: HandlerOrganizationCreation,
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
@@ -130,7 +135,9 @@ export class HubspotService {
                 case 'object.deletion':
                     await this.objectDeletion.execute(event);
                     break;
-
+                case 'object.merge':
+                    await this.objectMerge.execute(event);
+                    break;
                 /*
                 case 'owners.creation':
                 case 'owners.restore':

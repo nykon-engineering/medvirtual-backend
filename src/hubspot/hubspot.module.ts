@@ -29,6 +29,7 @@ import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HireRequestModule } from '../hire-request/hire-request.module';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
+import { HandlerObjectMerge } from './handlers/objectMerge';
 
 
 
@@ -39,6 +40,7 @@ import { OrganizationCreationService } from './create/Organization';
     HandlerObjectCreation, 
     HandlerObjectPropertyChange, 
     HandlerObjectDeletion, 
+    HandlerObjectMerge,
     HandlerOrganizationCreation, 
     HandlerOrganizationPropertyChange,
     HandlerOrganizationDeletion,

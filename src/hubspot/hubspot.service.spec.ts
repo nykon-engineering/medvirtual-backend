@@ -25,6 +25,7 @@ import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
+import { HandlerObjectMerge } from './handlers/objectMerge';
 
 
 jest.mock('axios', () => ({
@@ -75,6 +76,10 @@ const handlerObjectPropertyChangeMock = {
 };
 
 const handlerObjectDeletionmock = {
+  execute: jest.fn(),
+}
+
+const HandlerObjectMergeMock = {
   execute: jest.fn(),
 }
 
@@ -177,6 +182,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
         {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
+        {provide: HandlerObjectMerge, useValue: HandlerObjectMergeMock},
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
@@ -243,6 +249,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
         {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
+        {provide: HandlerObjectMerge, useValue: HandlerObjectMergeMock},
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
