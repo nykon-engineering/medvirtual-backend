@@ -34,6 +34,7 @@ export class HandlerObjectMerge {
     async execute(event){
 
         try{
+            console.log('Executing object merge handler for event:', event)
             const primaryCompany = await this.prisma.candidate.findUnique({
                 where: { hubspot_id: event.primaryObjectId }
             });
@@ -44,6 +45,10 @@ export class HandlerObjectMerge {
             const otherMergedIds = event.mergedObjectIds.filter(
                 id => id !== event.primaryObjectId
             );
+
+            console.log('Other merged IDs:', otherMergedIds);
+            console.log('Primary company:', primaryCompany);
+            console.log('Starting to fetch merged companies...');
             
             const mergedCompanies = await this.prisma.candidate.findMany({
             where: {
