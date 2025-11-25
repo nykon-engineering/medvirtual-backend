@@ -34,21 +34,20 @@ export class HandlerObjectMerge {
     async execute(event){
 
         try{
-            console.log('Executing object merge handler for event:', event)
-            const primaryCompany = await this.prisma.candidate.findUnique({
-                where: { hubspot_id: event.primaryObjectId }
+            const primaryCandidate = await this.prisma.candidate.findUnique({
+                where: { hubspot_id: String(event.primaryObjectId) }
             });
-            if (!primaryCompany) {
+            if (!primaryCandidate) {
                 throw new BadRequestException(`Primary company hubspotId=${event.primaryObjectId} not found in database.`);
             }
 
-            const otherMergedIds = event.mergedObjectIds.filter(
-                id => id !== event.primaryObjectId
+            
+            const otherMergedIds = event.mergedObjectIds
+                .map(id => String(id))
+                .filter(
+                id => id !== String(event.primaryObjectId)
             );
 
-            console.log('Other merged IDs:', otherMergedIds);
-            console.log('Primary company:', primaryCompany);
-            console.log('Starting to fetch merged companies...');
             
             const mergedCompanies = await this.prisma.candidate.findMany({
             where: {
@@ -62,7 +61,7 @@ export class HandlerObjectMerge {
 
             let dataToUpdate: Record<string, any> = {};
             for (const merged of mergedCompanies) {
-                const partialUpdate = this.mergeCandidateData(primaryCompany, merged);
+                const partialUpdate = this.mergeCandidateData(primaryCandidate, merged);
 
                 dataToUpdate = {
                 ...dataToUpdate,
@@ -72,15 +71,15 @@ export class HandlerObjectMerge {
 
             if (Object.keys(dataToUpdate).length > 0) {
                 await this.prisma.candidate.update({
-                    where: { hubspot_id: event.primaryObjectId },
+                    where: { hubspot_id: String(event.primaryObjectId) },
                     data: dataToUpdate
                 });
             }
 
             await this.prisma.candidate.update({
-                where: { hubspot_id: event.primaryObjectId },
+                where: { hubspot_id: String(event.primaryObjectId) },
                 data: {
-                    hubspot_id: event.newObjectId
+                    hubspot_id: String(event.newObjectId)
                 }
             });
 
