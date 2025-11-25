@@ -444,18 +444,19 @@ export class HireRequestController {
     }
   };
 
-  @Get('candidates/back-stage')
+  @Get('pairing-request-type/options')
   @UseGuards(AuthGuard)
-  @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ description: 'Backing candidates to origin stage' })
+  @ApiOperation({ description: 'Get Pairing request types options' })
 
-  async backStage() {
-    const result = await this.hireRequestService.backStage();
+  async getPairingRequestTypeController() {
+    const result = await this.hireRequestService.getPairingRequestType();
     return {
       status: 200,
-      message: 'Processed successfully',
+      message: 'Pairing request types retrieved successfully',
       data: result,
     }
   };
+
+  
 
 }

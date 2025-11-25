@@ -26,6 +26,11 @@ export class HireRequestUpdateService {
                 data.priority.toUpperCase()
               : undefined;
 
+              hubspotProperties.special_sourcing_needed =
+                data.hubspot_special_sourcing_needed ?
+                  data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false'
+                : undefined;
+
             //used to allow update datas on hubspot when the user schedule an interview on our side
             hubspotProperties.pairing_date = 
               data.pairing_date ?

@@ -124,7 +124,7 @@ export class HireRequestService {
       hs_pipeline: '0',
       hs_pipeline_stage: Object.keys(HRTicketStatus)
       .find(key => HRTicketStatus[key] === 'New Agent Request'), //=> New agent Request
-      pairing_request_type: 'New Client',
+      pairing_request_type: hireRequestData.hubspot_pairing_request_type || 'New Client',
       ticket_type: 'Agent Pairing Request',
       business_unit: organizationSQL.business_unit || "Not Specified",
       company_name: organizationSQL.name,
@@ -2049,6 +2049,20 @@ export class HireRequestService {
         
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
+
+    // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
+    const updateHireRequest = await this.prisma.hireRequest.update({
+      where: {
+        id: hireRequest.id,
+      },
+      data: {
+        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_time: data.time || null,
+      },
+    });
+    if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
+    
+    
     const updatedDate = new Date(`${data.date_time}`);
 
     const interviewScheduled = await this.prisma.interview.create({
@@ -2133,6 +2147,19 @@ export class HireRequestService {
         
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
+
+
+    // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
+    const updateHireRequest = await this.prisma.hireRequest.update({
+      where: {
+        id: hireRequest.id,
+      },
+      data: {
+        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_time: data.time || null,
+      },
+    });
+    if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
 
     const updatedDate = new Date(`${data.date_time}`);
     //console.log('updatedDate', updatedDate);
@@ -2817,61 +2844,30 @@ export class HireRequestService {
     }
   };
 
-  async backStage(): Promise <any>{
-    try{
-      const candidates = await this.prisma.candidate.findMany({
-        where: {
-          pipeline_status: '1172847191',
-          panelCandidates: {
-            some: {
-              panel: {
-                hireRequest: {
-                    status: {not: {in: ['awaiting_decision', 'placement_completed']}},
-                }
-              }
-            }
-          }
+  async getPairingRequestType () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
         },
-        select:{
-          id: true,
-          name: true,
-          first_name: true,
-          hubspot_id: true,
-          last_name : true,
-          pipeline_status: true,
-          pipeline_status_origin: true,
-          panelCandidates: {
-            select:{
-              panel:{
-                select:{
-                  hireRequest:{
-                    select:{
-                      title: true,
-                      status: true,
-                    }
-                  }
-                }
-              }
-            }
-        }
-      },
       });
-
-      //update all candidates that the pipeline status to the origin status
-      
-      await Promise.all(
-        candidates.map(async c =>{
-          await this.prisma.candidate.update({
-            where: { id: c.id },
-            data: { pipeline_status: c.pipeline_status_origin || c.pipeline_status},
-          });
-          await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status);
-        })
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "pairing_request_type"
       );
-      
-      return candidates;
-    }catch(err){
-      console.error('Backstage service failed', err?.message || err);
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Pairing Request Type:", error.response?.data || error.message);
+      throw new Error("Failed to find Pairing Request Type");
     }
-  }
+  };
+
+
 }

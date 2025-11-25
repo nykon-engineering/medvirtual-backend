@@ -23,7 +23,7 @@ export class HireRequestCreationService {
                 content: data.description,
                 hs_pipeline: "0", //=>Pairing Pipeline
                 hs_pipeline_stage: "1",  //=> New agent Request
-                pairing_request_type: "New Client",
+                pairing_request_type: data.hubspot_pairing_request_type || 'New Client',
                 ticket_type: "Agent Pairing Request",
                 business_unit: data.organization.business_unit || "Not Specified",
                 company_name: data.organization.name,
@@ -39,7 +39,7 @@ export class HireRequestCreationService {
                 tasks: data.hubspot_tasks,
                 n2_monitors_required_: data.hubspot_n2_monitors_required,
                 va_shift_hours: data.hubspot_va_shift_hours,
-                special_sourcing_needed: data.hubspot_special_sourcing_needed,
+                special_sourcing_needed: data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false',
                 special_requirements: data.hubspot_special_requirements,
                 additional_training_requested: data.hubspot_additional_training_requested,
                 pairing_date: data.hubspot_pairing_date,

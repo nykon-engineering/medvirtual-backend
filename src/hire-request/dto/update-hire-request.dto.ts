@@ -131,5 +131,10 @@ export class UpdateHireRequestDto {
     @IsOptional()
     hubspot_pairing_time: string
 
+    @ApiProperty({ type: String, description: 'Pairing Request Type', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_pairing_request_type: string
+
 }
 
