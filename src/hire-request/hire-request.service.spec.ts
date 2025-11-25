@@ -1343,6 +1343,8 @@ describe('HireRequestService', () => {
     });
   
     it('should throw NotFoundException if hireRequest not found', async () => {
+      jest.spyOn(service, 'verifyUnavailableCandidates')
+      .mockResolvedValue({ available: true });
       prismaMock.hireRequest.findUnique.mockResolvedValue(null);
   
       await expect(service.scheduleInterview(baseId, baseData as any, user))
@@ -1358,6 +1360,8 @@ describe('HireRequestService', () => {
     });
   
     it('should throw NotFoundException if panel not found', async () => {
+      jest.spyOn(service, 'verifyUnavailableCandidates')
+      .mockResolvedValue({ available: true });
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
   
@@ -1396,6 +1400,9 @@ describe('HireRequestService', () => {
     });
   
     it('should schedule interview and update all statuses successfully', async () => {
+      jest.spyOn(service, 'verifyUnavailableCandidates')
+      .mockResolvedValue({ available: true });
+      
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1' });
       prismaMock.interview.create.mockResolvedValue({ id: 'interview1' });
@@ -1453,6 +1460,9 @@ describe('HireRequestService', () => {
     });
   
     it('should throw NotFoundException if no panel exists for hire request', async () => {
+      jest.spyOn(service, 'verifyUnavailableCandidates')
+      .mockResolvedValue({ available: true });
+      
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue(null);
   
@@ -1493,6 +1503,9 @@ describe('HireRequestService', () => {
     });
   
     it('should update panel and hireRequest and return result of findOne', async () => {
+      jest.spyOn(service, 'verifyUnavailableCandidates')
+    .mockResolvedValue({ available: true });
+      
       prismaMock.hireRequest.findUnique.mockResolvedValue({ id: baseId });
       prismaMock.candidatePanel.findFirst.mockResolvedValue({
         id: 'panel1',

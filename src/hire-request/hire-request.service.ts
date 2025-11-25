@@ -85,6 +85,41 @@ export class HireRequestService {
     return true;
   }
 
+  async verifyUnavailableCandidates(hireRequestId: string, user: USER): Promise<any>{
+
+    const hireRequest = await this.findOne(hireRequestId, user);
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    const candidatesInPanels = hireRequest.panels.flatMap(p => p.panelCandidates)
+
+    const candidatesSelectedInOtherPanels = candidatesInPanels
+    .filter(pc => {
+        // pc = panelCandidate on the current Panel
+        const otherPanels = pc.candidate.panelCandidates;
+
+        if (!otherPanels || !otherPanels.length) return false;
+
+        return otherPanels.some(
+          pcc => pcc.status === 'selected_by_client'
+        );
+      });
+
+
+    const allCandidatesBlocked =
+      candidatesInPanels.length > 0 &&
+      candidatesSelectedInOtherPanels.length === candidatesInPanels.length;
+
+    /*
+    console.log({
+      totalCandidates: candidatesInPanels.length,
+      candidatesSelectedInOtherPanels,
+      allCandidatesBlocked,
+    });
+    */
+
+    return allCandidatesBlocked
+  }
+
   async create(data: CreateHireRequestDto, user?: USER):Promise<any> {   //user is option because the webhook use this function without user
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
@@ -654,23 +689,25 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
+    if (data.status !== 'cancelled'){ //allow user cancell HireRequest even if all candidates are blocked
+      const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
+      if (!verifyCandidates.available) {
+        throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+      }
+    }
+
     const assign_user = await this.verifyAssignUser(data.status, id);
     if (!assign_user) {
       throw new BadRequestException(`Status ${data.status} requires an assigned user`);
     }
 
     if (!data || !data.status) throw new BadRequestException('Data for status change is required');
-    const hireRequest = await this.prisma.hireRequest.findUnique({
-      where: {
-        id: id,
-        organization: user.role.includes('organization') ?  { id: user.organization_id || undefined } : undefined,
-      },
-      select:{
-        status: true,
-        hubspot_ticket_id: true,
-      }
-    });
+    
+    const hireRequest = await this.findOne(id, user);
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+
+
 
     const candidates = await this.prisma.panelCandidate.findMany({
       where: {
@@ -1595,6 +1632,11 @@ export class HireRequestService {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
     
+     const verifyCandidates = await this.verifyUnavailableCandidates(data.hireRequest_id, user);
+    if (!verifyCandidates.available) {
+      throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+    }
+
     const panel = await this.prisma.candidatePanel.findFirst({
       where: {
         hire_request_id: data.hireRequest_id,
@@ -2028,6 +2070,11 @@ export class HireRequestService {
   async scheduleInterview(id: string, data: scheduleInterviewDTO, user: USER){
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
+    const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
+    if (!verifyCandidates.available) {
+      throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+    }
+
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
@@ -2198,6 +2245,11 @@ export class HireRequestService {
 
   async awaitingDecision(id: string, data: awaitingDecisionDTO, user: USER): Promise<boolean> {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+     const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
+    if (!verifyCandidates.available) {
+      throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+    }
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
