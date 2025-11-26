@@ -233,6 +233,7 @@ export class CandidatesService {
       processing_error: true,
       avatar_url: true,
       gender: true,
+      shift_block: true,
       languages: {
         select: {
           name: true,
@@ -406,6 +407,7 @@ export class CandidatesService {
       tools: true,
       medical_tools: true,
       gender: true,
+      shift_block: true,
       languages: {
         select: {
           name: true,
