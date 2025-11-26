@@ -1,4 +1,5 @@
 import { EmailHeader, EmailFooter } from './components';
+const eye = `${process.env.FRONTEND_URL}/eye.png`;
 
 export default function systemReport(availableCandidates, endorsedCandidates, withoutResume, failedResumeParsing, withoutHeadshot) {
 
@@ -9,6 +10,11 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
       : candidate.name ?? 'N/A';
       return `
         <tr>
+          <td style="border: 1px solid #ccc; padding: 8px; text-align: left;">
+            <a href='https://app.hubspot.com/contacts/20630393/record/2-5922196/${candidate.hubspot_id}' target='_blank' rel='noopener noreferrer'>
+              <img src="${eye}" alt="Eye Icon" style="max-width: 24px; height: auto;" />
+            </a>
+          </td>
           <td style="border: 1px solid #ccc; padding: 8px; text-align: left;">
             ${candidate.hubspot_id}
           </td>
@@ -31,6 +37,11 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
 
       return `
         <tr>
+          <td style="border: 1px solid #ccc; padding: 8px; text-align: left;">
+            <a href='https://app.hubspot.com/contacts/20630393/record/2-5922196/${candidate.hubspot_id}' target='_blank' rel='noopener noreferrer'>
+              <img src="${eye}" alt="Eye Icon" style="max-width: 24px; height: auto;" />
+            </a>
+          </td>
           <td style="border: 1px solid #ccc; padding: 8px; text-align: left;">
             ${candidate.hubspot_id}
           </td>
@@ -66,9 +77,9 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
   <div style="max-width:600px;margin:0 auto;background-color:#ffffff;">
     ${EmailHeader}
 
-    <div style="padding:30px 20px;text-align:center;">
+    <div style="padding:25px 15px;text-align:center;">
       <p style="color:#181D27;font-size:18px;line-height:1.6;">
-        Hi Shayan, below is important data regarding candidates on our system.
+        Hi There, below is important data regarding candidates on our system.
       </p>
     </div>
     <div style="display: flex; justify-content: center; flex-wrap: wrap; text-align: center" align="center">
@@ -119,6 +130,7 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
     <table style="width:100%; border-collapse: collapse; margin-top:20px;">
         <thead>
         <tr style="background-color:#f4f4f4;">
+            <th style="border:1px solid #ccc;padding:8px;text-align:left;">&nbsp;</th>
             <th style="border:1px solid #ccc;padding:8px;text-align:left;">ID</th>
             <th style="border:1px solid #ccc;padding:8px;text-align:left;">Candidate Name</th>
             <th style="border:1px solid #ccc;padding:8px;text-align:left;">Error</th>
@@ -133,8 +145,9 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
     <table style="width:100%; border-collapse: collapse; margin-top:20px; margin-bottom:20px;">
         <thead>
         <tr style="background-color:#f4f4f4;">
-            <th style="border:1px solid #ccc;padding:8px;text-align:left;">ID</th>
-            <th style="border:1px solid #ccc;padding:8px;text-align:left;">Candidate Name</th>
+          <th style="border:1px solid #ccc;padding:8px;text-align:left;">&nbsp;</th>  
+          <th style="border:1px solid #ccc;padding:8px;text-align:left;">ID</th>
+          <th style="border:1px solid #ccc;padding:8px;text-align:left;">Candidate Name</th>
         </tr>
         </thead>
         <tbody>
