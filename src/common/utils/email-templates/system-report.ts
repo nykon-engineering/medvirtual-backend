@@ -77,7 +77,7 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
   <div style="max-width:600px;margin:0 auto;background-color:#ffffff;">
     ${EmailHeader}
 
-    <div style="padding:25px 15px;text-align:center;">
+    <div style="padding:15px 15px;text-align:center;">
       <p style="color:#181D27;font-size:18px;line-height:1.6;">
         Hi There, below is important data regarding candidates on our system.
       </p>
