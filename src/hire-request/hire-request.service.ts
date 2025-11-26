@@ -248,7 +248,7 @@ export class HireRequestService {
     return hireRequestWithHubspotID;
   }
 
-  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10): Promise<any> {
+  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10, businessUnit?: string): Promise<any> {
     
     if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
@@ -279,7 +279,16 @@ export class HireRequestService {
     //this code was updated for the switch above
     // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search ? { title: { contains: search, mode: 'insensitive' as const } } : {};
-    const whereClause =  { ...baseWhere, ...searchWhere }; ;
+    
+    // Add business unit filter if provided
+    const businessUnitWhere = businessUnit ? { 
+      OR: [
+        { organization: { business_unit: { contains: businessUnit, mode: 'insensitive' as const } } },
+        { hubspot_business_unit: { contains: businessUnit, mode: 'insensitive' as const } }
+      ]
+    } : {};
+    
+    const whereClause =  { ...baseWhere, ...searchWhere, ...businessUnitWhere };
 
     const skip = (page - 1) * perPage;
     const take = perPage;
@@ -292,7 +301,15 @@ export class HireRequestService {
         },
         include: {
           skills: true,
-          organization: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              business_unit: true,
+              email: true,
+              hubspot_id: true,
+            }
+          },
           createdBy:{
             select: {
               id: true,
