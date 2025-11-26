@@ -9,6 +9,16 @@ export class HireRequestCreationService {
       private readonly prisma: PrismaService
     ){}
 
+    async getOwnerId(userId: string): Promise<string | null> {
+      if (!userId) return null;
+      const user = await this.prisma.uSER.findUnique({
+        where: { id: userId },
+        select: { hubspot_id: true },
+      });
+      return user ? user.hubspot_id : null; 
+    }
+
+
     async execute(data: any): Promise<any> {
         try {
           const pay_range= data.salary_range_from && data.salary_range_to 
@@ -44,6 +54,9 @@ export class HireRequestCreationService {
                 additional_training_requested: data.hubspot_additional_training_requested,
                 pairing_date: data.hubspot_pairing_date,
                 pairing_time: data.hubspot_pairing_time,
+
+                //ticketOwner
+                ticket_owner: data.assign_user_id ? await this.getOwnerId(data.assign_user_id) : undefined,
                 //hire_date__start_of_employment_: PairingDate, 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 
               },
               associations: [

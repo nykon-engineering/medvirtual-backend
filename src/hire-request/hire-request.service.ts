@@ -1303,6 +1303,9 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
+    const newHr = await this.findOne(id, user);
+    await this.hubspot.updateHireRequestInHubspot(newHr, type === 'concierge' ? 'assign_user_id' : 'assign_sourcing_id');
+
     // Notify newly assigned user via email (non-blocking)
     if (data.user_id) {
       console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user ${data.user_id}`);
@@ -1316,7 +1319,7 @@ export class HireRequestService {
       console.log(`[notifications] No user_id provided for hire request reassignment ${id}, skipping notification`);
     }
 
-    return this.findOne(id, user);
+    return newHr;
   }
 
   async showMatchCandidates(id: string, user: USER): Promise<object> {

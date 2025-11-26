@@ -48,16 +48,12 @@ export class HubspotController {
         return this.hubspotService.updateCandidates(pipeline_stage);
     }
 
-
-
     @Post('update-organizations')
     @ApiProperty({ description: 'Update all organization with data from HubSpot' })
     @UseGuards(AuthGuard)
     async updateOrganizations(){
         return this.hubspotService.updateOrganizations();
     }
-
-
 
     //=> this route is just a example to read candidates and download resume
     @Post('candidates-download')
@@ -73,6 +69,9 @@ export class HubspotController {
     async getCandidates2(@Body() data: GetCandidatesDto) {
         return this.hubspotService.getCandidatesAndDownload(data);
     }
+
+    @Get('align-owners')
+    async alignOwners() {
+        return this.hubspotService.alignOwners();
+    }
 }
-
-

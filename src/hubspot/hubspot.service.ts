@@ -281,8 +281,8 @@ export class HubspotService {
         return await this.hireRequestCreationService.execute(data);
     }
 
-    async updateHireRequestInHubspot(data: any): Promise<any> {
-        return await this.hireRequestUpdateService.execute(data);
+    async updateHireRequestInHubspot(data: any, specificField?: string): Promise<any> {
+        return await this.hireRequestUpdateService.execute(data, specificField);
     }
 
     async createOrganizationInHubspot(data: any): Promise<any> {
@@ -635,4 +635,50 @@ export class HubspotService {
           throw new BadRequestException(`Error fetching candidates: ${error.message}`);
       }
     }
+
+
+    async alignOwners() {
+        
+            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/owners`,
+            {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+                },
+            });
+
+            if (!getObject) {
+                throw new BadRequestException('No object data found');
+            }
+            //console.log('Fetched Owner Data from HubSpot:', getObject.data);
+            
+            for (const owner of getObject.data.results){
+                console.log('Email from hubspot owner:', owner.email);
+                const ownerExists = await this.prisma.uSER.findUnique({
+                    where: {
+                        email: String(owner.email)
+                    }
+                })
+
+                if (ownerExists) {
+                    await this.prisma.uSER.update({
+                        where: {
+                            id: ownerExists.id
+                        },
+                        data: {
+                            hubspot_id: String(owner.id)
+                        }
+                    })
+                    console.log('Owner updated with hubspot id:', owner.email);
+                }
+
+                console.log('-------------------------');
+            }
+
+            return true;
+
+        
+    }
+
+    
 }
