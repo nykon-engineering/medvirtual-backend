@@ -27,7 +27,7 @@ export class HireRequestUpdateService {
             if (specificField) {
               switch (specificField) {
                 case 'assign_user_id':
-                hubspotProperties.ticket_owner = data.assign_user_id ? await this.getOwnerId(data.assign_user_id) : undefined;
+                hubspotProperties.hubspot_owner_id = data.assign_user_id ? await this.getOwnerId(data.assign_user_id) : undefined;
                 break;
 
                 case 'assign_sourcing_id':

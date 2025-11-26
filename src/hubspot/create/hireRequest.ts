@@ -56,7 +56,7 @@ export class HireRequestCreationService {
                 pairing_time: data.hubspot_pairing_time,
 
                 //ticketOwner
-                ticket_owner: data.assign_user_id ? await this.getOwnerId(data.assign_user_id) : undefined,
+                hubspot_owner_id: data.assign_user_id ? await this.getOwnerId(data.assign_user_id) : undefined,
                 //hire_date__start_of_employment_: PairingDate, 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 
               },
               associations: [
