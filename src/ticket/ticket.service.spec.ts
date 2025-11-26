@@ -226,6 +226,7 @@ describe('TicketService', () => {
               id: true,
               name: true,
               email: true,
+              business_unit: true,
               status: true,
               admin_id: true,
             }
