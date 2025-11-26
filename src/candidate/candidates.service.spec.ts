@@ -132,6 +132,7 @@ const MailMock ={
         email: 'a@a.com',
         name: 'John Doe',
         pipeline_status: '1',
+        shift_block: '8am-5pm',
         about_me: 'About me',
         tools: 'JavaScript, TypeScript',
         medical_tools: 'None',
@@ -193,6 +194,7 @@ const MailMock ={
           medical_tools: true,
           gender: true,
           country: true,
+          shift_block: true,
           educations: {
             select: {
               degree: true,
