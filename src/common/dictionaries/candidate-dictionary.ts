@@ -16,7 +16,8 @@ export const candidadeToDbDictionary : Record<string, string | string[]> = {
     tools: 'tools',
     medical_tools: 'medical_tools',
     gender: 'gender',
-    va_role_s: 'approved_positions_pairing'
+    va_role_s: 'approved_positions_pairing',
+    shift_block: 'shift_block'
 
 }
 

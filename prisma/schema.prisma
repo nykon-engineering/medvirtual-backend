@@ -164,6 +164,7 @@ model Candidate {
   processing_cost            Decimal?                @default(0)
   avatar_url                 String?
   headshot_url               String?
+  shift_block                String?
   educations                 CandidateEducation[]
   experiences                CandidateExperience[]
   languages                  CandidateLanguage[]
