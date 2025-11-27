@@ -1194,15 +1194,8 @@ export class CandidatesService {
 
   async getRandomTalentPoolCandidates(): Promise<any> {
     // Get candidates from talent pool (available candidates)
-    // Pipeline status '261075105' or '1087596819' represent available candidates
     const whereClause = {
       AND: [
-        {
-          OR: [
-            { pipeline_status: '261075105' },
-            { pipeline_status: '1087596819' }
-          ]
-        },
         {
           avatar_url: { not: null }
         },
@@ -1222,8 +1215,8 @@ export class CandidatesService {
       ]
     };
 
-    // Get total count of available candidates and total count of all candidates
-    const [candidates, totalCount, totalTableCount] = await this.prisma.$transaction([
+    // Get total count of all candidates in the table (without filters)
+    const [candidates, totalTableCount] = await this.prisma.$transaction([
       this.prisma.candidate.findMany({
         where: whereClause,
         select: {
@@ -1272,17 +1265,14 @@ export class CandidatesService {
           approved_positions_pairing: true,
         },
       }),
-      this.prisma.candidate.count({
-        where: whereClause,
-      }),
-      this.prisma.candidate.count()
+      this.prisma.candidate.count() // Count all records in the table without filters
     ]);
 
     // Shuffle array to get random candidates
     const shuffled = candidates.sort(() => 0.5 - Math.random());
     
     // Get first 10 candidates
-    const randomCandidates = shuffled.slice(0, 10);
+    const randomCandidates = shuffled.slice(0, 25);
 
     // Map pipeline_status to readable format if needed
     // Note: We're not including pipeline_status in the select, so it won't be in the response
@@ -1299,7 +1289,7 @@ export class CandidatesService {
     
     return {
       candidates: candidatesWithFullAvatarUrl,
-      total: totalCount,
+      total: totalTableCount, // Return count of all records in the table
       totalTable: totalTableCount
     };
   }
@@ -1310,40 +1300,9 @@ export class CandidatesService {
       throw new BadRequestException('Invalid candidate ID');
     }
 
-    // Get candidates from talent pool (available candidates)
-    // Pipeline status '261075105' or '1087596819' represent available candidates
-    const whereClause = {
-      AND: [
-        {
-          id: id.trim()
-        },
-        {
-          OR: [
-            { pipeline_status: '261075105' },
-            { pipeline_status: '1087596819' }
-          ]
-        },
-        {
-          avatar_url: { not: null }
-        },
-        {
-          specialization: { 
-            not: null
-          }
-        },
-        {
-          specialization: { 
-            not: 'N/A'
-          }
-        },
-        {
-          years_of_experience: { not: null }
-        },
-      ]
-    };
-
-    const candidate = await this.prisma.candidate.findFirst({
-      where: whereClause,
+    // Search candidate by ID without any filters
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: id.trim() },
       select: {
         id: true,
         first_name: true,
@@ -1392,7 +1351,7 @@ export class CandidatesService {
     });
 
     if (!candidate) {
-      throw new NotFoundException('Candidate not found or not available in talent pool');
+      throw new NotFoundException('Candidate not found');
     }
 
     // Construct full avatar URL and calculate salary

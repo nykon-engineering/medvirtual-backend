@@ -472,8 +472,8 @@ const MailMock ={
       mockPrisma.$transaction.mockReset();
     });
 
-    it('should return 10 random candidates from talent pool', async () => {
-      const mockCandidates = Array.from({ length: 15 }, (_, i) => ({
+    it('should return 25 random candidates from talent pool', async () => {
+      const mockCandidates = Array.from({ length: 30 }, (_, i) => ({
         id: `candidate-${i}`,
         first_name: `John${i}`,
         last_name: `Doe${i}`,
@@ -501,21 +501,23 @@ const MailMock ={
         approved_positions_pairing: ['Developer'],
       }));
 
-      mockPrisma.$transaction.mockResolvedValue([mockCandidates, 15, 20]);
+      mockPrisma.$transaction.mockResolvedValue([mockCandidates, 20]);
 
       const result = await service.getRandomTalentPoolCandidates();
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
 
-      expect(result.candidates).toHaveLength(10);
+      expect(result.candidates).toHaveLength(25);
       expect(result.candidates[0]).toHaveProperty('id');
       expect(result.candidates[0]).toHaveProperty('name');
       expect(result.candidates[0]).toHaveProperty('avatar_url');
       expect(result).toHaveProperty('total');
       expect(result).toHaveProperty('totalTable');
+      expect(result.total).toBe(20);
+      expect(result.totalTable).toBe(20);
     });
 
-    it('should return fewer than 10 candidates if less available', async () => {
+    it('should return fewer than 25 candidates if less available', async () => {
       const mockCandidates = Array.from({ length: 5 }, (_, i) => ({
         id: `candidate-${i}`,
         first_name: `John${i}`,
@@ -538,15 +540,17 @@ const MailMock ={
         approved_positions_pairing: [],
       }));
 
-      mockPrisma.$transaction.mockResolvedValue([mockCandidates, 5, 10]);
+      mockPrisma.$transaction.mockResolvedValue([mockCandidates, 10]);
 
       const result = await service.getRandomTalentPoolCandidates();
 
       expect(result.candidates).toHaveLength(5);
+      expect(result.total).toBe(10);
+      expect(result.totalTable).toBe(10);
     });
 
     it('should return empty array if no candidates available', async () => {
-      mockPrisma.$transaction.mockResolvedValue([[], 0, 10]);
+      mockPrisma.$transaction.mockResolvedValue([[], 25]);
 
       const result = await service.getRandomTalentPoolCandidates();
 
@@ -607,7 +611,7 @@ const MailMock ={
         },
       ];
 
-      mockPrisma.$transaction.mockResolvedValue([[mockCandidates[0]], 1, 10]); // Only the first one should be returned
+      mockPrisma.$transaction.mockResolvedValue([[mockCandidates[0]], 25]); // Only the first one should be returned
 
       const result = await service.getRandomTalentPoolCandidates();
 
