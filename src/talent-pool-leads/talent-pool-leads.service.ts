@@ -8,6 +8,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTalentPoolLeadDto } from './dto/create-talent-pool-lead.dto';
 import { UpdateTalentPoolLeadDto } from './dto/update-talent-pool-lead.dto';
 import { QueryTalentPoolLeadsDto } from './dto/query-talent-pool-leads.dto';
+import { Priority } from '@prisma/client';
+import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
 
 @Injectable()
 export class TalentPoolLeadsService {
@@ -91,6 +93,55 @@ export class TalentPoolLeadsService {
         created_at: true,
       },
     });
+
+    // Create an Interview Request ticket with client information
+    try {
+      // Try to find an existing organization by email or name
+      let organizationId: string | null = null;
+      
+      const existingOrg = await this.prisma.organization.findFirst({
+        where: {
+          OR: [
+            { email: createDto.email.toLowerCase().trim() },
+            { name: { equals: sanitizedOrganization, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (existingOrg) {
+        organizationId = existingOrg.id;
+      }
+
+      // Build ticket description with client information
+      const ticketDescription = `Talent Pool Lead Information:
+- Contact Name: ${sanitizedName}
+- Email: ${createDto.email.toLowerCase().trim()}
+- Organization: ${sanitizedOrganization}
+${sanitizedMainNeed ? `- Main Need: ${sanitizedMainNeed}` : ''}
+${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetails}` : ''}
+- Source: ${createDto.source}
+- Lead ID: ${lead.id}`;
+
+      // Create the ticket
+      const ticket = await this.prisma.ticket.create({
+        data: {
+          type: ticketTypeDictionary['Interview Request'] || 'interview',
+          title: `Interview Request - ${sanitizedOrganization}`,
+          description: ticketDescription,
+          priority: Priority.medium,
+          ...(organizationId && { organization: { connect: { id: organizationId } } }),
+        },
+      });
+
+      // Log ticket creation (non-blocking)
+      if (!ticket) {
+        console.warn(`[talent-pool-lead] Failed to create ticket for lead ${lead.id}`);
+      }
+    } catch (error) {
+      // Log error but don't fail the lead creation
+      console.error(`[talent-pool-lead] Error creating ticket for lead ${lead.id}:`, error?.message || error);
+    }
 
     return lead;
   }
