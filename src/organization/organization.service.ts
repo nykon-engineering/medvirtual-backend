@@ -315,12 +315,15 @@ export class OrganizationService {
       const whereClause: any = {};
 
       // Add user-specific filtering based on role
-      if (user.role === 'system_super_admin') {
+      if (user.role === 'system_super_admin' || user.role === 'system_admin') {
         // No additional filtering needed - return all organizations
+      /*
       } else if (user.role === 'system_admin') {
         // For system_admin: return only organizations they are admin or concierge of
         whereClause.OR = [{ admin_id: user.id }];
-      } else {
+      }
+      */
+      }else {
         // For organization users: return organizations they are associated with
         whereClause.OR = [
           { admin_id: user.id },
