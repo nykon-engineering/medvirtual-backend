@@ -594,6 +594,7 @@ export class OrganizationService {
         admin: org.admin || undefined,
         userCount: org.userCount,
         staffCount: org.staffCount,
+        source: org.source || undefined,
       }));
 
       // Calculate pagination metadata
