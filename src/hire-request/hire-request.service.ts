@@ -109,13 +109,13 @@ export class HireRequestService {
       candidatesInPanels.length > 0 &&
       candidatesSelectedInOtherPanels.length === candidatesInPanels.length;
 
-    /*
+    
     console.log({
       totalCandidates: candidatesInPanels.length,
       candidatesSelectedInOtherPanels,
       allCandidatesBlocked,
     });
-    */
+    
 
     return allCandidatesBlocked
   }
@@ -706,9 +706,9 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
-    if (data.status !== 'cancelled'){ //allow user cancell HireRequest even if all candidates are blocked
+    if (data.status !== 'cancelled' && data.status !== 'sourcing' ){ //allow user cancell or star sourcing HireRequest even if all candidates are blocked
       const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
-      if (!verifyCandidates.available) {
+      if (verifyCandidates) {
         throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
       }
     }
@@ -1653,7 +1653,7 @@ export class HireRequestService {
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
     
      const verifyCandidates = await this.verifyUnavailableCandidates(data.hireRequest_id, user);
-    if (!verifyCandidates.available) {
+    if (verifyCandidates) {
       throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
     }
 
@@ -2091,7 +2091,7 @@ export class HireRequestService {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
-    if (!verifyCandidates.available) {
+    if (verifyCandidates) {
       throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
     }
 
@@ -2267,7 +2267,7 @@ export class HireRequestService {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
      const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
-    if (!verifyCandidates.available) {
+    if (verifyCandidates) {
       throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
     }
 
