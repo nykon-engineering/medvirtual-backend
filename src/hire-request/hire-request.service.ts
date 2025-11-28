@@ -706,7 +706,7 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
-    if (data.status !== 'cancelled' && data.status !== 'sourcing' ){ //allow user cancell or star sourcing HireRequest even if all candidates are blocked
+    if (data.status !== 'cancelled' && data.status !== 'sourcing' && data.status !== 'new' ){ //allow user cancell or star sourcing HireRequest even if all candidates are blocked
       const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
       if (verifyCandidates) {
         throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
