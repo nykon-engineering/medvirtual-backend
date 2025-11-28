@@ -69,6 +69,26 @@ export class HandlerTicketDeletion {
                 }
             });
 
+            //=> Here I 'll remove all candidates from the ticket panels
+            const panels = await this.prisma.candidatePanel.findMany({
+                where:{
+                    hire_request_id: ticketExists.id
+                },
+                select:{
+                    id:true
+                }
+            });
+
+            await Promise.all(
+                panels.map(async panel =>{
+                    await this.prisma.panelCandidate.deleteMany({
+                        where:{
+                            panel_id: panel.id
+                        }
+                    })
+                })
+            );
+
             
         }catch (error) {
             throw new BadRequestException('Error deleting ticket', error);

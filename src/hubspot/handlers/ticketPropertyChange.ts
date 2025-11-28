@@ -20,7 +20,7 @@ export class HandlerTicketPropertyChange {
 
         if (event.propertyName === 'va_pay_rate_range') {
             //We receive a text like '120 - 150' and we need to parse it for 2 fields: salary_range_from and salary_range_to
-            const [from, to] = event.propertyValue.split(' - ').map(value => parseFloat(value.trim()));
+            const [from, to] = event.propertyValue.split('-').map(value => parseFloat(value.trim()));
             await this.prisma.hireRequest.update({
                 where: {
                     id: hr.id
@@ -41,7 +41,9 @@ export class HandlerTicketPropertyChange {
         let value = event.propertyValue;
 
         if (fieldUpdated === 'hubspot_pipeline_stage') return false; // skip updating pipeline stage for Ticket / HR
-
+        if (fieldUpdated === 'hubspot_numberVA') {
+            value = parseInt(event.propertyValue);
+        }
         // => Handle with pairing date and pairing time, because this field is within other table
 
         await this.prisma.hireRequest.update({

@@ -60,18 +60,19 @@ export class HireRequestUpdateService {
 
               //used to allow update datas on hubspot when the user schedule an interview on our side
               hubspotProperties.pairing_date = 
-                data.pairing_date ?
-                  data.pairing_date
+                data.hubspot_pairing_date ?
+                  data.hubspot_pairing_date
                 : undefined;
 
               hubspotProperties.pairing_time =
-                data.pairing_time ?
-                  data.pairing_time
+                data.hubspot_pairing_time ?
+                  data.hubspot_pairing_time
                 : undefined;
-          
+              
               hubspotProperties.va_pay_rate_range = data.salary_range_from && data.salary_range_to 
               ? `${data.salary_range_from} - ${data.salary_range_to}`
               : '';
+
             }
             
             
