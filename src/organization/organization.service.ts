@@ -820,7 +820,6 @@ export class OrganizationService {
 
   async update(id: string, data: UpdateOrganizationDto): Promise<Organization> {
     try {
-      console.log('Organization ID to update:', id);
       const updateData: any = {};
 
       // Map the fields from DTO to database fields
