@@ -30,6 +30,7 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
+import { OwnerCreationService } from './create/Owner';
 
 
 
@@ -59,6 +60,7 @@ import { HandlerObjectMerge } from './handlers/objectMerge';
     HireRequestCreationService,
     HireRequestUpdateService,
     OrganizationCreationService,
+    OwnerCreationService
   ],
   imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule), forwardRef(() => HireRequestModule) ],
   exports: [HubspotService, 

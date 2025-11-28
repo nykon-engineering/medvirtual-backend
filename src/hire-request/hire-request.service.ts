@@ -29,7 +29,7 @@ import {
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
-import { title } from 'process';
+import { formatTimestampToUSShort } from '../common/utils/formatDate';
 
 @Injectable()
 export class HireRequestService {
@@ -438,6 +438,7 @@ export class HireRequestService {
 
     const formatted = hireRequests.map(hr => ({
       ...hr,
+      hubspot_pairing_date: hr.hubspot_pairing_date ? formatTimestampToUSShort(hr.hubspot_pairing_date) : null,
       panels: hr.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
