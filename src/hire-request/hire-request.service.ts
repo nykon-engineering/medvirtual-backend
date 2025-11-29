@@ -237,8 +237,8 @@ export class HireRequestService {
     if (newHireRequest.assign_user_id) {
       console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
       try {
-        //const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
-        //console.log(`[notifications] Hire request created notification sent successfully:`, result);
+        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        console.log(`[notifications] Hire request created notification sent successfully:`, result);
       } catch (err) {
         console.error('[notifications] hire-request-created email failed', err?.message || err);
       }
