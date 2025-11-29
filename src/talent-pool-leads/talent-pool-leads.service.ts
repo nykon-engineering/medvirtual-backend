@@ -120,8 +120,7 @@ export class TalentPoolLeadsService {
 - Organization: ${sanitizedOrganization}
 ${sanitizedMainNeed ? `- Main Need: ${sanitizedMainNeed}` : ''}
 ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetails}` : ''}
-- Source: ${createDto.source}
-- Lead ID: ${lead.id}`;
+- Source: ${createDto.source}`;
 
       // Create the ticket
       const ticket = await this.prisma.ticket.create({
