@@ -1212,10 +1212,16 @@ export class CandidatesService {
         {
           years_of_experience: { not: null }
         },
+        {
+          // Filter only available candidates
+          pipeline_status: {
+            in: ['261075105', '1087596819']
+          }
+        },
       ]
     };
 
-    // Get total count of all candidates in the table (without filters)
+    // Get total count of available candidates (with filters)
     const [candidates, totalTableCount] = await this.prisma.$transaction([
       this.prisma.candidate.findMany({
         where: whereClause,
@@ -1265,13 +1271,13 @@ export class CandidatesService {
           approved_positions_pairing: true,
         },
       }),
-      this.prisma.candidate.count() // Count all records in the table without filters
+      this.prisma.candidate.count({ where: whereClause }) // Count available candidates with filters
     ]);
 
     // Shuffle array to get random candidates
     const shuffled = candidates.sort(() => 0.5 - Math.random());
     
-    // Get first 10 candidates
+    // Get first 25 candidates
     const randomCandidates = shuffled.slice(0, 25);
 
     // Map pipeline_status to readable format if needed
@@ -1285,11 +1291,12 @@ export class CandidatesService {
         ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
         : null,
       salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+      employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
     }));
     
     return {
       candidates: candidatesWithFullAvatarUrl,
-      total: totalTableCount, // Return count of all records in the table
+      total: totalTableCount, // Return count of available candidates with filters
       totalTable: totalTableCount
     };
   }
