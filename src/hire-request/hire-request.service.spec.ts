@@ -172,6 +172,7 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.findUnique.mockResolvedValue({
         id: 'hr1',
+        hubspot_pairing_date: null,
         skills: [{ skill_name: 'JS' }, { skill_name: 'TS' }],
       });
   
@@ -187,6 +188,7 @@ describe('HireRequestService', () => {
   
       expect(result).toEqual({
         id: 'hr1',
+        hubspot_pairing_date: null,
         skills: [{ skill_name: 'JS' }, { skill_name: 'TS' }],
         panels: [],
       });
@@ -205,7 +207,7 @@ describe('HireRequestService', () => {
   
       const result = await service.create(dto as any, user);
   
-      expect(result).toEqual({ id: 'hr1', skills: [], panels: [] });
+      expect(result).toEqual({ id: 'hr1', hubspot_pairing_date: null, skills: [], panels: [] });
       expect(prismaMock.hireRequestSkill.createMany).not.toHaveBeenCalled();
       expect(prismaMock.candidatePanel.create).toHaveBeenCalled();
     });
@@ -404,6 +406,7 @@ describe('HireRequestService', () => {
   
       expect(result).toEqual({
         id: 'hr1',
+        hubspot_pairing_date: null,
         panels: [
           {
             id: 'p1',
@@ -497,7 +500,7 @@ describe('HireRequestService', () => {
     
       expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
         where: { id: 'hr1' },
-        data: { title: 'Updated' }, // sem skills, pq vc destrutura
+        data: { title: 'Updated', hubspot_pairing_date: null }, 
       });
       expect(prismaMock.hireRequestSkill.deleteMany).toHaveBeenCalledWith({
         where: { hire_request_id: 'hr1' },
@@ -508,7 +511,7 @@ describe('HireRequestService', () => {
       expect(prismaMock.hireRequestSkill.findMany).toHaveBeenCalledWith({
         where: { hire_request_id: 'hr1' },
       });
-      expect(service.findOne).toHaveBeenCalledWith('hr1', user);
+      expect(service.findOne).toHaveBeenCalledWith('hr1', user, 'hubspot');
     });
     
 

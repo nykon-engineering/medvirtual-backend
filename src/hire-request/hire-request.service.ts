@@ -29,7 +29,7 @@ import {
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
-import { formatTimestampToUSShort } from '../common/utils/formatDate';
+import { dateToTimestamp, formatTimestampToUSShort, timestampToUSDate } from '../common/utils/formatDate';
 
 @Injectable()
 export class HireRequestService {
@@ -194,6 +194,8 @@ export class HireRequestService {
       numberVA: undefined,
       salary_range_from: sanitizeDecimal(hireRequestData.salary_range_from),
       salary_range_to: sanitizeDecimal(hireRequestData.salary_range_to),
+      hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
+      hubspot_pairing_time: hireRequestData.hubspot_pairing_time ? hireRequestData.hubspot_pairing_time : null,
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
@@ -223,7 +225,7 @@ export class HireRequestService {
       }
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
-    const hireRequestWithSkills = await this.findOne(newHireRequest.id, user);    
+    const hireRequestWithSkills = await this.findOne(newHireRequest.id, user, 'hubspot');    
     //send request for the hubspot to create the ticket
     try {
       await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
@@ -235,8 +237,8 @@ export class HireRequestService {
     if (newHireRequest.assign_user_id) {
       console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
       try {
-        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
-        console.log(`[notifications] Hire request created notification sent successfully:`, result);
+        //const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        //console.log(`[notifications] Hire request created notification sent successfully:`, result);
       } catch (err) {
         console.error('[notifications] hire-request-created email failed', err?.message || err);
       }
@@ -438,7 +440,7 @@ export class HireRequestService {
 
     const formatted = hireRequests.map(hr => ({
       ...hr,
-      hubspot_pairing_date: hr.hubspot_pairing_date ? formatTimestampToUSShort(hr.hubspot_pairing_date) : null,
+      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
       panels: hr.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
@@ -475,7 +477,7 @@ export class HireRequestService {
 
   }
 
-  async findOne(id: string, user: USER): Promise<any> {
+  async findOne(id: string, user: USER, source?: string): Promise<any> {
     if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
@@ -613,6 +615,12 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const formatted = {
       ...hireRequest,
+      hubspot_pairing_date: 
+      source === 'hubspot' 
+        ? hireRequest.hubspot_pairing_date : 
+        (hireRequest.hubspot_pairing_date 
+          ? timestampToUSDate(hireRequest.hubspot_pairing_date) 
+          : null),
       panels: (hireRequest.panels ?? []).map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
@@ -652,11 +660,15 @@ export class HireRequestService {
     }
 
     const {skills, ...hireRequestData} = data;
+    const sanitizeData = {
+      ...hireRequestData,
+      hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
+    }
     const requestUpdated = await this.prisma.hireRequest.update({
       where: {
         id: id
       },
-      data: hireRequestData,
+      data: sanitizeData,
     })
     if (!requestUpdated) throw new BadRequestException(`Hire request not updated`);
 
@@ -687,7 +699,7 @@ export class HireRequestService {
     }
 
     
-    const newHr = await this.findOne(id, user);
+    const newHr = await this.findOne(id, user, 'hubspot');
     await this.hubspot.updateHireRequestInHubspot(newHr);
     
     // Notify assignee via email when hire request is edited (non-blocking)

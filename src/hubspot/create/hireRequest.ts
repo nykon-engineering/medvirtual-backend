@@ -37,6 +37,8 @@ export class HireRequestCreationService {
 
     async execute(data: any): Promise<any> {
         try {
+
+
           const pay_range= data.salary_range_from && data.salary_range_to 
           ? `${data.salary_range_from} - ${data.salary_range_to}` 
           : '';
@@ -68,7 +70,7 @@ export class HireRequestCreationService {
                 special_sourcing_needed: data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false',
                 special_requirements: data.hubspot_special_requirements,
                 additional_training_requested: data.hubspot_additional_training_requested,
-                pairing_date: data.hubspot_pairing_date,
+                pairing_date: data.hubspot_pairing_date ? data.hubspot_pairing_date : undefined, //  milisecnonds in timestamp,
                 pairing_time: data.hubspot_pairing_time,
 
                 //ticketOwner
