@@ -1237,6 +1237,7 @@ export class CandidatesService {
         where: whereClauseForCandidates,
         select: {
           id: true,
+          hubspot_id: true,
           first_name: true,
           last_name: true,
           name: true,
@@ -1322,6 +1323,7 @@ export class CandidatesService {
       where: { id: id.trim() },
       select: {
         id: true,
+        hubspot_id: true,
         first_name: true,
         last_name: true,
         name: true,
