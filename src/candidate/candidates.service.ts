@@ -1343,6 +1343,7 @@ export class CandidatesService {
         medical_tools: true,
         avatar_url: true,
         gender: true,
+        shift_block: true,
         languages: {
           select: {
             name: true,
@@ -1400,7 +1401,8 @@ export class CandidatesService {
         : null,
       salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
         candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
-        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '')
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+        employment_type: transformedEmploymentType,
     };
 
     return candidateWithFullAvatarUrl;
