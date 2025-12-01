@@ -1296,14 +1296,27 @@ export class CandidatesService {
     
     // Construct full avatar URL for each candidate and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
-    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => ({
-      ...candidate,
-      avatar_url: candidate.avatar_url 
-        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
-        : null,
-      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
-      employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-    }));
+    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => {
+      // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
+      let employmentTypeValue = candidate.employment_type;
+      if (Array.isArray(employmentTypeValue)) {
+        employmentTypeValue = employmentTypeValue[0];
+      } else if (typeof employmentTypeValue === 'string' && employmentTypeValue.includes(';')) {
+        employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+      }
+      
+      // Apply the same transformation as in findOne and other places
+      const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
+      
+      return {
+        ...candidate,
+        avatar_url: candidate.avatar_url 
+          ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+          : null,
+        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+        employment_type: transformedEmploymentType,
+      };
+    });
     
     return {
       candidates: candidatesWithFullAvatarUrl,
@@ -1375,12 +1388,25 @@ export class CandidatesService {
 
     // Construct full avatar URL and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+    
+    // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
+    let employmentTypeValue = candidate.employment_type;
+    if (Array.isArray(employmentTypeValue)) {
+      employmentTypeValue = employmentTypeValue[0];
+    } else if (typeof employmentTypeValue === 'string' && employmentTypeValue.includes(';')) {
+      employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+    }
+    
+    // Apply the same transformation as in findOne and other places
+    const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
+    
     const candidateWithFullAvatarUrl = {
       ...candidate,
       avatar_url: candidate.avatar_url 
         ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
         : null,
       salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+      employment_type: transformedEmploymentType,
     };
 
     return candidateWithFullAvatarUrl;
