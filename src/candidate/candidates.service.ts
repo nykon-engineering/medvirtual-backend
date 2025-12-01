@@ -1193,38 +1193,48 @@ export class CandidatesService {
   }
 
   async getRandomTalentPoolCandidates(): Promise<any> {
-    // Get candidates from talent pool (available candidates)
-    const whereClause = {
-      AND: [
-        {
-          avatar_url: { not: null }
-        },
-        {
-          specialization: { 
-            not: null
-          }
-        },
-        {
-          specialization: { 
-            not: 'N/A'
-          }
-        },
-        {
-          years_of_experience: { not: null }
-        },
-        {
-          // Filter only available candidates
-          pipeline_status: {
-            in: ['261075105', '1087596819']
-          }
-        },
-      ]
+    // Base filter for "available" candidates in talent pool
+    const pipelineStatusFilter = {
+      pipeline_status: {
+        in: ['261075105', '1087596819'],
+      },
     };
 
-    // Get total count of available candidates (with filters)
+    // Filtros adicionales solo para obtener los candidatos que se muestran
+    const whereClauseForCandidates = {
+      AND: [
+        {
+          avatar_url: { not: null },
+        },
+        {
+          specialization: {
+            not: null,
+          },
+        },
+        {
+          specialization: {
+            not: 'N/A',
+          },
+        },
+        {
+          years_of_experience: { not: null },
+        },
+        {
+          // Solo candidatos disponibles
+          ...pipelineStatusFilter,
+        },
+      ],
+    };
+
+    // Para el conteo total de candidatos disponibles, solo usamos el filtro por pipeline_status
+    const whereClauseForCount = {
+      AND: [pipelineStatusFilter],
+    };
+
+    // Get total count of available candidates (only by pipeline_status)
     const [candidates, totalTableCount] = await this.prisma.$transaction([
       this.prisma.candidate.findMany({
-        where: whereClause,
+        where: whereClauseForCandidates,
         select: {
           id: true,
           first_name: true,
@@ -1271,7 +1281,7 @@ export class CandidatesService {
           approved_positions_pairing: true,
         },
       }),
-      this.prisma.candidate.count({ where: whereClause }) // Count available candidates with filters
+      this.prisma.candidate.count({ where: whereClauseForCount }), // Count available candidates only by pipeline_status
     ]);
 
     // Shuffle array to get random candidates
