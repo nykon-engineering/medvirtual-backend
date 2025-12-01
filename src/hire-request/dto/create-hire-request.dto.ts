@@ -87,5 +87,55 @@ export class CreateHireRequestDto {
     @IsArray()
     @IsOptional()
     skills: HireRequestSkillDTO[];
+
+
+    @ApiProperty({ type: String, description: 'Expected Tasks & Scope of Support', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_tasks: string
+
+    @ApiProperty({ type: String, description: '2 monitors required [Yes/No]', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_n2_monitors_required: string
+
+    @ApiProperty({ type: String, description: 'VA Shift hours', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_va_shift_hours: string
+
+    @ApiProperty({ type: String, description: 'Special Sourcing Needed[Yes/No]', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_special_sourcing_needed: string
+
+    @ApiProperty({ type: String, description: 'Special Sourcing Request (Specific Role)', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_special_requirements: string
+
+    @ApiProperty({ type: String, description: 'Additional Training Requested[Yes/No]', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_additional_training_requested: string
+
+    @ApiProperty({ type: String, description: 'Pairing Date', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_pairing_date: string
+
+    @ApiProperty({ type: String, description: 'Pairing Time', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_pairing_time: string
+
+    @ApiProperty({ type: String, description: 'Pairing Request Type', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_pairing_request_type: string
+
+
+    
+    
 }
 

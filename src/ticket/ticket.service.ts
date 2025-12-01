@@ -37,6 +37,7 @@ export class TicketService {
             id: true,
             name: true,
             email: true,
+            business_unit: true,
             status: true,
             admin_id: true,
           },
@@ -52,7 +53,6 @@ export class TicketService {
             email: true,
           },
         },
-        // @ts-ignore - createdBy relation will be available after prisma generate
         createdBy: {
           select: {
             id: true,
@@ -330,6 +330,7 @@ export class TicketService {
               id: true,
               name: true,
               email: true,
+              business_unit: true,
               status: true,
               admin_id: true,
             },
@@ -345,7 +346,6 @@ export class TicketService {
               email: true,
             },
           },
-          // @ts-ignore - createdBy relation will be available after prisma generate
           createdBy: {
             select: {
               id: true,

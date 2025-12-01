@@ -315,12 +315,15 @@ export class OrganizationService {
       const whereClause: any = {};
 
       // Add user-specific filtering based on role
-      if (user.role === 'system_super_admin') {
+      if (user.role === 'system_super_admin' || user.role === 'system_admin') {
         // No additional filtering needed - return all organizations
+      /*
       } else if (user.role === 'system_admin') {
         // For system_admin: return only organizations they are admin or concierge of
         whereClause.OR = [{ admin_id: user.id }];
-      } else {
+      }
+      */
+      }else {
         // For organization users: return organizations they are associated with
         whereClause.OR = [
           { admin_id: user.id },
@@ -591,6 +594,7 @@ export class OrganizationService {
         admin: org.admin || undefined,
         userCount: org.userCount,
         staffCount: org.staffCount,
+        source: org.source || undefined,
       }));
 
       // Calculate pagination metadata
@@ -640,7 +644,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto): Promise<Organization> {
+  async create(data: CreateOrganizationDto, user?: USER): Promise<Organization> {
     try {
       // // Check if the organization already exists
       // const existingOrganization = await this.prisma.organization.findUnique({
@@ -682,7 +686,7 @@ export class OrganizationService {
 
         if (existingUser) {
           throw new BadRequestException(
-            'User with this email already exists. Please select "existing" owner type.',
+            'User with this email already exists.',
           );
         }
 
@@ -700,21 +704,26 @@ export class OrganizationService {
       // Assign a random admin if not specified
       let adminId: string | undefined = data.admin_id;
       if (!adminId) {
-        const availableAdmins = await this.prisma.uSER.findMany({
-          where: {
-            email: 'hanieh@medvirtual.ai', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
-            role: 'system_super_admin',
-            status: 'active',
-          },
-        });
-
-        if (availableAdmins.length > 0) {
-          // Simple round-robin assignment - could be enhanced with load balancing
-          const randomIndex = Math.floor(
-            Math.random() * availableAdmins.length,
-          );
-          adminId = availableAdmins[randomIndex].id;
+        if (user){
+          adminId= user.id; // Added on 2025-11-18 by Paulo to get the logged in user as default admin
+        }else{
+          const availableAdmins = await this.prisma.uSER.findMany({
+            where: {
+              email: 'hanieh@medvirtual.ai', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
+              role: 'system_super_admin',
+              status: 'active',
+            },
+          });
+  
+          if (availableAdmins.length > 0) {
+            // Simple round-robin assignment - could be enhanced with load balancing
+            const randomIndex = Math.floor(
+              Math.random() * availableAdmins.length,
+            );
+            adminId = availableAdmins[randomIndex].id;
+          }
         }
+        
       }
       let specialtiesArray: string[] = [];
       let servicesArray: string[] = [];
@@ -733,7 +742,6 @@ export class OrganizationService {
       }else{
         servicesArray = [];
       }
-
 
       const organization = await this.prisma.organization.create({
         data: {
@@ -764,6 +772,7 @@ export class OrganizationService {
           owner_id: ownerId,
           admin_id: adminId,
           hubspot_id: data.hubspot_id || undefined,
+          source: user ? 'MedVirtual app' : 'Hubspot',
         },
       });
 
@@ -794,7 +803,14 @@ export class OrganizationService {
         await this.auth.inviteUser(inviteData);
       }
 
-      return organization;
+      const newOrganization = await this.getById(organization.id);
+
+      if (user){ //this rule avoid re-call on hubspot. If this flow came from hubspot, we dont have logged user and then we avoid send new organization for hubspot
+        await this.hubspot.createOrganizationInHubspot(newOrganization);
+      }
+      
+
+      return newOrganization;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -805,7 +821,6 @@ export class OrganizationService {
 
   async update(id: string, data: UpdateOrganizationDto): Promise<Organization> {
     try {
-      console.log('Organization ID to update:', id);
       const updateData: any = {};
 
       // Map the fields from DTO to database fields
@@ -2577,6 +2592,29 @@ export class OrganizationService {
     }
   }
 
+  async getOrganizationIndustryTypes () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/companies";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
   
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "industry"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find industry types:", error.response?.data || error.message);
+      throw new Error("Failed to find Organization Industry types");
+    }
+  };
 
 }

@@ -191,8 +191,8 @@ export class OrganizationController {
     status: 201,
     description: 'Organization created successfully',
   })
-  async create(@Body() data: CreateOrganizationDto) {
-    const org = await this.organizationService.create(data);
+  async create(@Body() data: CreateOrganizationDto, @CurrentUser() user: USER) {
+    const org = await this.organizationService.create(data, user);
     return {
       status: 201,
       message: 'Organization created successfully',
@@ -612,6 +612,14 @@ export class OrganizationController {
   @ApiOperation({ summary: 'Sync all organizations with deals' })
   async syncAllOrganizationsWithDeals() {
     return await this.organizationService.syncOrganizationsWithDeals();
+  }
+
+  @Get('get-organization/industry-types')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Get industry Types from hubspot' })
+  async getOrganizationIndustryTypes() {
+    return await this.organizationService.getOrganizationIndustryTypes();
   }
 
 }

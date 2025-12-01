@@ -69,6 +69,13 @@ export class HandlerTicketDeletion {
                 }
             });
 
+            //=> Here I 'll remove all candidates from the ticket panels
+            await this.prisma.candidatePanel.deleteMany({
+                where:{
+                    hire_request_id: ticketExists.id
+                }
+            });
+
             
         }catch (error) {
             throw new BadRequestException('Error deleting ticket', error);

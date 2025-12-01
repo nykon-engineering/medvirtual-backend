@@ -56,6 +56,9 @@ export class HandlerTicketCreation {
 
 
             ticketData.status='new';
+            ticketData.hubspot_pairing_date = ticketData.hubspot_pairing_date
+                ? String(ticketData.hubspot_pairing_date)
+                : null;
 
             const ticketExists = await this.prisma.hireRequest.findUnique({
                 where: {

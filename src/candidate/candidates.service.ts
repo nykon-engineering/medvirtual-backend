@@ -15,7 +15,8 @@ import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
-import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { Console } from 'console';
 
 
 @Injectable()
@@ -232,6 +233,7 @@ export class CandidatesService {
       processing_error: true,
       avatar_url: true,
       gender: true,
+      shift_block: true,
       languages: {
         select: {
           name: true,
@@ -350,11 +352,15 @@ export class CandidatesService {
 
       const candidatesWithScheduledInterview = candidates.map(candidate => ({
         ...candidate,
+        
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
-        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+        salary: findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
         panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
@@ -405,6 +411,7 @@ export class CandidatesService {
       tools: true,
       medical_tools: true,
       gender: true,
+      shift_block: true,
       languages: {
         select: {
           name: true,
@@ -698,9 +705,6 @@ export class CandidatesService {
 
 
 
-      
-
-
       console.log('starting with the openAi step...');
       //processing_organizeData
       await this.updateStatus(id, 'processing_organizeData');   
@@ -832,9 +836,9 @@ export class CandidatesService {
           });
           returned = {
             min: min._min.hourly_pay_rate || 0,
-            salary_min: findMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
+            salary_min: findJustMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
             max: max._max.hourly_pay_rate || 0,
-            salary_max: findMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
+            salary_max: findJustMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
           };
           
           result[field]=returned;
@@ -1190,6 +1194,218 @@ export class CandidatesService {
       }
     }
     return true;
+  }
+
+  async getRandomTalentPoolCandidates(): Promise<any> {
+    // Base filter for "available" candidates in talent pool
+    const pipelineStatusFilter = {
+      pipeline_status: {
+        in: ['261075105', '1087596819'],
+      },
+    };
+
+    // Filtros adicionales solo para obtener los candidatos que se muestran
+    const whereClauseForCandidates = {
+      AND: [
+        {
+          avatar_url: { not: null },
+        },
+        {
+          specialization: {
+            not: null,
+          },
+        },
+        {
+          specialization: {
+            not: 'N/A',
+          },
+        },
+        {
+          years_of_experience: { not: null },
+        },
+        {
+          // Solo candidatos disponibles
+          ...pipelineStatusFilter,
+        },
+      ],
+    };
+
+    // Para el conteo total de candidatos disponibles, solo usamos el filtro por pipeline_status
+    const whereClauseForCount = {
+      AND: [pipelineStatusFilter],
+    };
+
+    // Get total count of available candidates (only by pipeline_status)
+    const [candidates, totalTableCount] = await this.prisma.$transaction([
+      this.prisma.candidate.findMany({
+        where: whereClauseForCandidates,
+        select: {
+          id: true,
+          hubspot_id: true,
+          first_name: true,
+          last_name: true,
+          name: true,
+          country: true,
+          employment_type: true,
+          hourly_pay_rate: true,
+          years_of_experience: true,
+          about_me: true,
+          specialization: true,
+          tools: true,
+          medical_tools: true,
+          avatar_url: true,
+          gender: true,
+          languages: {
+            select: {
+              name: true,
+            }
+          },
+          skills: {
+            select: {
+              skill_name: true,
+              skill_type: true
+            }
+          },
+          educations: {
+            select: {
+              institution: true,
+              degree: true,
+              year: true
+            }
+          },
+          experiences: {
+            orderBy: { start_date: Prisma.SortOrder.desc },
+            select: {
+              company: true,
+              position: true,
+              start_date: true,
+              end_date: true,
+              responsabilities: true
+            }
+          },
+          approved_positions_pairing: true,
+        },
+      }),
+      this.prisma.candidate.count({ where: whereClauseForCount }), // Count available candidates only by pipeline_status
+    ]);
+
+    // Shuffle array to get random candidates
+    const shuffled = candidates.sort(() => 0.5 - Math.random());
+    
+    // Get first 25 candidates
+    const randomCandidates = shuffled.slice(0, 25);
+
+    // Map pipeline_status to readable format if needed
+    // Note: We're not including pipeline_status in the select, so it won't be in the response
+    
+    // Construct full avatar URL for each candidate and calculate salary
+    const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => ({
+      ...candidate,
+      avatar_url: candidate.avatar_url 
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+        : null,
+      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+      employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+    }));
+    
+    return {
+      candidates: candidatesWithFullAvatarUrl,
+      total: totalTableCount, // Return count of available candidates with filters
+      totalTable: totalTableCount
+    };
+  }
+
+  async getTalentPoolCandidateById(id: string): Promise<any> {
+    // Validate ID
+    if (!id || id.trim() === '') {
+      throw new BadRequestException('Invalid candidate ID');
+    }
+
+    // Search candidate by ID without any filters
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: id.trim() },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        country: true,
+        employment_type: true,
+        hourly_pay_rate: true,
+        years_of_experience: true,
+        about_me: true,
+        specialization: true,
+        tools: true,
+        medical_tools: true,
+        avatar_url: true,
+        gender: true,
+        shift_block: true,
+        languages: {
+          select: {
+            name: true,
+          }
+        },
+        skills: {
+          select: {
+            skill_name: true,
+            skill_type: true
+          }
+        },
+        educations: {
+          select: {
+            institution: true,
+            degree: true,
+            year: true
+          }
+        },
+        experiences: {
+          orderBy: { start_date: Prisma.SortOrder.desc },
+          select: {
+            company: true,
+            position: true,
+            start_date: true,
+            end_date: true,
+            responsabilities: true
+          }
+        },
+        approved_positions_pairing: true,
+      },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found');
+    }
+
+    // Construct full avatar URL and calculate salary
+    const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+    
+    // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
+    let employmentTypeValue = candidate.employment_type;
+    if (Array.isArray(employmentTypeValue)) {
+      employmentTypeValue = employmentTypeValue[0];
+    } else if (typeof employmentTypeValue === 'string' && employmentTypeValue.includes(';')) {
+      employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+    }
+    
+    // Apply the same transformation as in findOne and other places
+    const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
+    
+    const candidateWithFullAvatarUrl = {
+      ...candidate,
+      avatar_url: candidate.avatar_url 
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+        : null,
+      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+        employment_type: transformedEmploymentType,
+    };
+
+    return candidateWithFullAvatarUrl;
   }
 }
 

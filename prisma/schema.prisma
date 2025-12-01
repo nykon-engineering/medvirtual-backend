@@ -3,9 +3,10 @@ generator client {
   binaryTargets = ["native"]
 }
 
+
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") //LOCAL_DATABASE_URL // DATABASE_URL // PROD_DATABASE_URL
+  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -38,14 +39,14 @@ model USER {
   hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
   adminOrganizations           Organization[]      @relation("OrganizationAdmin")
   ownedOrganizations           Organization?       @relation("OrganizationOwner")
+  sessions                     Session[]
   tickets                      Ticket[]
-  createdTickets               Ticket[]            @relation("TicketCreatedByUser")
+  ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
   TicketNotes                  TicketNotes[]
   createdBy                    USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
   createdUsers                 USER[]              @relation("UserCreatedBy")
   organization                 Organization?       @relation(fields: [organization_id], references: [id])
-
-  sessions                     Session[]
+  talentPoolLeads              TalentPoolLead[]
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -63,8 +64,7 @@ model Session {
   createdAt DateTime @default(now())
   expiresAt DateTime
   isRevoked Boolean  @default(false)
-
-  user       USER     @relation(fields: [userId], references: [id])
+  user      USER     @relation(fields: [userId], references: [id])
 }
 
 model EmailVerification {
@@ -117,6 +117,7 @@ model Organization {
   postal_code             String?
   state                   String?
   business_unit           String?
+  source                  String?
   hire_requests           HireRequest[]
   admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
   owner                   USER?                   @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
@@ -163,6 +164,7 @@ model Candidate {
   processing_cost            Decimal?                @default(0)
   avatar_url                 String?
   headshot_url               String?
+  shift_block                String?
   educations                 CandidateEducation[]
   experiences                CandidateExperience[]
   languages                  CandidateLanguage[]
@@ -244,7 +246,6 @@ model HireRequest {
   title                        String
   description                  String?
   status                       HireRequestStatus  @default(new)
-  old_status                   HireRequestStatus?
   priority                     Priority           @default(medium)
   createdAt                    DateTime           @default(now())
   availability                 String
@@ -268,7 +269,17 @@ model HireRequest {
   hubspot_pipeline             String?
   hubspot_pipeline_stage       String?
   hubspot_ticket_type          String?
+  hubspot_tasks                String?
+  hubspot_n2_monitors_required String?
+  hubspot_va_shift_hours       String?
+  hubspot_special_sourcing_needed String?
+  hubspot_special_requirements String?
+  hubspot_additional_training_requested String?
+  hubspot_pairing_date         String? //String for avoid misunderstanding about timeZone
+  hubspot_pairing_time         String?
+
   assign_sourcing_id           String?
+  old_status                   HireRequestStatus?
   panels                       CandidatePanel[]
   assigned_sourcing            USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
   assigned_user                USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
@@ -354,7 +365,6 @@ model Interview {
 model Ticket {
   id           String        @id @default(uuid())
   user_id      String?
-  created_by   String?
   title        String
   description  String
   status       TicketStatus  @default(new)
@@ -365,12 +375,12 @@ model Ticket {
   staff_id     String?
   candidate_id String?
   updatedAt    DateTime      @updatedAt
+  created_by   String?
   candidate    Candidate?    @relation(fields: [candidate_id], references: [id])
   organization Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff        Staff?        @relation(fields: [staff_id], references: [id])
   user         USER?         @relation(fields: [user_id], references: [id])
-  createdBy    USER?         @relation("TicketCreatedByUser", fields: [created_by], references: [id])
-
+  createdBy    USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
   TicketNotes  TicketNotes[]
 
   @@index([user_id], map: "idx_tickets_user_id")
@@ -379,6 +389,7 @@ model Ticket {
   @@index([createdAt], map: "idx_tickets_createdAt")
   @@index([updatedAt], map: "idx_tickets_updatedAt")
   @@index([candidate_id], map: "idx_tickets_candidate_id")
+  @@index([created_by], map: "idx_tickets_created_by")
 }
 
 model GoogleToken {
@@ -465,6 +476,29 @@ model TicketNotes {
   deleted_at  DateTime? @db.Timestamptz(6)
   USER        USER      @relation(fields: [author_id], references: [id], onUpdate: NoAction)
   Ticket      Ticket    @relation(fields: [ticket_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model TalentPoolLead {
+  id                  String    @id @default(uuid())
+  name                String    @db.VarChar(255)
+  email               String    @db.VarChar(255)
+  organization        String    @db.VarChar(255)
+  main_need           String?
+  additional_details  String?
+  source              String    @db.VarChar(50)
+  type                String    @default("Talent Pool Inquiry") @db.VarChar(50)
+  status              String    @default("new") @db.VarChar(50)
+  assigned_to_user_id String?
+  notes               String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now())
+  contacted_at        DateTime?
+  assignedTo          USER?     @relation(fields: [assigned_to_user_id], references: [id])
+
+  @@index([assigned_to_user_id], map: "idx_talent_pool_leads_assigned_to_user_id")
+  @@index([email], map: "idx_talent_pool_leads_email")
+  @@index([status], map: "idx_talent_pool_leads_status")
+  @@index([source], map: "idx_talent_pool_leads_source")
 }
 
 enum Role {

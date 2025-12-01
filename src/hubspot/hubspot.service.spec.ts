@@ -23,6 +23,10 @@ import { HireRequestUpdateService } from './update/hireRequest';
 import { HandlerTicketCreation } from './handlers/ticketCreation';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
+import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
+import { OrganizationCreationService } from './create/Organization';
+import { HandlerObjectMerge } from './handlers/objectMerge';
+import { OwnerCreationService } from './create/Owner';
 
 
 jest.mock('axios', () => ({
@@ -73,6 +77,10 @@ const handlerObjectPropertyChangeMock = {
 };
 
 const handlerObjectDeletionmock = {
+  execute: jest.fn(),
+}
+
+const HandlerObjectMergeMock = {
   execute: jest.fn(),
 }
 
@@ -133,11 +141,23 @@ const HandlerTicketDeletionMock = {
   execute: jest.fn(),
 };
 
+const HandlerTicketPropertyChangeMock = {
+  execute: jest.fn(),
+};
+
 const hireRequestCreationServiceMock = {
   execute: jest.fn(),
 };
 
 const hireRequestUpdateServiceMock = {
+  execute: jest.fn(),
+};
+
+const organizationCreationServiceMock = {
+  execute: jest.fn(),
+};
+
+const ownerCreationServiceMock = {
   execute: jest.fn(),
 };
 
@@ -167,6 +187,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
         {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
+        {provide: HandlerObjectMerge, useValue: HandlerObjectMergeMock},
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
@@ -183,7 +204,10 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
         {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
         {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
-        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock}
+        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
+        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
+        {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
+        {provide: OwnerCreationService, useValue: ownerCreationServiceMock}
       ],
     }).compile();
 
@@ -231,6 +255,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
         {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
+        {provide: HandlerObjectMerge, useValue: HandlerObjectMergeMock},
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
@@ -247,7 +272,10 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
         {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
         {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
-        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock}
+        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
+        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
+        {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
+        {provide: OwnerCreationService, useValue: ownerCreationServiceMock}
       ]
     }).compile();
 

@@ -29,7 +29,7 @@ import {
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
-import { title } from 'process';
+import { dateToTimestamp, formatTimestampToUSShort, timestampToUSDate } from '../common/utils/formatDate';
 
 @Injectable()
 export class HireRequestService {
@@ -39,6 +39,20 @@ export class HireRequestService {
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
   ) {}
+  private toFixedDate(dateStr: string): Date {
+    const [datePart, timePart] = dateStr.split("T");
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hour, minute, second] = timePart.split(":").map(Number);
+  
+    return new Date(
+      year,
+      month - 1,
+      day,
+      hour,
+      minute,
+      second || 0,
+    );
+  }
 
   private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
     const hireRequest = await this.prisma.hireRequest.findUnique({
@@ -69,6 +83,41 @@ export class HireRequestService {
       },
     });
     return true;
+  }
+
+  async verifyUnavailableCandidates(hireRequestId: string, user: USER): Promise<any>{
+
+    const hireRequest = await this.findOne(hireRequestId, user);
+    if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+    const candidatesInPanels = hireRequest.panels.flatMap(p => p.panelCandidates)
+
+    const candidatesSelectedInOtherPanels = candidatesInPanels
+    .filter(pc => {
+        // pc = panelCandidate on the current Panel
+        const otherPanels = pc.candidate.panelCandidates;
+
+        if (!otherPanels || !otherPanels.length) return false;
+
+        return otherPanels.some(
+          pcc => pcc.status === 'selected_by_client'
+        );
+      });
+
+
+    const allCandidatesBlocked =
+      candidatesInPanels.length > 0 &&
+      candidatesSelectedInOtherPanels.length === candidatesInPanels.length;
+
+    
+    console.log({
+      totalCandidates: candidatesInPanels.length,
+      candidatesSelectedInOtherPanels,
+      allCandidatesBlocked,
+    });
+    
+
+    return allCandidatesBlocked
   }
 
   async create(data: CreateHireRequestDto, user?: USER):Promise<any> {   //user is option because the webhook use this function without user
@@ -110,7 +159,7 @@ export class HireRequestService {
       hs_pipeline: '0',
       hs_pipeline_stage: Object.keys(HRTicketStatus)
       .find(key => HRTicketStatus[key] === 'New Agent Request'), //=> New agent Request
-      pairing_request_type: 'New Client',
+      pairing_request_type: hireRequestData.hubspot_pairing_request_type || 'New Client',
       ticket_type: 'Agent Pairing Request',
       business_unit: organizationSQL.business_unit || "Not Specified",
       company_name: organizationSQL.name,
@@ -125,12 +174,14 @@ export class HireRequestService {
     const sanitizeDecimal = (value?: string | null) => {
       return value && value.trim() !== "" ? value : null;
     };
-    const hubspotTitle = `HR - ${organizationSQL.name} - ${hireRequestData.numberVA.toString()} - ${hireRequestData.position} - ${data.availability.toUpperCase()}`;
+
+    // Note: The title is now received from the frontend with the required format
+    // Previously used: const hubspotTitle = `HR - ${organizationSQL.name} - ${hireRequestData.numberVA.toString()} - ${hireRequestData.position} - ${data.availability.toUpperCase()}`;
+    // The title from hireRequestData (which comes from the frontend) is used directly
 
     const hireRequest = {
       ...hireRequestData,
       ...hubspotMappedFields,
-      title: hubspotTitle,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
       //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
@@ -143,6 +194,8 @@ export class HireRequestService {
       numberVA: undefined,
       salary_range_from: sanitizeDecimal(hireRequestData.salary_range_from),
       salary_range_to: sanitizeDecimal(hireRequestData.salary_range_to),
+      hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
+      hubspot_pairing_time: hireRequestData.hubspot_pairing_time ? hireRequestData.hubspot_pairing_time : null,
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
@@ -150,18 +203,7 @@ export class HireRequestService {
     })
     if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
     
-    // Notify assigned user via email (non-blocking)
-    if (newHireRequest.assign_user_id) {
-      console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
-      try {
-        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
-        console.log(`[notifications] Hire request created notification sent successfully:`, result);
-      } catch (err) {
-        console.error('[notifications] hire-request-created email failed', err?.message || err);
-      }
-    } else {
-      console.log(`[notifications] No assigned user for hire request ${newHireRequest.id}, skipping notification`);
-    }
+    
     
     if (skills && skills.length > 0) {
       const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
@@ -183,7 +225,7 @@ export class HireRequestService {
       }
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
-    const hireRequestWithSkills = await this.findOne(newHireRequest.id, user);    
+    const hireRequestWithSkills = await this.findOne(newHireRequest.id, user, 'hubspot');    
     //send request for the hubspot to create the ticket
     try {
       await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
@@ -191,11 +233,24 @@ export class HireRequestService {
       console.warn('[hubspot] createHireRequestTicket failed', err?.message || err);
     }
 
+    // Notify assigned user via email (non-blocking)
+    if (newHireRequest.assign_user_id) {
+      console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
+      try {
+        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        console.log(`[notifications] Hire request created notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] hire-request-created email failed', err?.message || err);
+      }
+    } else {
+      console.log(`[notifications] No assigned user for hire request ${newHireRequest.id}, skipping notification`);
+    }
+
     const hireRequestWithHubspotID = await this.findOne(newHireRequest.id, user);
     return hireRequestWithHubspotID;
   }
 
-  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10): Promise<any> {
+  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10, businessUnit?: string): Promise<any> {
     
     if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
@@ -226,7 +281,16 @@ export class HireRequestService {
     //this code was updated for the switch above
     // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search ? { title: { contains: search, mode: 'insensitive' as const } } : {};
-    const whereClause =  { ...baseWhere, ...searchWhere }; ;
+    
+    // Add business unit filter if provided
+    const businessUnitWhere = businessUnit ? { 
+      OR: [
+        { organization: { business_unit: { contains: businessUnit, mode: 'insensitive' as const } } },
+        { hubspot_business_unit: { contains: businessUnit, mode: 'insensitive' as const } }
+      ]
+    } : {};
+    
+    const whereClause =  { ...baseWhere, ...searchWhere, ...businessUnitWhere };
 
     const skip = (page - 1) * perPage;
     const take = perPage;
@@ -239,7 +303,15 @@ export class HireRequestService {
         },
         include: {
           skills: true,
-          organization: true,
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              business_unit: true,
+              email: true,
+              hubspot_id: true,
+            }
+          },
           createdBy:{
             select: {
               id: true,
@@ -368,6 +440,7 @@ export class HireRequestService {
 
     const formatted = hireRequests.map(hr => ({
       ...hr,
+      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
       panels: hr.panels.map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
@@ -377,7 +450,10 @@ export class HireRequestService {
           ...pc,
           candidate:{
             ...pc.candidate,
-            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+            salary: findMonthlySalary(
+              pc.candidate.hourly_pay_rate?.toNumber() || 0,
+              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
             panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
             .map(pcc => ({
@@ -404,7 +480,7 @@ export class HireRequestService {
 
   }
 
-  async findOne(id: string, user: USER): Promise<any> {
+  async findOne(id: string, user: USER, source?: string): Promise<any> {
     if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
     }
@@ -465,6 +541,7 @@ export class HireRequestService {
                     processing_error: true,
                     organization_id: true,
                     avatar_url: true,
+                    approved_positions_pairing: true,
                     languages: {
                       select: {
                         name: true,
@@ -542,6 +619,12 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const formatted = {
       ...hireRequest,
+      hubspot_pairing_date: 
+      source === 'hubspot' 
+        ? hireRequest.hubspot_pairing_date : 
+        (hireRequest.hubspot_pairing_date 
+          ? timestampToUSDate(hireRequest.hubspot_pairing_date) 
+          : null),
       panels: (hireRequest.panels ?? []).map(panel => ({
         ...panel,
         interview_date: panel.interviews[0]?.scheduled_date || null,
@@ -556,7 +639,10 @@ export class HireRequestService {
             ...pc,
             candidate:{
               ...pc.candidate,
-              salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+              salary: findMonthlySalary(
+                pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
               years_of_experience: years_of_experience,
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
@@ -581,11 +667,15 @@ export class HireRequestService {
     }
 
     const {skills, ...hireRequestData} = data;
+    const sanitizeData = {
+      ...hireRequestData,
+      hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
+    }
     const requestUpdated = await this.prisma.hireRequest.update({
       where: {
         id: id
       },
-      data: hireRequestData,
+      data: sanitizeData,
     })
     if (!requestUpdated) throw new BadRequestException(`Hire request not updated`);
 
@@ -616,8 +706,8 @@ export class HireRequestService {
     }
 
     
-    const newHr = await this.findOne(id, user);
-    //await this.hubspot.updateHireRequestInHubspot(newHr);
+    const newHr = await this.findOne(id, user, 'hubspot');
+    await this.hubspot.updateHireRequestInHubspot(newHr);
     
     // Notify assignee via email when hire request is edited (non-blocking)
     try {
@@ -636,23 +726,25 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
+    if (data.status !== 'cancelled' && data.status !== 'sourcing' && data.status !== 'new' ){ //allow user cancell or star sourcing HireRequest even if all candidates are blocked
+      const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
+      if (verifyCandidates) {
+        throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+      }
+    }
+
     const assign_user = await this.verifyAssignUser(data.status, id);
     if (!assign_user) {
       throw new BadRequestException(`Status ${data.status} requires an assigned user`);
     }
 
     if (!data || !data.status) throw new BadRequestException('Data for status change is required');
-    const hireRequest = await this.prisma.hireRequest.findUnique({
-      where: {
-        id: id,
-        organization: user.role.includes('organization') ?  { id: user.organization_id || undefined } : undefined,
-      },
-      select:{
-        status: true,
-        hubspot_ticket_id: true,
-      }
-    });
+    
+    const hireRequest = await this.findOne(id, user);
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
+
+
+
 
     const candidates = await this.prisma.panelCandidate.findMany({
       where: {
@@ -1248,6 +1340,9 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
+    const newHr = await this.findOne(id, user);
+    await this.hubspot.updateHireRequestInHubspot(newHr, type === 'concierge' ? 'assign_user_id' : 'assign_sourcing_id');
+
     // Notify newly assigned user via email (non-blocking)
     if (data.user_id) {
       console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user ${data.user_id}`);
@@ -1261,7 +1356,7 @@ export class HireRequestService {
       console.log(`[notifications] No user_id provided for hire request reassignment ${id}, skipping notification`);
     }
 
-    return this.findOne(id, user);
+    return newHr;
   }
 
   async showMatchCandidates(id: string, user: USER): Promise<object> {
@@ -1426,7 +1521,10 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const candidatesWithSalary = scoredCandidates.map(c => ({
       ...c,
-      salary: findMonthlySalary(c.hourly_pay_rate?.toNumber() || 0),
+      salary: findMonthlySalary(
+        c.hourly_pay_rate?.toNumber() || 0,
+        c.languages.length > 1 ? 'Bilingual' : c.languages[0]?.name,
+        c.approved_positions_pairing && c.approved_positions_pairing.length > 0 ? c.approved_positions_pairing[0] : ''),
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
       panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
@@ -1577,6 +1675,11 @@ export class HireRequestService {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
     
+     const verifyCandidates = await this.verifyUnavailableCandidates(data.hireRequest_id, user);
+    if (verifyCandidates) {
+      throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+    }
+
     const panel = await this.prisma.candidatePanel.findFirst({
       where: {
         hire_request_id: data.hireRequest_id,
@@ -1816,7 +1919,14 @@ export class HireRequestService {
                 skills:true,
                 pipeline_status: true,
                 avatar_url: true,
-                gender: true
+                gender: true,
+                approved_positions_pairing: true,
+                languages:{
+                  select:{
+                    id: true,
+                    name: true,
+                  }
+                }
               },
             },
           },
@@ -1857,7 +1967,10 @@ export class HireRequestService {
         ...pc,
         candidate: {
           ...pc.candidate,
-          salary: findMonthlySalary(pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0),
+          salary: findMonthlySalary(
+            pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
+            pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
+            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
           avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
         }
       }))
@@ -2010,6 +2123,11 @@ export class HireRequestService {
   async scheduleInterview(id: string, data: scheduleInterviewDTO, user: USER){
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
+    const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
+    if (verifyCandidates) {
+      throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+    }
+
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
@@ -2031,6 +2149,20 @@ export class HireRequestService {
         
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
+
+    // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
+    const updateHireRequest = await this.prisma.hireRequest.update({
+      where: {
+        id: hireRequest.id,
+      },
+      data: {
+        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_time: data.time || null,
+      },
+    });
+    if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
+    
+    
     const updatedDate = new Date(`${data.date_time}`);
 
     const interviewScheduled = await this.prisma.interview.create({
@@ -2066,7 +2198,6 @@ export class HireRequestService {
     if (!hireRequestUpdated) throw new BadRequestException(`Hire request status not updated to interview scheduled`);
 
     try{
-      const updatedDate = new Date(`${data.date_time}`);
       const updateDateTime = {
         hubspot_ticket_id: hireRequest.hubspot_ticket_id,
         pairing_date:updatedDate.toISOString().split("T")[0],
@@ -2117,8 +2248,21 @@ export class HireRequestService {
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
-    const updatedDate = new Date(`${data.date_time}`);
 
+    // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
+    const updateHireRequest = await this.prisma.hireRequest.update({
+      where: {
+        id: hireRequest.id,
+      },
+      data: {
+        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_time: data.time || null,
+      },
+    });
+    if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
+
+    const updatedDate = new Date(`${data.date_time}`);
+    //console.log('updatedDate', updatedDate);
     const editInterview = await this.prisma.interview.updateMany({
       where: {
         panel_id: panel.id,
@@ -2132,7 +2276,6 @@ export class HireRequestService {
     if (!editInterview) throw new BadRequestException(`Interview not updated`);
 
     try{
-      const updatedDate = new Date(`${data.date_time}`);
       const updateDateTime = {
         hubspot_ticket_id: hireRequest.hubspot_ticket_id,
         pairing_date:updatedDate.toISOString().split("T")[0],
@@ -2155,6 +2298,11 @@ export class HireRequestService {
 
   async awaitingDecision(id: string, data: awaitingDecisionDTO, user: USER): Promise<boolean> {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
+
+     const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
+    if (verifyCandidates) {
+      throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
+    }
 
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
@@ -2515,6 +2663,13 @@ export class HireRequestService {
                 hourly_pay_rate: true,
                 country: true,
                 avatar_url: true,
+                approved_positions_pairing: true,
+                languages:{
+                  select:{
+                    id: true,
+                    name: true,
+                  }
+                },
                 experiences: {
                   orderBy: { start_date: 'asc' },
                   take: 1, 
@@ -2565,7 +2720,10 @@ export class HireRequestService {
           candidate: {
             ...pc.candidate,
             years_of_experience,
-            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+            salary: findMonthlySalary(
+              pc.candidate.hourly_pay_rate?.toNumber() || 0,
+              pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
           },
         };
@@ -2686,6 +2844,7 @@ export class HireRequestService {
                 hourly_pay_rate: true,
                 years_of_experience: true,
                 avatar_url: true,
+                approved_positions_pairing: true,
                 languages: {
                   select: { name: true },
                 },
@@ -2743,7 +2902,11 @@ export class HireRequestService {
       panelId: panel.id,
       panelScheduledDate: panel.scheduled_date,
       isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
-      salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(pc.candidate.hourly_pay_rate.toNumber()) : null,
+      salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(
+        pc.candidate.hourly_pay_rate.toNumber(),
+        pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
+        pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''
+      ) : null,
       avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
     }));
@@ -2776,61 +2939,55 @@ export class HireRequestService {
     }
   };
 
-  async backStage(): Promise <any>{
-    try{
-      const candidates = await this.prisma.candidate.findMany({
-        where: {
-          pipeline_status: '1172847191',
-          panelCandidates: {
-            some: {
-              panel: {
-                hireRequest: {
-                    status: {not: {in: ['awaiting_decision', 'placement_completed']}},
-                }
-              }
-            }
-          }
+  async getVAShiftHours () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
         },
-        select:{
-          id: true,
-          name: true,
-          first_name: true,
-          hubspot_id: true,
-          last_name : true,
-          pipeline_status: true,
-          pipeline_status_origin: true,
-          panelCandidates: {
-            select:{
-              panel:{
-                select:{
-                  hireRequest:{
-                    select:{
-                      title: true,
-                      status: true,
-                    }
-                  }
-                }
-              }
-            }
-        }
-      },
       });
-
-      //update all candidates that the pipeline status to the origin status
-      
-      await Promise.all(
-        candidates.map(async c =>{
-          await this.prisma.candidate.update({
-            where: { id: c.id },
-            data: { pipeline_status: c.pipeline_status_origin || c.pipeline_status},
-          });
-          await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status);
-        })
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "va_shift_hours"
       );
-      
-      return candidates;
-    }catch(err){
-      console.error('Backstage service failed', err?.message || err);
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Shift Hours:", error.response?.data || error.message);
+      throw new Error("Failed to find VA Shift Hours");
     }
-  }
+  };
+
+  async getPairingRequestType () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "pairing_request_type"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Pairing Request Type:", error.response?.data || error.message);
+      throw new Error("Failed to find Pairing Request Type");
+    }
+  };
+
+
 }

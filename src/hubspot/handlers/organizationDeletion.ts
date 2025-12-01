@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { OrganizationStatus } from "@prisma/client";
 
 @Injectable()
 export class HandlerOrganizationDeletion {
@@ -18,10 +19,22 @@ export class HandlerOrganizationDeletion {
                 }
             })
             if(!organizationExists) return;
+
+            await this.prisma.uSER.updateMany({
+                where: {
+                    organization_id: organizationExists.id
+                },
+                data:{
+                    status: 'inactive'
+                }
+            })
             
-            await this.prisma.organization.delete({
+            await this.prisma.organization.update({
                 where: {
                     id: organizationExists.id
+                },
+                data:{
+                    status: OrganizationStatus.inactive
                 }
             });
         }catch (error) {

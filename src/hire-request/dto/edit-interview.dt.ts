@@ -8,6 +8,17 @@ export class editInterviewDTO{
     @IsString()
     date_time: DateTime;
 
+    @ApiProperty({ description: 'Just date of the interview', type:String, required: false })
+    @IsString()
+    @IsOptional()
+    date: string;
+
+    @ApiProperty({ description: 'Just time of the interview', type:String, required: false })
+    @IsString()
+    @IsOptional()
+    time: string;
+
+
     @ApiProperty({ description: 'The link of the interview', example: 'https://meet.google.com/XXXX', required: false })
     @IsString()
     @IsOptional()

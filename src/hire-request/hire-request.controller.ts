@@ -44,6 +44,7 @@ export class HireRequestController {
   @ApiQuery({ name: 'search', required: false, description: 'Search hire requests by title' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number for pagination' })
   @ApiQuery({ name: 'perPage', required: false, description: 'Number of items per page' })
+  @ApiQuery({ name: 'businessUnit', required: false, description: 'Filter by business unit' })
   @ApiResponse({ status: 200, description: 'List of hire requests with pagination info' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
   @ApiResponse({ status: 404, description: 'User role not found' })
@@ -51,11 +52,12 @@ export class HireRequestController {
     @CurrentUser() user: USER, 
     @Query('search') search?: string,
     @Query('page') page?: string,
-    @Query('perPage') perPage?: string
+    @Query('perPage') perPage?: string,
+    @Query('businessUnit') businessUnit?: string
   ) {
     const pageNumber = page ? parseInt(page, 10) : 1;
     const perPageNumber = perPage ? parseInt(perPage, 10) : 10;
-    const result = await this.hireRequestService.findAll(user, search, pageNumber, perPageNumber);
+    const result = await this.hireRequestService.findAll(user, search, pageNumber, perPageNumber, businessUnit);
     return {
       status: 200,
       message: 'Data retrieved successfully',
@@ -431,18 +433,32 @@ export class HireRequestController {
     }
   };
 
-  @Get('candidates/back-stage')
+  @Get('va-shift-hours/options')
   @UseGuards(AuthGuard)
-  @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ description: 'Backing candidates to origin stage' })
+  @ApiOperation({ description: 'Get VA Types options' })
 
-  async backStage() {
-    const result = await this.hireRequestService.backStage();
+  async getVAShiftHoursController() {
+    const result = await this.hireRequestService.getVAShiftHours();
     return {
       status: 200,
-      message: 'Processed successfully',
+      message: 'VA Shift hours retrieved successfully',
       data: result,
     }
   };
+
+  @Get('pairing-request-type/options')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get Pairing request types options' })
+
+  async getPairingRequestTypeController() {
+    const result = await this.hireRequestService.getPairingRequestType();
+    return {
+      status: 200,
+      message: 'Pairing request types retrieved successfully',
+      data: result,
+    }
+  };
+
+  
 
 }

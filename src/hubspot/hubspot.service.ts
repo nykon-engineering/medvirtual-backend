@@ -16,6 +16,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
 import { HandlerObjectDeletion } from './handlers/objectDeletion';
+import { HandlerObjectMerge } from './handlers/objectMerge';
+
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
@@ -33,6 +35,9 @@ import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
+import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
+import { OrganizationCreationService } from './create/Organization';
+
 
 
 
@@ -46,6 +51,8 @@ export class HubspotService {
       private readonly objectCreation: HandlerObjectCreation,
       private readonly objectPropertyChange: HandlerObjectPropertyChange,
       private readonly objectDeletion: HandlerObjectDeletion,
+      private readonly objectMerge: HandlerObjectMerge,
+
       private readonly organizationCreation: HandlerOrganizationCreation,
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
@@ -58,9 +65,12 @@ export class HubspotService {
 
       private readonly ticketRestore: HandlerTicketRestore,
       private readonly ticketDeletion: HandlerTicketDeletion,
+      private readonly ticketPropertyChange: HandlerTicketPropertyChange,
 
       private readonly hireRequestCreationService: HireRequestCreationService,
       private readonly hireRequestUpdateService: HireRequestUpdateService,
+
+      private readonly organizationCreationService: OrganizationCreationService,
 
       //private readonly ownerCreation: HandlerOwnerCreation,
       //private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -125,7 +135,9 @@ export class HubspotService {
                 case 'object.deletion':
                     await this.objectDeletion.execute(event);
                     break;
-
+                case 'object.merge':
+                    await this.objectMerge.execute(event);
+                    break;
                 /*
                 case 'owners.creation':
                 case 'owners.restore':
@@ -186,6 +198,10 @@ export class HubspotService {
 
                 case 'ticket.deletion':
                     await this.ticketDeletion.execute(event);
+                    break;
+                
+                case 'ticket.propertyChange':
+                    await this.ticketPropertyChange.execute(event);
                     break;
 
                 
@@ -265,10 +281,13 @@ export class HubspotService {
         return await this.hireRequestCreationService.execute(data);
     }
 
-    async updateHireRequestInHubspot(data: any): Promise<any> {
-        return await this.hireRequestUpdateService.execute(data);
+    async updateHireRequestInHubspot(data: any, specificField?: string): Promise<any> {
+        return await this.hireRequestUpdateService.execute(data, specificField);
     }
 
+    async createOrganizationInHubspot(data: any): Promise<any> {
+        return await this.organizationCreationService.execute(data);
+    }
 
     ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot
     async createCandidates(pipeline_stage: string): Promise<string> {
@@ -616,4 +635,50 @@ export class HubspotService {
           throw new BadRequestException(`Error fetching candidates: ${error.message}`);
       }
     }
+
+
+    async alignOwners() {
+        
+            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/owners`,
+            {
+            headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+                },
+            });
+
+            if (!getObject) {
+                throw new BadRequestException('No object data found');
+            }
+            //console.log('Fetched Owner Data from HubSpot:', getObject.data);
+            
+            for (const owner of getObject.data.results){
+                console.log('Email from hubspot owner:', owner.email);
+                const ownerExists = await this.prisma.uSER.findUnique({
+                    where: {
+                        email: String(owner.email)
+                    }
+                })
+
+                if (ownerExists) {
+                    await this.prisma.uSER.update({
+                        where: {
+                            id: ownerExists.id
+                        },
+                        data: {
+                            hubspot_id: String(owner.id)
+                        }
+                    })
+                    console.log('Owner updated with hubspot id:', owner.email);
+                }
+
+                console.log('-------------------------');
+            }
+
+            return true;
+
+        
+    }
+
+    
 }
