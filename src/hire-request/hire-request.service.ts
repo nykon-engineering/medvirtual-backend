@@ -450,7 +450,10 @@ export class HireRequestService {
           ...pc,
           candidate:{
             ...pc.candidate,
-            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+            salary: findMonthlySalary(
+              pc.candidate.hourly_pay_rate?.toNumber() || 0,
+              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
             panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
             .map(pcc => ({
@@ -538,6 +541,7 @@ export class HireRequestService {
                     processing_error: true,
                     organization_id: true,
                     avatar_url: true,
+                    approved_positions_pairing: true,
                     languages: {
                       select: {
                         name: true,
@@ -635,7 +639,10 @@ export class HireRequestService {
             ...pc,
             candidate:{
               ...pc.candidate,
-              salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+              salary: findMonthlySalary(
+                pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
               years_of_experience: years_of_experience,
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
@@ -1514,7 +1521,10 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const candidatesWithSalary = scoredCandidates.map(c => ({
       ...c,
-      salary: findMonthlySalary(c.hourly_pay_rate?.toNumber() || 0),
+      salary: findMonthlySalary(
+        c.hourly_pay_rate?.toNumber() || 0,
+        c.languages.length > 1 ? 'Bilingual' : c.languages[0]?.name,
+        c.approved_positions_pairing && c.approved_positions_pairing.length > 0 ? c.approved_positions_pairing[0] : ''),
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
       panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
@@ -1909,7 +1919,14 @@ export class HireRequestService {
                 skills:true,
                 pipeline_status: true,
                 avatar_url: true,
-                gender: true
+                gender: true,
+                approved_positions_pairing: true,
+                languages:{
+                  select:{
+                    id: true,
+                    name: true,
+                  }
+                }
               },
             },
           },
@@ -1950,7 +1967,10 @@ export class HireRequestService {
         ...pc,
         candidate: {
           ...pc.candidate,
-          salary: findMonthlySalary(pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0),
+          salary: findMonthlySalary(
+            pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
+            pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
+            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
           avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
         }
       }))
@@ -2643,6 +2663,13 @@ export class HireRequestService {
                 hourly_pay_rate: true,
                 country: true,
                 avatar_url: true,
+                approved_positions_pairing: true,
+                languages:{
+                  select:{
+                    id: true,
+                    name: true,
+                  }
+                },
                 experiences: {
                   orderBy: { start_date: 'asc' },
                   take: 1, 
@@ -2693,7 +2720,10 @@ export class HireRequestService {
           candidate: {
             ...pc.candidate,
             years_of_experience,
-            salary: findMonthlySalary(pc.candidate.hourly_pay_rate?.toNumber() || 0),
+            salary: findMonthlySalary(
+              pc.candidate.hourly_pay_rate?.toNumber() || 0,
+              pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
           },
         };
@@ -2814,6 +2844,7 @@ export class HireRequestService {
                 hourly_pay_rate: true,
                 years_of_experience: true,
                 avatar_url: true,
+                approved_positions_pairing: true,
                 languages: {
                   select: { name: true },
                 },
@@ -2871,7 +2902,11 @@ export class HireRequestService {
       panelId: panel.id,
       panelScheduledDate: panel.scheduled_date,
       isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
-      salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(pc.candidate.hourly_pay_rate.toNumber()) : null,
+      salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(
+        pc.candidate.hourly_pay_rate.toNumber(),
+        pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
+        pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''
+      ) : null,
       avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
     }));

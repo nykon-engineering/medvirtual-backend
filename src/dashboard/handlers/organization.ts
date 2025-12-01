@@ -30,6 +30,7 @@ export class HandlerOrganization {
       medical_tools: true,
       avatar_url: true,
       gender: true,
+      approved_positions_pairing: true,
       languages: {
         select: {
           name: true,
@@ -183,6 +184,7 @@ export class HandlerOrganization {
         id: true,
         scheduled_date: true,
         status: true,
+        
         panelCandidates: {
           select: {
             id: true,
@@ -290,7 +292,9 @@ export class HandlerOrganization {
 
     const otherTalentsSalary = otherTalents.map((talent) => ({
       ...talent,
-      salary: findMonthlySalary(Number(talent?.hourly_pay_rate)),
+      salary: findMonthlySalary(Number(talent?.hourly_pay_rate),
+        talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
+        talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : ''),
       avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` :  null,
     }))
     result.otherTalents = otherTalentsSalary;

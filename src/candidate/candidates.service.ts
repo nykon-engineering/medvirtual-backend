@@ -15,7 +15,7 @@ import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
-import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { Console } from 'console';
 
 
@@ -352,11 +352,15 @@ export class CandidatesService {
 
       const candidatesWithScheduledInterview = candidates.map(candidate => ({
         ...candidate,
+        
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
-        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+        salary: findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
         panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
@@ -832,9 +836,9 @@ export class CandidatesService {
           });
           returned = {
             min: min._min.hourly_pay_rate || 0,
-            salary_min: findMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
+            salary_min: findJustMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
             max: max._max.hourly_pay_rate || 0,
-            salary_max: findMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
+            salary_max: findJustMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
           };
           
           result[field]=returned;
@@ -1296,27 +1300,16 @@ export class CandidatesService {
     
     // Construct full avatar URL for each candidate and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
-    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => {
-      // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
-      let employmentTypeValue = candidate.employment_type;
-      if (Array.isArray(employmentTypeValue)) {
-        employmentTypeValue = employmentTypeValue[0];
-      } else if (typeof employmentTypeValue === 'string' && employmentTypeValue.includes(';')) {
-        employmentTypeValue = employmentTypeValue.split(';')[0].trim();
-      }
-      
-      // Apply the same transformation as in findOne and other places
-      const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
-      
-      return {
-        ...candidate,
-        avatar_url: candidate.avatar_url 
-          ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
-          : null,
-        salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
-        employment_type: transformedEmploymentType,
-      };
-    });
+    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => ({
+      ...candidate,
+      avatar_url: candidate.avatar_url 
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+        : null,
+      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+      employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+    }));
     
     return {
       candidates: candidatesWithFullAvatarUrl,
@@ -1405,8 +1398,9 @@ export class CandidatesService {
       avatar_url: candidate.avatar_url 
         ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
         : null,
-      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
-      employment_type: transformedEmploymentType,
+      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '')
     };
 
     return candidateWithFullAvatarUrl;

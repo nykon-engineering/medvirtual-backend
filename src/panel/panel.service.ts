@@ -170,7 +170,10 @@ export class PanelService {
         const failedResume = failedResumeParsing.map(candidate => ({
             ...candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-            salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+            salary: findMonthlySalary(
+                candidate.hourly_pay_rate?.toNumber() || 0,
+                candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,
@@ -198,7 +201,10 @@ export class PanelService {
         const CandwithoutHeadshot = withoutHeadshot.map(candidate => ({
             ...candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-            salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+            salary: findMonthlySalary(
+                candidate.hourly_pay_rate?.toNumber() || 0,
+                candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,
@@ -316,7 +322,10 @@ export class PanelService {
         const processed = candidatesWithInterviews.map(candidate => ({
             ...candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-            salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0),
+            salary: findMonthlySalary(
+                candidate.hourly_pay_rate?.toNumber() || 0,
+                candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,
