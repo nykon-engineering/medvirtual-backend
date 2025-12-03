@@ -274,7 +274,7 @@ export class HireRequestService {
     return hireRequestWithHubspotID;
   }
 
-  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10, businessUnit?: string): Promise<any> {
+  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10, businessUnit?: string, status?: string): Promise<any> {
     
     if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
@@ -300,6 +300,10 @@ export class HireRequestService {
       case 'system_admin':
         baseWhere = {};
         break;
+    }
+
+    if (status) {
+      baseWhere = { ...baseWhere, status: status };
     }
 
     //this code was updated for the switch above
@@ -2951,6 +2955,11 @@ export class HireRequestService {
       const vaTypeProperty = response.data.results.find(
         (prop) => prop.name === "va_type"
       );
+
+      //filter only options that doesnt have 'do not use' in the label
+      if (vaTypeProperty) {
+        vaTypeProperty.options = vaTypeProperty.options.filter(option => !option.label.toLowerCase().includes('do not use'));
+      }
   
       if (!vaTypeProperty) {
         return [];
