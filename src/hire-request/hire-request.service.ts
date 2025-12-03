@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HireRequestStatus, USER } from '@prisma/client';
+import { HireRequestStatus, PanelCandidateStatus, PanelStatus, USER } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
@@ -110,11 +110,13 @@ export class HireRequestService {
       candidatesSelectedInOtherPanels.length === candidatesInPanels.length;
 
     
+    /*
     console.log({
       totalCandidates: candidatesInPanels.length,
       candidatesSelectedInOtherPanels,
       allCandidatesBlocked,
     });
+    */
     
 
     return allCandidatesBlocked
@@ -123,7 +125,7 @@ export class HireRequestService {
   async create(data: CreateHireRequestDto, user?: USER):Promise<any> {   //user is option because the webhook use this function without user
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const {skills, client_id,  ...hireRequestData} = data;
+    const {skills, client_id, selectedCandidates,  ...hireRequestData} = data;
 
     if( user.role.includes('system') && !client_id) throw new BadRequestException('Client ID is required for system users');
 
@@ -151,9 +153,6 @@ export class HireRequestService {
       }
     });
     if (!organizationSQL) throw new NotFoundException(`Organization from client not found`);
-
-    //removed on 2025-11-13 asked by Pauli => https://regenta-company.monday.com/boards/9328303960/pulses/18374055394
-    //const content = `CLIENT : ${organizationSQL.name} ${organizationSQL.industry && `\n\nINDUSTRY: `+organizationSQL.industry} ${organizationSQL.website_url && `\n\nWEBSITE:`+organizationSQL.website_url}  ${data.numberVA && `\n\nHOW MANY VA'S NEEDED:`+data.numberVA} \n\nTARGET START DATE: ${new Date(data.expected_start_date).toLocaleDateString()}\n\nTITLE: ${organizationSQL.name} ${data.description && `\n\nDESCRIPTION: `+data.description}\n\nAVAILABILITY: ${data.availability}${data.skills && `\n\nSKILLS: `+(data.skills ?? []).map(s => s.name ?? s).join(", ")}`;
 
     const hubspotMappedFields = mapHRTicketToDb({
       hs_pipeline: '0',
@@ -183,8 +182,6 @@ export class HireRequestService {
       ...hireRequestData,
       ...hubspotMappedFields,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
-      //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
-      //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
       createdBy: { connect: { id: user.id } },
@@ -221,10 +218,37 @@ export class HireRequestService {
       data: {
         hire_request_id: newHireRequest.id,
         readable: false,
-        
+        status: PanelStatus.created,
       }
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
+
+    if (data.selectedCandidates && data.selectedCandidates.length > 0) {
+      //Create a panel with the selected candidates
+      const panelCandidates = await this.prisma.panelCandidate.createMany({
+        data: data.selectedCandidates.map(candidate => ({
+          candidate_id: candidate.id,
+          panel_id: panel.id,
+          status: PanelCandidateStatus.selected,
+        })),
+      });
+      if (!panelCandidates) throw new BadRequestException(`Panel candidates not created`);
+
+      //Current user as the Sourcing assignee
+      await this.prisma.hireRequest.update({
+        where: { id: newHireRequest.id },
+        data: {
+          assigned_sourcing: { connect: { id: user.id } }
+        }
+      })
+
+      await this.panelReady({
+        hireRequest_id: newHireRequest.id,
+        readable: true,
+      }, user);
+
+      }
+
     const hireRequestWithSkills = await this.findOne(newHireRequest.id, user, 'hubspot');    
     //send request for the hubspot to create the ticket
     try {
@@ -1675,7 +1699,7 @@ export class HireRequestService {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
     
-     const verifyCandidates = await this.verifyUnavailableCandidates(data.hireRequest_id, user);
+    const verifyCandidates = await this.verifyUnavailableCandidates(data.hireRequest_id, user);
     if (verifyCandidates) {
       throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
     }
