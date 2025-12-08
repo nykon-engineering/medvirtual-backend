@@ -124,7 +124,7 @@ export class TalentPoolLeadsService {
 
       const assigneeEmail = isProduction
         ? 'hanieh@medvirtual.ai'
-        : 'barbara@regenta.ai';
+        : 'pauli@regenta.ai';
 
       // Find the assignee user by email
       const assignee = await this.prisma.uSER.findUnique({
