@@ -10,10 +10,14 @@ import { UpdateTalentPoolLeadDto } from './dto/update-talent-pool-lead.dto';
 import { QueryTalentPoolLeadsDto } from './dto/query-talent-pool-leads.dto';
 import { Priority } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TalentPoolLeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) { }
 
   /**
    * Check rate limit: maximum 3 submissions per email per day
@@ -98,7 +102,7 @@ export class TalentPoolLeadsService {
     try {
       // Try to find an existing organization by email or name
       let organizationId: string | null = null;
-      
+
       const existingOrg = await this.prisma.organization.findFirst({
         where: {
           OR: [
@@ -113,6 +117,25 @@ export class TalentPoolLeadsService {
         organizationId = existingOrg.id;
       }
 
+      // Determine assignee based on environment
+      // Prod: hanieh@medvirtual.ai, Dev: Pauli@regenta.ai
+      let assignedUserId: string | null = null;
+      const isProduction = process.env.NODE_ENV !== 'development';
+
+      const assigneeEmail = isProduction
+        ? 'hanieh@medvirtual.ai'
+        : 'barbara@regenta.ai';
+
+      // Find the assignee user by email
+      const assignee = await this.prisma.uSER.findUnique({
+        where: { email: assigneeEmail },
+        select: { id: true },
+      });
+
+      if (assignee) {
+        assignedUserId = assignee.id;
+      }
+
       // Build ticket description with client information
       const ticketDescription = `Talent Pool Lead Information:
 - Contact Name: ${sanitizedName}
@@ -122,7 +145,7 @@ ${sanitizedMainNeed ? `- Main Need: ${sanitizedMainNeed}` : ''}
 ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetails}` : ''}
 - Source: ${createDto.source}`;
 
-      // Create the ticket
+      // Create the ticket with assignee
       const ticket = await this.prisma.ticket.create({
         data: {
           type: ticketTypeDictionary['Interview Request'] || 'interview',
@@ -130,12 +153,32 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
           description: ticketDescription,
           priority: Priority.medium,
           ...(organizationId && { organization: { connect: { id: organizationId } } }),
+          ...(assignedUserId && { user: { connect: { id: assignedUserId } } }),
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              first_name: true,
+              last_name: true,
+              role: true,
+            },
+          },
+          organization: true,
         },
       });
 
       // Log ticket creation (non-blocking)
       if (!ticket) {
         console.warn(`[talent-pool-lead] Failed to create ticket for lead ${lead.id}`);
+      } else {
+        // Send notification to assignee (non-blocking)
+        try {
+          await this.notifications.notifyTicketEvent(ticket, 'assigned');
+        } catch (err) {
+          console.warn(`[talent-pool-lead] Failed to send notification for ticket ${ticket.id}:`, err?.message || err);
+        }
       }
     } catch (error) {
       // Log error but don't fail the lead creation
@@ -208,10 +251,10 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
       assigned_to_user_id: lead.assigned_to_user_id,
       assigned_to_user: lead.assignedTo
         ? {
-            id: lead.assignedTo.id,
-            name: `${lead.assignedTo.first_name} ${lead.assignedTo.last_name}`,
-            email: lead.assignedTo.email,
-          }
+          id: lead.assignedTo.id,
+          name: `${lead.assignedTo.first_name} ${lead.assignedTo.last_name}`,
+          email: lead.assignedTo.email,
+        }
         : null,
       notes: lead.notes,
       created_at: lead.created_at,
@@ -298,10 +341,10 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
       assigned_to_user_id: updatedLead.assigned_to_user_id,
       assigned_to_user: updatedLead.assignedTo
         ? {
-            id: updatedLead.assignedTo.id,
-            name: `${updatedLead.assignedTo.first_name} ${updatedLead.assignedTo.last_name}`,
-            email: updatedLead.assignedTo.email,
-          }
+          id: updatedLead.assignedTo.id,
+          name: `${updatedLead.assignedTo.first_name} ${updatedLead.assignedTo.last_name}`,
+          email: updatedLead.assignedTo.email,
+        }
         : null,
       updated_at: updatedLead.updated_at,
       contacted_at: updatedLead.contacted_at,
