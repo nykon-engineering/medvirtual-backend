@@ -242,12 +242,16 @@ export class HireRequestService {
         }
       })
 
-      await this.panelReady({
-        hireRequest_id: newHireRequest.id,
-        readable: true,
-      }, user);
-
+      if (user.role.includes('organization')) {
+        await this.panelReady({
+          hireRequest_id: newHireRequest.id,
+          readable: user.role.includes('organization') ? true : false,
+        }, user);
+      }else{
+        //if the system user create the HR, just change the status for "sourcing"
+         await this.updateHireRequestStatus(newHireRequest.id, 'sourcing');
       }
+    }
 
     const hireRequestWithSkills = await this.findOne(newHireRequest.id, user, 'hubspot');    
     //send request for the hubspot to create the ticket
