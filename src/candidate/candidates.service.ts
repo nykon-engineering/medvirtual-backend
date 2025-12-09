@@ -862,8 +862,12 @@ export class CandidatesService {
             ...new Set(
               returned.flatMap((c) => c.approved_positions_pairing || [])
             ),
-          ].sort();
-          returned=uniquePositions;
+          ] as string[];
+
+          const filteredPositions = uniquePositions.filter(
+            (pos) => !pos.toLowerCase().includes('do not use')
+          );
+          returned=filteredPositions.sort();
         }else{
           
           returned = await this.prisma.candidate.findMany({
