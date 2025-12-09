@@ -17,6 +17,7 @@ import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { Console } from 'console';
+import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 
 
 @Injectable()
@@ -1168,6 +1169,22 @@ export class CandidatesService {
     return true;
   }
 
+  async removeCandidate(data: RemoveCandidateDto): Promise<boolean> {
+    if (!data.candidateId) throw new BadRequestException('Candidate ID is required');
+    if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
+
+
+    await this.prisma.panelCandidate.deleteMany({
+      where: {
+        candidate_id: data.candidateId,
+        panel: {
+          hire_request_id: data.hireRequestId
+        }
+      }
+    });
+
+    return true;
+  }
 
   async processAllAvatars(): Promise<boolean> {
     const candidates = await this.prisma.candidate.findMany({

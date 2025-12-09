@@ -13,6 +13,7 @@ import { Roles } from '../auth/roles.decorator';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
+import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 
 
 
@@ -210,6 +211,24 @@ export class CandidatesController {
     return {
       status: 200,
       message: 'Candidate endorsed successfully',
+      data: result
+    }
+  }
+
+  @Post('remove-candidate')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Remove candidates from an existing panel' })
+  @ApiBody({ type: RemoveCandidateDto })
+  @ApiResponse({ status: 200, description: 'Candidate removed successfully' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @ApiResponse({ status: 400, description: 'Hire Request ID is required' })
+  @ApiResponse({ status: 404, description: 'Hire Request not found in candidate panel' })
+  @ApiResponse({ status: 400, description: 'Failed to remove candidate' })
+  async removeCandidate(@Body() data: RemoveCandidateDto){
+    const result = await this.candidatesService.removeCandidate(data);
+    return {
+      status: 200,
+      message: 'Candidate removed successfully',
       data: result
     }
   }

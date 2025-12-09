@@ -235,13 +235,16 @@ export class HireRequestService {
       if (!panelCandidates) throw new BadRequestException(`Panel candidates not created`);
 
       //Current user as the Sourcing assignee
-      await this.prisma.hireRequest.update({
-        where: { id: newHireRequest.id },
-        data: {
-          assigned_sourcing: { connect: { id: user.id } }
-        }
-      })
+      if (user.role.includes('system')){
+        await this.prisma.hireRequest.update({
+          where: { id: newHireRequest.id },
+          data: {
+            assigned_sourcing: { connect: { id: user.id } }
+          }
+        })
 
+      }
+      
       if (user.role.includes('organization')) {
         await this.panelReady({
           hireRequest_id: newHireRequest.id,
