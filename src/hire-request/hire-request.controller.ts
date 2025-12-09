@@ -53,11 +53,12 @@ export class HireRequestController {
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
-    @Query('businessUnit') businessUnit?: string
+    @Query('businessUnit') businessUnit?: string,
+    @Query('status') status?: string
   ) {
     const pageNumber = page ? parseInt(page, 10) : 1;
     const perPageNumber = perPage ? parseInt(perPage, 10) : 10;
-    const result = await this.hireRequestService.findAll(user, search, pageNumber, perPageNumber, businessUnit);
+    const result = await this.hireRequestService.findAll(user, search, pageNumber, perPageNumber, businessUnit, status);
     return {
       status: 200,
       message: 'Data retrieved successfully',

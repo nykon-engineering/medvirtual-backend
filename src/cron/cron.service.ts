@@ -214,7 +214,7 @@ export class CronService {
             const mailSent = await this.mailService.sendMail({
             from: 'MedVirtual <noreply@medvirtual.ai>',
             to: 'shayan@regenta.ai',
-            cc: 'paulo@regenta.ai,hanieh@medvirtual.ai',
+            cc: ['paulo@regenta.ai', 'hanieh@medvirtual.ai'],
             subject: 'System Report',
             html: emailBody,
             });

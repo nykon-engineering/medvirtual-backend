@@ -304,6 +304,8 @@ export class HireRequestService {
 
     if (status) {
       baseWhere = { ...baseWhere, status: status };
+    }else{
+      baseWhere = { ...baseWhere, status: { not: 'deleted' }}
     }
 
     //this code was updated for the switch above
@@ -320,6 +322,8 @@ export class HireRequestService {
     
     const whereClause =  { ...baseWhere, ...searchWhere, ...businessUnitWhere };
 
+    //console.log('HireRequestService.findAll - whereClause:', whereClause);
+
     const skip = (page - 1) * perPage;
     const take = perPage;
 
@@ -327,7 +331,7 @@ export class HireRequestService {
       this.prisma.hireRequest.findMany({
         where: {
           ...whereClause,
-          status: { not: 'deleted' }
+          
         },
         include: {
           skills: true,
