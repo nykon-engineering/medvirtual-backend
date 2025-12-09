@@ -1114,53 +1114,56 @@ export class CandidatesService {
   
   async endorseCandidate(data: EndorseCandidateDto): Promise<boolean> {
 
-    if (!data.candidateId) throw new BadRequestException('Candidate ID is required');
+    //console.log('Starting endorsement process for candidates:', data.candidatesId, 'to hire request:', data.hireRequestId);
+
+    if (!data.candidatesId) throw new BadRequestException('Candidates ID is required');
     if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
 
-    const hire_request = await this.prisma.candidatePanel.findFirst({
+    const panel = await this.prisma.candidatePanel.findFirst({
       where: { hire_request_id: data.hireRequestId },
       select: { id: true }
     })
-    if (!hire_request) throw new NotFoundException('Hire Request not found in candidate panel');
+    if (!panel) throw new NotFoundException('Hire Request not found in candidate panel');
 
-    const candidate = await this.prisma.candidate.findUnique({
-      where: { id: data.candidateId },
+    const candidates = await this.prisma.candidate.findMany({
+      where: { id: { in: data.candidatesId }},
       select: { 
+        id: true,
         hubspot_id: true,
         pipeline_status: true
        }
     });
-    if (!candidate) throw new NotFoundException('Candidate not found');
+    if (!candidates) throw new NotFoundException('Candidate not found');
 
 
-    const newStatus = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === 'endorsed via platform')?.[0];
-    if (!newStatus) throw new BadRequestException('Invalid status mapping for Endorsed via platform');
-
-    const [endorsement, candidateUpdated] = await this.prisma.$transaction([
-      this.prisma.panelCandidate.create({
-        data:{
-          panel_id: hire_request.id,
-          candidate_id: data.candidateId,
-          status: 'selected',
+    //verify if the candidates is within the panel already. If so, skip this specific candidate
+    for (const candidate of candidates) {
+      const existingPanelCandidate = await this.prisma.panelCandidate.findFirst({
+        where: {
+          panel_id: panel.id,
+          candidate_id: candidate.id,
         }
-      }),
-    
-      this.prisma.candidate.update({
-        where: { id: data.candidateId },
-        data: { 
-          pipeline_status_origin: candidate.pipeline_status,
-          pipeline_status: newStatus 
-        } 
-      })
-    ])
-    if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
-    if (!candidateUpdated) throw new BadGatewayException('Failed to update candidate status');
+      });
 
-    await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, newStatus);
+      if (existingPanelCandidate) {
+        data.candidatesId = data.candidatesId.filter(id => id !== candidate.id);
+      }
+    }
+
+    const endorsement = await this.prisma.panelCandidate.createMany({
+      data: data.candidatesId.map(candidateId => ({
+        panel_id: panel.id,
+        candidate_id: candidateId,
+        status: 'selected',
+      }))
+    })
+
+      
+    if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
 
     return true;
-
   }
+
 
   async processAllAvatars(): Promise<boolean> {
     const candidates = await this.prisma.candidate.findMany({

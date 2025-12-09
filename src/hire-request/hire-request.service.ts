@@ -217,7 +217,7 @@ export class HireRequestService {
     const panel = await this.prisma.candidatePanel.create({
       data: {
         hire_request_id: newHireRequest.id,
-        readable: false,
+        readable: user.role.includes('organization') ? true : false,
         status: PanelStatus.created,
       }
     })

@@ -196,9 +196,8 @@ export class CandidatesController {
   }
 
   @Post('endorse-candidate')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Endorse a candidate' })
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Endorse candidates in an existing panel' })
   @ApiBody({ type: EndorseCandidateDto })
   @ApiResponse({ status: 200, description: 'Candidate endorsed successfully' })
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
@@ -207,7 +206,6 @@ export class CandidatesController {
   @ApiResponse({ status: 400, description: 'Failed to endorse candidate' })
 
   async endorseCandidate(@Body() data: EndorseCandidateDto){
-    console.log('Endorsing candidate - controller:', data);
     const result = await this.candidatesService.endorseCandidate(data);
     return {
       status: 200,
