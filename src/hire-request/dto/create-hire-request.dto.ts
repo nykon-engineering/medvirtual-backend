@@ -135,6 +135,11 @@ export class CreateHireRequestDto {
     hubspot_pairing_request_type: string
 
 
+    @ApiProperty({ description: 'The selected candidates for the hire request', required: false })
+    @IsArray()
+    @IsOptional()
+    selectedCandidates: any[];
+
     
     
 }

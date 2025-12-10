@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { TalentPoolLeadsService } from './talent-pool-leads.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTalentPoolLeadDto } from './dto/create-talent-pool-lead.dto';
 import { UpdateTalentPoolLeadDto } from './dto/update-talent-pool-lead.dto';
 import { QueryTalentPoolLeadsDto } from './dto/query-talent-pool-leads.dto';
@@ -22,6 +23,16 @@ const mockPrisma = {
   uSER: {
     findUnique: jest.fn(),
   },
+  organization: {
+    findFirst: jest.fn(),
+  },
+  ticket: {
+    create: jest.fn(),
+  },
+};
+
+const mockNotificationsService = {
+  notifyTicketEvent: jest.fn(),
 };
 
 describe('TalentPoolLeadsService', () => {
@@ -33,6 +44,7 @@ describe('TalentPoolLeadsService', () => {
       providers: [
         TalentPoolLeadsService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: NotificationsService, useValue: mockNotificationsService },
       ],
     }).compile();
 
@@ -64,7 +76,17 @@ describe('TalentPoolLeadsService', () => {
 
       mockPrisma.talentPoolLead.count.mockResolvedValue(0); // Rate limit check passes
       mockPrisma.talentPoolLead.findFirst.mockResolvedValue(null); // No duplicate
+      mockPrisma.organization.findFirst.mockResolvedValue(null); // No existing org
+      mockPrisma.uSER.findUnique.mockResolvedValue(null); // No assignee found (optional)
+      mockPrisma.ticket.create.mockResolvedValue({
+        id: 'ticket-1',
+        type: 'interview',
+        title: 'Interview Request - Healthcare Organization',
+        user: null,
+        organization: null,
+      });
       mockPrisma.talentPoolLead.create.mockResolvedValue(mockCreatedLead);
+      mockNotificationsService.notifyTicketEvent.mockResolvedValue(true);
 
       const result = await service.create(createDto);
 
@@ -118,6 +140,15 @@ describe('TalentPoolLeadsService', () => {
 
       mockPrisma.talentPoolLead.count.mockResolvedValue(0);
       mockPrisma.talentPoolLead.findFirst.mockResolvedValue(null);
+      mockPrisma.organization.findFirst.mockResolvedValue(null);
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+      mockPrisma.ticket.create.mockResolvedValue({
+        id: 'ticket-1',
+        type: 'interview',
+        title: 'Interview Request - Healthcare Org',
+        user: null,
+        organization: null,
+      });
       mockPrisma.talentPoolLead.create.mockResolvedValue({
         id: 'lead-1',
         name: '&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;John',
@@ -126,6 +157,7 @@ describe('TalentPoolLeadsService', () => {
         status: 'new',
         created_at: new Date(),
       });
+      mockNotificationsService.notifyTicketEvent.mockResolvedValue(true);
 
       const result = await service.create(maliciousDto);
 
@@ -152,6 +184,15 @@ describe('TalentPoolLeadsService', () => {
 
       mockPrisma.talentPoolLead.count.mockResolvedValue(0);
       mockPrisma.talentPoolLead.findFirst.mockResolvedValue(null);
+      mockPrisma.organization.findFirst.mockResolvedValue(null);
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+      mockPrisma.ticket.create.mockResolvedValue({
+        id: 'ticket-1',
+        type: 'interview',
+        title: 'Interview Request - Healthcare Organization',
+        user: null,
+        organization: null,
+      });
       mockPrisma.talentPoolLead.create.mockResolvedValue({
         id: 'lead-1',
         email: 'john@healthcare.com',
@@ -160,6 +201,7 @@ describe('TalentPoolLeadsService', () => {
         status: 'new',
         created_at: new Date(),
       });
+      mockNotificationsService.notifyTicketEvent.mockResolvedValue(true);
 
       await service.create(dtoWithUpperCaseEmail);
 

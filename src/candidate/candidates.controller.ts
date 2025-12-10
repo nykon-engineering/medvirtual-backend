@@ -13,6 +13,7 @@ import { Roles } from '../auth/roles.decorator';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
+import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 
 
 
@@ -196,9 +197,8 @@ export class CandidatesController {
   }
 
   @Post('endorse-candidate')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Endorse a candidate' })
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Endorse candidates in an existing panel' })
   @ApiBody({ type: EndorseCandidateDto })
   @ApiResponse({ status: 200, description: 'Candidate endorsed successfully' })
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
@@ -207,11 +207,28 @@ export class CandidatesController {
   @ApiResponse({ status: 400, description: 'Failed to endorse candidate' })
 
   async endorseCandidate(@Body() data: EndorseCandidateDto){
-    console.log('Endorsing candidate - controller:', data);
     const result = await this.candidatesService.endorseCandidate(data);
     return {
       status: 200,
       message: 'Candidate endorsed successfully',
+      data: result
+    }
+  }
+
+  @Post('remove-candidate')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Remove candidates from an existing panel' })
+  @ApiBody({ type: RemoveCandidateDto })
+  @ApiResponse({ status: 200, description: 'Candidate removed successfully' })
+  @ApiResponse({ status: 400, description: 'Candidate ID is required' })
+  @ApiResponse({ status: 400, description: 'Hire Request ID is required' })
+  @ApiResponse({ status: 404, description: 'Hire Request not found in candidate panel' })
+  @ApiResponse({ status: 400, description: 'Failed to remove candidate' })
+  async removeCandidate(@Body() data: RemoveCandidateDto){
+    const result = await this.candidatesService.removeCandidate(data);
+    return {
+      status: 200,
+      message: 'Candidate removed successfully',
       data: result
     }
   }

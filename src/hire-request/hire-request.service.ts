@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HireRequestStatus, USER } from '@prisma/client';
+import { HireRequestStatus, PanelCandidateStatus, PanelStatus, USER } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
@@ -110,11 +110,13 @@ export class HireRequestService {
       candidatesSelectedInOtherPanels.length === candidatesInPanels.length;
 
     
+    /*
     console.log({
       totalCandidates: candidatesInPanels.length,
       candidatesSelectedInOtherPanels,
       allCandidatesBlocked,
     });
+    */
     
 
     return allCandidatesBlocked
@@ -123,7 +125,7 @@ export class HireRequestService {
   async create(data: CreateHireRequestDto, user?: USER):Promise<any> {   //user is option because the webhook use this function without user
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
-    const {skills, client_id,  ...hireRequestData} = data;
+    const {skills, client_id, selectedCandidates,  ...hireRequestData} = data;
 
     if( user.role.includes('system') && !client_id) throw new BadRequestException('Client ID is required for system users');
 
@@ -151,9 +153,6 @@ export class HireRequestService {
       }
     });
     if (!organizationSQL) throw new NotFoundException(`Organization from client not found`);
-
-    //removed on 2025-11-13 asked by Pauli => https://regenta-company.monday.com/boards/9328303960/pulses/18374055394
-    //const content = `CLIENT : ${organizationSQL.name} ${organizationSQL.industry && `\n\nINDUSTRY: `+organizationSQL.industry} ${organizationSQL.website_url && `\n\nWEBSITE:`+organizationSQL.website_url}  ${data.numberVA && `\n\nHOW MANY VA'S NEEDED:`+data.numberVA} \n\nTARGET START DATE: ${new Date(data.expected_start_date).toLocaleDateString()}\n\nTITLE: ${organizationSQL.name} ${data.description && `\n\nDESCRIPTION: `+data.description}\n\nAVAILABILITY: ${data.availability}${data.skills && `\n\nSKILLS: `+(data.skills ?? []).map(s => s.name ?? s).join(", ")}`;
 
     const hubspotMappedFields = mapHRTicketToDb({
       hs_pipeline: '0',
@@ -183,8 +182,6 @@ export class HireRequestService {
       ...hireRequestData,
       ...hubspotMappedFields,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
-      //removed the status pending signature asked by Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/18070949199
-      //status: organizationSQL.organization_role !== OrganizationRole.client ? 'pending_signature' as HireRequestStatus : 'new' as HireRequestStatus,
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
       createdBy: { connect: { id: user.id } },
@@ -220,11 +217,42 @@ export class HireRequestService {
     const panel = await this.prisma.candidatePanel.create({
       data: {
         hire_request_id: newHireRequest.id,
-        readable: false,
-        
+        readable: user.role.includes('organization') ? true : false,
+        status: PanelStatus.created,
       }
     })
     if (!panel) throw new BadRequestException(`Hire request panel not created`);
+
+    if (data.selectedCandidates && data.selectedCandidates.length > 0) {
+      //Create a panel with the selected candidates
+      const panelCandidates = await this.prisma.panelCandidate.createMany({
+        data: data.selectedCandidates.map(candidate => ({
+          candidate_id: candidate.id,
+          panel_id: panel.id,
+          status: PanelCandidateStatus.selected,
+        })),
+      });
+      if (!panelCandidates) throw new BadRequestException(`Panel candidates not created`);
+
+      if (user.role.includes('organization')) {
+        await this.panelReady({
+          hireRequest_id: newHireRequest.id,
+          readable: true,
+        }, user);
+      }else{
+        //Current user as the Sourcing assignee
+        await this.prisma.hireRequest.update({
+          where: { id: newHireRequest.id },
+          data: {
+            assigned_sourcing: { connect: { id: user.id } }
+          }
+        })
+
+        //if the system user create the HR, just change the status for "sourcing"
+         await this.updateHireRequestStatus(newHireRequest.id, 'sourcing');
+      }
+    }
+
     const hireRequestWithSkills = await this.findOne(newHireRequest.id, user, 'hubspot');    
     //send request for the hubspot to create the ticket
     try {
@@ -237,7 +265,7 @@ export class HireRequestService {
     if (newHireRequest.assign_user_id) {
       console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
       try {
-        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id, '' , 'panel_request_flow');
         console.log(`[notifications] Hire request created notification sent successfully:`, result);
       } catch (err) {
         console.error('[notifications] hire-request-created email failed', err?.message || err);
@@ -250,7 +278,7 @@ export class HireRequestService {
     return hireRequestWithHubspotID;
   }
 
-  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10, businessUnit?: string): Promise<any> {
+  async findAll(user: USER, search?: string, page: number = 1, perPage: number = 10, businessUnit?: string, status?: string): Promise<any> {
     
     if (!user || user.role.includes("organization") && !user.organization_id) {
       throw new NotFoundException('User not found or not part of an organization');
@@ -278,6 +306,12 @@ export class HireRequestService {
         break;
     }
 
+    if (status) {
+      baseWhere = { ...baseWhere, status: status };
+    }else{
+      baseWhere = { ...baseWhere, status: { not: 'deleted' }}
+    }
+
     //this code was updated for the switch above
     // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search ? { title: { contains: search, mode: 'insensitive' as const } } : {};
@@ -292,6 +326,8 @@ export class HireRequestService {
     
     const whereClause =  { ...baseWhere, ...searchWhere, ...businessUnitWhere };
 
+    //console.log('HireRequestService.findAll - whereClause:', whereClause);
+
     const skip = (page - 1) * perPage;
     const take = perPage;
 
@@ -299,7 +335,7 @@ export class HireRequestService {
       this.prisma.hireRequest.findMany({
         where: {
           ...whereClause,
-          status: { not: 'deleted' }
+          
         },
         include: {
           skills: true,
@@ -1675,7 +1711,7 @@ export class HireRequestService {
     if(!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
     if (!data || !data.hireRequest_id) throw new BadRequestException('Data is required to confirm panel ready');
     
-     const verifyCandidates = await this.verifyUnavailableCandidates(data.hireRequest_id, user);
+    const verifyCandidates = await this.verifyUnavailableCandidates(data.hireRequest_id, user);
     if (verifyCandidates) {
       throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
     }
@@ -2927,6 +2963,11 @@ export class HireRequestService {
       const vaTypeProperty = response.data.results.find(
         (prop) => prop.name === "va_type"
       );
+
+      //filter only options that doesnt have 'do not use' in the label
+      if (vaTypeProperty) {
+        vaTypeProperty.options = vaTypeProperty.options.filter(option => !option.label.toLowerCase().includes('do not use'));
+      }
   
       if (!vaTypeProperty) {
         return [];
