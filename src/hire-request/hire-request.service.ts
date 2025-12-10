@@ -234,8 +234,13 @@ export class HireRequestService {
       });
       if (!panelCandidates) throw new BadRequestException(`Panel candidates not created`);
 
-      //Current user as the Sourcing assignee
-      if (user.role.includes('system')){
+      if (user.role.includes('organization')) {
+        await this.panelReady({
+          hireRequest_id: newHireRequest.id,
+          readable: true,
+        }, user);
+      }else{
+        //Current user as the Sourcing assignee
         await this.prisma.hireRequest.update({
           where: { id: newHireRequest.id },
           data: {
@@ -243,14 +248,6 @@ export class HireRequestService {
           }
         })
 
-      }
-      
-      if (user.role.includes('organization')) {
-        await this.panelReady({
-          hireRequest_id: newHireRequest.id,
-          readable: user.role.includes('organization') ? true : false,
-        }, user);
-      }else{
         //if the system user create the HR, just change the status for "sourcing"
          await this.updateHireRequestStatus(newHireRequest.id, 'sourcing');
       }
@@ -268,7 +265,7 @@ export class HireRequestService {
     if (newHireRequest.assign_user_id) {
       console.log(`[notifications] Attempting to send hire request created notification for HR ${newHireRequest.id} to user ${newHireRequest.assign_user_id}`);
       try {
-        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id);
+        const result = await this.notifications.notifyHireRequestCreated(newHireRequest.id, '' , 'panel_request_flow');
         console.log(`[notifications] Hire request created notification sent successfully:`, result);
       } catch (err) {
         console.error('[notifications] hire-request-created email failed', err?.message || err);

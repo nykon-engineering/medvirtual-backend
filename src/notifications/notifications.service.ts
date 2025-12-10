@@ -631,7 +631,7 @@ export class NotificationsService {
     });
   }
 
-  async notifyHireRequestCreated(hireRequestId: string, type?: string): Promise<boolean> {
+  async notifyHireRequestCreated(hireRequestId: string, type?: string, from?: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -703,7 +703,8 @@ export class NotificationsService {
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
-       </div>`,
+       </div>
+       ${from === 'panel_request_flow' ? `<p>This hire request was created from Panel Request Flow.</p>` : '' }`,
       emailTheme
     );
 
