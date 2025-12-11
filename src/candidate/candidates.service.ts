@@ -15,9 +15,11 @@ import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
+import { HireRequestService } from 'src/hire-request/hire-request.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
-import { Console } from 'console';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { changeStatusHireRequesDTO } from 'src/hire-request/dto/changeStatus-hire-request.dto';
+
 
 
 @Injectable()
@@ -32,6 +34,8 @@ export class CandidatesService {
     @Inject(forwardRef(() => HubspotService))
     private readonly hubspot: HubspotService,
     private readonly mailService: MailService,
+
+    private readonly hireRequest: HireRequestService
   ){}
 
   async findAll(
@@ -1169,7 +1173,7 @@ export class CandidatesService {
     return true;
   }
 
-  async removeCandidate(data: RemoveCandidateDto): Promise<boolean> {
+  async removeCandidate(data: RemoveCandidateDto, user: USER): Promise<boolean> {
     if (!data.candidateId) throw new BadRequestException('Candidate ID is required');
     if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
 
@@ -1182,6 +1186,20 @@ export class CandidatesService {
         }
       }
     });
+
+    //if no has more candidate, cancel panel
+    const lengthCandidates = await this.prisma.panelCandidate.count({
+      where: {
+        panel: {
+          hire_request_id: data.hireRequestId
+        }
+      }
+    });
+
+    if (lengthCandidates === 0) {
+      //call the function hireRequest Update Status to cancel
+      await this.hireRequest.updateStatus(data.hireRequestId, {status: 'cancelled'}, user);
+    }
 
     return true;
   }
