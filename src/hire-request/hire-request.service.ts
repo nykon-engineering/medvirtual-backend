@@ -1914,7 +1914,7 @@ export class HireRequestService {
           },
           {
             status: 'interview_scheduled',
-            readable: true,
+            //readable: true, => removed because we removed the feature where the user selects if the panel is readable or not
           },
           {
             status: 'decision_pending',
