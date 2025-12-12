@@ -15,10 +15,9 @@ import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
-import { HireRequestService } from 'src/hire-request/hire-request.service';
+import { HireRequestService } from '../hire-request/hire-request.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
-import { changeStatusHireRequesDTO } from 'src/hire-request/dto/changeStatus-hire-request.dto';
 
 
 

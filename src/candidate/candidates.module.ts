@@ -8,12 +8,13 @@ import { S3Module } from '../s3/s3.module';
 import { OpenaiModule } from '../openai/openai.module';
 import { HubspotModule } from '../hubspot/hubspot.module';
 import { MailModule } from '../mail/mail.module';
+import { HireRequestModule } from '../hire-request/hire-request.module';
 
 @Module({
   controllers: [CandidatesController],
   providers: [CandidatesService],
   imports: [forwardRef(() => HubspotModule),
-    PrismaModule, GoogledriveModule, TextractModule, S3Module, OpenaiModule, MailModule],
+    PrismaModule, GoogledriveModule, TextractModule, S3Module, OpenaiModule, MailModule, HireRequestModule],
   exports: [CandidatesService],
 })
 export class CandidatesModule {}
