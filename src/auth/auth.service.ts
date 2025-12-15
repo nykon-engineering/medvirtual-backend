@@ -585,6 +585,64 @@ export class AuthService {
     return `Invitation sent successfully to ${data.email}`;
   }
 
+
+  async reInviteUser(id: string): Promise<string> {
+    const userToReInvite = await this.userService.findById(id);
+    if (!userToReInvite) {
+      throw new NotFoundException('User not found');
+    }
+
+    const code = jwt.sign({ id: userToReInvite.id }, process.env.JWT_SECRET, {
+      expiresIn: '24h',
+    });
+
+    if (!code) {
+      throw new BadRequestException('Failed to generate invite code');
+    }
+
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, userToReInvite.id);
+    
+    // Send signup link via email
+    const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+    const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
+      ? `${baseInviteLink}&company=berry` 
+      : baseInviteLink;
+    const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
+    const mailSent = await this.mailService.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: userToReInvite.email,
+      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
+      html: emailBody,
+      headers: {
+        'X-Mailer': 'MedVirtual Platform',
+        'X-Priority': '3',
+        'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
+        'X-Entity-Ref-ID': `invite-${userToReInvite.id}`,
+      },
+    });
+
+    if (!mailSent) {
+      throw new BadRequestException('Failed to send invitation email');
+    }
+
+    // Store the verification code in the database with an expiration time
+    const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours - same time as JWT
+    const storeCode = await this.prisma.emailInvitation.create({
+      data: {
+        userId: userToReInvite.id,
+        email_from: userToReInvite.email,
+        code: code,
+        expiresAt: codeExpiresAt,
+      },
+    });
+    if (!storeCode) {
+      throw new BadRequestException('Failed to store invite code');
+    }
+
+    return `Invitation sent successfully to ${userToReInvite.email}`;
+  }
+
   async getUser(data: AuthGetInviteDto): Promise<any> {
     const { token } = data;
     if (!token) {
