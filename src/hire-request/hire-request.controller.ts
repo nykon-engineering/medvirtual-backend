@@ -66,6 +66,21 @@ export class HireRequestController {
     }
   }
 
+  @Get('get-opened-hire-requests')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get all opened hire requests regarding rules for the current user' })
+  @ApiResponse({ status: 200, description: 'List of opened hire requests' })
+  @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
+  @ApiResponse({ status: 404, description: 'User role not found' })
+  async getOpenedHireRequests(@CurrentUser() user: USER) {
+    const result = await this.hireRequestService.getOpenedHireRequests(user);
+    return {
+      status: 200,
+      message: 'Opened hire requests retrieved successfully',
+      data: result,
+    }
+  }
+
 
   @Get('available-candidates-panel')
   @UseGuards(AuthGuard)

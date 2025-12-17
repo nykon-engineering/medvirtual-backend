@@ -5,6 +5,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { findMonthlySalary } from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
+import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
+import { changeLabelAvailability } from '../../common/utils/hubspot.util';
 
 @Injectable()
 export class HandlerOrganization {
@@ -292,6 +294,7 @@ export class HandlerOrganization {
 
     const otherTalentsSalary = otherTalents.map((talent) => ({
       ...talent,
+      employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
       salary: findMonthlySalary(Number(talent?.hourly_pay_rate),
         talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
         talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : ''),

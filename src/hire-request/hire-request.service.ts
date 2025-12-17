@@ -696,6 +696,209 @@ export class HireRequestService {
     return formatted;
   }
 
+  async getOpenedHireRequests(user: USER): Promise<any> {
+    
+    if (!user || user.role.includes("organization") && !user.organization_id) {
+      throw new NotFoundException('User not found or not part of an organization');
+    }
+    if(!user.role) throw new NotFoundException('User role not found');
+
+    let baseWhere = { };
+    switch (user.role) {
+      case 'organization_super_admin':
+      case 'organization_admin':
+        baseWhere = { 
+          organization: { id: user.organization_id },
+          OR: [
+            {status: { in: ['new', 'pending_signature', 'sourcing', 'for_review', 'panel_ready'] }},
+            {
+              status: 'interview_scheduled',
+              panels: {
+                some: {
+                  interviews: {
+                    some: {
+                      scheduled_date: {
+                        gt: new Date(),
+                      },
+                      status: 'scheduled',
+                    },
+                  },
+                },
+              },
+            }
+          ]
+          
+         };
+        break
+      
+      case 'system_super_admin':
+      case 'system_admin':
+        baseWhere = {
+          status : 'sourcing'
+        };
+        break;
+    }
+
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: {
+        ...baseWhere,
+      },
+      include: {
+        skills: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            business_unit: true,
+            email: true,
+            hubspot_id: true,
+          }
+        },
+        createdBy:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        assigned_user:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        assigned_sourcing: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        panels: {
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+            readable: true,
+            panelCandidates: {
+              select: {
+                id:true,
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                    email: true,
+                    country: true,
+                    languages: true,
+                    specialization: true,
+                    about_me: true,
+                    hourly_pay_rate: true,
+                    avatar_url: true,
+                    approved_positions_pairing: true,
+                    skills: {
+                      select: {
+                        skill_name: true,
+                        proficiency_level: true,
+                      },
+                    },
+                    educations: {
+                      orderBy: { year: 'desc' },
+                      select: {
+                        institution: true,
+                        degree: true,
+                        year: true,
+                      },
+                    },
+                    experiences: {
+                      orderBy: { start_date: 'desc' },
+                      select: {
+                        company: true,
+                        position: true,
+                        responsabilities: true,
+                        start_date: true,
+                        end_date: true,
+                      },
+                    },
+                    panelCandidates: {
+                      select:{
+                        id: true,
+                        status: true,
+                        panel:{
+                          select:{
+                            id: true,
+                            hire_request_id: true,
+                            hireRequest:{
+                              select:{
+                                id: true,
+                                title: true,
+                                organization:{
+                                  select:{
+                                    id: true,
+                                    name: true,
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                },
+              },
+            },
+            interviews: {
+              select: {
+                scheduled_date: true,
+                link: true,
+              },
+            },
+          },
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+     
+
+    const formatted = hireRequests.map(hr => ({
+      ...hr,
+      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
+      panels: hr.panels.map(panel => ({
+        ...panel,
+        interview_date: panel.interviews[0]?.scheduled_date || null,
+        interview_link: panel.interviews[0]?.link || null,
+        interviews: undefined,
+        panelCandidates: panel.panelCandidates.map(pc => ({
+          ...pc,
+          candidate:{
+            ...pc.candidate,
+            salary: findMonthlySalary(
+              pc.candidate.hourly_pay_rate?.toNumber() || 0,
+              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
+            .map(pcc => ({
+              panel_id: pcc.panel.id,
+              title: pcc.panel.hireRequest.title,
+              organization_name: pcc.panel.hireRequest.organization.name,
+              status: pcc.status,
+            })) : [],
+          }
+        }))
+      }))
+    }));
+
+    return formatted;
+    
+
+  }
+
   async update(id: string, data: UpdateHireRequestDto, user: USER): Promise<object> {
     let result;
     if(!user || user.role.includes("organization") && !user.organization_id) {
@@ -1925,6 +2128,7 @@ export class HireRequestService {
         ],
        
       },
+      
       select: {
         id: true,
         scheduled_date: true,
@@ -1973,23 +2177,7 @@ export class HireRequestService {
             link: true,
           },
         },
-        hireRequest: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            status: true,
-            priority: true,
-            createdAt: true,
-            availability: true,
-            contract_length: true,
-            expected_start_date: true,
-            salary_range_from: true,
-            salary_range_to: true,
-            specialization: true,
-            location: true,
-          },
-        },
+        hireRequest: true,
       },
     });
 
