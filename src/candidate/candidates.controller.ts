@@ -51,7 +51,7 @@ export class CandidatesController {
     @Query('search') search: string,
     @Query('all') all: string,
   ) {
-    const result = await this.candidatesService.findAll(
+    const result = await this.candidatesService.findAll( 
       user, 
       country, 
       availability, 

@@ -261,8 +261,7 @@ export class HireRequestController {
   }
 
   @Get('get-panels/all')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('organization_super_admin', 'organization_admin')
+  @UseGuards(AuthGuard)
   @ApiOperation({ description: 'Get all readable Panels of the specific/current logged organization' })
   @ApiResponse({ status: 200, description: 'Panels returned successfully' })
   @ApiResponse({ status: 404, description: 'User not found or not part of an organization' })
