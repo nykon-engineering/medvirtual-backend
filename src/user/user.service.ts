@@ -154,6 +154,11 @@ export class UserService {
     perPage?: number,
     ): Promise<any> {
     
+    page = page ? Number(page) : 1;
+    perPage = perPage ? Number(perPage) : 10;
+    const skip = (page - 1) * perPage;
+    const take = perPage;
+
     let whereClause: any = { 
       role: { in: ['system_admin', 'system_super_admin'] }  
     };
@@ -187,10 +192,12 @@ export class UserService {
         },
       ];
     }
-
     
-    const users = await this.prisma.uSER.findMany({
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.uSER.findMany({
       where: whereClause,
+      skip,
+      take,
       select: {
         id: true,
         email: true,
@@ -204,7 +211,11 @@ export class UserService {
       orderBy: {
         first_name: 'asc',
       },
-    });
+    }),
+    this.prisma.uSER.count({
+      where: whereClause,
+    }),
+    ])
 
     if (!users || users.length === 0) {
       throw new NotFoundException(
@@ -212,7 +223,16 @@ export class UserService {
       );
     }
 
-    return users;
+    return {
+      status: 200,
+      data: users,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(Number(total) / perPage),
+      },
+    };
   }
 
   async getProfileById(id: string): Promise<GetProfileDto> {
