@@ -11,6 +11,7 @@ import { OpenaiService } from '../openai/openai.service';
 import axios from 'axios';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -62,6 +63,10 @@ const HireRequestMock = {
   updateStatus: jest.fn(),
 }
 
+const notificationsMock = {
+  notifyEndorseCandidates: jest.fn(),
+}
+
   describe('CandidatesService', () => {
     let service: CandidatesService;
     let prisma: PrismaService;
@@ -84,6 +89,7 @@ const HireRequestMock = {
         { provide: HubspotService, useValue: hubspotMock },
         { provide: MailService, useValue: MailMock },
         { provide: HireRequestService, useValue: HireRequestMock },
+        { provide: NotificationsService, useValue: notificationsMock },
       ],
     }).compile();
 

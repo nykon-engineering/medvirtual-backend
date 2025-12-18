@@ -203,7 +203,6 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Candidate endorsed successfully' })
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
   @ApiResponse({ status: 400, description: 'Hire Request ID is required' })
-  @ApiResponse({ status: 404, description: 'Hire Request not found in candidate panel' })
   @ApiResponse({ status: 400, description: 'Failed to endorse candidate' })
 
   async endorseCandidate(@Body() data: EndorseCandidateDto){

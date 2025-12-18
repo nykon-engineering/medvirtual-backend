@@ -876,6 +876,62 @@ export class NotificationsService {
     });
   }
 
+  async notifyEndorseCandidates(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        priority: true,
+        specialization: true,
+        assigned_user: { select: { id: true, email: true, first_name: true, last_name: true } },
+        organization: {
+          select: { name: true },
+        },
+      },
+    });
+    if (!hr) throw new NotFoundException('Hire request not found');
+    if (!hr.assigned_user?.email)
+      throw new BadRequestException('Hire request has no assignee email');
+
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+
+    // Get user email theme
+    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+
+    const html = this.buildEmail(
+      `<p>${hr.assigned_user.first_name ?? hr.assigned_user.first_name} ${hr.assigned_user.last_name ?? hr.assigned_user.last_name}</p>
+       <p>The hire request received new candidates.</p>
+       
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Organization:</strong> ${hr.organization.name}</p>
+         <p><strong>Description:</strong> 
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
+         <p><strong>Specialization:</strong> ${hr.specialization}</p>
+       </div>
+       
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           View Hire Request Details
+         </a>
+       </div>`,
+      emailTheme
+    );
+
+    return await this.mail.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: [hr.assigned_user.email],
+      subject: `Candidate Endorsed in Hire Request: ${hr.title}`,
+      html,
+    });
+  }
+
+  // ======== Tickets ========
+
   async notifyTicketStatusChangeToCreator(ticket: any, newStatus: 'in_progress' | 'resolved' | 'closed'): Promise<boolean> {
     if (!ticket) throw new NotFoundException('Ticket not found');
 

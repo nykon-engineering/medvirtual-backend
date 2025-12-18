@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ProcessingStatus, USER } from '@prisma/client';
+import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 
 import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
@@ -18,6 +18,7 @@ import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 
 
@@ -34,7 +35,8 @@ export class CandidatesService {
     private readonly hubspot: HubspotService,
     private readonly mailService: MailService,
 
-    private readonly hireRequest: HireRequestService
+    private readonly hireRequest: HireRequestService,
+    private readonly notifications: NotificationsService
   ){}
 
   async findAll(
@@ -1127,11 +1129,19 @@ export class CandidatesService {
     if (!data.candidatesId) throw new BadRequestException('Candidates ID is required');
     if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
 
-    const panel = await this.prisma.candidatePanel.findFirst({
+    let panel = await this.prisma.candidatePanel.findFirst({
       where: { hire_request_id: data.hireRequestId },
       select: { id: true }
     })
-    if (!panel) throw new NotFoundException('Hire Request not found in candidate panel');
+    if (!panel) {
+      panel = await this.prisma.candidatePanel.create({
+        data: {
+          hire_request_id: data.hireRequestId,
+          status: PanelStatus.created,
+          readable: true,
+        }
+      });
+    }
 
     const candidates = await this.prisma.candidate.findMany({
       where: { id: { in: data.candidatesId }},
@@ -1168,6 +1178,12 @@ export class CandidatesService {
 
       
     if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
+    try {
+        const result = await this.notifications.notifyEndorseCandidates(data.hireRequestId);
+        console.log(`[notifications] Hire request endorsement notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] hire-request-endorsement email failed', err?.message || err);
+      }
 
     return true;
   }
