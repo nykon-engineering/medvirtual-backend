@@ -30,7 +30,7 @@ export class OrganizationCreationService {
                 numberofemployees: Number(data.number_of_employees),
                 phone: data.phone || '',
                 referral_email: data.email || '',
-                type: 'Current Client',
+                type: data.type || '',
                 business_unit: data.business_unit || '',
               },
               associations:[]

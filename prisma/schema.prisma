@@ -118,6 +118,7 @@ model Organization {
   state                   String?
   business_unit           String?
   source                  String?
+  type                    String?
   hire_requests           HireRequest[]
   admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
   owner                   USER?                   @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)

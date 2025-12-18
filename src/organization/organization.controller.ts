@@ -622,4 +622,12 @@ export class OrganizationController {
     return await this.organizationService.getOrganizationIndustryTypes();
   }
 
+  @Get('get-organization-types/all')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Get organization Types from hubspot' })
+  async getOrganizationTypes() {
+    return await this.organizationService.getOrganizationTypes();
+  }
+
 }
