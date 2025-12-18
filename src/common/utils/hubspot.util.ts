@@ -102,13 +102,9 @@ export function mapOrganizationToDbHubspot(hubspotData: organizationData): any {
   for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
     const value = hubspotData[hubspotKey];
       if (value === undefined) continue;
+        
+      result[dbKey] = value;
 
-      if (hubspotKey === "type") {
-        result[dbKey] = value === "PROSPECT" ? OrganizationRole.prospect : OrganizationRole.client;
-      } else {
-        result[dbKey] = value;
-      }
-      
     }
   return result as any;
 }

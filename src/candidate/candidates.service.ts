@@ -240,6 +240,7 @@ export class CandidatesService {
       avatar_url: true,
       gender: true,
       shift_block: true,
+      video_link: true,
       languages: {
         select: {
           name: true,
@@ -418,6 +419,7 @@ export class CandidatesService {
       medical_tools: true,
       gender: true,
       shift_block: true,
+      video_link: true,
       languages: {
         select: {
           name: true,

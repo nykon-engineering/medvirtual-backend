@@ -166,6 +166,7 @@ model Candidate {
   avatar_url                 String?
   headshot_url               String?
   shift_block                String?
+  video_link                 String?
   educations                 CandidateEducation[]
   experiences                CandidateExperience[]
   languages                  CandidateLanguage[]

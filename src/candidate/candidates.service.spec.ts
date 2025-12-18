@@ -145,6 +145,7 @@ const notificationsMock = {
         name: 'John Doe',
         pipeline_status: '1',
         shift_block: '8am-5pm',
+        video_link: 'X',
         about_me: 'About me',
         tools: 'JavaScript, TypeScript',
         medical_tools: 'None',
@@ -207,6 +208,7 @@ const notificationsMock = {
           gender: true,
           country: true,
           shift_block: true,
+          video_link: true,
           educations: {
             select: {
               degree: true,
