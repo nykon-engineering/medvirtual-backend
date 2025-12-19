@@ -33,6 +33,7 @@ export class HandlerOrganization {
       avatar_url: true,
       gender: true,
       approved_positions_pairing: true,
+      video_link: true,
       languages: {
         select: {
           name: true,
