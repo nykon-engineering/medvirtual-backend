@@ -2183,6 +2183,14 @@ export class HireRequestService {
                 }
               },
             },
+            createdBy:{
+              select:{
+                id: true,
+                first_name: true,
+                last_name: true,
+                role: true,
+              }
+            }
           },
         },
         interviews: {
