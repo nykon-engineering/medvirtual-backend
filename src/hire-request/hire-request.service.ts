@@ -2065,6 +2065,7 @@ export class HireRequestService {
             last_name: true,
             email: true,
             country: true,
+            video_link: true,
             skills: {
               select: {
                 skill_name: true,
@@ -2161,6 +2162,7 @@ export class HireRequestService {
                 avatar_url: true,
                 gender: true,
                 approved_positions_pairing: true,
+                video_link: true,
                 languages:{
                   select:{
                     id: true,
@@ -2243,6 +2245,7 @@ export class HireRequestService {
                 country: true,
                 specialization: true,
                 employment_type: true,
+                video_link: true,
                 skills: {
                   select: {
                     id: true,

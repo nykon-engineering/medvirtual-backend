@@ -444,10 +444,14 @@ export class HubspotService {
                     id: candidate.id
                 },
                 data: candidateData
+                //data: {
+                //    video_link: candidateData.video_link,
+                //}
             })
 
             console.log('Candidate updated:', response.results[0]);
             //Here, I start to work with the skills
+            
             if (hubspotProps.career_highlights_relevant_job_experiences) {
                 await this.prisma.candidateSkill.deleteMany({
                     where: {
@@ -487,6 +491,7 @@ export class HubspotService {
                 }
             }
             console.log('Candidate updated:', candidate.first_name);
+            
   
         }
     }
@@ -498,7 +503,7 @@ export class HubspotService {
 
         const organizations = await this.prisma.organization.findMany({
             where:{
-                industry: ''
+                type: null
             },
             orderBy:{
                 updatedAt: 'asc'
@@ -555,7 +560,10 @@ export class HubspotService {
                 where: {
                     id: org.id
                 },
-                data: organizationData,
+                //data: organizationData,
+                data:{
+                    type: organizationData.type ? organizationData.type : '',
+                }
             })
             
             console.log('Organization updated:', org.name,':=>', organizationData);
