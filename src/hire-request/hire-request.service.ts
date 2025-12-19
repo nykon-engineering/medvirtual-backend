@@ -786,6 +786,14 @@ export class HireRequestService {
             panelCandidates: {
               select: {
                 id:true,
+                createdBy:{
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    role: true,
+                  }
+                },
                 candidate: {
                   select: {
                     id: true,
@@ -1901,6 +1909,7 @@ export class HireRequestService {
         data: data.candidates_id.map((candidateId) => ({
           candidate_id: candidateId,
           panel_id: panel.id,
+          createdByUserId: user.id,
         })),
       });
 

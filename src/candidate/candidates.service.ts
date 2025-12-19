@@ -297,7 +297,7 @@ export class CandidatesService {
             }
           }
         }
-      }
+      },
       
     }
 
@@ -1124,7 +1124,7 @@ export class CandidatesService {
     return scoredHireRequests;
   }
   
-  async endorseCandidate(data: EndorseCandidateDto): Promise<boolean> {
+  async endorseCandidate(data: EndorseCandidateDto, user: USER): Promise<boolean> {
 
     //console.log('Starting endorsement process for candidates:', data.candidatesId, 'to hire request:', data.hireRequestId);
 
@@ -1175,6 +1175,7 @@ export class CandidatesService {
         panel_id: panel.id,
         candidate_id: candidateId,
         status: 'selected',
+        createdByUserId: user.id
       }))
     })
 

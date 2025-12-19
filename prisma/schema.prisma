@@ -37,6 +37,7 @@ model USER {
   hireRequestsSourcingAssigned HireRequest[]       @relation("AssignedSourcing")
   hireRequestsAssigned         HireRequest[]       @relation("AssignedUser")
   hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
+  panelCandidatesCreated       PanelCandidate[]    @relation("PanelCandidateCreatedBy")
   adminOrganizations           Organization[]      @relation("OrganizationAdmin")
   ownedOrganizations           Organization?       @relation("OrganizationOwner")
   sessions                     Session[]
@@ -327,13 +328,15 @@ model CandidatePanel {
 }
 
 model PanelCandidate {
-  id           String               @id @default(uuid())
-  panel_id     String
-  candidate_id String
-  status       PanelCandidateStatus @default(selected)
-  createdAt    DateTime             @default(now())
-  candidate    Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
-  panel        CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
+  id              String               @id @default(uuid())
+  panel_id        String
+  candidate_id    String
+  status          PanelCandidateStatus @default(selected)
+  createdAt       DateTime             @default(now())
+  createdByUserId String?
+  candidate       Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
+  panel           CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
+  createdBy       USER?              @relation("PanelCandidateCreatedBy", fields: [createdByUserId], references: [id])
 
   @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
   @@index([panel_id], map: "idx_panel_candidates_panel_id")

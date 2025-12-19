@@ -205,8 +205,8 @@ export class CandidatesController {
   @ApiResponse({ status: 400, description: 'Hire Request ID is required' })
   @ApiResponse({ status: 400, description: 'Failed to endorse candidate' })
 
-  async endorseCandidate(@Body() data: EndorseCandidateDto){
-    const result = await this.candidatesService.endorseCandidate(data);
+  async endorseCandidate(@Body() data: EndorseCandidateDto, @CurrentUser() user: USER){
+    const result = await this.candidatesService.endorseCandidate(data, user);
     return {
       status: 200,
       message: 'Candidate endorsed successfully',
