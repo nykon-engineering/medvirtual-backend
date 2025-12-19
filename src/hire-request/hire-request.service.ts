@@ -378,6 +378,7 @@ export class HireRequestService {
               panelCandidates: {
                 select: {
                   id:true,
+                  status: true,
                   candidate: {
                     select: {
                       id: true,
@@ -443,6 +444,15 @@ export class HireRequestService {
                       }
                     },
                   },
+                  createdAt: true,
+                  createdBy:{
+                    select:{
+                      id: true,
+                      first_name: true,
+                      last_name: true,
+                      role: true,
+                    }
+                  }
                 },
               },
               interviews: {
@@ -559,6 +569,7 @@ export class HireRequestService {
             readable: true,
             panelCandidates: {
               select: {
+                id:true,
                 status: true,
                 candidate: {
                   select: {
@@ -640,6 +651,15 @@ export class HireRequestService {
                     }
                   },
                 },
+                createdAt: true,
+                createdBy:{
+                  select:{
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    role: true,
+                  }
+                }
               },
             },
             interviews: {
