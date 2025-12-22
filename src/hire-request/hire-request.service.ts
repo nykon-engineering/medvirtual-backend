@@ -2161,26 +2161,41 @@ export class HireRequestService {
 
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
-        hireRequest: {
-          org_id: user.organization_id || undefined,
-        },
-        OR: [
+        AND: [
           {
-            status: 'created',
-            readable: true,
+            hireRequest: {
+              org_id: user.organization_id || undefined,
+            },
           },
           {
-            status: 'interview_scheduled',
-            //readable: true, => removed because we removed the feature where the user selects if the panel is readable or not
-          },
-          {
-            status: 'decision_pending',
-          },
-          {
-            status: 'decision_made',
+            OR: [
+              {
+                hireRequest: {
+                  status: {
+                    in: [
+                      HireRequestStatus.awaiting_decision,
+                      HireRequestStatus.placement_completed,
+                    ],
+                  },
+                },
+              },
+              {
+                panelCandidates: {
+                  some: {
+                    createdBy: {
+                      role: {
+                        in: 
+                          user.role.includes("organization")
+                          ? ['organization_admin', 'organization_super_admin']
+                          : ['system_admin', 'system_super_admin'], 
+                      },
+                    },
+                  },
+                },
+              },
+            ],
           },
         ],
-       
       },
       
       select: {
@@ -2254,6 +2269,7 @@ export class HireRequestService {
         ...pc,
         candidate: {
           ...pc.candidate,
+          employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
           salary: findMonthlySalary(
             pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
             pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
@@ -2263,12 +2279,8 @@ export class HireRequestService {
       }))
       
     }));
-
-    const panelWithoutNewHireRequests = result
-    .filter(panel => panel.hireRequest.status !== 'new')
-    .filter(panel => panel.hireRequest.status !== 'sourcing');
     
-    return panelWithoutNewHireRequests;
+    return result;
   }
 
   async getPanelsByOrganization(user: USER){

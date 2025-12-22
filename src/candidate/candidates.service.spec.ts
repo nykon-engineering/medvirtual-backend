@@ -153,7 +153,7 @@ const notificationsMock = {
         specialization: 'Software Development',
         years_of_experience: 5,
         hourly_pay_rate: 5,
-        employment_type: 'Full-time',
+        employment_type: 'Full Time',
         educations: [{ degree: 'BSc', institution: 'University', year: '2020' }],
         approved_positions_pairing: ['Test'],
         experiences: [
@@ -266,7 +266,7 @@ const notificationsMock = {
       const expectedResult = {
         ...mockCandidate,
         pipeline_status: 'Unknown Stage',
-        employment_type: 'Full-time',
+        employment_type: 'Full Time',
         panelCandidates: [
           {
             title: 'Hire Request 1',

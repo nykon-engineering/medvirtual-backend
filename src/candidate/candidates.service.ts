@@ -1181,12 +1181,17 @@ export class CandidatesService {
 
       
     if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
+    
     try {
+      if ( user.role.includes('organization')){
         const result = await this.notifications.notifyEndorseCandidates(data.hireRequestId);
         console.log(`[notifications] Hire request endorsement notification sent successfully:`, result);
-      } catch (err) {
-        console.error('[notifications] hire-request-endorsement email failed', err?.message || err);
+      }else{
+        console.log(`[notifications] Hire request endorsement skipped for user role: ${user.role}`);
       }
+    } catch (err) {
+      console.error('[notifications] hire-request-endorsement email failed', err?.message || err);
+    }
 
     return true;
   }

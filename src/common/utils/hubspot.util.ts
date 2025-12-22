@@ -154,7 +154,7 @@ export function changeLabelAvailability(label: string): string {
     ? "Part Time" 
     : label === "Available Candidates" 
       ? "Full Time"
-      : label;
+      : "Full Time";
 }
 
 
