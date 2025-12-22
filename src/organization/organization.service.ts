@@ -298,6 +298,7 @@ export class OrganizationService {
         limit = 10,
         search,
         role,
+        type,
         status,
         industry,
         location,
@@ -363,6 +364,11 @@ export class OrganizationService {
       // Add role filter
       if (role) {
         whereClause.organization_role = role;
+      }
+
+      // Add role type
+      if (type) {
+        whereClause.type = type;
       }
 
       // Add status filter

@@ -50,6 +50,15 @@ export class GetOrganizationsDto {
 
   @ApiProperty({
     required: false,
+    description: 'Filter by organization type',
+    enum: OrganizationRole,
+  })
+  @IsOptional()
+  @IsString()
+  type?: String;
+
+  @ApiProperty({
+    required: false,
     description: 'Filter by organization status',
     enum: OrganizationStatus,
   })
