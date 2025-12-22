@@ -30,6 +30,7 @@ import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspo
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
 import { dateToTimestamp, formatTimestampToUSShort, timestampToUSDate } from '../common/utils/formatDate';
+import { create } from 'domain';
 
 @Injectable()
 export class HireRequestService {
@@ -184,6 +185,7 @@ export class HireRequestService {
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
+      assigned_sourcing:  user.role.includes('organization') ?  { connect: { id: organizationSQL.admin_id } } :  { connect: { id: user.id } } ,
       createdBy: { connect: { id: user.id } },
       position: undefined,
       contract_amount: undefined,
@@ -230,6 +232,7 @@ export class HireRequestService {
           candidate_id: candidate.id,
           panel_id: panel.id,
           status: PanelCandidateStatus.selected,
+          createdByUserId: user.id,
         })),
       });
       if (!panelCandidates) throw new BadRequestException(`Panel candidates not created`);
@@ -378,6 +381,7 @@ export class HireRequestService {
               panelCandidates: {
                 select: {
                   id:true,
+                  status: true,
                   candidate: {
                     select: {
                       id: true,
@@ -392,6 +396,7 @@ export class HireRequestService {
                       hourly_pay_rate: true,
                       avatar_url: true,
                       approved_positions_pairing: true,
+                      video_link: true,
                       skills: {
                         select: {
                           skill_name: true,
@@ -442,6 +447,15 @@ export class HireRequestService {
                       }
                     },
                   },
+                  createdAt: true,
+                  createdBy:{
+                    select:{
+                      id: true,
+                      first_name: true,
+                      last_name: true,
+                      role: true,
+                    }
+                  }
                 },
               },
               interviews: {
@@ -558,6 +572,7 @@ export class HireRequestService {
             readable: true,
             panelCandidates: {
               select: {
+                id:true,
                 status: true,
                 candidate: {
                   select: {
@@ -578,6 +593,7 @@ export class HireRequestService {
                     organization_id: true,
                     avatar_url: true,
                     approved_positions_pairing: true,
+                    video_link: true,
                     languages: {
                       select: {
                         name: true,
@@ -638,6 +654,15 @@ export class HireRequestService {
                     }
                   },
                 },
+                createdAt: true,
+                createdBy:{
+                  select:{
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    role: true,
+                  }
+                }
               },
             },
             interviews: {
@@ -694,6 +719,218 @@ export class HireRequestService {
     };
 
     return formatted;
+  }
+
+  async getOpenedHireRequests(user: USER): Promise<any> {
+    
+    if (!user || user.role.includes("organization") && !user.organization_id) {
+      throw new NotFoundException('User not found or not part of an organization');
+    }
+    if(!user.role) throw new NotFoundException('User role not found');
+
+    let baseWhere = { };
+    switch (user.role) {
+      case 'organization_super_admin':
+      case 'organization_admin':
+        baseWhere = { 
+          organization: { id: user.organization_id },
+          OR: [
+            {status: { in: ['new', 'pending_signature', 'sourcing', 'for_review', 'panel_ready'] }},
+            {
+              status: 'interview_scheduled',
+              panels: {
+                some: {
+                  interviews: {
+                    some: {
+                      scheduled_date: {
+                        gt: new Date(),
+                      },
+                      status: 'scheduled',
+                    },
+                  },
+                },
+              },
+            }
+          ]
+          
+         };
+        break
+      
+      case 'system_super_admin':
+      case 'system_admin':
+        baseWhere = {
+          status :  { in: ['sourcing', 'for_review'] }
+        };
+        break;
+    }
+
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: {
+        ...baseWhere,
+      },
+      include: {
+        skills: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            business_unit: true,
+            email: true,
+            hubspot_id: true,
+          }
+        },
+        createdBy:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        assigned_user:{
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        assigned_sourcing: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        panels: {
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+            readable: true,
+            panelCandidates: {
+              select: {
+                id:true,
+                createdBy:{
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    role: true,
+                  }
+                },
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                    email: true,
+                    country: true,
+                    languages: true,
+                    specialization: true,
+                    about_me: true,
+                    hourly_pay_rate: true,
+                    avatar_url: true,
+                    approved_positions_pairing: true,
+                    video_link: true,
+                    skills: {
+                      select: {
+                        skill_name: true,
+                        proficiency_level: true,
+                      },
+                    },
+                    educations: {
+                      orderBy: { year: 'desc' },
+                      select: {
+                        institution: true,
+                        degree: true,
+                        year: true,
+                      },
+                    },
+                    experiences: {
+                      orderBy: { start_date: 'desc' },
+                      select: {
+                        company: true,
+                        position: true,
+                        responsabilities: true,
+                        start_date: true,
+                        end_date: true,
+                      },
+                    },
+                    panelCandidates: {
+                      select:{
+                        id: true,
+                        status: true,
+                        panel:{
+                          select:{
+                            id: true,
+                            hire_request_id: true,
+                            hireRequest:{
+                              select:{
+                                id: true,
+                                title: true,
+                                organization:{
+                                  select:{
+                                    id: true,
+                                    name: true,
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                },
+              },
+            },
+            interviews: {
+              select: {
+                scheduled_date: true,
+                link: true,
+              },
+            },
+          },
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+     
+
+    const formatted = hireRequests.map(hr => ({
+      ...hr,
+      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
+      panels: hr.panels.map(panel => ({
+        ...panel,
+        interview_date: panel.interviews[0]?.scheduled_date || null,
+        interview_link: panel.interviews[0]?.link || null,
+        interviews: undefined,
+        panelCandidates: panel.panelCandidates.map(pc => ({
+          ...pc,
+          candidate:{
+            ...pc.candidate,
+            salary: findMonthlySalary(
+              pc.candidate.hourly_pay_rate?.toNumber() || 0,
+              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
+            .map(pcc => ({
+              panel_id: pcc.panel.id,
+              title: pcc.panel.hireRequest.title,
+              organization_name: pcc.panel.hireRequest.organization.name,
+              status: pcc.status,
+            })) : [],
+          }
+        }))
+      }))
+    }));
+
+    return formatted;
+    
+
   }
 
   async update(id: string, data: UpdateHireRequestDto, user: USER): Promise<object> {
@@ -1685,16 +1922,36 @@ export class HireRequestService {
         if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       }
 
-
-      await tx.panelCandidate.deleteMany({
+      //check existing candidates on the panel
+      const existingCandidates = await tx.panelCandidate.findMany({
         where: { panel_id: panel.id },
+        select: { candidate_id: true },
       });
+      //filter data.candidates_id to find just candidates who will be add on the panel without duplicates
+      const candidatesToAdd = data.candidates_id.filter(
+        (candidateId) => !existingCandidates.some((ec) => ec.candidate_id === candidateId)
+      );
+      //filter existing candidates to find candidates who will be removed from the panel
+      const candidatesToRemove = existingCandidates
+        .filter((ec) => !data.candidates_id.includes(ec.candidate_id))
+        .map((ec) => ec.candidate_id);
+
+      // Remove candidates from the panel
+      if (candidatesToRemove.length > 0) {
+        await tx.panelCandidate.deleteMany({
+          where: {
+            panel_id: panel.id,
+            candidate_id: { in: candidatesToRemove },
+          },
+        });
+      }
 
       // Create new candidates on the panel
       await tx.panelCandidate.createMany({
-        data: data.candidates_id.map((candidateId) => ({
+        data: candidatesToAdd.map((candidateId) => ({
           candidate_id: candidateId,
           panel_id: panel.id,
+          createdByUserId: user.id,
         })),
       });
 
@@ -1862,6 +2119,7 @@ export class HireRequestService {
             last_name: true,
             email: true,
             country: true,
+            video_link: true,
             skills: {
               select: {
                 skill_name: true,
@@ -1904,27 +2162,43 @@ export class HireRequestService {
 
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
-        hireRequest: {
-          org_id: user.organization_id || undefined,
-        },
-        OR: [
+        AND: [
           {
-            status: 'created',
-            readable: true,
+            hireRequest: {
+              org_id: user.organization_id || undefined,
+            },
           },
           {
-            status: 'interview_scheduled',
-            readable: true,
-          },
-          {
-            status: 'decision_pending',
-          },
-          {
-            status: 'decision_made',
+            OR: [
+              {
+                hireRequest: {
+                  status: {
+                    in: [
+                      HireRequestStatus.awaiting_decision,
+                      HireRequestStatus.placement_completed,
+                    ],
+                  },
+                },
+              },
+              {
+                panelCandidates: {
+                  some: {
+                    createdBy: {
+                      role: {
+                        in: 
+                          user.role.includes("organization")
+                          ? ['organization_admin', 'organization_super_admin']
+                          : ['system_admin', 'system_super_admin'], 
+                      },
+                    },
+                  },
+                },
+              },
+            ],
           },
         ],
-       
       },
+      
       select: {
         id: true,
         scheduled_date: true,
@@ -1957,6 +2231,7 @@ export class HireRequestService {
                 avatar_url: true,
                 gender: true,
                 approved_positions_pairing: true,
+                video_link: true,
                 languages:{
                   select:{
                     id: true,
@@ -1965,6 +2240,14 @@ export class HireRequestService {
                 }
               },
             },
+            createdBy:{
+              select:{
+                id: true,
+                first_name: true,
+                last_name: true,
+                role: true,
+              }
+            }
           },
         },
         interviews: {
@@ -1973,23 +2256,7 @@ export class HireRequestService {
             link: true,
           },
         },
-        hireRequest: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            status: true,
-            priority: true,
-            createdAt: true,
-            availability: true,
-            contract_length: true,
-            expected_start_date: true,
-            salary_range_from: true,
-            salary_range_to: true,
-            specialization: true,
-            location: true,
-          },
-        },
+        hireRequest: true,
       },
     });
 
@@ -2003,6 +2270,7 @@ export class HireRequestService {
         ...pc,
         candidate: {
           ...pc.candidate,
+          employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
           salary: findMonthlySalary(
             pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
             pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
@@ -2055,6 +2323,7 @@ export class HireRequestService {
                 country: true,
                 specialization: true,
                 employment_type: true,
+                video_link: true,
                 skills: {
                   select: {
                     id: true,
@@ -2700,6 +2969,7 @@ export class HireRequestService {
                 country: true,
                 avatar_url: true,
                 approved_positions_pairing: true,
+                video_link: true,
                 languages:{
                   select:{
                     id: true,
@@ -2881,6 +3151,7 @@ export class HireRequestService {
                 years_of_experience: true,
                 avatar_url: true,
                 approved_positions_pairing: true,
+                video_link: true,
                 languages: {
                   select: { name: true },
                 },

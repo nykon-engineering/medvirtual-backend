@@ -298,6 +298,7 @@ export class OrganizationService {
         limit = 10,
         search,
         role,
+        type,
         status,
         industry,
         location,
@@ -363,6 +364,11 @@ export class OrganizationService {
       // Add role filter
       if (role) {
         whereClause.organization_role = role;
+      }
+
+      // Add role type
+      if (type) {
+        whereClause.type = type;
       }
 
       // Add status filter
@@ -580,6 +586,7 @@ export class OrganizationService {
         date_founded: org.date_founded || undefined,
         date_joined: org.date_joined || undefined,
         date_became_client: org.date_became_client || undefined,
+        type: org.type || undefined,
         //status: org.status === 'active' && org.staffCount === 0 ? 'inactive' : org.status,
         status: org.status,
         signed_document_url: org.signed_document_url || undefined,
@@ -757,6 +764,7 @@ export class OrganizationService {
           description: data.description,
           industry: data.industry ? organizationIndustryToDbDictionary[data.industry] || data.industry : undefined,
           business_unit: data.business_unit,
+          type: data.type,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
           number_of_employees: Number(data.number_of_employees),
@@ -2616,5 +2624,30 @@ export class OrganizationService {
       throw new Error("Failed to find Organization Industry types");
     }
   };
+
+  async getOrganizationTypes () : Promise<any> {
+      try {
+        const url = "https://api.hubapi.com/crm/v3/properties/companies";
+        const response = await axios.get(url, {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+        });
+    
+        const vaTypeProperty = response.data.results.find(
+          (prop) => prop.name === "type"
+        );
+    
+        if (!vaTypeProperty) {
+          return [];
+        }
+  
+        return vaTypeProperty.options || [];
+      } catch (error) {
+        console.error("Failed to find Organization Type:", error.response?.data || error.message);
+        throw new Error("Failed to find Organization Type");
+      }
+    };
 
 }

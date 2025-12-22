@@ -108,6 +108,12 @@ export class OrganizationController {
     description: 'Filter by organization role',
   })
   @ApiQuery({
+    name: 'type',
+    required: false,
+    type: String,
+    description: 'Filter by organization type',
+  })
+  @ApiQuery({
     name: 'status',
     required: false,
     enum: ['active', 'inactive'],
@@ -620,6 +626,14 @@ export class OrganizationController {
   @ApiOperation({ summary: 'Get industry Types from hubspot' })
   async getOrganizationIndustryTypes() {
     return await this.organizationService.getOrganizationIndustryTypes();
+  }
+
+  @Get('get-organization-types/all')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Get organization Types from hubspot' })
+  async getOrganizationTypes() {
+    return await this.organizationService.getOrganizationTypes();
   }
 
 }

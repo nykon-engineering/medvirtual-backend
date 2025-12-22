@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ProcessingStatus, USER } from '@prisma/client';
+import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 
 import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
@@ -15,9 +15,11 @@ import axios from 'axios';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
+import { HireRequestService } from '../hire-request/hire-request.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
-import { Console } from 'console';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+
 
 
 @Injectable()
@@ -32,6 +34,9 @@ export class CandidatesService {
     @Inject(forwardRef(() => HubspotService))
     private readonly hubspot: HubspotService,
     private readonly mailService: MailService,
+
+    private readonly hireRequest: HireRequestService,
+    private readonly notifications: NotificationsService
   ){}
 
   async findAll(
@@ -235,6 +240,7 @@ export class CandidatesService {
       avatar_url: true,
       gender: true,
       shift_block: true,
+      video_link: true,
       languages: {
         select: {
           name: true,
@@ -291,7 +297,7 @@ export class CandidatesService {
             }
           }
         }
-      }
+      },
       
     }
 
@@ -413,6 +419,7 @@ export class CandidatesService {
       medical_tools: true,
       gender: true,
       shift_block: true,
+      video_link: true,
       languages: {
         select: {
           name: true,
@@ -1117,18 +1124,26 @@ export class CandidatesService {
     return scoredHireRequests;
   }
   
-  async endorseCandidate(data: EndorseCandidateDto): Promise<boolean> {
+  async endorseCandidate(data: EndorseCandidateDto, user: USER): Promise<boolean> {
 
     //console.log('Starting endorsement process for candidates:', data.candidatesId, 'to hire request:', data.hireRequestId);
 
     if (!data.candidatesId) throw new BadRequestException('Candidates ID is required');
     if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
 
-    const panel = await this.prisma.candidatePanel.findFirst({
+    let panel = await this.prisma.candidatePanel.findFirst({
       where: { hire_request_id: data.hireRequestId },
       select: { id: true }
     })
-    if (!panel) throw new NotFoundException('Hire Request not found in candidate panel');
+    if (!panel) {
+      panel = await this.prisma.candidatePanel.create({
+        data: {
+          hire_request_id: data.hireRequestId,
+          status: PanelStatus.created,
+          readable: true,
+        }
+      });
+    }
 
     const candidates = await this.prisma.candidate.findMany({
       where: { id: { in: data.candidatesId }},
@@ -1160,16 +1175,28 @@ export class CandidatesService {
         panel_id: panel.id,
         candidate_id: candidateId,
         status: 'selected',
+        createdByUserId: user.id
       }))
     })
 
       
     if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
+    
+    try {
+      if ( user.role.includes('organization')){
+        const result = await this.notifications.notifyEndorseCandidates(data.hireRequestId);
+        console.log(`[notifications] Hire request endorsement notification sent successfully:`, result);
+      }else{
+        console.log(`[notifications] Hire request endorsement skipped for user role: ${user.role}`);
+      }
+    } catch (err) {
+      console.error('[notifications] hire-request-endorsement email failed', err?.message || err);
+    }
 
     return true;
   }
 
-  async removeCandidate(data: RemoveCandidateDto): Promise<boolean> {
+  async removeCandidate(data: RemoveCandidateDto, user: USER): Promise<boolean> {
     if (!data.candidateId) throw new BadRequestException('Candidate ID is required');
     if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
 
@@ -1182,6 +1209,20 @@ export class CandidatesService {
         }
       }
     });
+
+    //if no has more candidate, cancel panel
+    const lengthCandidates = await this.prisma.panelCandidate.count({
+      where: {
+        panel: {
+          hire_request_id: data.hireRequestId
+        }
+      }
+    });
+
+    if (lengthCandidates === 0) {
+      //call the function hireRequest Update Status to cancel
+      await this.hireRequest.updateStatus(data.hireRequestId, {status: 'cancelled'}, user);
+    }
 
     return true;
   }
@@ -1279,6 +1320,8 @@ export class CandidatesService {
           medical_tools: true,
           avatar_url: true,
           gender: true,
+          shift_block: true,
+          video_link: true,
           languages: {
             select: {
               name: true,
@@ -1368,6 +1411,7 @@ export class CandidatesService {
         avatar_url: true,
         gender: true,
         shift_block: true,
+        video_link: true,
         languages: {
           select: {
             name: true,

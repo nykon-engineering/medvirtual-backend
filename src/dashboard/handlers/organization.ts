@@ -5,6 +5,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { findMonthlySalary } from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
+import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
+import { changeLabelAvailability } from '../../common/utils/hubspot.util';
 
 @Injectable()
 export class HandlerOrganization {
@@ -31,6 +33,7 @@ export class HandlerOrganization {
       avatar_url: true,
       gender: true,
       approved_positions_pairing: true,
+      video_link: true,
       languages: {
         select: {
           name: true,
@@ -210,6 +213,8 @@ export class HandlerOrganization {
                 experiences: true,
                 skills:true,
                 languages: true,
+                approved_positions_pairing: true,
+                avatar_url: true,
               },
             },
           },
@@ -233,7 +238,24 @@ export class HandlerOrganization {
         },
       },
     });
-    result.awaitingDecision = awaitingDecision;
+
+    //change candidate employment_type and calculate salary
+    const awaitingDecisionSanitized = awaitingDecision.map((item) => ({
+      ...item,
+      panelCandidates: item.panelCandidates.map((pc) => ({
+        ...pc,
+        candidate: {
+          ...pc.candidate,
+          employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+          salary: findMonthlySalary(Number(pc.candidate?.hourly_pay_rate),
+            pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+          avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+        }
+      }))
+    }));
+
+    result.awaitingDecision = awaitingDecisionSanitized;
 
     const otherTalents = await this.prisma.candidate.findMany({
       where: {
@@ -249,7 +271,7 @@ export class HandlerOrganization {
         ]
       },
       select,
-      take: 8,
+      take: 9,
     });
     const lastTimeofDay = new Date();
     lastTimeofDay.setHours(23, 59, 59, 999);
@@ -292,6 +314,7 @@ export class HandlerOrganization {
 
     const otherTalentsSalary = otherTalents.map((talent) => ({
       ...talent,
+      employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
       salary: findMonthlySalary(Number(talent?.hourly_pay_rate),
         talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
         talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : ''),

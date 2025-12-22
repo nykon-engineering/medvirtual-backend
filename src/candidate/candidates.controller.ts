@@ -51,7 +51,7 @@ export class CandidatesController {
     @Query('search') search: string,
     @Query('all') all: string,
   ) {
-    const result = await this.candidatesService.findAll(
+    const result = await this.candidatesService.findAll( 
       user, 
       country, 
       availability, 
@@ -203,11 +203,10 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Candidate endorsed successfully' })
   @ApiResponse({ status: 400, description: 'Candidate ID is required' })
   @ApiResponse({ status: 400, description: 'Hire Request ID is required' })
-  @ApiResponse({ status: 404, description: 'Hire Request not found in candidate panel' })
   @ApiResponse({ status: 400, description: 'Failed to endorse candidate' })
 
-  async endorseCandidate(@Body() data: EndorseCandidateDto){
-    const result = await this.candidatesService.endorseCandidate(data);
+  async endorseCandidate(@Body() data: EndorseCandidateDto, @CurrentUser() user: USER){
+    const result = await this.candidatesService.endorseCandidate(data, user);
     return {
       status: 200,
       message: 'Candidate endorsed successfully',
@@ -224,8 +223,8 @@ export class CandidatesController {
   @ApiResponse({ status: 400, description: 'Hire Request ID is required' })
   @ApiResponse({ status: 404, description: 'Hire Request not found in candidate panel' })
   @ApiResponse({ status: 400, description: 'Failed to remove candidate' })
-  async removeCandidate(@Body() data: RemoveCandidateDto){
-    const result = await this.candidatesService.removeCandidate(data);
+  async removeCandidate(@Body() data: RemoveCandidateDto, @CurrentUser() user: USER){
+    const result = await this.candidatesService.removeCandidate(data, user);
     return {
       status: 200,
       message: 'Candidate removed successfully',

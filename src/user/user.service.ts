@@ -148,6 +148,93 @@ export class UserService {
     return users;
   }
 
+  async getAllSystemUsers(
+    search?: string,
+    page?: number,
+    perPage?: number,
+    ): Promise<any> {
+    
+    page = page ? Number(page) : 1;
+    perPage = perPage ? Number(perPage) : 10;
+    const skip = (page - 1) * perPage;
+    const take = perPage;
+
+    let whereClause: any = { 
+      role: { in: ['system_admin', 'system_super_admin'] }  
+    };
+
+    // Add search filter if provided
+    if (search) {
+      whereClause.OR = [
+        {
+          first_name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          last_name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          email: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          job_title: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+      ];
+    }
+    
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.uSER.findMany({
+      where: whereClause,
+      skip,
+      take,
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        job_title: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: {
+        first_name: 'asc',
+      },
+    }),
+    this.prisma.uSER.count({
+      where: whereClause,
+    }),
+    ])
+
+    if (!users || users.length === 0) {
+      throw new NotFoundException(
+        `No system users found.`,
+      );
+    }
+
+    return {
+      status: 200,
+      data: users,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(Number(total) / perPage),
+      },
+    };
+  }
+
   async getProfileById(id: string): Promise<GetProfileDto> {
     const user = await this.prisma.uSER.findUnique({
       where: { id },

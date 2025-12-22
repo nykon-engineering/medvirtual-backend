@@ -321,6 +321,22 @@ export class UserController {
     return this.userService.findUsersByOrganizationByCurrentUser(user, status);
   }
 
+  @Get('system-users/all')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin')
+  @ApiOperation({ summary: 'Get all system users' })
+  @ApiResponse({ status: 200, description: 'System users found successfully.' })
+  @ApiQuery({name: 'search', required: false, type: String, description: 'Search term for name or email'})
+  
+  async getAllSystemUsers(
+    @Query('search') search?: string,
+    @Query('page') page?: number,
+    @Query('perPage') perPage?: number,
+  ) {
+    return this.userService.getAllSystemUsers(search, page, perPage);
+  }
+
+
   @Patch(':id')
   @ApiBody({ type: UpdateUserDto })
   @UseGuards(AuthGuard, RolesGuard)
@@ -334,6 +350,7 @@ export class UserController {
     @Body() userData: UpdateUserDto,
     @CurrentUser() currentUser: USER,
   ) {
+    console.log('UpdateUser called by', userData, 'for user ID', id);
     // Check if organization admin is trying to update users in their organization
     if (currentUser.role === 'organization_super_admin') {
       const targetUser = await this.userService.findById(id);

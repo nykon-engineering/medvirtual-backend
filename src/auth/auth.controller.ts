@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Patch,
   Post,
   Query,
@@ -245,6 +246,30 @@ export class AuthController {
     if (result) {
       return {
         statusCode: 201,
+        message: result,
+      };
+    }
+  }
+
+  @Get('re-invite/:id')
+  @HttpCode(200)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin')
+  @ApiOperation({ summary: 'Resend invitation to an invited user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Invitation resent successfully to new.user@client.com.',
+  })
+  @ApiResponse({ status: 400, description: 'User ID is required' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 400, description: 'Failed to generate invite code' })
+  @ApiResponse({ status: 400, description: 'Failed to send invitation email' })
+  @ApiResponse({ status: 400, description: 'Failed to store invite code' })
+  async reInviteUser(@Param('id') id: string) {
+    const result = await this.authService.reInviteUser(id);
+    if (result) {
+      return {
+        statusCode: 200,
         message: result,
       };
     }

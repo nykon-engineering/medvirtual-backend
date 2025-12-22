@@ -10,6 +10,8 @@ import { GoogledriveService } from '../googledrive/googledrive.service';
 import { OpenaiService } from '../openai/openai.service';
 import axios from 'axios';
 import { MailService } from '../mail/mail.service';
+import { HireRequestService } from '../hire-request/hire-request.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -57,6 +59,14 @@ const MailMock ={
   sendEmail: jest.fn(),
 }
 
+const HireRequestMock = {
+  updateStatus: jest.fn(),
+}
+
+const notificationsMock = {
+  notifyEndorseCandidates: jest.fn(),
+}
+
   describe('CandidatesService', () => {
     let service: CandidatesService;
     let prisma: PrismaService;
@@ -78,6 +88,8 @@ const MailMock ={
         { provide: OpenaiService, useValue: openAIMock },
         { provide: HubspotService, useValue: hubspotMock },
         { provide: MailService, useValue: MailMock },
+        { provide: HireRequestService, useValue: HireRequestMock },
+        { provide: NotificationsService, useValue: notificationsMock },
       ],
     }).compile();
 
@@ -133,6 +145,7 @@ const MailMock ={
         name: 'John Doe',
         pipeline_status: '1',
         shift_block: '8am-5pm',
+        video_link: 'X',
         about_me: 'About me',
         tools: 'JavaScript, TypeScript',
         medical_tools: 'None',
@@ -140,7 +153,7 @@ const MailMock ={
         specialization: 'Software Development',
         years_of_experience: 5,
         hourly_pay_rate: 5,
-        employment_type: 'Full-time',
+        employment_type: 'Full Time',
         educations: [{ degree: 'BSc', institution: 'University', year: '2020' }],
         approved_positions_pairing: ['Test'],
         experiences: [
@@ -195,6 +208,7 @@ const MailMock ={
           gender: true,
           country: true,
           shift_block: true,
+          video_link: true,
           educations: {
             select: {
               degree: true,
@@ -252,7 +266,7 @@ const MailMock ={
       const expectedResult = {
         ...mockCandidate,
         pipeline_status: 'Unknown Stage',
-        employment_type: 'Full-time',
+        employment_type: 'Full Time',
         panelCandidates: [
           {
             title: 'Hire Request 1',
