@@ -185,6 +185,7 @@ export class HireRequestService {
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
+      assigned_sourcing:  user.role.includes('organization') ?  { connect: { id: organizationSQL.admin_id } } :  { connect: { id: user.id } } ,
       createdBy: { connect: { id: user.id } },
       position: undefined,
       contract_amount: undefined,
@@ -758,7 +759,7 @@ export class HireRequestService {
       case 'system_super_admin':
       case 'system_admin':
         baseWhere = {
-          status : 'sourcing'
+          status :  { in: ['sourcing', 'for_review'] }
         };
         break;
     }
