@@ -1919,14 +1919,33 @@ export class HireRequestService {
         if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
       }
 
-
-      await tx.panelCandidate.deleteMany({
+      //check existing candidates on the panel
+      const existingCandidates = await tx.panelCandidate.findMany({
         where: { panel_id: panel.id },
+        select: { candidate_id: true },
       });
+      //filter data.candidates_id to find just candidates who will be add on the panel without duplicates
+      const candidatesToAdd = data.candidates_id.filter(
+        (candidateId) => !existingCandidates.some((ec) => ec.candidate_id === candidateId)
+      );
+      //filter existing candidates to find candidates who will be removed from the panel
+      const candidatesToRemove = existingCandidates
+        .filter((ec) => !data.candidates_id.includes(ec.candidate_id))
+        .map((ec) => ec.candidate_id);
+
+      // Remove candidates from the panel
+      if (candidatesToRemove.length > 0) {
+        await tx.panelCandidate.deleteMany({
+          where: {
+            panel_id: panel.id,
+            candidate_id: { in: candidatesToRemove },
+          },
+        });
+      }
 
       // Create new candidates on the panel
       await tx.panelCandidate.createMany({
-        data: data.candidates_id.map((candidateId) => ({
+        data: candidatesToAdd.map((candidateId) => ({
           candidate_id: candidateId,
           panel_id: panel.id,
           createdByUserId: user.id,
