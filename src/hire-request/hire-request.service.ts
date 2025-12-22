@@ -30,6 +30,7 @@ import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspo
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
 import { dateToTimestamp, formatTimestampToUSShort, timestampToUSDate } from '../common/utils/formatDate';
+import { create } from 'domain';
 
 @Injectable()
 export class HireRequestService {
@@ -230,6 +231,7 @@ export class HireRequestService {
           candidate_id: candidate.id,
           panel_id: panel.id,
           status: PanelCandidateStatus.selected,
+          createdByUserId: user.id,
         })),
       });
       if (!panelCandidates) throw new BadRequestException(`Panel candidates not created`);
@@ -2261,8 +2263,12 @@ export class HireRequestService {
       }))
       
     }));
+
+    const panelWithoutNewHireRequests = result
+    .filter(panel => panel.hireRequest.status !== 'new')
+    .filter(panel => panel.hireRequest.status !== 'sourcing');
     
-    return result;
+    return panelWithoutNewHireRequests;
   }
 
   async getPanelsByOrganization(user: USER){

@@ -925,7 +925,7 @@ export class NotificationsService {
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: [hr.assigned_user.email],
-      subject: `Candidate Endorsed in Hire Request: ${hr.title}`,
+      subject: `New candidates in Hire Request: ${hr.title}`,
       html,
     });
   }
