@@ -514,9 +514,9 @@ export class UserService {
       }
 
       // Additional safety check: Prevent deletion of system super admins
-      if (user.role === 'system_super_admin') {
+      if (user.role === 'system_super_admin' || user.role === 'organization_super_admin') {
         throw new BadRequestException(
-          'Cannot delete system super admin users for security reasons',
+          'Cannot delete super admin users for security reasons',
         );
       }
 
@@ -577,12 +577,6 @@ export class UserService {
         await tx.organization.updateMany({
           where: { owner_id: id },
           data: { owner_id: null },
-        });
-
-        // Update organizations where this user is admin_id
-        await tx.organization.updateMany({
-          where: { admin_id: id },
-          data: { admin_id: null },
         });
 
         // 6. Update hire requests where this user is assigned (has SET NULL constraint)
