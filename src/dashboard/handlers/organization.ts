@@ -234,6 +234,7 @@ export class HandlerOrganization {
             salary_range_to: true,
             specialization: true,
             location: true,
+            hubspot_role_type: true,
           },
         },
       },
