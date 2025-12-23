@@ -207,6 +207,14 @@ export class UserService {
         role: true,
         status: true,
         createdAt: true,
+        sessions:{
+          orderBy: { createdAt: 'desc'},
+          take: 10,
+          select: {
+            id: true,
+            createdAt: true,
+          }
+        }
       },
       orderBy: {
         first_name: 'asc',
