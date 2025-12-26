@@ -55,6 +55,68 @@ export class HireRequestService {
     );
   }
 
+  private selectPanels = {
+        id: true,
+        scheduled_date: true,
+        decided_date: true,
+        status: true,
+        panelCandidates: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            createdBy:{
+              select:{
+                id: true,
+                first_name: true,
+                last_name: true,
+                role: true,
+              }
+            },
+            candidate: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                name: true,
+                email: true,
+                specialization: true,
+                country: true,
+                employment_type: true,
+                about_me: true,
+                years_of_experience: true,
+                hourly_pay_rate: true,
+                organization_id: true,
+                processing_status: true,
+                processing_error: true,
+                educations: true,
+                experiences: true,
+                skills:true,
+                pipeline_status: true,
+                avatar_url: true,
+                gender: true,
+                approved_positions_pairing: true,
+                video_link: true,
+                languages:{
+                  select:{
+                    id: true,
+                    name: true,
+                  }
+                }
+              },
+            },
+            
+          },
+        },
+        interviews: {
+          select: {
+            scheduled_date: true,
+            link: true,
+          },
+        },
+        hireRequest: true,
+      };
+
   private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
     const hireRequest = await this.prisma.hireRequest.findUnique({
         where: { id: hireRequest_id },
@@ -338,7 +400,6 @@ export class HireRequestService {
       this.prisma.hireRequest.findMany({
         where: {
           ...whereClause,
-          
         },
         include: {
           skills: true,
@@ -387,6 +448,7 @@ export class HireRequestService {
                       id: true,
                       first_name: true,
                       last_name: true,
+                      pipeline_status: true,
                       name: true,
                       email: true,
                       country: true,
@@ -2199,65 +2261,7 @@ export class HireRequestService {
         ],
       },
       
-      select: {
-        id: true,
-        scheduled_date: true,
-        status: true,
-        panelCandidates: {
-          select: {
-            id: true,
-            status: true,
-            createdAt: true,
-            candidate: {
-              select: {
-                id: true,
-                first_name: true,
-                last_name: true,
-                name: true,
-                email: true,
-                specialization: true,
-                country: true,
-                employment_type: true,
-                about_me: true,
-                years_of_experience: true,
-                hourly_pay_rate: true,
-                organization_id: true,
-                processing_status: true,
-                processing_error: true,
-                educations: true,
-                experiences: true,
-                skills:true,
-                pipeline_status: true,
-                avatar_url: true,
-                gender: true,
-                approved_positions_pairing: true,
-                video_link: true,
-                languages:{
-                  select:{
-                    id: true,
-                    name: true,
-                  }
-                }
-              },
-            },
-            createdBy:{
-              select:{
-                id: true,
-                first_name: true,
-                last_name: true,
-                role: true,
-              }
-            }
-          },
-        },
-        interviews: {
-          select: {
-            scheduled_date: true,
-            link: true,
-          },
-        },
-        hireRequest: true,
-      },
+      select: this.selectPanels,
     });
 
 
@@ -2838,6 +2842,7 @@ export class HireRequestService {
       },
       data: {
         status: 'decision_made',
+        decided_date: new Date(),
       },
     });
     if( !panelUpdated) throw new BadRequestException(`Panel not updated to decision made`);
@@ -2952,64 +2957,7 @@ export class HireRequestService {
       where: {
         id: panelExists.id,
       },
-      select:{
-        id: true,
-        scheduled_date: true,
-        status: true,
-        panelCandidates: {
-          select: {
-            status: true,
-            candidate: {
-              select: {
-                id: true,
-                first_name: true,
-                last_name: true,
-                name: true,
-                hourly_pay_rate: true,
-                country: true,
-                avatar_url: true,
-                approved_positions_pairing: true,
-                video_link: true,
-                languages:{
-                  select:{
-                    id: true,
-                    name: true,
-                  }
-                },
-                experiences: {
-                  orderBy: { start_date: 'asc' },
-                  take: 1, 
-                  select: { start_date: true },
-                },
-              },
-            },
-          },
-        },
-        hireRequest: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            status: true,
-            priority: true,
-            createdAt: true,
-            availability: true,
-            contract_length: true,
-            expected_start_date: true,
-            salary_range_from: true,
-            salary_range_to: true,
-            specialization: true,
-            location: true,
-            assign_user_id: true,
-            skills: {
-              select: {
-                skill_name: true,
-                required_level: true
-              },
-            }
-          },
-        },
-      },
+      select: this.selectPanels,
     })
     
     if (!panels || panels.length === 0) throw new NotFoundException(`Panels not found for this current organization`);

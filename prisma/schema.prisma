@@ -316,6 +316,7 @@ model CandidatePanel {
   hire_request_id String
   status          PanelStatus      @default(created)
   scheduled_date  DateTime?
+  decided_date    DateTime?
   createdAt       DateTime         @default(now())
   readable        Boolean          @default(false)
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
