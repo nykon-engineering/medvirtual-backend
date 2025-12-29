@@ -1,38 +1,16 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
 import { PrismaService } from "../../prisma/prisma.service";
-import { OwnerCreationService } from "./Owner";
+import { getOwnerId } from "../../common/utils/getOwnerId";
 
 @Injectable()
 
 export class HireRequestCreationService {
     constructor(
       private readonly prisma: PrismaService,
-      private readonly ownerCreationService: OwnerCreationService
     ){}
 
-    async getOwnerId(userId: string): Promise<string | null> {
-      if (!userId) return null;
-      const user = await this.prisma.uSER.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          hubspot_id: true,
-          first_name: true,
-          last_name: true,
-          email: true,
-        },
-          
-      });
-
-      /* => Commented because we cannot create owners using hubspot API
-      if (user && !user.hubspot_id) {
-        await this.ownerCreationService.execute(user)
-      }
-      */
-
-      return user && user.hubspot_id ? user.hubspot_id : null; 
-    }
+    
 
 
     async execute(data: any): Promise<any> {
@@ -74,9 +52,9 @@ export class HireRequestCreationService {
                 pairing_time: data.hubspot_pairing_time ? data.hubspot_pairing_time : undefined,
 
                 //ticketOwner
-                hubspot_owner_id: data.assign_user_id ? await this.getOwnerId(data.assign_user_id) : undefined,
+                hubspot_owner_id: data.assign_user_id ? await getOwnerId(data.assign_user_id) : undefined,
                 //pairing_specialist
-                pairing_specialist: data.assign_sourcing_id ? await this.getOwnerId(data.assign_sourcing_id) : undefined,
+                pairing_specialist: data.assign_sourcing_id ? await getOwnerId(data.assign_sourcing_id) : undefined,
                 //hire_date__start_of_employment_: PairingDate, 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 
               },
               associations: data.organization.hubspot_id ? [

@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
 import { PrismaService } from "../../prisma/prisma.service";
-import { mapDbToOrganization } from "../../common/utils/hubspot.util";
+import { getOwnerId } from "../../common/utils/getOwnerId";
 
 @Injectable()
 
@@ -32,6 +32,7 @@ export class OrganizationCreationService {
                 referral_email: data.email || '',
                 type: data.type || '',
                 business_unit: data.business_unit || '',
+                hubspot_owner_id: data.admin_id ? await getOwnerId(data.admin_id) : undefined,
               },
               associations:[]
             },
