@@ -49,6 +49,14 @@ export class HireRequestUpdateService {
                 case 'assign_sourcing_id':
                 hubspotProperties.pairing_specialist = data.assign_sourcing_id ? await this.getOwnerId(data.assign_sourcing_id) : undefined;
                 break;
+
+                case 'closed_date':
+                hubspotProperties.closed_date = new Date().toISOString();
+                break;
+
+                case 'cancel_date':
+                hubspotProperties.ticket_cancel_date = new Date().toISOString().split("T")[0]; //YYYY-MM-DD
+                break;
               }
               
             }else{

@@ -2937,12 +2937,16 @@ export class HireRequestService {
     }
     */
 
+    //update hire request in hubspot to 'For Onboarding (Paired)'
     const dataForHubspot = {
       hubspot_ticket_id: hireRequest.hubspot_ticket_id,
       hubspot_pipeline_stage: Object.keys(HRTicketStatus)
       .find(key => HRTicketStatus[key] === 'For Onboarding (Paired)'),
     }
     await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+
+    //Update closed_date in hubspot
+    await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'closed_date');
     
     // Fire placement completed notification (non-blocking)
     try {
