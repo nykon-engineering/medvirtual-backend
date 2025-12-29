@@ -1171,6 +1171,10 @@ export class HireRequestService {
           .find(key => HRTicketStatus[key] === 'Pairing Lost'), //=> Pairing Lost
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+
+
+        //Update cancel_date in hubspot
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'cancel_date');
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
