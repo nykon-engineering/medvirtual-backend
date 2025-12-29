@@ -243,7 +243,7 @@ export class NotificationsService {
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
-        createdBy:{
+        createdBy: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         assigned_user: {
@@ -291,9 +291,9 @@ export class NotificationsService {
       : 'Not specified';
 
     // Get winner candidate name
-    const winners = hr.panels?.[0]?.panelCandidates.length > 0 
-    ? 
-      hr.panels?.[0].panelCandidates.map(pa=> 
+    const winners = hr.panels?.[0]?.panelCandidates.length > 0
+      ?
+      hr.panels?.[0].panelCandidates.map(pa =>
         `<p><div style='margin-left:3px; border-radius:8px; background-color:#CCC; padding:3px;'>
         <strong>${pa.candidate.name || `${pa.candidate.first_name || ''} ${pa.candidate.last_name || ''}`.trim()}</strong><br/>
         Specialization: <strong>${pa.candidate.specialization || 'Specialization not specified'}</strong><br/>
@@ -680,8 +680,8 @@ export class NotificationsService {
 
     const html = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
-      ${type==='sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
-       <p>You have been assigned ${type==='sourcing' ? `to source` : `to`} this hire request:</p>
+      ${type === 'sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
+       <p>You have been assigned ${type === 'sourcing' ? `to source` : `to`} this hire request:</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
@@ -692,7 +692,7 @@ export class NotificationsService {
          </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
-         <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
+
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
@@ -704,7 +704,7 @@ export class NotificationsService {
            View Hire Request Details
          </a>
        </div>
-       ${from === 'panel_request_flow' ? `<p>This hire request was created from Panel Request Flow.</p>` : '' }`,
+       ${from === 'panel_request_flow' ? `<p>This hire request was created from Panel Request Flow.</p>` : ''}`,
       emailTheme
     );
 
@@ -773,7 +773,7 @@ export class NotificationsService {
          </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
-         <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
+
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
