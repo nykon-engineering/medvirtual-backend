@@ -16,12 +16,14 @@ import InviteSignup from '../common/utils/email-templates/invite-signup';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { InviteUserToOrganizationDto } from './dto/inviteUserToOrganization.dto';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
+import { HubspotService } from '../hubspot/hubspot.service';
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly hubspotService: HubspotService,
   ) {}
 
   async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
@@ -942,6 +944,20 @@ export class UserService {
       });
       if (!storeCode) {
         throw new BadRequestException('Failed to store invite code');
+      }
+
+      //create contact in hubspot
+      try{
+          const newUserForHubspot = {
+            ...newUser,
+            organization: {
+              hubspot_id: organization.hubspot_id || '',
+            },
+          }
+
+          await this.hubspotService.createContactInHubspot(newUserForHubspot);
+      }catch(err){
+        console.error('Error creating contact in Hubspot:', err);
       }
 
       return `Invitation sent successfully to ${inviteData.email}`;

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 
 describe('UserService', () => {
   let service: UserService;
@@ -30,12 +31,17 @@ describe('UserService', () => {
     sendMail: jest.fn(),
   };
 
+  const hubspotServiceMock = {
+    createContactInHubspot: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: MailService, useValue: mailServiceMock },
+        { provide: HubspotService, useValue: hubspotServiceMock },
       ],
     }).compile();
 

@@ -13,14 +13,36 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn(),
 }));
 
+const userServiceMock = {
+  findByEmail: jest.fn(),
+};
+
+const prismaServiceMock = {
+  uSER: {
+    update: jest.fn(),
+  },
+};
+
+const mailServiceMock = {
+  sendMail: jest.fn(),
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
 describe('Forgot password', () => {
 
   let service: RecoverypassService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [RecoverypassService, UserService, PrismaService, MailService],
-      imports: [ ],
+      providers: [RecoverypassService, 
+
+        { provide: UserService, useValue: userServiceMock },
+        { provide: PrismaService, useValue: prismaServiceMock },
+        { provide: MailService, useValue: mailServiceMock }
+      ],
     }).compile();
 
     service = module.get<RecoverypassService>(RecoverypassService);
@@ -87,7 +109,11 @@ describe('Set password', () => {
   let service2: RecoverypassService;
   beforeEach(async() => {
     const module2: TestingModule = await Test.createTestingModule({
-      providers: [RecoverypassService, UserService, PrismaService, MailService],
+      providers: [RecoverypassService, 
+        { provide: UserService, useValue: userServiceMock },
+        { provide: PrismaService, useValue: prismaServiceMock },
+        { provide: MailService, useValue: mailServiceMock }
+      ],
       imports: [],
     }).compile();
 
@@ -97,13 +123,13 @@ describe('Set password', () => {
   it ('Should return 400 if the hash is empty', async () =>{
     const dataFake = { token: '', password: 'newPassword123' };
 
-    expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is required'); //verify that the error is thrown
+    await expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is required'); //verify that the error is thrown
   });
 
-  it ('should return 400 if new password is empty', () => {
+  it ('should return 400 if new password is empty', async () => {
     const dataFake = {token: 'validHash123', password: ''};
 
-    expect(service2.setPassword(dataFake)).rejects.toThrow('New password is required'); //verify that the error is thrown
+    await expect(service2.setPassword(dataFake)).rejects.toThrow('New password is required'); //verify that the error is thrown
   });
 
   it ('should return not found if the user does not exist in the hash', async () =>{
@@ -112,11 +138,11 @@ describe('Set password', () => {
 
     (jwt.verify as jest.Mock).mockReturnValue({}); //SIMULATE A VALID TOKEN, BUT WITHOUT USER ID
 
-    expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is expired or invalid'); //verify that the error is thrown and print message of the catch
+    await expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is expired or invalid'); //verify that the error is thrown and print message of the catch
 
   });
 
-  it ('should return 400 if the hash is expired or invalid', () => {
+  it ('should return 400 if the hash is expired or invalid', async () => {
     const dataFake = { token: 'validHash123', password: 'newPassword123' };
     const userFake = {id: "1", email: "test@test.com", name: "Test User"};
 
@@ -125,18 +151,17 @@ describe('Set password', () => {
       throw new Error('Invalid token'); // Simulate an error in token verification
     });
 
-    expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is expired or invalid'); //verify that the error is thrown
+    await expect(service2.setPassword(dataFake)).rejects.toThrow('Hash is expired or invalid'); //verify that the error is thrown
   });
 
-  it ('should return 200 if the password is reset successfully', () => {
+  it('should return 200 if the password is reset successfully', async () => {
     const dataFake = { token: 'validHash123', password: 'newPassword123' };
-    const userFake = {id: "1", email: "test@test.com", name: "Test User"};
 
-    service2['user'].findByEmail = jest.fn().mockResolvedValue(userFake); // Mock a user found
+    (jwt.verify as jest.Mock).mockReturnValue({ id: '1' });
+    prismaServiceMock.uSER.update.mockResolvedValue({});
 
-    (jwt.verify as jest.Mock).mockReturnValue({ id: userFake.id }); 
-    service2['prisma'].uSER.update = jest.fn().mockResolvedValue({}); 
-    service2['mail'].sendMail = jest.fn().mockResolvedValue(true); 
-    expect(service2.setPassword(dataFake)).resolves.toBe(true); 
-  })
+    await expect(service2.setPassword(dataFake))
+      .resolves.toBe(true);
+  });
+
 })
