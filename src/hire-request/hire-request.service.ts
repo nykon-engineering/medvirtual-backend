@@ -1078,9 +1078,6 @@ export class HireRequestService {
     const hireRequest = await this.findOne(id, user);
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
-
-
-
     const candidates = await this.prisma.panelCandidate.findMany({
       where: {
         panel: {
@@ -1169,6 +1166,7 @@ export class HireRequestService {
           hubspot_ticket_id: hireRequest.hubspot_ticket_id,
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Pairing Lost'), //=> Pairing Lost
+          cancel_reason: data.reason || 'No reason provided',
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
 
@@ -3254,6 +3252,31 @@ export class HireRequestService {
     } catch (error) {
       console.error("Failed to find Pairing Request Type:", error.response?.data || error.message);
       throw new Error("Failed to find Pairing Request Type");
+    }
+  };
+
+  async getCancelReasonOptions () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "cancel_reason"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Cancel Reason:", error.response?.data || error.message);
+      throw new Error("Failed to find Cancel Reason");
     }
   };
 

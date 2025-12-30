@@ -82,6 +82,11 @@ export class HireRequestUpdateService {
                     data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false'
                   : undefined;
 
+              hubspotProperties.cancel_reason =
+                  data.cancel_reason ?
+                    data.cancel_reason
+                  : undefined;
+                  
               //used to allow update datas on hubspot when the user schedule an interview on our side
               hubspotProperties.pairing_date = 
                 data.hubspot_pairing_date ?

@@ -350,7 +350,7 @@ export class UserController {
     @Body() userData: UpdateUserDto,
     @CurrentUser() currentUser: USER,
   ) {
-    console.log('UpdateUser called by', userData, 'for user ID', id);
+    //console.log('UpdateUser called by', userData, 'for user ID', id);
     // Check if organization admin is trying to update users in their organization
     if (currentUser.role === 'organization_super_admin') {
       const targetUser = await this.userService.findById(id);
