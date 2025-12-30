@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -31,6 +33,7 @@ import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
 @Injectable()
 export class AuthService {
   constructor(
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly workosService: WorkosService,
     private readonly mailService: MailService,

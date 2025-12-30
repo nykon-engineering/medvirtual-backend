@@ -952,6 +952,7 @@ export class UserService {
             ...newUser,
             organization: {
               hubspot_id: organization.hubspot_id || '',
+              business_unit: organization.business_unit || '',
             },
           }
 

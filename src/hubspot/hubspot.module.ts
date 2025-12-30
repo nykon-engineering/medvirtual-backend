@@ -64,7 +64,11 @@ import { ContactCreationService } from './create/contact';
     OwnerCreationService,
     ContactCreationService
   ],
-  imports: [PrismaModule, GoogledriveModule, forwardRef(() => CandidatesModule), forwardRef(() => OrganizationModule), forwardRef(() => HireRequestModule) ],
+  imports: [PrismaModule, 
+    GoogledriveModule, 
+    forwardRef(() => CandidatesModule), 
+    forwardRef(() => OrganizationModule), 
+    forwardRef(() => HireRequestModule) ],
   exports: [HubspotService, 
     HandlerOrganizationCreation, 
     HandlerObjectCreation, 

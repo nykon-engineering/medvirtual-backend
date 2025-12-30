@@ -16,7 +16,11 @@ export class ContactCreationService {
             "https://api.hubapi.com/crm/v3/objects/contacts",
             {
               properties: {
-                account_type: data.business_unit || "Not Specified", //business_unit
+                account_type: data.organization.business_unit 
+                  ? data.organization.business_unit === 'MedVirtual' 
+                    ? 'Med Virtual'
+                    : data.organization.business_unit
+                  : "Not Specified", //business_unit
                 firstname: data.first_name,
                 lastname: data.last_name,
                 email: data.email,
@@ -44,17 +48,11 @@ export class ContactCreationService {
               },
             }
           );
-      
-          //console.log(response.data);
-          //update hireRequest with the hubspot_ticket_id
-          await this.prisma.hireRequest.update({
-            where: { id: data.id },
-            data: { hubspot_ticket_id: response.data.id },
-          });
+         
           return true;
         } catch (error) {
           if (error.response) {
-            console.error("Error to created ticket:", error.response.data);
+            console.error("Error to created contact:", error.response.data);
           } else {
             console.error("Connection error:", error.message);
           }
