@@ -247,7 +247,11 @@ export class HireRequestService {
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
-      assigned_sourcing:  user.role.includes('organization') ?  { connect: { id: organizationSQL.admin_id } } :  { connect: { id: user.id } } ,
+      assigned_sourcing:  user.role.includes('organization') 
+                            ?  { connect: { id: organizationSQL.admin_id } } 
+                            :  selectedCandidates && selectedCandidates.length > 0 
+                                ? { connect: { id: user.id } } 
+                                : undefined,
       createdBy: { connect: { id: user.id } },
       position: undefined,
       contract_amount: undefined,
