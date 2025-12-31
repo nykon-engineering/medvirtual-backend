@@ -523,8 +523,8 @@ export class UserService {
         throw new NotFoundException(`User not found`);
       }
 
-      // Additional safety check: Prevent deletion of system super admins
-      if (user.role === 'system_super_admin' || user.role === 'organization_super_admin') {
+      // Additional safety check: Prevent deletion of kind admins
+      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin') {
         throw new BadRequestException(
           'Cannot delete super admin users for security reasons',
         );
