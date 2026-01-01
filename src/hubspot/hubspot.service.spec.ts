@@ -28,6 +28,7 @@ import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
 import { ContactCreationService } from './create/contact';
+import { OrganizationUpdateService } from './update/organization';
 
 
 jest.mock('axios', () => ({
@@ -158,6 +159,10 @@ const organizationCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const organizationUpdateServiceMock = {
+  execute: jest.fn(),
+};
+
 const ownerCreationServiceMock = {
   execute: jest.fn(),
 };
@@ -212,6 +217,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
         {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
+        {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
         {provide: ContactCreationService, useValue: contactCreationServiceMock}
       ],
@@ -281,6 +287,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
         {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
+        {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
         {provide: ContactCreationService, useValue: contactCreationServiceMock}
       ]

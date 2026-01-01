@@ -32,6 +32,7 @@ import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
 import { ContactCreationService } from './create/contact';
+import { OrganizationUpdateService } from './update/organization';
 
 
 
@@ -62,7 +63,8 @@ import { ContactCreationService } from './create/contact';
     HireRequestUpdateService,
     OrganizationCreationService,
     OwnerCreationService,
-    ContactCreationService
+    ContactCreationService,
+    OrganizationUpdateService
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 

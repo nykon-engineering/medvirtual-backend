@@ -62,6 +62,7 @@ describe('OrganizationService', () => {
   const mockHubspotService = {
     createOrUpdateCompany: jest.fn(),
     createOrganizationInHubspot: jest.fn(),
+    updateOrganizationInHubspot: jest.fn(),
   };
 
   const mockAuthService = {

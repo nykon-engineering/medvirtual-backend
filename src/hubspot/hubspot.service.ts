@@ -38,6 +38,7 @@ import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { ContactCreationService } from './create/contact';
+import { OrganizationUpdateService } from './update/organization';
 
 
 
@@ -58,6 +59,7 @@ export class HubspotService {
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
       private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
+      private readonly organizationUpdateService: OrganizationUpdateService,
 
       private readonly dealCreation: HandlerDealCreation,
       private readonly dealPropertyChange: HandlerDealPropertyChange,
@@ -291,6 +293,10 @@ export class HubspotService {
 
     async createOrganizationInHubspot(data: any): Promise<any> {
         return await this.organizationCreationService.execute(data);
+    }
+
+    async updateOrganizationInHubspot(data: any): Promise<any> {
+        return await this.organizationUpdateService.execute(data);
     }
 
     async createContactInHubspot(data: any): Promise<any> {
