@@ -4,6 +4,7 @@ export const ticketTypeDictionary : Record<string, string> ={
     "Interview Request": "interview",
     "Support":  "support",
     "Referral":  "referral",
+    "Hire Request Cancellation": "hire_request_cancellation",
 }
 
 // Reverse dictionary to convert backend type to frontend display name

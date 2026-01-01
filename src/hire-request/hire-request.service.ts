@@ -114,7 +114,11 @@ export class HireRequestService {
             link: true,
           },
         },
-        hireRequest: true,
+        hireRequest: {
+          include: {
+            tickets: true,
+          },
+        }
       };
 
   private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
@@ -531,7 +535,8 @@ export class HireRequestService {
                 },
               },
             },
-          }
+          },
+          tickets: true,
         },
         skip,
         take,
@@ -738,7 +743,8 @@ export class HireRequestService {
               },
             },
           },
-        }
+        },
+        tickets: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
