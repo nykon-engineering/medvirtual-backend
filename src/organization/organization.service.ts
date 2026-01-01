@@ -1021,7 +1021,7 @@ export class OrganizationService {
         );
       }
 
-      return await this.prisma.organization.update({
+      const res = await this.prisma.organization.update({
         where: { id },
         data: { admin_id: adminId },
         include: {
@@ -1030,6 +1030,11 @@ export class OrganizationService {
           users: true,
         },
       });
+
+      //updateOrganizationInHubspot
+      await this.hubspot.updateOrganizationInHubspot(res);
+
+      return res
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
