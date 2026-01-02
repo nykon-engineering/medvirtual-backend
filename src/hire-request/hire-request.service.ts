@@ -1167,6 +1167,15 @@ export class HireRequestService {
         },
       })
 
+      //update cancel_date and cancel_reason on database
+      await this.prisma.hireRequest.update({
+        where: { id },
+        data: {
+          cancel_date: new Date().toISOString(),
+          cancel_reason: data.reason || 'No reason provided',
+        },
+      });
+
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
