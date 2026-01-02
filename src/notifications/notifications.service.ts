@@ -645,7 +645,6 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         availability: true,
-        contract_length: true,
         assigned_user: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -730,7 +729,6 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         availability: true,
-        contract_length: true,
         assigned_user: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -810,7 +808,6 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         availability: true,
-        contract_length: true,
         assigned_user: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -853,7 +850,6 @@ export class NotificationsService {
          </p>
          <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
-         <p><strong>Contract Length:</strong> ${hr.contract_length || 'Not specified'}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>

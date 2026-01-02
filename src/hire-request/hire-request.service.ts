@@ -2392,7 +2392,6 @@ export class HireRequestService {
             priority: true,
             createdAt: true,
             availability: true,
-            contract_length: true,
             expected_start_date: true,
             salary_range_from: true,
             salary_range_to: true,
