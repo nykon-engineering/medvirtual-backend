@@ -88,6 +88,7 @@ export class HandlerOrganizationPropertyChange {
                 }
             }
             
+            
 
             await this.prisma.organization.update({
                 where: {

@@ -16,6 +16,7 @@ export const organizationToDbDictionary : Record<string, string> = {
     specialty: 'specialties',
     type: 'type',
     business_unit: 'business_unit',
+    hubspot_owner_id: 'hubspot_owner_id',
 };
 
 export const dbToOrganizationDictionary : Record<string, string> = Object.fromEntries(  
