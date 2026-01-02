@@ -17,6 +17,7 @@ import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper'
 import { InviteUserToOrganizationDto } from './dto/inviteUserToOrganization.dto';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { admin } from 'googleapis/build/src/apis/admin';
 
 @Injectable()
 export class UserService {
@@ -953,6 +954,8 @@ export class UserService {
             organization: {
               hubspot_id: organization.hubspot_id || '',
               business_unit: organization.business_unit || '',
+              name: organization.name,
+              admin_id: organization.admin_id || null,
             },
           }
 
