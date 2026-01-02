@@ -463,6 +463,161 @@ export class StaffService {
     };
   }
 
+  async findByOrganization(
+    user: USER,
+    organizationId: string,
+    page: number,
+    perPage: number,
+    search: string,
+    start_date_from: Date,
+    start_date_to: Date,
+  ): Promise<object> {
+
+    console.log('Organization ID in Service:', organizationId);
+    page = page ? Number(page) : 1;
+    perPage = perPage ? Number(perPage) : 10;
+
+    const skip = (page - 1) * perPage;
+    const take = perPage;
+
+    const where: any = {
+      status: { not: 'terminated' },
+      hireRequest: {},
+      candidate: {},
+    };
+
+    
+    where.OR = [
+      {
+        hireRequest: {
+          org_id: organizationId,
+        },
+      },
+      {
+        organization_id: organizationId,
+      },
+    ];
+    
+    
+    if (search) {
+      where.OR = [
+        {
+          hireRequest: {
+            title: { contains: search, mode: 'insensitive' },
+          },
+        },
+        {
+          candidate: {
+            first_name: { contains: search, mode: 'insensitive' },
+          },
+        },
+        {
+          candidate: {
+            last_name: { contains: search, mode: 'insensitive' },
+          },
+        },
+      ];
+    }
+
+    if (start_date_from || start_date_to) {
+      where.start_date = {};
+      if (start_date_from) where.start_date.gte = new Date(start_date_from);
+      if (start_date_to) where.start_date.lte = new Date(start_date_to);
+    }
+
+    const select = {
+      id: true,
+      hirerequest_id: true,
+      status: true,
+      salary: true,
+      start_date: true,
+      created_at: true,
+      updated_at: true,
+      hubspot_id: true,
+      hubspot_close_date: true,
+      hubspot_deal_name: true,
+      hubspot_dealstage: true,
+      hubspot_dealtype: true,
+      hubspot_deployment_type: true,
+      hubspot_description: true,
+      hubspot_hs_acv: true,
+      hubspot_pipeline: true,
+      hubspot_business_unit: true,
+      hubspot_candidate_id: true,
+      hubspot_organization_id: true,
+      candidate: {
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          name: true,
+          email: true,
+          specialization: true,
+          employment_type: true,
+          country: true,
+          about_me: true,
+          languages: {
+            select: {
+              name: true,
+            },
+          },
+          skills: {
+            select: {
+              skill_name: true,
+            },
+          },
+          createdAt: true,
+        },
+      },
+      hireRequest: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          availability: true,
+          contract_length: true,
+          expected_start_date: true,
+          salary_range_from: true,
+          salary_range_to: true,
+          specialization: true,
+          location: true,
+        },
+      },
+      bonus: {
+        select: {
+          id: true,
+          amount: true,
+          description: true,
+          created_at: true,
+          created_by: true,
+        },
+      },
+    };
+
+    const [staff, total] = await this.prisma.$transaction([
+      this.prisma.staff.findMany({
+        where,
+        skip,
+        take,
+        select,
+      }),
+      this.prisma.staff.count({ where }),
+    ]);
+
+    return {
+      status: 200,
+      data: staff,
+      meta: {
+        total,
+        page,
+        perPage,
+        totalPages: Math.ceil(Number(total) / perPage),
+      },
+    };
+  }
+
   async updateStaff(
     staffId: string,
     updateData: any,
