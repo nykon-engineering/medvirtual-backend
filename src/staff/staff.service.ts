@@ -544,6 +544,7 @@ export class StaffService {
       hubspot_pipeline: true,
       hubspot_business_unit: true,
       hubspot_candidate_id: true,
+      hubspot_client_name: true,
       hubspot_organization_id: true,
       candidate: {
         select: {
