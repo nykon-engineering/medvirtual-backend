@@ -1176,6 +1176,18 @@ export class HireRequestService {
         },
       });
 
+      //close possible tickets from this HireRequest
+      await this.prisma.ticket.updateMany({
+        where: {
+          hireRequest_id: id,
+          status: { not : 'resolved'},
+          type: 'hire_request_cancellation',
+        },
+        data:{
+          status: 'resolved',
+        }
+      })
+
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
