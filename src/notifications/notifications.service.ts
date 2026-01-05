@@ -372,6 +372,8 @@ export class NotificationsService {
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
+        hubspot_role_type: true,
+        availability: true,
         assigned_user: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -460,7 +462,7 @@ export class NotificationsService {
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: emailsUsers.map(u => u.email),
-      subject: `Interview Invite: ${hr.title}`,
+      subject: `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
       html,
     });
   }
@@ -926,6 +928,278 @@ export class NotificationsService {
     });
   }
 
+    async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        specialization: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        expected_start_date: true,
+        hubspot_role_type: true,
+        availability: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            business_unit: true,
+            admin: {
+              select: { id: true, email: true, first_name: true, last_name: true }
+            },
+            owner: {
+              select: { id: true, email: true, first_name: true, last_name: true }
+            }
+          },
+        },
+        panels: {
+          select: {
+            id: true,
+            panelCandidates: {
+              where: { status: 'selected_by_client' },
+              select: {
+                candidate: {
+                  select: {
+                    id: true,
+                    first_name: true,
+                    last_name: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!hr) throw new NotFoundException('Hire request not found');
+
+    // Get organization admin and super admin users
+    const organizationAdmins = await this.prisma.uSER.findMany({
+      where: {
+        organization_id: hr.organization.id,
+        role: { in: ['organization_admin', 'organization_super_admin'] },
+        status: 'active',
+      },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+      },
+    });
+
+    // Also include organization admin and owner if they exist
+    const additionalRecipients: any[] = [];
+    if (hr.organization.admin && hr.organization.admin.email) {
+      additionalRecipients.push(hr.organization.admin);
+    }
+    if (hr.organization.owner && hr.organization.owner.email) {
+      additionalRecipients.push(hr.organization.owner);
+    }
+
+    // Combine all recipients and remove duplicates
+    const allRecipients = [...organizationAdmins, ...additionalRecipients];
+    const uniqueRecipients = allRecipients.filter((recipient, index, self) =>
+      index === self.findIndex(r => r.email === recipient.email)
+    );
+
+    if (uniqueRecipients.length === 0) {
+      throw new BadRequestException('No organization admins found to notify');
+    }
+
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    const salaryRange = hr.salary_range_from && hr.salary_range_to
+      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+      : 'Not specified';
+    const startDate = hr.expected_start_date
+      ? new Date(hr.expected_start_date).toLocaleDateString()
+      : 'Not specified';
+
+    // Get winner candidate name
+    const winnerCandidate = hr.panels?.[0]?.panelCandidates?.[0]?.candidate;
+    const winnerName = winnerCandidate
+      ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
+      : 'Not specified';
+
+    // Get user email theme using the first admin's ID
+    const firstAdminId = uniqueRecipients[0]?.id;
+    const emailTheme = firstAdminId 
+      ? await getUserEmailTheme(this.prisma, firstAdminId)
+      : null;
+    
+    // Determine company name: prioritize organization business_unit if Berry Virtual,
+    // otherwise use theme from user, fallback to MedVirtual
+    let companyName = 'MedVirtual';
+    if (hr.organization.business_unit === 'Berry Virtual') {
+      // If organization is Berry Virtual, use Berry Virtual theme
+      companyName = 'Berry Virtual';
+    } else if (emailTheme?.companyName) {
+      // Otherwise, use the theme from the user
+      companyName = emailTheme.companyName;
+    }
+    
+    // Get fromEmail considering recipient roles
+    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
+
+    const html = this.buildEmail(
+      `<p>Your hire request has been completed.</p>
+       
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Organization:</strong> ${hr.organization.name}</p>
+         <p><strong>Description:</strong>
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
+         <p><strong>Specialization:</strong> ${hr.specialization}</p>
+         <p><strong>Salary Range:</strong> ${salaryRange}</p>
+         <p><strong>Expected Start Date:</strong> ${startDate}</p>
+         <p><strong>Selected Candidate:</strong> ${winnerName}</p>
+       </div>
+       
+       <p>Please review the details and proceed with the next steps.</p>
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           Review Hire Request
+         </a>
+       </div>`,
+      emailTheme
+    );
+    const results = this.mail.sendMail({
+      from: fromEmail,
+      to: uniqueRecipients.map(r => r.email),
+      subject: `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
+      html,
+    });
+
+    // Return true if at least one email was sent successfully
+    return results;
+  }
+
+  async notifyHireRequestAwaitingDecision(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        hubspot_role_type: true,
+        availability: true,
+        status: true,
+        panels: {
+          where: {
+            status: 'decision_pending',
+          },
+          select: {
+            id: true,
+            status: true,
+            scheduled_date: true,
+          },
+          take: 1,
+        },
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            business_unit: true,
+          },
+        },
+      },
+    });
+
+    if (!hr) throw new NotFoundException('Hire request not found');
+
+    // Get organization admin and super admin users (clients)
+    const organizationAdmins = await this.prisma.uSER.findMany({
+      where: {
+        organization_id: hr.organization.id,
+        role: { in: ['organization_admin', 'organization_super_admin'] },
+        status: 'active',
+      },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+      },
+    });
+
+    // Remove duplicates by email
+    const uniqueRecipients = organizationAdmins.filter((recipient, index, self) =>
+      index === self.findIndex(r => r.email === recipient.email)
+    );
+
+    if (uniqueRecipients.length === 0) {
+      throw new BadRequestException('No organization admins found to notify');
+    }
+
+    //removed on 2025-11-13 asked by Pauli on medvirtual group
+    //const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    const detailUrl = `${process.env.FRONTEND_URL}/interview-panels`;
+
+    // Get panel information
+    const panel = hr.panels?.[0];
+    const scheduledDate = panel?.scheduled_date
+      ? new Date(panel.scheduled_date).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : 'Not specified';
+
+    // Get user email theme using the first admin's ID
+    const firstAdminId = uniqueRecipients[0]?.id;
+    const emailTheme = firstAdminId 
+      ? await getUserEmailTheme(this.prisma, firstAdminId)
+      : null;
+    
+    // Determine company name: prioritize organization business_unit if Berry Virtual,
+    // otherwise use theme from user, fallback to MedVirtual
+    let companyName = 'MedVirtual';
+    if (hr.organization.business_unit === 'Berry Virtual') {
+      // If organization is Berry Virtual, use Berry Virtual theme
+      companyName = 'Berry Virtual';
+    } else if (emailTheme?.companyName) {
+      // Otherwise, use the theme from the user
+      companyName = emailTheme.companyName;
+    }
+    
+    // Get fromEmail considering recipient roles
+    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
+
+    const html = this.buildEmail(
+      `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
+      
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <p><strong>Scheduled Date:</strong> ${scheduledDate}</p>
+      </div>
+      
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${detailUrl}" class="cta-button">
+          Review Hire Request
+        </a>
+      </div>`,
+      emailTheme
+    );
+    const results = this.mail.sendMail({
+      from: fromEmail,
+      to: uniqueRecipients.map(r => r.email),
+      subject: `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
+      html,
+    });
+
+    // Return true if at least one email was sent successfully
+    return results;
+  }
   // ======== Tickets ========
 
   async notifyTicketStatusChangeToCreator(ticket: any, newStatus: 'in_progress' | 'resolved' | 'closed'): Promise<boolean> {
@@ -1395,274 +1669,7 @@ export class NotificationsService {
     return results.some(result => result === true);
   }
 
-  async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
-    const hr = await this.prisma.hireRequest.findUnique({
-      where: { id: hireRequestId },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        status: true,
-        priority: true,
-        specialization: true,
-        salary_range_from: true,
-        salary_range_to: true,
-        expected_start_date: true,
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            business_unit: true,
-            admin: {
-              select: { id: true, email: true, first_name: true, last_name: true }
-            },
-            owner: {
-              select: { id: true, email: true, first_name: true, last_name: true }
-            }
-          },
-        },
-        panels: {
-          select: {
-            id: true,
-            panelCandidates: {
-              where: { status: 'selected_by_client' },
-              select: {
-                candidate: {
-                  select: {
-                    id: true,
-                    first_name: true,
-                    last_name: true,
-                    name: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
 
-    if (!hr) throw new NotFoundException('Hire request not found');
-
-    // Get organization admin and super admin users
-    const organizationAdmins = await this.prisma.uSER.findMany({
-      where: {
-        organization_id: hr.organization.id,
-        role: { in: ['organization_admin', 'organization_super_admin'] },
-        status: 'active',
-      },
-      select: {
-        id: true,
-        email: true,
-        first_name: true,
-        last_name: true,
-        role: true,
-      },
-    });
-
-    // Also include organization admin and owner if they exist
-    const additionalRecipients: any[] = [];
-    if (hr.organization.admin && hr.organization.admin.email) {
-      additionalRecipients.push(hr.organization.admin);
-    }
-    if (hr.organization.owner && hr.organization.owner.email) {
-      additionalRecipients.push(hr.organization.owner);
-    }
-
-    // Combine all recipients and remove duplicates
-    const allRecipients = [...organizationAdmins, ...additionalRecipients];
-    const uniqueRecipients = allRecipients.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
-    );
-
-    if (uniqueRecipients.length === 0) {
-      throw new BadRequestException('No organization admins found to notify');
-    }
-
-    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
-    const startDate = hr.expected_start_date
-      ? new Date(hr.expected_start_date).toLocaleDateString()
-      : 'Not specified';
-
-    // Get winner candidate name
-    const winnerCandidate = hr.panels?.[0]?.panelCandidates?.[0]?.candidate;
-    const winnerName = winnerCandidate
-      ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
-      : 'Not specified';
-
-    // Get user email theme using the first admin's ID
-    const firstAdminId = uniqueRecipients[0]?.id;
-    const emailTheme = firstAdminId 
-      ? await getUserEmailTheme(this.prisma, firstAdminId)
-      : null;
-    
-    // Determine company name: prioritize organization business_unit if Berry Virtual,
-    // otherwise use theme from user, fallback to MedVirtual
-    let companyName = 'MedVirtual';
-    if (hr.organization.business_unit === 'Berry Virtual') {
-      // If organization is Berry Virtual, use Berry Virtual theme
-      companyName = 'Berry Virtual';
-    } else if (emailTheme?.companyName) {
-      // Otherwise, use the theme from the user
-      companyName = emailTheme.companyName;
-    }
-    
-    // Get fromEmail considering recipient roles
-    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
-
-    const html = this.buildEmail(
-      `<p>Your hire request has been completed.</p>
-       
-       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
-         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
-         <p><strong>Title:</strong> ${hr.title}</p>
-         <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong>
-         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
-         </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
-         <p><strong>Salary Range:</strong> ${salaryRange}</p>
-         <p><strong>Expected Start Date:</strong> ${startDate}</p>
-         <p><strong>Selected Candidate:</strong> ${winnerName}</p>
-       </div>
-       
-       <p>Please review the details and proceed with the next steps.</p>
-       <div style="text-align: left; margin: 30px 0;">
-         <a href="${detailUrl}" class="cta-button">
-           Review Hire Request
-         </a>
-       </div>`,
-      emailTheme
-    );
-    const results = this.mail.sendMail({
-      from: fromEmail,
-      to: uniqueRecipients.map(r => r.email),
-      subject: `Hire Request Completed: ${hr.title}.`,
-      html,
-    });
-
-    // Return true if at least one email was sent successfully
-    return results;
-  }
-
-  async notifyHireRequestAwaitingDecision(hireRequestId: string): Promise<boolean> {
-    const hr = await this.prisma.hireRequest.findUnique({
-      where: { id: hireRequestId },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        panels: {
-          where: {
-            status: 'decision_pending',
-          },
-          select: {
-            id: true,
-            status: true,
-            scheduled_date: true,
-          },
-          take: 1,
-        },
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            business_unit: true,
-          },
-        },
-      },
-    });
-
-    if (!hr) throw new NotFoundException('Hire request not found');
-
-    // Get organization admin and super admin users (clients)
-    const organizationAdmins = await this.prisma.uSER.findMany({
-      where: {
-        organization_id: hr.organization.id,
-        role: { in: ['organization_admin', 'organization_super_admin'] },
-        status: 'active',
-      },
-      select: {
-        id: true,
-        email: true,
-        first_name: true,
-        last_name: true,
-        role: true,
-      },
-    });
-
-    // Remove duplicates by email
-    const uniqueRecipients = organizationAdmins.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
-    );
-
-    if (uniqueRecipients.length === 0) {
-      throw new BadRequestException('No organization admins found to notify');
-    }
-
-    //removed on 2025-11-13 asked by Pauli on medvirtual group
-    //const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const detailUrl = `${process.env.FRONTEND_URL}/interview-panels`;
-
-    // Get panel information
-    const panel = hr.panels?.[0];
-    const scheduledDate = panel?.scheduled_date
-      ? new Date(panel.scheduled_date).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : 'Not specified';
-
-    // Get user email theme using the first admin's ID
-    const firstAdminId = uniqueRecipients[0]?.id;
-    const emailTheme = firstAdminId 
-      ? await getUserEmailTheme(this.prisma, firstAdminId)
-      : null;
-    
-    // Determine company name: prioritize organization business_unit if Berry Virtual,
-    // otherwise use theme from user, fallback to MedVirtual
-    let companyName = 'MedVirtual';
-    if (hr.organization.business_unit === 'Berry Virtual') {
-      // If organization is Berry Virtual, use Berry Virtual theme
-      companyName = 'Berry Virtual';
-    } else if (emailTheme?.companyName) {
-      // Otherwise, use the theme from the user
-      companyName = emailTheme.companyName;
-    }
-    
-    // Get fromEmail considering recipient roles
-    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
-
-    const html = this.buildEmail(
-      `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
-      
-      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
-        <p><strong>Scheduled Date:</strong> ${scheduledDate}</p>
-      </div>
-      
-      <div style="text-align: left; margin: 30px 0;">
-        <a href="${detailUrl}" class="cta-button">
-          Review Hire Request
-        </a>
-      </div>`,
-      emailTheme
-    );
-    const results = this.mail.sendMail({
-      from: fromEmail,
-      to: uniqueRecipients.map(r => r.email),
-      subject: `Your hire request has been marked as awaiting decision: ${hr.title}`,
-      html,
-    });
-
-    // Return true if at least one email was sent successfully
-    return results;
-  }
 
   async notifyTicketNoteAddedToAssignee(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
     const ticket = await this.prisma.ticket.findUnique({
