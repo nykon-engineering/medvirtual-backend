@@ -126,7 +126,7 @@ export class OpenaiService {
         `;
 
 
-        try{
+        try {
             const response = await openai.chat.completions.create({
                 model: 'gpt-4o-mini',
                 messages: [
@@ -151,7 +151,7 @@ export class OpenaiService {
 
             let message: any = response.choices?.[0]?.message?.content;
             if (!message) {
-            throw new BadRequestException('OpenAI did not return a valid message.');
+                throw new BadRequestException('OpenAI did not return a valid message.');
             }
 
             let parsedMessage;
@@ -167,30 +167,30 @@ export class OpenaiService {
 
             return message;
 
-        }catch (error: any) {
-            
+        } catch (error: any) {
+
             if (error?.type === 'insufficient_quota') {
                 console.error('[OpenAI] Insufficient Quota:');
 
                 const today = new Date();
                 const existingMail = await this.prisma.mail_Settings.findFirst({
-                where: {
-                    title: 'insufficient_quota',
-                    created_at: {
-                    gte: new Date(today.setHours(0, 0, 0, 0)),
-                    lt: new Date(today.setHours(23, 59, 59, 999)), 
+                    where: {
+                        title: 'insufficient_quota',
+                        created_at: {
+                            gte: new Date(today.setHours(0, 0, 0, 0)),
+                            lt: new Date(today.setHours(23, 59, 59, 999)),
+                        },
                     },
-                },
                 });
                 if (!existingMail) {
                     // Send insufficient quota via email
                     const emailBody = insufficient_quota();
                     const mailSent = await this.mailService.sendMail({
-                    from: 'MedVirtual <noreply@medvirtual.ai>',
-                    to: 'shayan@regenta.ai',
-                    cc: 'paulo@regenta.ai',
-                    subject: 'Insufficient Quota from OpenAI',
-                    html: emailBody,
+                        from: 'MedVirtual <noreply@medvirtual.ai>',
+                        to: 'shayan@regenta.ai',
+                        cc: 'paulo@regenta.ai',
+                        subject: 'Insufficient Quota from OpenAI',
+                        html: emailBody,
                     });
                     if (!mailSent) {
                         console.log('Failed to send insufficient quota email notification.');
@@ -198,13 +198,13 @@ export class OpenaiService {
                     //Here I save in the database that I sent the email
                     await this.prisma.mail_Settings.create({
                         data: {
-                          title: 'insufficient_quota',
+                            title: 'insufficient_quota',
                         },
                     });
                 }
 
-                
-                
+
+
                 throw new BadRequestException('You dont have credits. Check your plan/billing.');
             }
 
@@ -212,17 +212,17 @@ export class OpenaiService {
                 console.log('[OpenAI] Rate Limit Exceeded:');
                 throw new BadRequestException('Rate limit exceeded. Please try again later.');
             }
-          
+
             console.log('[OpenAI] unexpected error:', error);
             throw new BadRequestException('unexpected error to request OpenAI.', error);
         }
-        
+
     }
 
-    async generateAvatarWithScreenshoot(candidate: any, imageDownloaded: any): Promise<any>{
-        
+    async generateAvatarWithScreenshoot(candidate: any, imageDownloaded: any): Promise<any> {
+
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      
+
         const prompt = `
         Generate a realistic professional avatar inspired by the person in the reference image.
         Keep a similar lighting setup (soft studio light) and neutral background, but without accessories like headphone.
@@ -245,8 +245,8 @@ export class OpenaiService {
         });
 
         //=> calculate the cost
-        
-        
+
+
         if (!result.data || !result.data[0] || !result.data[0].b64_json) {
             throw new Error("A resposta da API OpenAI não contém os dados esperados.");
         }
@@ -257,6 +257,72 @@ export class OpenaiService {
         fs.writeFileSync(outputPath, Buffer.from(imageBase64, "base64"));
 
         return outputPath;
+    }
+
+
+    async extractDataFromResumeImages(imagePaths: string[]): Promise<any> {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+            throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
+        }
+        const openai = new OpenAI({
+            apiKey: apiKey
+        });
+
+        const contentPayload: any[] = [
+            {
+                type: "text",
+                text: `You are a resume parser. Extract the following information into a strictly valid JSON object.
+            
+            JSON Schema:
+            {
+                "bio": "string (summary)",
+                "experience": [{ "company": "", "role": "", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "description": ["string"] }],
+                "education": [{ "institution": "", "degree": "", "year": "" }],
+                "skills": ["string"]
+            }
+
+            - Do not invent information.
+            - If dates are "Present", use null for end_date.
+            - Summarize the bio based on the visible text.
+            - Ensure "experience.description" is an array of strings (sentences).
+            `
+            }
+        ];
+
+        for (const imgPath of imagePaths) {
+            const fileData = fs.readFileSync(imgPath);
+            const b64 = fileData.toString('base64');
+            contentPayload.push({
+                type: "image_url",
+                image_url: {
+                    url: `data:image/png;base64,${b64}`,
+                    detail: "high"
+                }
+            });
+        }
+
+        try {
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    {
+                        role: "user",
+                        content: contentPayload
+                    }
+                ],
+                max_tokens: 3500,
+                temperature: 0,
+                response_format: { type: "json_object" }
+            });
+
+            const result = response.choices[0].message.content;
+            return JSON.parse(result || '{}');
+
+        } catch (error) {
+            console.error('Error in extractDataFromResumeImages:', error);
+            throw new BadRequestException('Failed to extract data from resume images');
+        }
     }
 
 

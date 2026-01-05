@@ -1,7 +1,8 @@
 import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
-
+import * as fs from 'fs';
+import { pdfToPng } from 'pdf-to-png-converter';
 import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
 import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
@@ -37,14 +38,14 @@ export class CandidatesService {
 
     private readonly hireRequest: HireRequestService,
     private readonly notifications: NotificationsService
-  ){}
+  ) { }
 
   async findAll(
-    user: USER, 
-    country?: string, 
-    availability?: string, 
-    monthly_compensation_from?: string, 
-    monthly_compensation_to?: string, 
+    user: USER,
+    country?: string,
+    availability?: string,
+    monthly_compensation_from?: string,
+    monthly_compensation_to?: string,
     years_of_experience?: string,
     specializations?: string,
     positions?: string,
@@ -54,11 +55,11 @@ export class CandidatesService {
     perPage?: number,
     search?: string,
     all?: string
-  ): Promise <any> {
+  ): Promise<any> {
 
     // Check if all parameter is set to true
     const getAllCandidates = all === 'true';
-    
+
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
 
@@ -66,15 +67,15 @@ export class CandidatesService {
     const skip = getAllCandidates ? 0 : (page - 1) * perPage;
     const take = getAllCandidates ? undefined : perPage;
 
-    
-    
-    if (!user || user.role.includes("organization") && !user.organization_id) 
+
+
+    if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('The current user doent have an organization_id');
 
-    const {organization_id} = user;
+    const { organization_id } = user;
 
-    const hourly_from = monthly_compensation_from ? findHourlySalary(Number(monthly_compensation_from)) : undefined; 
-    const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined; 
+    const hourly_from = monthly_compensation_from ? findHourlySalary(Number(monthly_compensation_from)) : undefined;
+    const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined;
 
     const combinedFilters: Record<string, any>[] = [];
 
@@ -85,18 +86,18 @@ export class CandidatesService {
 
 
     const languagesArray = languages ?
-    languages.split(',').map(l => l.trim()).filter(Boolean)
-    : [];
-    const skillsArray = skills ? 
-    skills.split(',').map(s => s.trim()).filter(Boolean)
-    : [];
-    const specializationArray = specializations 
-    ? specializations.split(',').map(s => s.trim()).filter(Boolean) 
-    : [];
-    const positionsArray = positions 
-    ? positions.split(',').map(s => s.trim()).filter(Boolean) 
-    : [];
-    
+      languages.split(',').map(l => l.trim()).filter(Boolean)
+      : [];
+    const skillsArray = skills ?
+      skills.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    const specializationArray = specializations
+      ? specializations.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    const positionsArray = positions
+      ? positions.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
     if (languagesArray.length) {
       combinedFilters.push(
         ...languagesArray.map(lang => ({
@@ -145,7 +146,7 @@ export class CandidatesService {
 
 
     const searchFilter = search
-    ? {
+      ? {
         OR: [
           { first_name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
           { last_name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
@@ -153,7 +154,7 @@ export class CandidatesService {
           { email: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
         ],
       }
-    : {};
+      : {};
 
 
     const where = {
@@ -220,7 +221,7 @@ export class CandidatesService {
         }
       ]
     }
-    const select ={
+    const select = {
       id: true,
       first_name: true,
       last_name: true,
@@ -266,7 +267,7 @@ export class CandidatesService {
           start_date: true,
           end_date: true,
           responsabilities: true
-        } 
+        }
       },
       approved_positions_pairing: true,
       selectedInInterviews: {
@@ -275,19 +276,19 @@ export class CandidatesService {
         }
       },
       panelCandidates: {
-        select:{
+        select: {
           id: true,
           status: true,
-          panel:{
-            select:{
+          panel: {
+            select: {
               hire_request_id: true,
-              hireRequest:{
-                select:{
+              hireRequest: {
+                select: {
                   id: true,
                   title: true,
                   status: true,
-                  organization:{
-                    select:{
+                  organization: {
+                    select: {
                       id: true,
                       name: true,
                     }
@@ -298,11 +299,11 @@ export class CandidatesService {
           }
         }
       },
-      
+
     }
 
 
-    try{
+    try {
       const [candidates, total] = await this.prisma.$transaction([
         this.prisma.candidate.findMany({
           where,
@@ -324,22 +325,22 @@ export class CandidatesService {
             }
           ]
         }),
-        this.prisma.candidate.count({where})
+        this.prisma.candidate.count({ where })
       ])
-      
+
       candidates.forEach(candidate => {
         if (candidate.pipeline_status) {
           const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
           candidate.pipeline_status = stageName || 'Unknown Stage';
         }
-        
+
       });
 
       const candidateIds = candidates.map(candidate => candidate.id);
-      
+
       const interviewRequestTickets = await this.prisma.ticket.findMany({
         where: {
-          organization: { is: { id: organization_id || undefined} },
+          organization: { is: { id: organization_id || undefined } },
           type: 'interview',
           status: {
             in: ['new', 'in_progress']
@@ -359,21 +360,21 @@ export class CandidatesService {
 
       const candidatesWithScheduledInterview = candidates.map(candidate => ({
         ...candidate,
-        
+
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
         salary: findMonthlySalary(
           candidate.hourly_pay_rate?.toNumber() || 0,
-          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
           candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
-        avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
+        avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
         panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
           organization_name: pc.panel.hireRequest.organization.name,
           status: 'test',
-          
+
         })) : []
       }));
 
@@ -393,16 +394,16 @@ export class CandidatesService {
           all: false
         }
       };
-    }catch(error){
+    } catch (error) {
       throw new BadGatewayException('Failed to fetch candidates', error.message);
     }
   }
 
   async findOne(id: string, user: USER) {
-    const {organization_id} = user;
+    const { organization_id } = user;
     if (!id) throw new BadRequestException('Candidate ID is required');
 
-    const select ={
+    const select = {
       id: true,
       first_name: true,
       last_name: true,
@@ -450,17 +451,17 @@ export class CandidatesService {
         }
       },
       panelCandidates: {
-        select:{
+        select: {
           id: true,
-          panel:{
-            select:{
+          panel: {
+            select: {
               hire_request_id: true,
-              hireRequest:{
-                select:{
+              hireRequest: {
+                select: {
                   id: true,
                   title: true,
-                  organization:{
-                    select:{
+                  organization: {
+                    select: {
                       id: true,
                       name: true,
                     }
@@ -471,9 +472,9 @@ export class CandidatesService {
           }
         }
       }
-      
+
     }
-  
+
     const candidate = await this.prisma.candidate.findUnique({
       where: {
         id: id,
@@ -489,18 +490,18 @@ export class CandidatesService {
       candidate.pipeline_status = stageName || 'Unknown Stage';
     }
     candidate.employment_type = changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type;
-    
+
     const formattedCandidate = {
       ...candidate, // mantém os outros campos do candidato
       panelCandidates: candidate.panelCandidates && candidate.panelCandidates.length > 0
         ? candidate.panelCandidates.map(pc => ({
-            title: pc.panel?.hireRequest?.title || '',
-            organization_name: pc.panel?.hireRequest?.organization?.name || '',
-          }))
+          title: pc.panel?.hireRequest?.title || '',
+          organization_name: pc.panel?.hireRequest?.organization?.name || '',
+        }))
         : [],
     };
     return formattedCandidate;
-    
+
   }
 
   async update(id: string, data: UpdateCandidateDto): Promise<any> {
@@ -518,19 +519,19 @@ export class CandidatesService {
         ...data
       }
     });
-    if(!updatedCandidate) throw new BadGatewayException('Failed to update candidate');
+    if (!updatedCandidate) throw new BadGatewayException('Failed to update candidate');
     return updatedCandidate;
   }
 
   private async updateStatus(id: string, status: ProcessingStatus, error?: string): Promise<void> {
     await this.prisma.candidate.update({
       where: { id },
-      data: { 
+      data: {
         processing_status: status,
         processing_error: error || null,
         processed_at: new Date()
 
-       }
+      }
     });
   }
 
@@ -561,7 +562,7 @@ export class CandidatesService {
       }
     }
 
-    if(jsonData.experience !== '' && jsonData.experience !== undefined){
+    if (jsonData.experience !== '' && jsonData.experience !== undefined) {
       const experienceData = jsonData.experience;
 
       if (Array.isArray(experienceData)) {
@@ -573,7 +574,7 @@ export class CandidatesService {
             start_date: new Date(item.start_date) || '',
             end_date: new Date(item.end_date) || '',
             responsabilities: item.description || '',
-            
+
           }))
         });
       }
@@ -581,7 +582,7 @@ export class CandidatesService {
     return true
   }
 
-  async processAvatar(id: string): Promise<boolean>{
+  async processAvatar(id: string): Promise<boolean> {
     console.log('starting process Avatar for candidate ID:', id);
     if (!id) throw new BadRequestException('Candidate ID is required');
 
@@ -589,30 +590,30 @@ export class CandidatesService {
       where: {
         id: id
       },
-      select:{
+      select: {
         id: true,
         headshot_url: true,
       }
     });
-    if(!candidate) throw new BadRequestException('Candidate not found');
+    if (!candidate) throw new BadRequestException('Candidate not found');
 
-    if( candidate && candidate.headshot_url && candidate.headshot_url.includes('http')) { 
-      
+    if (candidate && candidate.headshot_url && candidate.headshot_url.includes('http')) {
+
       const idImage = extractDriveFileId(candidate.headshot_url);
       if (!idImage) {
         console.log('Error in extracting image ID from URL');
         return false;
       }
-      
+
       const imageName = `${candidate.id}__image.png`;
       const downloadDir = path.resolve(__dirname, '/tmp');
 
       const imageDownloaded = await this.google.downloadImage(idImage, imageName, downloadDir);
-      if (!imageDownloaded ) {
+      if (!imageDownloaded) {
         console.log('Failed to download image from Google Drive:', imageDownloaded);
       }
       console.log('Image downloaded successfully from Google Drive', imageDownloaded);
-      const avatarImage= await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
+      const avatarImage = await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
       console.log('Avatar generated successfully: ', avatarImage);
 
       const bucketFile = await this.s3.uploadFile(avatarImage, path.basename(avatarImage), 'medvirtual-avatar');
@@ -626,16 +627,16 @@ export class CandidatesService {
       //update database with new avatar URL
       const updatedCandidate = await this.prisma.candidate.update({
         where: { id: id },
-        data: { 
+        data: {
           avatar_url: bucketFile,
-         }
+        }
       });
 
-    } 
+    }
     return true;
   }
 
-  async processData(id: string): Promise<boolean>{
+  async processData(id: string): Promise<boolean> {
     console.log('starting process data for candidate ID:', id);
     if (!id) throw new BadRequestException('Candidate ID is required');
 
@@ -644,18 +645,18 @@ export class CandidatesService {
         id: id
       }
     });
-    if( candidate && candidate.resume_url && candidate.resume_url.includes('http')) {
+
+    if (candidate && candidate.resume_url && candidate.resume_url.includes('http')) {
 
       const idFile = extractDriveFileId(candidate.resume_url);
-
       const pdfName = `${candidate.id}_resume.pdf`;
-      const downloadDir = path.resolve(__dirname, '/tmp');
-     
+      const downloadDir = path.resolve(__dirname, '/tmp'); // Ensuring temp dir usage
+
       if (!idFile) {
         await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
         return false;
       }
-      
+
       console.log('starting with download step...');
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
@@ -681,89 +682,102 @@ export class CandidatesService {
         return false;
       }
 
-      console.log('starting with upload step...');
-      //processing_uploadFile
-      await this.updateStatus(id, 'processing_uploadFile');
-      const bucketFile = await this.s3.uploadFile(path.join(downloadDir, pdfName), `candidates/${pdfName}`, 'medvirtual-documents');
-      if (!bucketFile) {
-        await this.updateStatus(id, 'failed', 'Failed to upload file to S3');
-        console.log('Failed to upload file to S3');
-        return false;
+      // Prepare for processing: Split PDF and Convert to Images
+      const tempDir = path.join(downloadDir, `temp_pages_${candidate.id}`);
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      console.log('starting with first textract step...');
-      //processing_extractData
-      await this.updateStatus(id, 'processing_extractData');
-      const jobId = await this.textract.startTextracktJob(bucketFile);
-      if (!jobId) {
-        await this.updateStatus(id, 'failed', 'Failed to start Textract job');
-        console.log('Failed to start Textract job');
-        return false;
-      }
+      try {
+        console.log('Splitting PDF and converting to images with pdf-to-png-converter...');
+        await this.updateStatus(id, 'processing_extractText');
 
-      console.log('starting with the second textract step...');
-      //processing_extractText
-      await this.updateStatus(id, 'processing_extractText');
-      const extract = await this.textract.getTextractResult(jobId);
-      if(!extract) {
-        await this.updateStatus(id, 'failed', 'Failed to extract text from Textract');
-        console.log('Failed to extract text from Textract');
-        return false;
-      }
+        const pdfPath = path.join(downloadDir, pdfName);
 
+        // Convert to PNG using pdf-to-png-converter (Cross-Platform)
+        const pngPages = await pdfToPng(pdfPath, {
+          disableFontFace: true,
+          useSystemFonts: false,
+          viewportScale: 2.0,
+        });
 
+        const imagePaths: string[] = [];
 
-      console.log('starting with the openAi step...');
-      //processing_organizeData
-      await this.updateStatus(id, 'processing_organizeData');   
-      const organizedDataString = await this.openai.organizeText(extract, candidate);
+        pngPages.forEach((page, index) => {
+          if (page.content) {
+            const tempImgPath = path.join(tempDir, `page_${index + 1}.png`);
+            fs.writeFileSync(tempImgPath, page.content);
+            imagePaths.push(tempImgPath);
+          }
+        });
 
-      const organizedData = JSON.parse(organizedDataString);
-      const transformedData = {
-        ...organizedData,
-        experience: organizedData.experience.map(exp => ({
-          ...exp,
-          description: exp.description.join("; ")
-        })),
-        education: organizedData.education.map(edu => ({
-          ...edu,
-          description: edu.description.join("; ")
-        }))
-      };
-      
-      if (!transformedData) {
-        await this.updateStatus(id, 'failed', 'Failed to organize data from OpenAI');
-        console.log('Failed to organize data from OpenAI');
-        return false;
-      }
-
-      const parsedData = transformedData;
-      console.log('The datas were organized successfully by openAi');
-
-      //processing_updateCandidate
-      await this.prisma.candidate.update({
-        where: { id: id },
-        data: { 
-          processing_status: 'processing_updateCandidate',
-          processed_resume_data: parsedData,
-          processed_at: new Date(),
-          about_me: parsedData.bio,
-          years_of_experience: parsedData.years_of_experience || 0,
+        if (imagePaths.length === 0) {
+          throw new Error('No images converted from PDF.');
         }
-      })
-      //call function to populate skills, education, experience....
-      const populateDatas = await this.updateFromJson(id, parsedData);
-      if (!populateDatas){
-        await this.updateStatus(id, 'failed');
-        console.log('Failed to populate candidate data from JSON');
+
+        console.log('Sending images to OpenAI...');
+        await this.updateStatus(id, 'processing_organizeData');
+
+        const organizedData = await this.openai.extractDataFromResumeImages(imagePaths);
+
+        // Transform data to match expectations (e.g. join array descriptions)
+        const transformedData = {
+          ...organizedData,
+          experience: organizedData.experience?.map(exp => ({
+            ...exp,
+            description: Array.isArray(exp.description) ? exp.description.join("; ") : exp.description
+          })) || [],
+          // Education description is not requested in new prompt, so we don't map it.
+          // If previous code relied on it, it might be undefined.
+          education: organizedData.education || []
+        };
+
+        if (!transformedData) {
+          await this.updateStatus(id, 'failed', 'Failed to organize data from OpenAI');
+          return false;
+        }
+
+        console.log('Data extracted successfully by OpenAI');
+
+        //processing_updateCandidate
+        await this.prisma.candidate.update({
+          where: { id: id },
+          data: {
+            processing_status: 'processing_updateCandidate',
+            processed_resume_data: transformedData,
+            processed_at: new Date(),
+            about_me: transformedData.bio,
+            years_of_experience: transformedData.years_of_experience || 0,
+          }
+        });
+
+        //call function to populate skills, education, experience....
+        const populateDatas = await this.updateFromJson(id, transformedData);
+        if (!populateDatas) {
+          await this.updateStatus(id, 'failed', 'Failed to populate from JSON');
+          return false;
+        }
+
+        //completed
+        await this.updateStatus(id, 'completed');
+
+      } catch (error) {
+        console.error('Error in processData:', error);
+        await this.updateStatus(id, 'failed', error.message || 'Unknown processing error');
         return false;
+      } finally {
+        // Cleanup
+        if (fs.existsSync(tempDir)) {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+        // Optionally remove the original downloaded PDF too?
+        const pdfPath = path.join(downloadDir, pdfName);
+        if (fs.existsSync(pdfPath)) {
+          fs.unlinkSync(pdfPath);
+        }
       }
 
-      //completed
-      await this.updateStatus(id, 'completed');
-      
-      
-    }else{
+    } else {
       await this.updateStatus(id, 'failed', 'Resume URL not found');
       return false;
     }
@@ -786,8 +800,8 @@ export class CandidatesService {
       let returned
 
       for (const field of fields) {
-        
-        if (field === 'languages'){
+
+        if (field === 'languages') {
           returned = await this.prisma.candidateLanguage.findMany({
             where: {
               candidate: {
@@ -801,7 +815,7 @@ export class CandidatesService {
             },
             distinct: ['name'],
           });
-        }else if (field === 'skills'){
+        } else if (field === 'skills') {
 
           returned = await this.prisma.candidateSkill.findMany({
             where: {
@@ -819,8 +833,8 @@ export class CandidatesService {
             },
             distinct: ['skill_name'],
           });
-        
-        }else if (field === 'salary_range'){
+
+        } else if (field === 'salary_range') {
           const max = await this.prisma.candidate.aggregate({
             _max: {
               hourly_pay_rate: true,
@@ -848,15 +862,15 @@ export class CandidatesService {
             max: max._max.hourly_pay_rate || 0,
             salary_max: findJustMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
           };
-          
-          result[field]=returned;
-        
-        }else if (field === 'approved_positions_pairing'){
+
+          result[field] = returned;
+
+        } else if (field === 'approved_positions_pairing') {
           returned = await this.prisma.candidate.findMany({
             where: {
-              OR:[
-                {pipeline_status: '261075105'},
-                {pipeline_status: '1087596819'}
+              OR: [
+                { pipeline_status: '261075105' },
+                { pipeline_status: '1087596819' }
               ],
               approved_positions_pairing: { isEmpty: false },
             },
@@ -875,14 +889,14 @@ export class CandidatesService {
           const filteredPositions = uniquePositions.filter(
             (pos) => !pos.toLowerCase().includes('do not use')
           );
-          returned=filteredPositions.sort();
-        }else{
-          
+          returned = filteredPositions.sort();
+        } else {
+
           returned = await this.prisma.candidate.findMany({
             where: {
-              OR:[
-                {pipeline_status: '261075105'},
-                {pipeline_status: '1087596819'}
+              OR: [
+                { pipeline_status: '261075105' },
+                { pipeline_status: '1087596819' }
               ],
               AND: [
                 {
@@ -895,7 +909,7 @@ export class CandidatesService {
                     not: 'N/A'
                   }
                 }
-              ] 
+              ]
             },
             distinct: [field],
             select: {
@@ -914,7 +928,7 @@ export class CandidatesService {
           ];
           */
 
-          
+
           try {
             const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
             const response = await axios.get(url, {
@@ -923,32 +937,32 @@ export class CandidatesService {
                 "Content-Type": "application/json",
               },
             });
-        
+
             const vaTypeProperty = response.data.results.find(
               (prop) => prop.name === "career_highlights_relevant_job_experiences"
             );
-        
+
             if (!vaTypeProperty) {
               return [];
             }
             const returnedSpecializations = vaTypeProperty.options.map((option) => option.value);
-            result[field]=returnedSpecializations || [];
+            result[field] = returnedSpecializations || [];
             //return vaTypeProperty.options || [];
           } catch (error) {
             console.error("Failed to find types:", error.response?.data || error.message);
             throw new Error("Failed to find VA types");
           }
-          
-        }else{
-          result[field]=returned;
+
+        } else {
+          result[field] = returned;
         }
 
-        
+
       }
       return result;
-        
+
     } catch (error) {
-        throw new BadRequestException(`Error fetching countries: ${error.message}`);
+      throw new BadRequestException(`Error fetching countries: ${error.message}`);
     }
   }
 
@@ -975,24 +989,24 @@ export class CandidatesService {
     const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
       body,
       {
-          headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json'
-          }
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
       }
-  )
+    )
 
-  if(response.status !== 200) {
-    throw new BadGatewayException('Failed to update candidate status in HubSpot');
-  }
+    if (response.status !== 200) {
+      throw new BadGatewayException('Failed to update candidate status in HubSpot');
+    }
     const updatedCandidate = await this.prisma.candidate.update({
       where: { id: id },
       data: {
         pipeline_status: stageName
       }
     });
-    if(!updatedCandidate) throw new BadGatewayException('Failed to update candidate status');
-    
+    if (!updatedCandidate) throw new BadGatewayException('Failed to update candidate status');
+
     return updatedCandidate;
   }
 
@@ -1000,7 +1014,7 @@ export class CandidatesService {
     if (!user || (user.role.includes("organization") && !user.organization_id)) {
       throw new NotFoundException("User not found or not part of an organization");
     }
-  
+
     const candidate = await this.prisma.candidate.findUnique({
       where: { id: candidateId },
       select: {
@@ -1016,14 +1030,14 @@ export class CandidatesService {
         skills: { select: { skill_name: true, proficiency_level: true } },
       },
     });
-  
+
     if (!candidate) throw new NotFoundException("Candidate not found");
-  
+
     const hireRequests = await this.prisma.hireRequest.findMany({
       where: {
         status: 'sourcing',
-        assigned_user:  user.role === 'system_admin' ?  { is : {id : user.id} } : undefined,
-        panels:{
+        assigned_user: user.role === 'system_admin' ? { is: { id: user.id } } : undefined,
+        panels: {
           some: {
             panelCandidates: {}
           }
@@ -1040,19 +1054,19 @@ export class CandidatesService {
         salary_range_to: true,
         organization: { select: { id: true, name: true } },
         skills: { select: { skill_name: true, required_level: true } },
-        panels: { select: { id: true, _count: {select: {panelCandidates: true}} } },
+        panels: { select: { id: true, _count: { select: { panelCandidates: true } } } },
       },
     });
-  
+
     const HOURS = Number(process.env.CANDIDATE_HOUR_PER_MONTH ?? 176);
     const PERCENT = Number(process.env.CANDIDATE_PERCENT ?? 1);
-  
+
     const candidateSkills = candidate.skills.map((s) => s.skill_name);
-  
+
     const scoredHireRequests = hireRequests.map((hr) => {
       let score = 0;
       const matchedCriteria: string[] = [];
-  
+
       const hrSpecialization = hr.specialization
         ? hr.specialization.split(";").map((s) => s.trim())
         : [];
@@ -1064,25 +1078,25 @@ export class CandidatesService {
         score += 3;
         matchedCriteria.push(`${candidate.specialization}`);
       }
-  
+
       if (hr.location && candidate.country === hr.location) {
         score += 2;
         matchedCriteria.push(`${hr.location}`);
       }
-  
+
       if (hr.availability && candidate.employment_type === hr.availability) {
         score += 2;
         matchedCriteria.push(`${hr.availability}`);
       }
-  
+
       const hourly_from = hr.salary_range_from
         ? findHourlySalary(Number(hr.salary_range_from))
         : undefined;
-  
+
       const hourly_to = hr.salary_range_to
         ? findHourlySalary(Number(hr.salary_range_to))
         : undefined;
-  
+
       if (
         candidate.hourly_pay_rate !== null &&
         hourly_from !== undefined &&
@@ -1095,12 +1109,12 @@ export class CandidatesService {
           `Salary between range`
         );
       }
-  
+
       const requiredSkills = hr.skills.map((s) => s.skill_name);
       const matchedSkills = candidateSkills.filter((skill) =>
         requiredSkills.includes(skill)
       );
-  
+
       const skillMatchPercent =
         requiredSkills.length > 0
           ? matchedSkills.length / requiredSkills.length
@@ -1109,9 +1123,9 @@ export class CandidatesService {
       if (matchedSkills.length > 0) {
         matchedCriteria.push(...matchedSkills);
       }
-  
+
       score += skillMatchPercent * 10;
-  
+
       return {
         ...hr,
         matchedSkills,
@@ -1119,11 +1133,11 @@ export class CandidatesService {
         score: Math.round(score * 100) / 100,
       };
     });
-  
+
     scoredHireRequests.sort((a, b) => b.score - a.score);
     return scoredHireRequests;
   }
-  
+
   async endorseCandidate(data: EndorseCandidateDto, user: USER): Promise<boolean> {
 
     //console.log('Starting endorsement process for candidates:', data.candidatesId, 'to hire request:', data.hireRequestId);
@@ -1146,12 +1160,12 @@ export class CandidatesService {
     }
 
     const candidates = await this.prisma.candidate.findMany({
-      where: { id: { in: data.candidatesId }},
-      select: { 
+      where: { id: { in: data.candidatesId } },
+      select: {
         id: true,
         hubspot_id: true,
         pipeline_status: true
-       }
+      }
     });
     if (!candidates) throw new NotFoundException('Candidate not found');
 
@@ -1179,14 +1193,14 @@ export class CandidatesService {
       }))
     })
 
-      
+
     if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
-    
+
     try {
-      if ( user.role.includes('organization')){
+      if (user.role.includes('organization')) {
         const result = await this.notifications.notifyEndorseCandidates(data.hireRequestId);
         console.log(`[notifications] Hire request endorsement notification sent successfully:`, result);
-      }else{
+      } else {
         console.log(`[notifications] Hire request endorsement skipped for user role: ${user.role}`);
       }
     } catch (err) {
@@ -1221,7 +1235,7 @@ export class CandidatesService {
 
     if (lengthCandidates === 0) {
       //call the function hireRequest Update Status to cancel
-      await this.hireRequest.updateStatus(data.hireRequestId, {status: 'cancelled'}, user);
+      await this.hireRequest.updateStatus(data.hireRequestId, { status: 'cancelled' }, user);
     }
 
     return true;
@@ -1358,26 +1372,26 @@ export class CandidatesService {
 
     // Shuffle array to get random candidates
     const shuffled = candidates.sort(() => 0.5 - Math.random());
-    
+
     // Get first 25 candidates
     const randomCandidates = shuffled.slice(0, 25);
 
     // Map pipeline_status to readable format if needed
     // Note: We're not including pipeline_status in the select, so it won't be in the response
-    
+
     // Construct full avatar URL for each candidate and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
     const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => ({
       ...candidate,
-      avatar_url: candidate.avatar_url 
-        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
         : null,
       salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
-        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
         candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
     }));
-    
+
     return {
       candidates: candidatesWithFullAvatarUrl,
       total: totalTableCount, // Return count of available candidates with filters
@@ -1450,7 +1464,7 @@ export class CandidatesService {
 
     // Construct full avatar URL and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
-    
+
     // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
     let employmentTypeValue = candidate.employment_type;
     if (Array.isArray(employmentTypeValue)) {
@@ -1458,19 +1472,19 @@ export class CandidatesService {
     } else if (typeof employmentTypeValue === 'string' && employmentTypeValue.includes(';')) {
       employmentTypeValue = employmentTypeValue.split(';')[0].trim();
     }
-    
+
     // Apply the same transformation as in findOne and other places
     const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
-    
+
     const candidateWithFullAvatarUrl = {
       ...candidate,
-      avatar_url: candidate.avatar_url 
-        ? `${AVATAR_BASE_URL}${candidate.avatar_url}` 
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
         : null,
       salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
-        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name ,
+        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
         candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
-        employment_type: transformedEmploymentType,
+      employment_type: transformedEmploymentType,
     };
 
     return candidateWithFullAvatarUrl;
