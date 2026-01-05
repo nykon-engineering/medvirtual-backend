@@ -49,46 +49,6 @@ export class AuthController {
     private readonly user: UserService,
   ) {}
 
-  @Get('workos')
-  @Redirect()
-  @ApiOperation({ summary: 'Generate authorizationUrl from WorkOs' })
-  @ApiResponse({ status: 200, description: 'Url generated succesfully' })
-  @ApiResponse({ status: 500, description: 'Url generated failed' })
-  async workOs() {
-    const url = await this.authService.workOsSignIn();
-    if (!url) {
-      return {
-        statusCode: 500,
-        message: 'Authentication failed',
-      };
-    }
-    return { url: url };
-  }
-
-  @Get('callback')
-  @ApiOperation({ summary: 'Return from WorkOS for authentication' })
-  @ApiResponse({ status: 400, description: 'Code is required' })
-  @ApiResponse({
-    status: 400,
-    description: 'Failed to retrieve user profile from WorkOS',
-  })
-  @ApiResponse({ status: 400, description: 'Failed to create session' })
-  @ApiResponse({ status: 200, description: 'User authenticated successfully' })
-  @ApiResponse({ status: 500, description: 'Authentication failed' })
-  async callback(
-    @Query('code') code: string,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const token = await this.authService.handleUser(code);
-    res.cookie('authToken', token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'none',
-      maxAge: 60 * 60 * 1000, // 1 hora
-    });
-    res.redirect('http://localhost:8080/home');
-  }
-
   @Post('signin')
   @HttpCode(200)
   @ApiBody({ type: AuthSignInDto })
