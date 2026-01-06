@@ -16,7 +16,7 @@ export class OpenaiService {
     constructor(
         private readonly mailService: MailService,
         private readonly prisma: PrismaService
-    ) {}
+    ) { }
     /* istanbul ignore next */
 
 
@@ -25,7 +25,7 @@ export class OpenaiService {
     async organizeText(text: string, candidate: any): Promise<string> {
 
         const candidateJSON = JSON.stringify(candidate);
-        
+
         const apiKey = process.env.OPENAI_API_KEY;
 
         if (!apiKey) {
@@ -261,7 +261,7 @@ export class OpenaiService {
 
 
     async extractDataFromResumeImages(imagePaths: string[]): Promise<any> {
-        const apiKey = process.env.OPENAI_API_KEY;
+        const apiKey = process.env.OPENAI_API_KEY_RESUME_EXTRACTION || process.env.OPENAI_API_KEY;
         if (!apiKey) {
             throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
         }
