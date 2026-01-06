@@ -45,7 +45,9 @@ jobs:
 
       - name: 🧬 Generate Prisma Client (Linux Lambda)
         working-directory: lambda-package
-        run: npx prisma generate
+        run: |
+          npm install prisma --no-save
+          npx prisma generate
       
       - name: 🧹 Remove arquivos .map
         run: find lambda-package -name "*.map" -type f -delete
