@@ -12,7 +12,6 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
-      S3_LAMBDA_BUCKET: ${{ secrets.S3_LAMBDA_BUCKET }}
       NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
@@ -38,6 +37,8 @@ jobs:
         #run: npm run build:esbuild
         run: npx webpack --config webpack.config.js
 
+          
+
       - name: 📁 Build lambda-package
         run: |
           mkdir lambda-package
@@ -49,14 +50,14 @@ jobs:
       - name: 📦 Install just production dependencies
         working-directory: lambda-package
         run: npm install --omit=dev
-
-      - name: 📦 Copy Prisma engines to lambda-package
-        run: |
-          mkdir -p lambda-package/node_modules/.prisma
-          cp -r node_modules/.prisma/client lambda-package/node_modules/.prisma/
       
       - name: 🧹 Remove arquivos .map
         run: find lambda-package -name "*.map" -type f -delete
+
+      - name: 📦 Copy prisma binaries
+        run: |
+          mkdir -p lambda-package/node_modules/.prisma
+          cp -r node_modules/.prisma/* lambda-package/node_modules/.prisma/
 
       - name: 📦 Build ZIP files
         working-directory: lambda-package
@@ -68,21 +69,14 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: 📤 Upload ZIP to S3
+      
+      - name: 🚀 Deploy at AWS Lambda
         run: |
-          aws s3 cp lambda.zip s3://$S3_LAMBDA_BUCKET/lambda-${{ github.sha }}.zip
+            aws lambda update-function-code \
+              --function-name $LAMBDA_FUNCTION_NAME \
+              --zip-file fileb://lambda.zip \
+              --no-cli-pager \
+              --output text
 
-
-      - name: 🚀 Deploy at AWS Lambda (via S3)
-        run: |
-          aws lambda update-function-code \
-            --function-name $LAMBDA_FUNCTION_NAME \
-            --s3-bucket $S3_LAMBDA_BUCKET \
-            --s3-key lambda-${{ github.sha }}.zip \
-            --no-cli-pager \
-            --output text
-
-
-      - name: 🧹 Clean temp files
-        run: rm -rf lambda-package lambda.zip
+      #- name: 🧹 Clean temp files
+      #  run: rm -rf lambda-package lambda.zip
