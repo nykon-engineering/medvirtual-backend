@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
+import { randomBytes } from 'crypto';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { UserService } from '../user/user.service';
@@ -16,28 +17,52 @@ import { RecoveryResetPasswordDto } from './dto/recoveryResetPassword.dto';
 
 @Injectable()
 export class RecoverypassService {
+  private readonly RESET_TOKEN_EXPIRATION_MINUTES = 10;
+  
   constructor(
     private readonly user: UserService,
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
   ) {}
 
-  async forgotPassword(email: RecoveryForgotPasswordDto): Promise<boolean> {
+  async forgotPassword(data: RecoveryForgotPasswordDto): Promise<boolean> {
     //check if the user exists with this email
-    if (!email || !email.email) {
+    if (!data || !data.email) {
       throw new BadRequestException('Email is required');
     }
-    const user = await this.user.findByEmail(email.email);
+    const user = await this.user.findByEmail(data.email);
     if (!user) {
-      throw new NotFoundException('User with this email does not exist');
+      return true; // I put it here to prevent email enumeration
     }
 
-    //create hash with the email and the current date with expiration time
-    const hash = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-      expiresIn: '10m',
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(rawToken, 10);
+
+    const expiresAt = new Date(
+      Date.now() + this.RESET_TOKEN_EXPIRATION_MINUTES * 60 * 1000,
+    );
+
+    // Invalidate previous tokens
+    await this.prisma.passwordResetToken.updateMany({
+      where: {
+        userId: user.id,
+        usedAt: null,
+      },
+      data: {
+        usedAt: new Date(),
+      },
     });
 
-    if (!hash) throw new BadRequestException('Error generating recovery hash');
+    // Store new token (hashed)
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+
 
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, user.id);
@@ -45,7 +70,7 @@ export class RecoverypassService {
     // Send verification code via email
     const emailBody = getResetPasswordTemplate(
       user.first_name,
-      `${process.env.FRONTEND_URL}/set-password?t=${hash}`,
+      `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`,
       emailTheme || undefined
     );
     const mailSent = await this.mail.sendMail({
@@ -71,28 +96,60 @@ export class RecoverypassService {
     return true;
   }
 
+
+
   async setPassword(data: RecoveryResetPasswordDto): Promise<boolean> {
     const { token, password } = data;
-    if (!token) throw new BadRequestException('Hash is required');
+    if (!token) throw new BadRequestException('Reset token is required');
     if (!password) throw new BadRequestException('New password is required');
+
+
+
+    const resetToken = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      include: {
+        user: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException('Invalid or expired token');
+    }
+
+    const isValidToken = await bcrypt.compare(
+      token,
+      resetToken.tokenHash,
+    );
+
+    if (!isValidToken) {
+      throw new BadRequestException('Invalid or expired token');
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    //verify the hash validate
-    try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET);
-      const userId = payload['id'];
 
-      if (!userId) throw new NotFoundException('User ID not found in hash');
-      //update the user password
-      await this.prisma.uSER.update({
-        where: { id: userId },
-        data: { password: hashedPassword },
-      });
+    // Atomic operation
+    await this.prisma.$transaction([
+      this.prisma.uSER.update({
+        where: { id: resetToken.userId },
+        data: {
+          password: hashedPassword,
+        },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: {
+          usedAt: new Date(),
+        },
+      }),
+    ]);
 
-      return true;
-    } catch (error) {
-      throw new BadRequestException('Hash is expired or invalid');
-    }
+    return true;
   }
 }

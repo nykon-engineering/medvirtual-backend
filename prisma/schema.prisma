@@ -48,6 +48,7 @@ model USER {
   createdUsers                 USER[]              @relation("UserCreatedBy")
   organization                 Organization?       @relation(fields: [organization_id], references: [id])
   talentPoolLeads              TalentPoolLead[]
+  PasswordResetTokens          PasswordResetToken[]
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -281,6 +282,9 @@ model HireRequest {
   hubspot_pairing_date         String? //String for avoid misunderstanding about timeZone
   hubspot_pairing_time         String?
 
+  cancel_date                  DateTime?
+  cancel_reason                String?
+
   assign_sourcing_id           String?
   old_status                   HireRequestStatus?
   panels                       CandidatePanel[]
@@ -509,6 +513,20 @@ model TalentPoolLead {
   @@index([status], map: "idx_talent_pool_leads_status")
   @@index([source], map: "idx_talent_pool_leads_source")
 }
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      USER @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
 
 enum Role {
   organization_admin

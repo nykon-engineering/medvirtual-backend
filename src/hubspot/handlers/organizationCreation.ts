@@ -22,6 +22,7 @@ export class HandlerOrganizationCreation {
 
         const properties = Object.keys(organizationToDbDictionary).join(',');
         try{
+            let owner;
             const getObject = await axios.post('https://api.hubapi.com/crm/v3/objects/companies/search',
             {
             filterGroups: [
@@ -54,6 +55,27 @@ export class HandlerOrganizationCreation {
             const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
 
             console.log('Mapped organization data:', organizationData);
+
+            const hubspotOwnerId = (organizationData as any).hubspot_owner_id;
+            if (hubspotOwnerId) {
+                console.log('HubSpot Owner ID found:', hubspotOwnerId);
+                //check if the owner exists in the system
+                owner = await this.prisma.uSER.findUnique({
+                    where: {
+                        hubspot_id: String(hubspotOwnerId)
+                    },
+                    select: {
+                        id: true
+                    }
+                })
+                
+                if (owner) { //if owner exists, update the organization admin with the new owner
+                    organizationData.admin_id = owner.id;
+                }
+                
+            }
+
+            (organizationData as any).hubspot_owner_id = undefined;
 
 
             organizationData.status=OrganizationStatus.inactive; // => asked by Pauli on 10-13-2025 because She needs to active them manualy or when this organization has a deal/staff

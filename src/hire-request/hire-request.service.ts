@@ -1167,6 +1167,27 @@ export class HireRequestService {
         },
       })
 
+      //update cancel_date and cancel_reason on database
+      await this.prisma.hireRequest.update({
+        where: { id },
+        data: {
+          cancel_date: new Date().toISOString(),
+          cancel_reason: data.reason || 'No reason provided',
+        },
+      });
+
+      //close possible tickets from this HireRequest
+      await this.prisma.ticket.updateMany({
+        where: {
+          hireRequest_id: id,
+          status: { not : 'resolved'},
+          type: 'hire_request_cancellation',
+        },
+        data:{
+          status: 'resolved',
+        }
+      })
+
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
@@ -2392,7 +2413,6 @@ export class HireRequestService {
             priority: true,
             createdAt: true,
             availability: true,
-            contract_length: true,
             expected_start_date: true,
             salary_range_from: true,
             salary_range_to: true,

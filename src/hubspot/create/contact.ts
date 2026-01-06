@@ -9,6 +9,28 @@ export class ContactCreationService {
       private readonly prisma: PrismaService
     ){}
 
+    async getOwnerId(userId: string): Promise<string | null> {
+      if (!userId) return null;
+      const user = await this.prisma.uSER.findUnique({
+      where: { id: userId },
+      select: {
+          id: true,
+          hubspot_id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+      },
+          
+      });
+
+      /* => Commented because we cannot create owners using hubspot API
+      if (user && !user.hubspot_id) {
+      await this.ownerCreationService.execute(user)
+      }
+      */
+
+      return user && user.hubspot_id ? user.hubspot_id : null; 
+    }
 
     async execute(data: any): Promise<any> {
         try {
@@ -26,6 +48,11 @@ export class ContactCreationService {
                 email: data.email,
                 phone: data.phone || '',
                 jobtitle: data.job_title || '',
+                business_unit: data.organization.business_unit || '',
+                company: data.organization.name || '',
+                hubspot_owner_id: data.organization.admin_id ? await this.getOwnerId(data.organization.admin_id) : undefined,
+                demo_owner: data.organization.admin_id ? await this.getOwnerId(data.organization.admin_id) : undefined,
+                title: data.first_name + ' ' + data.last_name,
 
               },
               associations: data.organization.hubspot_id ? [

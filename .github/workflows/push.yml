@@ -12,6 +12,7 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
+      S3_LAMBDA_BUCKET: ${{ secrets.S3_LAMBDA_BUCKET }}
       NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
@@ -46,18 +47,22 @@ jobs:
           cp -r prisma/schema.prisma lambda-package/prisma/
           cp package.prod.json lambda-package/package.json
           if [ -f .env ]; then cp .env lambda-package/; else echo "⚠️  Arquivo .env não encontrado, ignorando..."; fi
-
-      - name: 📦 Install just production dependencies
-        working-directory: lambda-package
-        run: npm install --omit=dev
       
       - name: 🧹 Remove arquivos .map
         run: find lambda-package -name "*.map" -type f -delete
 
-      - name: 📦 Copy prisma binaries
+      - name: 📦 Copy prisma Cliente only
         run: |
           mkdir -p lambda-package/node_modules/.prisma
-          cp -r node_modules/.prisma/* lambda-package/node_modules/.prisma/
+          cp -r node_modules/.prisma/client lambda-package/node_modules/.prisma/
+
+      - name: 📊 Debug lambda-package size
+        run: |
+          du -sh lambda-package
+          du -sh lambda-package/node_modules || true
+          du -sh lambda-package/node_modules/.prisma || true
+          du -sh lambda-package/prisma || true
+
 
       - name: 📦 Build ZIP files
         working-directory: lambda-package
@@ -69,14 +74,20 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: 🚀 Deploy at AWS Lambda
+      
+      - name: 📤 Upload ZIP to S3
         run: |
-            aws lambda update-function-code \
-              --function-name $LAMBDA_FUNCTION_NAME \
-              --zip-file fileb://lambda.zip \
-              --no-cli-pager \
-              --output text
+          aws s3 cp lambda.zip s3://$S3_LAMBDA_BUCKET/lambda.zip
+          
+      - name: 🚀 Deploy at AWS Lambda (via S3)
+        run: |
+          aws lambda update-function-code \
+            --function-name $LAMBDA_FUNCTION_NAME \
+            --s3-bucket $S3_LAMBDA_BUCKET \
+            --s3-key lambda.zip \
+            --no-cli-pager \
+            --output text
+
 
       - name: 🧹 Clean temp files
         run: rm -rf lambda-package lambda.zip
