@@ -38,7 +38,13 @@ jobs:
         #run: npm run build:esbuild
         run: npx webpack --config webpack.config.js
 
-          
+      - name: 🧹 Keep only Linux Prisma binary
+        run: |
+          find node_modules/.prisma -type f \
+            ! -name "*openssl*" \
+            -delete
+
+   
 
       - name: 📁 Build lambda-package
         run: |
@@ -58,7 +64,7 @@ jobs:
       - name: 📦 Copy prisma binaries
         run: |
           mkdir -p lambda-package/node_modules/.prisma
-          cp -r node_modules/.prisma/* lambda-package/node_modules/.prisma/
+          cp -r node_modules/.prisma/client lambda-package/node_modules/.prisma/
 
       - name: 📦 Build ZIP files
         working-directory: lambda-package
