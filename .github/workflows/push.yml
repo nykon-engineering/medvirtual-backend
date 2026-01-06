@@ -12,6 +12,7 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
+      S3_LAMBDA_BUCKET: ${{ secrets.S3_LAMBDA_BUCKET }}
       NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
@@ -36,8 +37,6 @@ jobs:
       - name: 🔨 Build with webpack
         #run: npm run build:esbuild
         run: npx webpack --config webpack.config.js
-
-          
 
       - name: 📁 Build lambda-package
         run: |
@@ -70,13 +69,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: 🚀 Deploy at AWS Lambda
+      - name: 📤 Upload ZIP to S3
         run: |
-            aws lambda update-function-code \
-              --function-name $LAMBDA_FUNCTION_NAME \
-              --zip-file fileb://lambda.zip \
-              --no-cli-pager \
-              --output text
+          aws s3 cp lambda.zip s3://$S3_LAMBDA_BUCKET/lambda-${{ github.sha }}.zip
+
+
+      - name: 🚀 Deploy at AWS Lambda (via S3)
+        run: |
+          aws lambda update-function-code \
+            --function-name $LAMBDA_FUNCTION_NAME \
+            --s3-bucket $S3_LAMBDA_BUCKET \
+            --s3-key lambda-${{ github.sha }}.zip \
+            --no-cli-pager \
+            --output text
+
 
       - name: 🧹 Clean temp files
         run: rm -rf lambda-package lambda.zip
