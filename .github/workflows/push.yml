@@ -34,6 +34,10 @@ jobs:
       - name: 🧱 Prisma by docker
         run: docker run --rm -v $(pwd):/app -w /app node:18 npx prisma generate
 
+      - name: 🔐 Fix Prisma file permissions
+        run: |
+          sudo chown -R $(whoami):$(whoami) node_modules/.prisma
+
       - name: 🔨 Build with webpack
         #run: npm run build:esbuild
         run: npx webpack --config webpack.config.js
@@ -42,6 +46,11 @@ jobs:
         run: |
           find node_modules/.prisma -type f \
             ! -name "*openssl*" \
+            ! -name "*linux*" \
+            ! -name "*.js" \
+            ! -name "*.d.ts" \
+            ! -name "*.json" \
+            ! -name "*.prisma" \
             -delete
 
    
