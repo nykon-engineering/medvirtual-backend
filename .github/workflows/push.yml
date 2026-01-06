@@ -53,11 +53,6 @@ jobs:
       - name: 🧹 Remove arquivos .map
         run: find lambda-package -name "*.map" -type f -delete
 
-      - name: 📦 Copy prisma binaries
-        run: |
-          mkdir -p lambda-package/node_modules/.prisma
-          cp -r node_modules/.prisma/* lambda-package/node_modules/.prisma/
-
       - name: 📦 Build ZIP files
         working-directory: lambda-package
         run: zip -r ../lambda.zip . > /dev/null
@@ -68,6 +63,10 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: 📏 Check unzipped size
+        run: |
+          du -sh lambda-package
 
       - name: 📤 Upload ZIP to S3
         run: |
