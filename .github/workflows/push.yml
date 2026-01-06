@@ -60,6 +60,14 @@ jobs:
           mkdir -p lambda-package/node_modules/.prisma
           cp -r node_modules/.prisma/* lambda-package/node_modules/.prisma/
 
+      - name: 📊 Debug lambda-package size
+        run: |
+          du -sh lambda-package
+          du -sh lambda-package/node_modules || true
+          du -sh lambda-package/node_modules/.prisma || true
+          du -sh lambda-package/prisma || true
+
+
       - name: 📦 Build ZIP files
         working-directory: lambda-package
         run: zip -r ../lambda.zip . > /dev/null
