@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -8,7 +10,6 @@ import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
 import { UserService } from '../user/user.service';
-import { WorkosService } from '../workos/workos.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateVerificationCode } from '../common/utils/generateCode.util';
@@ -31,78 +32,12 @@ import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
 @Injectable()
 export class AuthService {
   constructor(
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
-    private readonly workosService: WorkosService,
     private readonly mailService: MailService,
     private readonly prisma: PrismaService,
   ) {}
 
-  async workOsSignIn(): Promise<string> {
-    const authorizationUrl = await this.workosService.getUrl();
-    if (!authorizationUrl) {
-      throw new Error('Failed to generate authorization URL');
-    }
-    //console.log('workos route:', authorizationUrl);
-    return authorizationUrl;
-  }
-
-  async handleUser(code: string): Promise<string> {
-    const timeToExpires =
-      Number(process.env.TOKEN_TIME_EXPIRED) | (60 * 60 * 100);
-    if (!code) {
-      throw new BadRequestException('Code is required');
-    }
-    const result = await this.workosService.getUserByCode(code);
-    if (!result) {
-      throw new BadRequestException(
-        'Failed to retrieve user profile from WorkOS',
-      );
-    }
-
-    const user = result.user;
-    let userDB = await this.userService.findByEmail(user.email);
-
-    if (!userDB) {
-      userDB = await this.userService.create({
-        email: user.email,
-        first_name: user.first_name || '',
-        last_name: user.last_name || '',
-        phone: user.phone || '',
-        avatar: user.profile_picture_url || '',
-        job_title: user.jobTitle || '',
-        organization_name: user.companyName || '',
-        role: user.role?.slug || 'user',
-        workos_id: user.id,
-        password: '', // Password is not used for SSO users
-        authentication_method: result.authenticationMethod,
-        status: 'incomplete',
-        verified: user.email_verified || false,
-      });
-    }
-
-    const token = jwt.sign({ id: userDB.id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    });
-
-    //revoke previous sessions of this user before I create the new session
-    await this.prisma.session.updateMany({
-      where: { userId: user.id },
-      data: { isRevoked: true },
-    });
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: userDB.id,
-        token: token,
-        expiresAt: new Date(Date.now() + timeToExpires), // 1 hour from now
-      },
-    });
-
-    if (!session) {
-      throw new BadRequestException('Failed to create session');
-    }
-    return token;
-  }
 
   async signIn(data: AuthSignInDto): Promise<object> {
     const timeToExpires = data.rememberMe

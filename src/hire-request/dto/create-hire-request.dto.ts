@@ -41,10 +41,6 @@ export class CreateHireRequestDto {
     @Type(() => Date)
     expected_start_date: Date;
 
-    @ApiProperty({ example: '6 months', description: 'The contract length for the hire request', required: false,  type: String })
-    @IsString()
-    @IsOptional()
-    contract_length: string;
 
     @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: false,  type: String })
     @IsString()

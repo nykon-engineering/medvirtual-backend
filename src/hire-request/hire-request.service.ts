@@ -55,6 +55,72 @@ export class HireRequestService {
     );
   }
 
+  private selectPanels = {
+        id: true,
+        scheduled_date: true,
+        decided_date: true,
+        status: true,
+        panelCandidates: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            createdBy:{
+              select:{
+                id: true,
+                first_name: true,
+                last_name: true,
+                role: true,
+              }
+            },
+            candidate: {
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                name: true,
+                email: true,
+                specialization: true,
+                country: true,
+                employment_type: true,
+                about_me: true,
+                years_of_experience: true,
+                hourly_pay_rate: true,
+                organization_id: true,
+                processing_status: true,
+                processing_error: true,
+                educations: true,
+                experiences: true,
+                skills:true,
+                pipeline_status: true,
+                avatar_url: true,
+                gender: true,
+                approved_positions_pairing: true,
+                video_link: true,
+                languages:{
+                  select:{
+                    id: true,
+                    name: true,
+                  }
+                }
+              },
+            },
+            
+          },
+        },
+        interviews: {
+          select: {
+            scheduled_date: true,
+            link: true,
+          },
+        },
+        hireRequest: {
+          include: {
+            tickets: true,
+          },
+        }
+      };
+
   private async verifyAssignUser(statusTo, hireRequest_id): Promise<boolean> {
     const hireRequest = await this.prisma.hireRequest.findUnique({
         where: { id: hireRequest_id },
@@ -185,7 +251,11 @@ export class HireRequestService {
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       status: HireRequestStatus.new,
       assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
-      assigned_sourcing:  user.role.includes('organization') ?  { connect: { id: organizationSQL.admin_id } } :  { connect: { id: user.id } } ,
+      assigned_sourcing:  user.role.includes('organization') 
+                            ?  { connect: { id: organizationSQL.admin_id } } 
+                            :  selectedCandidates && selectedCandidates.length > 0 
+                                ? { connect: { id: user.id } } 
+                                : undefined,
       createdBy: { connect: { id: user.id } },
       position: undefined,
       contract_amount: undefined,
@@ -338,7 +408,6 @@ export class HireRequestService {
       this.prisma.hireRequest.findMany({
         where: {
           ...whereClause,
-          
         },
         include: {
           skills: true,
@@ -387,6 +456,7 @@ export class HireRequestService {
                       id: true,
                       first_name: true,
                       last_name: true,
+                      pipeline_status: true,
                       name: true,
                       email: true,
                       country: true,
@@ -465,7 +535,8 @@ export class HireRequestService {
                 },
               },
             },
-          }
+          },
+          tickets: true,
         },
         skip,
         take,
@@ -672,7 +743,8 @@ export class HireRequestService {
               },
             },
           },
-        }
+        },
+        tickets: true,
       }
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -1016,9 +1088,6 @@ export class HireRequestService {
     const hireRequest = await this.findOne(id, user);
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
-
-
-
     const candidates = await this.prisma.panelCandidate.findMany({
       where: {
         panel: {
@@ -1098,6 +1167,27 @@ export class HireRequestService {
         },
       })
 
+      //update cancel_date and cancel_reason on database
+      await this.prisma.hireRequest.update({
+        where: { id },
+        data: {
+          cancel_date: new Date().toISOString(),
+          cancel_reason: data.reason || 'No reason provided',
+        },
+      });
+
+      //close possible tickets from this HireRequest
+      await this.prisma.ticket.updateMany({
+        where: {
+          hireRequest_id: id,
+          status: { not : 'resolved'},
+          type: 'hire_request_cancellation',
+        },
+        data:{
+          status: 'resolved',
+        }
+      })
+
       const updatedRequest = await this.updateHireRequestStatus(id, data.status as HireRequestStatus);
       if (!updatedRequest) throw new BadRequestException(`Hire request status not updated`);
 
@@ -1107,8 +1197,13 @@ export class HireRequestService {
           hubspot_ticket_id: hireRequest.hubspot_ticket_id,
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Pairing Lost'), //=> Pairing Lost
+          cancel_reason: data.reason || 'No reason provided',
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+
+
+        //Update cancel_date in hubspot
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'cancel_date');
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
@@ -2199,65 +2294,7 @@ export class HireRequestService {
         ],
       },
       
-      select: {
-        id: true,
-        scheduled_date: true,
-        status: true,
-        panelCandidates: {
-          select: {
-            id: true,
-            status: true,
-            createdAt: true,
-            candidate: {
-              select: {
-                id: true,
-                first_name: true,
-                last_name: true,
-                name: true,
-                email: true,
-                specialization: true,
-                country: true,
-                employment_type: true,
-                about_me: true,
-                years_of_experience: true,
-                hourly_pay_rate: true,
-                organization_id: true,
-                processing_status: true,
-                processing_error: true,
-                educations: true,
-                experiences: true,
-                skills:true,
-                pipeline_status: true,
-                avatar_url: true,
-                gender: true,
-                approved_positions_pairing: true,
-                video_link: true,
-                languages:{
-                  select:{
-                    id: true,
-                    name: true,
-                  }
-                }
-              },
-            },
-            createdBy:{
-              select:{
-                id: true,
-                first_name: true,
-                last_name: true,
-                role: true,
-              }
-            }
-          },
-        },
-        interviews: {
-          select: {
-            scheduled_date: true,
-            link: true,
-          },
-        },
-        hireRequest: true,
-      },
+      select: this.selectPanels,
     });
 
 
@@ -2376,7 +2413,6 @@ export class HireRequestService {
             priority: true,
             createdAt: true,
             availability: true,
-            contract_length: true,
             expected_start_date: true,
             salary_range_from: true,
             salary_range_to: true,
@@ -2838,6 +2874,7 @@ export class HireRequestService {
       },
       data: {
         status: 'decision_made',
+        decided_date: new Date(),
       },
     });
     if( !panelUpdated) throw new BadRequestException(`Panel not updated to decision made`);
@@ -2932,12 +2969,16 @@ export class HireRequestService {
     }
     */
 
+    //update hire request in hubspot to 'For Onboarding (Paired)'
     const dataForHubspot = {
       hubspot_ticket_id: hireRequest.hubspot_ticket_id,
       hubspot_pipeline_stage: Object.keys(HRTicketStatus)
       .find(key => HRTicketStatus[key] === 'For Onboarding (Paired)'),
     }
     await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+
+    //Update closed_date in hubspot
+    await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'closed_date');
     
     // Fire placement completed notification (non-blocking)
     try {
@@ -2952,64 +2993,7 @@ export class HireRequestService {
       where: {
         id: panelExists.id,
       },
-      select:{
-        id: true,
-        scheduled_date: true,
-        status: true,
-        panelCandidates: {
-          select: {
-            status: true,
-            candidate: {
-              select: {
-                id: true,
-                first_name: true,
-                last_name: true,
-                name: true,
-                hourly_pay_rate: true,
-                country: true,
-                avatar_url: true,
-                approved_positions_pairing: true,
-                video_link: true,
-                languages:{
-                  select:{
-                    id: true,
-                    name: true,
-                  }
-                },
-                experiences: {
-                  orderBy: { start_date: 'asc' },
-                  take: 1, 
-                  select: { start_date: true },
-                },
-              },
-            },
-          },
-        },
-        hireRequest: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            status: true,
-            priority: true,
-            createdAt: true,
-            availability: true,
-            contract_length: true,
-            expected_start_date: true,
-            salary_range_from: true,
-            salary_range_to: true,
-            specialization: true,
-            location: true,
-            assign_user_id: true,
-            skills: {
-              select: {
-                skill_name: true,
-                required_level: true
-              },
-            }
-          },
-        },
-      },
+      select: this.selectPanels,
     })
     
     if (!panels || panels.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
@@ -3298,6 +3282,31 @@ export class HireRequestService {
     } catch (error) {
       console.error("Failed to find Pairing Request Type:", error.response?.data || error.message);
       throw new Error("Failed to find Pairing Request Type");
+    }
+  };
+
+  async getCancelReasonOptions () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "cancel_reason"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Cancel Reason:", error.response?.data || error.message);
+      throw new Error("Failed to find Cancel Reason");
     }
   };
 

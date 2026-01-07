@@ -37,6 +37,8 @@ import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
+import { ContactCreationService } from './create/contact';
+import { OrganizationUpdateService } from './update/organization';
 
 
 
@@ -57,6 +59,7 @@ export class HubspotService {
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
       private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
+      private readonly organizationUpdateService: OrganizationUpdateService,
 
       private readonly dealCreation: HandlerDealCreation,
       private readonly dealPropertyChange: HandlerDealPropertyChange,
@@ -71,10 +74,13 @@ export class HubspotService {
       private readonly hireRequestUpdateService: HireRequestUpdateService,
 
       private readonly organizationCreationService: OrganizationCreationService,
+      private readonly contactCreationService: ContactCreationService,
 
-      //private readonly ownerCreation: HandlerOwnerCreation,
-      //private readonly ownerDeletion: HandlerOwnerDeletion,
-      //private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
+      private readonly ownerCreation: HandlerOwnerCreation,
+      private readonly ownerDeletion: HandlerOwnerDeletion,
+      private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
+
+
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
     ) {
@@ -138,24 +144,24 @@ export class HubspotService {
                 case 'object.merge':
                     await this.objectMerge.execute(event);
                     break;
-                /*
+                
                 case 'owners.creation':
                 case 'owners.restore':
-                case 'contact.creation':
-                case 'contact.restore':
+                //case 'contact.creation':
+                //case 'contact.restore':
                     await this.ownerCreation.execute(event);
                     break;
 
                 case 'owners.deletion':
-                case 'contact.deletion':
+                //case 'contact.deletion':
                     await this.ownerDeletion.execute(event);
                     break;
 
                 case 'owners.propertyChange':
-                case 'contact.propertyChange':
+                //case 'contact.propertyChange':
                     await this.ownerPropertyChange.execute(event);
                     break;
-                */
+                
                 case 'company.creation':
                 case 'company.restore':
                     await this.organizationCreation.execute(event);
@@ -287,6 +293,15 @@ export class HubspotService {
 
     async createOrganizationInHubspot(data: any): Promise<any> {
         return await this.organizationCreationService.execute(data);
+    }
+
+    async updateOrganizationInHubspot(data: any): Promise<any> {
+        return await this.organizationUpdateService.execute(data);
+    }
+
+    async createContactInHubspot(data: any): Promise<any> {
+        //console.log('Creating contact in Hubspot with data:', data);
+        return await this.contactCreationService.execute(data);
     }
 
     ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot

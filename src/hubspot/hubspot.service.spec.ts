@@ -27,6 +27,8 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
+import { ContactCreationService } from './create/contact';
+import { OrganizationUpdateService } from './update/organization';
 
 
 jest.mock('axios', () => ({
@@ -157,7 +159,15 @@ const organizationCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const organizationUpdateServiceMock = {
+  execute: jest.fn(),
+};
+
 const ownerCreationServiceMock = {
+  execute: jest.fn(),
+};
+
+const contactCreationServiceMock = {
   execute: jest.fn(),
 };
 
@@ -207,7 +217,9 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
         {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
-        {provide: OwnerCreationService, useValue: ownerCreationServiceMock}
+        {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
+        {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
+        {provide: ContactCreationService, useValue: contactCreationServiceMock}
       ],
     }).compile();
 
@@ -275,7 +287,9 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
         {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
-        {provide: OwnerCreationService, useValue: ownerCreationServiceMock}
+        {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
+        {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
+        {provide: ContactCreationService, useValue: contactCreationServiceMock}
       ]
     }).compile();
 

@@ -16,12 +16,15 @@ import InviteSignup from '../common/utils/email-templates/invite-signup';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { InviteUserToOrganizationDto } from './dto/inviteUserToOrganization.dto';
 import { organizationIndustryToDbDictionary } from '../common/dictionaries/organizationIndustry-dictionary';
+import { HubspotService } from '../hubspot/hubspot.service';
+import { admin } from 'googleapis/build/src/apis/admin';
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly hubspotService: HubspotService,
   ) {}
 
   async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
@@ -207,6 +210,14 @@ export class UserService {
         role: true,
         status: true,
         createdAt: true,
+        sessions:{
+          orderBy: { createdAt: 'desc'},
+          take: 10,
+          select: {
+            id: true,
+            createdAt: true,
+          }
+        }
       },
       orderBy: {
         first_name: 'asc',
@@ -513,10 +524,10 @@ export class UserService {
         throw new NotFoundException(`User not found`);
       }
 
-      // Additional safety check: Prevent deletion of system super admins
-      if (user.role === 'system_super_admin') {
+      // Additional safety check: Prevent deletion of kind admins
+      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin') {
         throw new BadRequestException(
-          'Cannot delete system super admin users for security reasons',
+          'Cannot delete super admin users for security reasons',
         );
       }
 
@@ -577,12 +588,6 @@ export class UserService {
         await tx.organization.updateMany({
           where: { owner_id: id },
           data: { owner_id: null },
-        });
-
-        // Update organizations where this user is admin_id
-        await tx.organization.updateMany({
-          where: { admin_id: id },
-          data: { admin_id: null },
         });
 
         // 6. Update hire requests where this user is assigned (has SET NULL constraint)
@@ -940,6 +945,23 @@ export class UserService {
       });
       if (!storeCode) {
         throw new BadRequestException('Failed to store invite code');
+      }
+
+      //create contact in hubspot
+      try{
+          const newUserForHubspot = {
+            ...newUser,
+            organization: {
+              hubspot_id: organization.hubspot_id || '',
+              business_unit: organization.business_unit || '',
+              name: organization.name,
+              admin_id: organization.admin_id || null,
+            },
+          }
+
+          await this.hubspotService.createContactInHubspot(newUserForHubspot);
+      }catch(err){
+        console.error('Error creating contact in Hubspot:', err);
       }
 
       return `Invitation sent successfully to ${inviteData.email}`;

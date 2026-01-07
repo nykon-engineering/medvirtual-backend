@@ -474,6 +474,20 @@ export class HireRequestController {
     }
   };
 
+
+  @Get('cancel-reason/options')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get Cancel reason options' })
+
+  async getCancelReasonController() {
+    const result = await this.hireRequestService.getCancelReasonOptions();
+    return {
+      status: 200,
+      message: 'Cancel reason options retrieved successfully',
+      data: result,
+    }
+  };
+
   
 
 }

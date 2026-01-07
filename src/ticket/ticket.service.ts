@@ -146,6 +146,15 @@ export class TicketService {
       );
     }
 
+    if (
+      (createTicketDto.type === 'hire_request_cancellation' ) &&
+      !createTicketDto.hireRequest_id
+    ) {
+      throw new BadRequestException(
+        'Hire Request ID is required for hire request cancellation tickets',
+      );
+    }
+
     if (createTicketDto.candidate_id) {
       const candidate = await this.prisma.candidate.findUnique({
         where: { id: createTicketDto.candidate_id },
@@ -183,11 +192,20 @@ export class TicketService {
       }
     }
 
+    if (createTicketDto.hireRequest_id) {
+      const hireRequest = await this.prisma.hireRequest.findUnique({
+        where: { id: createTicketDto.hireRequest_id },
+      });
+      if (!hireRequest) {
+        throw new BadRequestException('Candidate not found');
+      }
+    }
+
     let assignedValidatedUser;
     let assignedValidatedOrg;
     
-    // For support tickets, organization is optional
-    if (createTicketDto.type === 'Support') {
+    // For support and hire request cancellation tickets, organization is optional
+    if (createTicketDto.type === 'Support' || createTicketDto.type === 'hire_request_cancellation') {
       assignedValidatedUser = createTicketDto.assigned_user_id;
       assignedValidatedOrg = createTicketDto.client_id;
     } else {
@@ -253,6 +271,10 @@ export class TicketService {
 
       if (createTicketDto.staff_id) {
         data.staff = { connect: { id: createTicketDto.staff_id } };
+      }
+
+      if (createTicketDto.hireRequest_id) {
+        data.hireRequest = { connect: { id: createTicketDto.hireRequest_id } };
       }
 
       const ticket = await this.prisma.ticket.create({

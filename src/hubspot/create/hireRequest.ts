@@ -1,33 +1,31 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
 import { PrismaService } from "../../prisma/prisma.service";
-import { OwnerCreationService } from "./Owner";
 
 @Injectable()
 
 export class HireRequestCreationService {
     constructor(
-      private readonly prisma: PrismaService,
-      private readonly ownerCreationService: OwnerCreationService
+      private readonly prisma: PrismaService
     ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
       if (!userId) return null;
       const user = await this.prisma.uSER.findUnique({
-        where: { id: userId },
-        select: {
+      where: { id: userId },
+      select: {
           id: true,
           hubspot_id: true,
           first_name: true,
           last_name: true,
           email: true,
-        },
+      },
           
       });
 
       /* => Commented because we cannot create owners using hubspot API
       if (user && !user.hubspot_id) {
-        await this.ownerCreationService.execute(user)
+      await this.ownerCreationService.execute(user)
       }
       */
 

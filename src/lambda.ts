@@ -29,6 +29,7 @@ async function bootstrapServer(): Promise<any> {
     }),
   );
 
+  
   //Inicialize the Swagger configuration
   const config = new DocumentBuilder()
   .setTitle('MedVirtual Backend')

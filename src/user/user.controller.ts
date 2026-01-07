@@ -350,7 +350,7 @@ export class UserController {
     @Body() userData: UpdateUserDto,
     @CurrentUser() currentUser: USER,
   ) {
-    console.log('UpdateUser called by', userData, 'for user ID', id);
+    //console.log('UpdateUser called by', userData, 'for user ID', id);
     // Check if organization admin is trying to update users in their organization
     if (currentUser.role === 'organization_super_admin') {
       const targetUser = await this.userService.findById(id);
@@ -416,7 +416,7 @@ export class UserController {
     summary: 'Delete user',
     description: 'Permanently deletes a user and all related data. Handles foreign key constraints by cleaning up related records first. Cannot delete system super admins or users who are the only admin/owner of an organization.'
   })
-  @Roles('system_super_admin', 'system_admin')
+  @Roles('system_super_admin', 'organization_super_admin')
   @ApiResponse({ 
     status: 200, 
     description: 'User deleted successfully.'

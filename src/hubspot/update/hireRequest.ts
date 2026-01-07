@@ -49,6 +49,14 @@ export class HireRequestUpdateService {
                 case 'assign_sourcing_id':
                 hubspotProperties.pairing_specialist = data.assign_sourcing_id ? await this.getOwnerId(data.assign_sourcing_id) : undefined;
                 break;
+
+                case 'closed_date':
+                hubspotProperties.closed_date = new Date().toISOString();
+                break;
+
+                case 'cancel_date':
+                hubspotProperties.ticket_cancel_date = new Date().toISOString().split("T")[0]; //YYYY-MM-DD
+                break;
               }
               
             }else{
@@ -74,6 +82,11 @@ export class HireRequestUpdateService {
                     data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false'
                   : undefined;
 
+              hubspotProperties.cancel_reason =
+                  data.cancel_reason ?
+                    data.cancel_reason
+                  : undefined;
+                  
               //used to allow update datas on hubspot when the user schedule an interview on our side
               hubspotProperties.pairing_date = 
                 data.hubspot_pairing_date ?

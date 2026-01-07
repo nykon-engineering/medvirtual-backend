@@ -42,6 +42,11 @@ export class CreateTicketDto {
     @IsOptional()
     staff_id?: string;
 
+    @ApiProperty({ description: 'ID of the hire request (required for Cancellation requests)', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    hireRequest_id?: string;
+
     @ApiProperty({ description: 'ID of the user who created the ticket', required: false, type: String })
     @IsString()
     @IsOptional()

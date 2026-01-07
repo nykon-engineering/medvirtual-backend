@@ -184,6 +184,69 @@ export class StaffController {
     );
   }
 
+  @Get('by-organization/:organizationId')
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary: 'Get staff records by organization',
+    description:
+      'Retrieve staff records by an organization.',
+  })
+  @ApiParam({
+    name: 'organizationId',
+    required: true,
+    type: String,
+    description: 'Organization ID to filter staff records',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number for pagination (default is 1)',
+  })
+  @ApiQuery({
+    name: 'perPage',
+    required: false,
+    type: Number,
+    description: 'Number of records per page for pagination (default is 10)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Role title',
+  })
+  @ApiQuery({
+    name: 'start_date_from',
+    required: false,
+    type: Date,
+    description: 'Start Date from',
+  })
+  @ApiQuery({
+    name: 'start_date_to',
+    required: false,
+    type: Date,
+    description: 'Start Date to',
+  })
+  async findByOrganization(
+    @Param('organizationId') organizationId: string,
+    @Query('page') page: number,
+    @Query('perPage') perPage: number,
+    @Query('search') search: string,
+    @Query('start_date_from') start_date_from: Date,
+    @Query('start_date_to') start_date_to: Date,
+    @CurrentUser() user: USER,
+  ) {
+    return await this.staffService.findByOrganization(
+      user,
+      organizationId,
+      page,
+      perPage,
+      search,
+      start_date_from,
+      start_date_to,
+    );
+  }
+
   @Put(':id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')

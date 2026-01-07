@@ -17,6 +17,8 @@ export class HandlerOrganizationPropertyChange {
     ){}
 
     async execute(event){
+       
+        let owner;
         const organization = await this.prisma.organization.findUnique({
             where: {
                 hubspot_id: String(event.objectId)
@@ -32,7 +34,7 @@ export class HandlerOrganizationPropertyChange {
         ) return await this.organizationDeletion.execute(event);
 
             const fieldExists = Object.keys(organizationToDbDictionary).includes(event.propertyName);
-            if(!fieldExists) return;
+            if(!fieldExists && event.propertyName !== 'hubspot_owner_id') return;
 
             const fieldUpdated = organizationToDbDictionary[event.propertyName];
             let value = event.propertyValue;
@@ -59,7 +61,35 @@ export class HandlerOrganizationPropertyChange {
             if (fieldUpdated === 'number_of_employees') {
                 value = event.propertyValue ? Number(event.propertyValue) : null;
             }
+
+            if (event.propertyName === 'hubspot_owner_id') {
+                
+                //check if the owner exists in the system
+                owner = await this.prisma.uSER.findUnique({
+                    where: {
+                        hubspot_id: String(event.propertyValue)
+                    },
+                    select: {
+                        id: true
+                    }
+                })
+                
+                if (owner) { //if owner exists, update the organization admin with the new owner
+                    await this.prisma.organization.update({
+                        where: {
+                            id: organization.id
+                        },
+                        data: {
+                            admin: { connect: { id: owner.id } }
+                        }
+                    })
+                    
+                    return true;
+                }
+            }
             
+            
+
             await this.prisma.organization.update({
                 where: {
                     id: organization.id

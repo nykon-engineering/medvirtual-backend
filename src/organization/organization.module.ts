@@ -9,7 +9,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
 @Module({
   controllers: [OrganizationController],
   providers: [OrganizationService],
-  imports: [PrismaModule, AuthModule, forwardRef(() => HubspotModule), NotificationsModule],
+  imports: [PrismaModule, 
+    forwardRef(() =>AuthModule), 
+    forwardRef(() => HubspotModule), 
+    NotificationsModule],
   exports: [OrganizationService],
 })
 export class OrganizationModule {}
