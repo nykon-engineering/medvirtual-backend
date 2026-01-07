@@ -521,7 +521,7 @@ export class OrganizationService {
         // Calculate staffCount: exclude terminated
         // Count staff where status !== 'terminated'
         const staffCount = org.staff.filter(
-          staff => staff.status !== 'terminated' && staff.status !== 'inactive'
+          staff => staff.status === 'active'
         ).length;
 
         // Apply hasUser filter: skip organizations that don't meet the criteria
