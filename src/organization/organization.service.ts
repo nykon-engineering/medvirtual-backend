@@ -437,7 +437,7 @@ export class OrganizationService {
       if (hasStaff === true) {
         whereClause.staff = {
           some: {
-            status: { not: 'terminated' },
+            status: { not: { in: ['terminated', 'inactive'] } },
           },
         };
       }
@@ -518,10 +518,11 @@ export class OrganizationService {
           user => user.status !== 'inactive'
         ).length;
 
+        
         // Calculate staffCount: exclude terminated
         // Count staff where status !== 'terminated'
         const staffCount = org.staff.filter(
-          staff => staff.status !== 'terminated' && staff.status !== 'inactive'
+          staff => (staff.status !== 'terminated' && staff.status !== 'inactive')
         ).length;
 
         // Apply hasUser filter: skip organizations that don't meet the criteria
