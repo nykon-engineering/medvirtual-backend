@@ -27,14 +27,11 @@ jobs:
       - name: 🔥 Remove Prisma cache
         run: rm -rf node_modules/.cache node_modules/.prisma
 
-
       - name: Update binaryTargets for production (Linux)
         run: sed -i 's/binaryTargets = \["native"\]/binaryTargets = \["rhel-openssl-1.0.x"\]/' prisma/schema.prisma
 
-      - name: 🧬 Prisma generate
-        run: npx prisma generate
-      #- name: 🧱 Prisma by docker
-      #  run: docker run --rm -v $(pwd):/app -w /app node:18 npx prisma generate
+      - name: 🧱 Prisma by docker
+        run: docker run --rm -v $(pwd):/app -w /app node:18 npx prisma generate
 
       - name: 🔨 Build with webpack
         #run: npm run build:esbuild
