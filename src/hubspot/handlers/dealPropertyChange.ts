@@ -4,6 +4,7 @@ import { HandlerDealCreation } from "./dealCreation";
 import { HandlerDealDeletion } from "./dealDeletion";
 import { dealToDbDictionary } from "../../common/dictionaries/deal-dictionary";
 import axios from "axios";
+import { dealPipelineToDbDictionary } from "../../common/dictionaries/deal-pipeline-dictionary";
 
 
 @Injectable()
@@ -89,10 +90,24 @@ export class HandlerDealPropertyChange {
                     }
                 })
                 if (OrganizationExists && OrganizationExists.status === 'inactive') {
-                    await this.prisma.organization.update({
-                        where: { id: OrganizationExists.id },
-                        data: { status: 'active' }
-                    });
+                    
+                    //get activePipelines from hubspot
+                    const activePipelines = Object.entries(dealPipelineToDbDictionary)
+                        .filter(([key]) => key !== '148234581' &&
+                            key !== '1012779094' &&
+                            key !== '16981844' &&
+                            key !== '31963952' &&
+                            key !== '1172012586');
+
+                    //check if the event.propertyName == 'dealstage' && event.propertyValue is in activePipelines
+                    if (event.propertyName === 'dealstage' && activePipelines.some(([key]) => key === event.propertyValue)) {
+
+                        //only update organization status to active if the dealstage is in activePipelines
+                        await this.prisma.organization.update({
+                            where: { id: OrganizationExists.id },
+                            data: { status: 'active' }
+                        });
+                    }
                 }
     
                 await this.prisma.staff.update({
@@ -119,6 +134,7 @@ export class HandlerDealPropertyChange {
         objectToUpdate = {
             [fieldUpdated]: value
         }
+
 
         if (deal && event.propertyName == 'dealstage' && event.propertyValue == '148234581' ||
             deal && event.propertyName == 'dealstage' && event.propertyValue == '1012779094' ||
