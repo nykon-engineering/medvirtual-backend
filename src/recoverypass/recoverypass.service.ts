@@ -32,7 +32,7 @@ export class RecoverypassService {
     }
     const user = await this.user.findByEmail(data.email);
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException('User not found! Please check the email provided.');
     }
 
     const rawToken = randomBytes(32).toString('hex');
