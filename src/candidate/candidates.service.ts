@@ -697,7 +697,7 @@ export class CandidatesService {
         const outputPrefix = path.join(tempDir, 'page');
 
        const { Poppler } = require('node-poppler');
-       const poppler = new Poppler('/opt/bin/pdftocairo');
+       const poppler = new Poppler('/opt/bin');
 
         const options = {
           firstPageToConvert: 1,
