@@ -56,6 +56,10 @@ module.exports = {
           ),
           to: 'pdf.worker.mjs',
         },
+        {
+          from: path.resolve(__dirname, 'node_modules/@napi-rs'),
+          to: 'node_modules/@napi-rs',
+        },
       ],
     }),
   ],
