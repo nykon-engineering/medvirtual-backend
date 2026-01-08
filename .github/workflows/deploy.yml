@@ -24,17 +24,16 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
       
-      - name: 🔥 Remove Prisma cache
-        run: rm -rf node_modules/.cache node_modules/.prisma
+      - name: 🧹 Clean Prisma artifacts
+        run: |
+          rm -rf node_modules/.cache
+          rm -rf node_modules/.prisma
+          rm -rf node_modules/@prisma/client
 
-      - name: Update binaryTargets for production (Linux)
-        run: sed -i 's/binaryTargets = \["native"\]/binaryTargets = \["rhel-openssl-1.0.x"\]/' prisma/schema.prisma
-
-      - name: 🧱 Prisma by docker
-        run: docker run --rm -v $(pwd):/app -w /app node:18 npx prisma generate
+      - name: 🧱 Prisma generate (Node 20)
+        run: npx prisma generate
 
       - name: 🔨 Build with webpack
-        #run: npm run build:esbuild
         run: npx webpack --config webpack.config.js
 
       - name: 📁 Build lambda-package

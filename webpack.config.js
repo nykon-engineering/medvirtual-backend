@@ -47,6 +47,15 @@ module.exports = {
         path.resolve(__dirname, 'node_modules/swagger-ui-dist/swagger-ui-standalone-preset.js'),
         path.resolve(__dirname, 'node_modules/swagger-ui-dist/favicon-16x16.png'),
         path.resolve(__dirname, 'node_modules/swagger-ui-dist/favicon-32x32.png'),
+
+        // ✅ PDF.js worker
+        {
+          from: path.resolve(
+            __dirname,
+            'node_modules/pdfjs-dist/build/pdf.worker.mjs'
+          ),
+          to: 'pdf.worker.mjs',
+        },
       ],
     }),
   ],
