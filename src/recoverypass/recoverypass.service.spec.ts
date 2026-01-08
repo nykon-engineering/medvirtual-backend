@@ -62,12 +62,12 @@ describe('RecoverypassService', () => {
         .rejects.toThrow('Email is required');
     });
 
-    it('should return true if user does not exist (anti-enumeration)', async () => {
+    it('should return Error if user does not exist (anti-enumeration)', async () => {
       userServiceMock.findByEmail.mockResolvedValue(null);
 
       await expect(
         service.forgotPassword({ email: 'notfound@test.com' }),
-      ).resolves.toBe(true);
+      ).rejects.toThrow('User not found');
     });
 
     it('should create reset token and send email successfully', async () => {

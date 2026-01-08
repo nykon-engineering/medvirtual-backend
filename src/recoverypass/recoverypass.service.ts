@@ -32,7 +32,7 @@ export class RecoverypassService {
     }
     const user = await this.user.findByEmail(data.email);
     if (!user) {
-      return true; // I put it here to prevent email enumeration
+      throw new NotFoundException('User not found');
     }
 
     const rawToken = randomBytes(32).toString('hex');
@@ -61,8 +61,6 @@ export class RecoverypassService {
         expiresAt,
       },
     });
-
-
 
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, user.id);
