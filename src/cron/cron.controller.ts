@@ -45,4 +45,15 @@ export class CronController {
         }
     }
 
+    @Get('sync-clients-with-active-staffs')
+    @ApiProperty({ description: 'Send email with important datas' })
+    async syncClientsWithActiveStaffs() {
+        const result = await this.cron.syncClientsWithActiveStaffs();
+        return {
+            status: 200,
+            message: 'the sync was successful',
+            data: result
+        }
+    }
+
 }
