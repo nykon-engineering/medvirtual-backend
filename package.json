@@ -35,6 +35,7 @@
     "@aws-sdk/s3-request-presigner": "^3.858.0",
     "@codegenie/serverless-express": "^4.16.0",
     "@hubspot/api-client": "^13.0.0",
+    "@napi-rs/canvas": "^0.1.88",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",

@@ -20,6 +20,27 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+
+/**
+ * Necessary pollyfills to run pdf-to-png-converter in AWS Lambda environment
+ */
+function setupPdfCanvas() {
+  if ((globalThis as any).__PDF_CANVAS_READY__) return;
+
+  (globalThis as any).DOMMatrix = class {};
+  (globalThis as any).ImageData = class {};
+  (globalThis as any).Path2D = class {};
+
+  (globalThis as any).createCanvas = createCanvas;
+  (globalThis as any).loadImage = loadImage;
+
+  (globalThis as any).__PDF_CANVAS_READY__ = true;
+
+  console.log('[PDF] Canvas initialized for Lambda');
+}
+
+setupPdfCanvas();
 
 
 
