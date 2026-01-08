@@ -696,9 +696,8 @@ export class CandidatesService {
         const pdfPath = path.join(downloadDir, pdfName);
         const outputPrefix = path.join(tempDir, 'page');
 
-        // Convert to PNG using node-poppler
-        const { Poppler } = require('node-poppler');
-        const poppler = new Poppler();
+       const { Poppler } = require('node-poppler');
+       const poppler = new Poppler('/opt/bin/pdftocairo');
 
         const options = {
           firstPageToConvert: 1,
