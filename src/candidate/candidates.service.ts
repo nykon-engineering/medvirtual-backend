@@ -2,7 +2,7 @@ import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectabl
 import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
-import { pdfToImg } from 'pdftoimg-js';
+import { pdfToPng } from 'pdf-to-png-converter';
 import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
 import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
@@ -689,27 +689,22 @@ export class CandidatesService {
       }
 
       try {
-        console.log('Splitting PDF and converting to images with pdftoimg-js...');
+        console.log('Splitting PDF and converting to images with pdf-to-png-converter...');
         await this.updateStatus(id, 'processing_extractText');
 
         const pdfPath = path.join(downloadDir, pdfName);
 
         // Convert to PNG using pdf-to-png-converter (Cross-Platform)
-        // Convert to PNG using pdftoimg-js
-        const pngPages = await pdfToImg(pdfPath, {
-          scale: 2.0,
+        const pngPages = await pdfToPng(pdfPath, {
+          viewportScale: 2.0,
         });
 
         const imagePaths: string[] = [];
 
-        (pngPages as string[]).forEach((page, index) => {
-          if (page) {
-            const tempImgPath = path.join(tempDir, `page_${index + 1}.png`);
-            // pdfToImg likely returns base64 string. Strip prefix if present.
-            const base64Data = page.replace(/^data:image\/\w+;base64,/, "");
-            fs.writeFileSync(tempImgPath, Buffer.from(base64Data, 'base64'));
-            imagePaths.push(tempImgPath);
-          }
+        pngPages.forEach((page, index) => {
+          const tempImgPath = path.join(tempDir, `page_${index + 1}.png`);
+          fs.writeFileSync(tempImgPath, page.content);
+          imagePaths.push(tempImgPath);
         });
 
         if (imagePaths.length === 0) {
