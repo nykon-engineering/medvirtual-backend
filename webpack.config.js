@@ -55,11 +55,7 @@ module.exports = {
             'node_modules/pdfjs-dist/build/pdf.worker.mjs'
           ),
           to: 'pdf.worker.mjs',
-        },
-        {
-          from: path.resolve(__dirname, 'node_modules/@napi-rs'),
-          to: 'node_modules/@napi-rs',
-        },
+        }
       ],
     }),
   ],
@@ -69,7 +65,6 @@ module.exports = {
       // Ignore o AWS SDK because it is in lambda environment
       'aws-sdk': 'commonjs aws-sdk',
       'class-transformer/storage': 'commonjs class-transformer/storage',
-      '@napi-rs/canvas': 'commonjs @napi-rs/canvas',
     },
   ],
   //devtool: 'source-map', // Generate source maps for debugging
