@@ -270,25 +270,55 @@ export class OpenaiService {
         });
 
         const contentPayload: any[] = [
-            {
-                type: "text",
-                text: `You are a resume parser. Extract the following information into a strictly valid JSON object.
-            
-            JSON Schema:
-            {
-                "bio": "string (summary)",
-                "experience": [{ "company": "", "role": "", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "description": ["string"] }],
-                "education": [{ "institution": "", "degree": "", "year": "" }],
-                "skills": ["string"]
-            }
+    {
+        type: "text",
+        text: `You are an expert Resume Parsing AI specialized in OCR and data extraction from images. Your goal is extreme accuracy, especially with dates and timeline reconstruction.
 
-            - Do not invent information.
-            - If dates are "Present", use null for end_date.
-            - Summarize the bio based on the visible text.
-            - Ensure "experience.description" is an array of strings (sentences).
-            `
-            }
-        ];
+        ### STEP 1: VISUAL ANALYSIS
+        - Scan the document layout. Dates for specific roles are often right-aligned or located in the margins opposite the job title.
+        - Associate dates strictly with their corresponding "Experience" or "Education" block based on vertical alignment and font hierarchy.
+        - Detect the language of the document (English, Spanish, etc.) to correctly interpret month names (e.g., "Ene" = Jan, "Dic" = Dec).
+
+        ### STEP 2: DATE PARSING RULES (CRITICAL)
+        You must convert all extracted dates to ISO 8601 format (YYYY-MM-DD). Follow these strict rules:
+        1. **"Present" / "Current" / "Actualidad"**: Return null for end_date.
+        2. **"Month Year" (e.g., "March 2022", "Mar '22", "03/2022")**: Convert to the first day of the month -> "2022-03-01".
+        3. **"Year" only (e.g., "2021")**:
+           - For start_date: "2021-01-01".
+           - For end_date (if not present): "2021-12-31" or match the graduation logic.
+           - For education graduation: "2021-01-01".
+        4. **Seasons (e.g., "Summer 2020")**: Map roughly (Spring=03, Summer=06, Fall=09, Winter=12) -> "2020-06-01".
+        5. **Ambiguous OCR**: If a date looks like "201S", infer "2015" based on context.
+
+        ### STEP 3: DATA EXTRACTION
+        Extract the data into this strict JSON Schema:
+        {
+            "bio": "string (professional summary, max 3 sentences)",
+            "experience": [
+                { 
+                    "company": "string", 
+                    "role": "string", 
+                    "start_date": "YYYY-MM-DD (or null)", 
+                    "end_date": "YYYY-MM-DD (or null)", 
+                    "description": ["string (bullet points)"] 
+                }
+            ],
+            "education": [
+                { 
+                    "institution": "string", 
+                    "degree": "string", 
+                    "year": "YYYY-MM-DD (graduation date)" 
+                }
+            ],
+            "skills": ["string"]
+        }
+
+        ### FINAL VALIDATION
+        - Ensure logical consistency: A job cannot end before it starts.
+        - If description is a block of text, split it into sentences for the array.
+        - Return ONLY the raw JSON object. No markdown formatting, no code blocks.`
+    }
+];
 
         for (const imgPath of imagePaths) {
             const fileData = fs.readFileSync(imgPath);
@@ -311,8 +341,8 @@ export class OpenaiService {
                         content: contentPayload
                     }
                 ],
-                max_tokens: 3500,
-                temperature: 0,
+                max_tokens: 4500,
+                temperature: 0.1,
                 response_format: { type: "json_object" }
             });
 

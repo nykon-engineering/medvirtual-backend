@@ -737,8 +737,6 @@ export class CandidatesService {
             ...exp,
             description: Array.isArray(exp.description) ? exp.description.join("; ") : exp.description
           })) || [],
-          // Education description is not requested in new prompt, so we don't map it.
-          // If previous code relied on it, it might be undefined.
           education: organizedData.education || []
         };
 
