@@ -10,6 +10,25 @@ export class HandlerTicketPropertyChange {
         private readonly prisma: PrismaService,
     ){}
 
+    private async getUserId(hubspotId: string): Promise<string | null> {
+      if (!hubspotId) return null;
+      const user = await this.prisma.uSER.findUnique({
+        where: { hubspot_id: hubspotId },
+        select: {
+          id: true,
+        },
+          
+      });
+
+      /* => Commented because we cannot create owners using hubspot API
+      if (user && !user.hubspot_id) {
+        await this.ownerCreationService.execute(user)
+      }
+      */
+
+      return user && user.id ? user.id : null; 
+    }
+
     async execute(event){
         const hr = await this.prisma.hireRequest.findUnique({
             where: {
@@ -34,17 +53,54 @@ export class HandlerTicketPropertyChange {
             return true;
         }
 
+        let value = event.propertyValue;
+        
+        if (event.propertyName === 'pairing_specialist') {
+            //assign_sourcing_id
+            value = await this.getUserId(event.propertyValue);
+
+            if(!value) return true;
+            await this.prisma.hireRequest.update({
+                where: {
+                    id: hr.id
+                },
+                data: {
+                    assign_sourcing_id: value
+                }
+            })
+            
+            return true;
+        }
+
+        if (event.propertyName === 'hubspot_owner_id') {
+            //assign_user_id
+            value = await this.getUserId(event.propertyValue);
+
+            if(!value) return true;
+            await this.prisma.hireRequest.update({
+                where: {
+                    id: hr.id
+                },
+                data: {
+                    assign_user_id: value
+                }
+            })
+            
+            return true;
+        }
+
         const fieldExists = Object.keys(hrTicketToDbDictionary).includes(event.propertyName);
         if(!fieldExists) return;
 
         const fieldUpdated = hrTicketToDbDictionary[event.propertyName];
-        let value = event.propertyValue;
+        
 
         if (fieldUpdated === 'hubspot_pipeline_stage') return false; // skip updating pipeline stage for Ticket / HR
         if (fieldUpdated === 'hubspot_numberVA') {
             value = parseInt(event.propertyValue);
         }
-        // => Handle with pairing date and pairing time, because this field is within other table
+       
+        
 
         await this.prisma.hireRequest.update({
             where: {
