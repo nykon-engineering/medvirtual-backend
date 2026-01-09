@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { HireRequestStatus, OrganizationStatus, PanelCandidateStatus } from '@prisma/client';
+import { CandidateStatus, HireRequestStatus, OrganizationStatus, PanelCandidateStatus, PanelStatus } from '@prisma/client';
 import { findMonthlySalary } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
 
 @Injectable()
 export class PanelService {
@@ -115,9 +116,19 @@ export class PanelService {
         })
         result.activeHireRequests = HrCount;
 
+        const activePipelines = Object.entries(dealPipelineToDbDictionary)
+            .filter(([key]) => key !== '148234581' &&
+                key !== '1012779094' &&
+                key !== '16981844' &&
+                key !== '31963952' &&
+                key !== '1172012586');
+
         const staffCount = await this.prisma.staff.count({
             where:{
-                status: 'active'
+                status: 'active',
+                hubspot_dealstage: { 
+                    in: activePipelines.map(([key, _value]) => String(key))
+                }
             }
         })
         result.activeStaff = staffCount;
@@ -133,7 +144,7 @@ export class PanelService {
         })
         result.candidatesAvailable = candidatesAvailable;
 
-        const candidatesEndorsed = await this.prisma.candidate.count({
+        /*const candidatesEndorsed = await this.prisma.candidate.count({
             where:{
                 pipeline_status: '1172847191',
                 panelCandidates: {
@@ -142,18 +153,39 @@ export class PanelService {
                     }
                 }
             }
-        })
-        result.candidatesEndorsed = candidatesEndorsed;
+        })*/
 
-        const candidatesHired = await this.prisma.candidate.count({
+        const candidatesEndorsed = await this.prisma.candidate.count({
             where:{
                 panelCandidates:{
                     some:{
-                        status: PanelCandidateStatus.selected_by_client
+                        panel:{
+                            hireRequest:{
+                                status: HireRequestStatus.awaiting_decision
+                            }
+                        }
                     }
                 }
             }
         })
+
+        result.candidatesEndorsed = candidatesEndorsed;
+
+        const candidatesHired = await this.prisma.candidate.count({
+            where: {
+                panelCandidates: {
+                some: {
+                    status: PanelCandidateStatus.selected_by_client,
+                    panel: {
+                    hireRequest: {
+                        status: { not: HireRequestStatus.deleted },
+                    },
+                    },
+                },
+                },
+            },
+            });
+
         result.candidatesHired = candidatesHired;
 
         const failedResumeParsing = await this.prisma.candidate.findMany({
@@ -242,6 +274,21 @@ export class PanelService {
                 },
             });
 
+            const hireRequestsEndorsed = await this.prisma.hireRequest.count({
+                where:{
+                    status: HireRequestStatus.placement_completed,
+                    panels: {
+                        some: {
+                            status: PanelStatus.decision_made,
+                            decided_date: {
+                                gte: new Date(date.getFullYear(), date.getMonth(), 1),
+                                lt: new Date(date.getFullYear(), date.getMonth() + 1, 1),
+                            },
+                        },
+                    },
+                }
+            })
+
             const interviewsScheduled = await this.prisma.interview.count({
                 where: {
                     scheduled_date: {
@@ -258,7 +305,8 @@ export class PanelService {
                 //monthName
                 month: date.toLocaleString('default', { month: 'short' }),
                 candidates: candidatesCreated,
-                hireRequests: hireRequestsCreated,
+                hireRequests_created: hireRequestsCreated,
+                hireRequests_endorsed: hireRequestsEndorsed,
                 interviews: interviewsScheduled,
             });
         }
