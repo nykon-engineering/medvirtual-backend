@@ -6,6 +6,7 @@ import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import systemReport from '../common/utils/email-templates/system-report';
 import { MailService } from '../mail/mail.service';
+import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
 
 type Event = {
     objectId?: string;
@@ -225,6 +226,118 @@ export class CronService {
             return true;
         } catch (error) {
             console.error('Error generating system report:', error);
+            return false;
+        }
+    }
+
+    async syncClientsWithActiveStaffs(): Promise<boolean> {
+
+        try {
+            //Get just active pipelines from hubspot
+            const activePipelines = Object.entries(dealPipelineToDbDictionary)
+            .filter(([key]) => key !== '148234581' &&
+                key !== '1012779094' &&
+                key !== '16981844' &&
+                key !== '31963952' &&
+                key !== '1172012586');
+            
+
+            const inactiveClients = await this.prisma.organization.findMany({
+                where: {
+                    status: 'inactive',
+                    staff: {
+                        some: {
+                            hubspot_dealstage: { in: activePipelines.map(([key, value]) => key) },
+                        }
+                    }
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    staff: {
+                        select: {
+                            id: true,
+                            hubspot_id: true,
+                            hubspot_deal_name: true,
+                            hubspot_dealstage: true,
+                        }
+                    }
+                }
+            });
+
+            console.log(`Inactive clients Found:`, inactiveClients);
+
+            //update them for active    
+            await Promise.all(inactiveClients.map(async (client) => {
+                console.log(`Updating client ${client.name} (ID: ${client.id}) to active status.`);
+                await this.prisma.organization.update({
+                    where: { id: client.id },
+                    data: {
+                        status: 'active',
+                    }
+                });
+            }));
+
+
+            return true
+        }catch (error) {
+            console.error('Error syncing clients with active staffs:', error);
+            return false;
+        }
+
+    
+    }
+
+    async syncStaffHubspotDealStages(): Promise<boolean> {
+        const activePipelines = Object.entries(dealPipelineToDbDictionary)
+            .filter(([key]) => key !== '148234581' &&
+                key !== '1012779094' &&
+                key !== '16981844' &&
+                key !== '31963952' &&
+                key !== '1172012586');
+
+        try {
+            const staffs = await this.prisma.staff.findMany({
+                where: {
+                    hubspot_id: { not: null },
+                },
+                select: {
+                    id: true,
+                    hubspot_id: true,
+                },
+                orderBy: {
+                    updated_at: 'asc',
+                }
+            });
+
+            for (const staff of staffs) {
+                try {
+                    const response = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${staff.hubspot_id}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json',
+                            },
+                        });
+
+                    const dealstage = response.data.properties.dealstage;
+
+                    await this.prisma.staff.update({
+                        where: { id: staff.id },
+                        data: {
+                            hubspot_dealstage: dealstage,
+                            status: activePipelines.some(([key]) => key === dealstage) ? 'active' : 'terminated',
+                        }
+                    });
+
+                } catch (error) {
+                    console.error(`Error updating staff ID ${staff.id}:`, error);
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error syncing staff HubSpot deal stages:', error);
             return false;
         }
     }

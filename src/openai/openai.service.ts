@@ -278,14 +278,16 @@ export class OpenaiService {
             {
                 "bio": "string (summary)",
                 "experience": [{ "company": "", "role": "", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "description": ["string"] }],
-                "education": [{ "institution": "", "degree": "", "year": "" }],
+                "education": [{ "institution": "", "degree": "", "year": "YYYY-MM-DD" }],
                 "skills": ["string"]
             }
 
             - Do not invent information.
             - If dates are "Present", use null for end_date.
+            - If dates are in "Month Year" format (e.g. "Mar 2025"), convert them to "YYYY-MM-01".
             - Summarize the bio based on the visible text.
             - Ensure "experience.description" is an array of strings (sentences).
+            - For education, extract the graduation date. If only year is available, use "YYYY-01-01".
             `
             }
         ];
@@ -304,15 +306,15 @@ export class OpenaiService {
 
         try {
             const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
+                model: "gpt-4.1-nano",
                 messages: [
                     {
                         role: "user",
                         content: contentPayload
                     }
                 ],
-                max_tokens: 3500,
-                temperature: 0,
+                max_tokens: 4500,
+                temperature: 0.1,
                 response_format: { type: "json_object" }
             });
 

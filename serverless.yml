@@ -1,4 +1,3 @@
-#File responsible for simulate a lambda locally
 service: nest-api-local
 
 org: null
@@ -10,13 +9,25 @@ provider:
   runtime: nodejs16.x
   region: us-east-1
   stage: dev
-  memorySize: 512
+  memorySize: 1024          
   timeout: 600
+
+layers:
+  poppler:
+    path: layers/poppler
+    name: poppler-utils
+    compatibleRuntimes:
+      - nodejs16.x
+      - nodejs18.x
+      - nodejs20.x
 
 functions:
   api:
     handler: dist/index.handler
     timeout: 600
+    memorySize: 1024
+    layers:
+      - { Ref: PopplerLambdaLayer }
     events:
       - http:
           path: /{proxy+}
@@ -29,7 +40,7 @@ plugins:
 custom:
   serverless-offline:
     noPrependStageInUrl: true
-    
+
 package:
   individually: true
   excludeDevDependencies: true

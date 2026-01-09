@@ -2,7 +2,7 @@ import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectabl
 import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
-import { pdfToImg } from 'pdftoimg-js';
+
 import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
 import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
@@ -688,33 +688,42 @@ export class CandidatesService {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
+
       try {
-        console.log('Splitting PDF and converting to images with pdftoimg-js...');
+        console.log('Splitting PDF and converting to images with node-poppler...');
         await this.updateStatus(id, 'processing_extractText');
 
         const pdfPath = path.join(downloadDir, pdfName);
+        const outputPrefix = path.join(tempDir, 'page');
 
-        // Convert to PNG using pdf-to-png-converter (Cross-Platform)
-        // Convert to PNG using pdftoimg-js
-        const pngPages = await pdfToImg(pdfPath, {
-          scale: 2.0,
-        });
+       const { Poppler } = require('node-poppler');
+       const poppler = new Poppler('/opt/bin');
 
-        const imagePaths: string[] = [];
+        const options = {
+          firstPageToConvert: 1,
+          pngFile: true,
+        };
 
-        (pngPages as string[]).forEach((page, index) => {
-          if (page) {
-            const tempImgPath = path.join(tempDir, `page_${index + 1}.png`);
-            // pdfToImg likely returns base64 string. Strip prefix if present.
-            const base64Data = page.replace(/^data:image\/\w+;base64,/, "");
-            fs.writeFileSync(tempImgPath, Buffer.from(base64Data, 'base64'));
-            imagePaths.push(tempImgPath);
-          }
-        });
+        // This will generate files like page-1.png, page-2.png, etc. in the tempDir
+        await poppler.pdfToCairo(pdfPath, outputPrefix, options);
+
+        // Read the generated directory to find the images
+        const files = fs.readdirSync(tempDir);
+        const imagePaths = files
+          .filter(file => file.startsWith('page') && file.endsWith('.png'))
+          .map(file => path.join(tempDir, file))
+          .sort((a, b) => {
+            // Sort by page number if needed
+            const numA = parseInt(a.match(/page-(\d+)\.png/)?.[1] || '0');
+            const numB = parseInt(b.match(/page-(\d+)\.png/)?.[1] || '0');
+            return numA - numB;
+          });
 
         if (imagePaths.length === 0) {
           throw new Error('No images converted from PDF.');
         }
+
+        console.log(`Converted ${imagePaths.length} images.`);
 
         console.log('Sending images to OpenAI...');
         await this.updateStatus(id, 'processing_organizeData');
@@ -728,8 +737,6 @@ export class CandidatesService {
             ...exp,
             description: Array.isArray(exp.description) ? exp.description.join("; ") : exp.description
           })) || [],
-          // Education description is not requested in new prompt, so we don't map it.
-          // If previous code relied on it, it might be undefined.
           education: organizedData.education || []
         };
 

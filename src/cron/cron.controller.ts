@@ -45,4 +45,26 @@ export class CronController {
         }
     }
 
+    @Get('sync-clients-with-active-staffs')
+    @ApiProperty({ description: 'Send email with important datas' })
+    async syncClientsWithActiveStaffs() {
+        const result = await this.cron.syncClientsWithActiveStaffs();
+        return {
+            status: 200,
+            message: 'the sync was successful',
+            data: result
+        }
+    }
+
+    @Get('update-hubspot-deal-stages')
+    @ApiProperty({ description: 'Update HubSpot deal stages for staffs' })
+    async syncStaffHubspotDealStages() {
+        const result = await this.cron.syncStaffHubspotDealStages();
+        return {
+            status: 200,
+            message: 'HubSpot deal stages updated successfully',
+            data: result
+        }
+    }
+
 }

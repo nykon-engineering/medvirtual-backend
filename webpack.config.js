@@ -55,7 +55,7 @@ module.exports = {
             'node_modules/pdfjs-dist/build/pdf.worker.mjs'
           ),
           to: 'pdf.worker.mjs',
-        },
+        }
       ],
     }),
   ],
