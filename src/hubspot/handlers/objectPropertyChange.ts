@@ -16,13 +16,13 @@ export class HandlerObjectPropertyChange {
 
     async execute(event){
 
-        if ( process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34852562825' ||
+        if ( 
             process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34854113885' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34926337420' ||
             process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '31392562945' ||
             process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '31413155696' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34093387338' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34624704579'
+            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34624704579' ||
+            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '29875931213' ||
+            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '35888726709'
         ){
             return false; // test contact, ignore
         }
