@@ -288,4 +288,50 @@ export class CronService {
     
     }
 
+    async syncStaffHubspotDealStages(): Promise<boolean> {
+        try {
+            const staffs = await this.prisma.staff.findMany({
+                where: {
+                    hubspot_id: { not: null },
+                },
+                select: {
+                    id: true,
+                    hubspot_id: true,
+                },
+                orderBy: {
+                    updated_at: 'asc',
+                }
+            });
+
+            for (const staff of staffs) {
+                try {
+                    const response = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${staff.hubspot_id}`,
+                        {
+                            headers: {
+                                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json',
+                            },
+                        });
+
+                    const dealstage = response.data.properties.dealstage;
+
+                    await this.prisma.staff.update({
+                        where: { id: staff.id },
+                        data: {
+                            hubspot_dealstage: dealstage,
+                        }
+                    });
+
+                } catch (error) {
+                    console.error(`Error updating staff ID ${staff.id}:`, error);
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Error syncing staff HubSpot deal stages:', error);
+            return false;
+        }
+    }
+
 }
