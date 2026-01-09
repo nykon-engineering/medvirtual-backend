@@ -289,6 +289,13 @@ export class CronService {
     }
 
     async syncStaffHubspotDealStages(): Promise<boolean> {
+        const activePipelines = Object.entries(dealPipelineToDbDictionary)
+            .filter(([key]) => key !== '148234581' &&
+                key !== '1012779094' &&
+                key !== '16981844' &&
+                key !== '31963952' &&
+                key !== '1172012586');
+
         try {
             const staffs = await this.prisma.staff.findMany({
                 where: {
@@ -319,6 +326,7 @@ export class CronService {
                         where: { id: staff.id },
                         data: {
                             hubspot_dealstage: dealstage,
+                            status: activePipelines.some(([key]) => key === dealstage) ? 'active' : 'terminated',
                         }
                     });
 
