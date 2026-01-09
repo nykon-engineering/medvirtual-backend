@@ -334,7 +334,7 @@ export class OpenaiService {
 
         try {
             const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
+                model: "gpt-4.1-nano",
                 messages: [
                     {
                         role: "user",
@@ -342,7 +342,7 @@ export class OpenaiService {
                     }
                 ],
                 max_tokens: 4500,
-                temperature: 0.1,
+                temperature: 0,
                 response_format: { type: "json_object" }
             });
 
