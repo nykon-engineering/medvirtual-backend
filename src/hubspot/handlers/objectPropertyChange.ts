@@ -16,16 +16,23 @@ export class HandlerObjectPropertyChange {
 
     async execute(event){
 
-        if ( 
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34854113885' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '31392562945' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '31413155696' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '34624704579' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '29875931213' ||
-            process.env.ENVIRONMENT === 'PROD' &&   event.objectId === '35888726709'
-        ){
-            return false; // test contact, ignore
+        const ignoredObjectIds = [ //test candidates id
+            34854113885,
+            31392562945,
+            31413155696,
+            34624704579,
+            29875931213,
+            35888726709,
+        ];
+
+        if (
+            process.env.ENVIRONMENT === 'PROD' &&
+            ignoredObjectIds.includes(event.objectId)
+        ) {
+            return false; // test candidate, ignore
         }
+
+
         const candidate = await this.prisma.candidate.findUnique({
             where: {
                 hubspot_id: String(event.objectId)
