@@ -151,7 +151,7 @@ export class HandlerDealPropertyChange {
             fieldUpdated === 'start_date') {
             const timestamp = Number(event.propertyValue);
             if (!isNaN(timestamp)) {
-              value = new Date(timestamp).toISOString();
+              objectToUpdate[fieldUpdated] = new Date(timestamp).toISOString();
             }
         }
         
