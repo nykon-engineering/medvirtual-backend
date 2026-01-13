@@ -321,7 +321,50 @@ export class OpenaiService {
             const result = response.choices[0].message.content;
             return JSON.parse(result || '{}');
 
-        } catch (error) {
+        } catch (error: any) {
+
+            if (error?.type === 'insufficient_quota') {
+                console.error('[OpenAI] Insufficient Quota:');
+
+                const today = new Date();
+                const existingMail = await this.prisma.mail_Settings.findFirst({
+                    where: {
+                        title: 'insufficient_quota',
+                        created_at: {
+                            gte: new Date(today.setHours(0, 0, 0, 0)),
+                            lt: new Date(today.setHours(23, 59, 59, 999)),
+                        },
+                    },
+                });
+                if (!existingMail) {
+                    // Send insufficient quota via email
+                    const emailBody = insufficient_quota();
+                    const mailSent = await this.mailService.sendMail({
+                        from: 'MedVirtual <noreply@medvirtual.ai>',
+                        to: 'shayan@regenta.ai',
+                        cc: 'paulo@regenta.ai',
+                        subject: 'Insufficient Quota from OpenAI',
+                        html: emailBody,
+                    });
+                    if (!mailSent) {
+                        console.log('Failed to send insufficient quota email notification.');
+                    }
+                    //Here I save in the database that I sent the email
+                    await this.prisma.mail_Settings.create({
+                        data: {
+                            title: 'insufficient_quota',
+                        },
+                    });
+                }
+
+                throw new BadRequestException('You dont have credits. Check your plan/billing.');
+            }
+
+            if (error?.type === 'rate_limit_error') {
+                console.log('[OpenAI] Rate Limit Exceeded:');
+                throw new BadRequestException('Rate limit exceeded. Please try again later.');
+            }
+
             console.error('Error in extractDataFromResumeImages:', error);
             throw new BadRequestException('Failed to extract data from resume images');
         }
