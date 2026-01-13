@@ -7,7 +7,6 @@ import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries
 import { PrismaService } from '../prisma/prisma.service';
 import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
 import { GoogledriveService } from '../googledrive/googledrive.service';
-import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
@@ -29,7 +28,6 @@ export class CandidatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly google: GoogledriveService,
-    private readonly textract: TextractService,
     private readonly s3: S3Service,
     private readonly openai: OpenaiService,
     @Inject(forwardRef(() => HubspotService))
@@ -556,7 +554,7 @@ export class CandidatesService {
             candidate_id: id,
             institution: item.institution || '',
             degree: item.degree || '',
-            year: item.end_date || '',
+            year: item.year || null,
           }))
         });
       }
@@ -571,8 +569,8 @@ export class CandidatesService {
             candidate_id: id,
             company: item.company || '',
             position: item.role || '',
-            start_date: new Date(item.start_date) || '',
-            end_date: new Date(item.end_date) || '',
+            start_date: item.start_date ? new Date(item.start_date) : null,
+            end_date: item.end_date ? new Date(item.end_date) : null,
             responsabilities: item.description || '',
 
           }))
@@ -696,8 +694,9 @@ export class CandidatesService {
         const pdfPath = path.join(downloadDir, pdfName);
         const outputPrefix = path.join(tempDir, 'page');
 
-       const { Poppler } = require('node-poppler');
-       const poppler = new Poppler('/opt/bin');
+        const { Poppler } = require('node-poppler');
+        const popplerPath = process.env.POPPLER_BIN_PATH || (fs.existsSync('/opt/bin/pdftocairo') ? '/opt/bin' : undefined);
+        const poppler = new Poppler(popplerPath);
 
         const options = {
           firstPageToConvert: 1,

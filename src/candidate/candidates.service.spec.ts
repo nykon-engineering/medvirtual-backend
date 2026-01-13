@@ -4,7 +4,6 @@ import { BadGatewayException, BadRequestException, NotFoundException } from '@ne
 import { CandidatesService } from './candidates.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { OpenaiService } from '../openai/openai.service';
@@ -28,6 +27,14 @@ const mockPrisma = {
   },
   candidateSkill: {
     findMany: jest.fn(),
+  },
+  candidateExperience: {
+    createMany: jest.fn(),
+    deleteMany: jest.fn(),
+  },
+  candidateEducation: {
+    createMany: jest.fn(),
+    deleteMany: jest.fn(),
   },
   $transaction: jest.fn(),
 };
@@ -55,7 +62,7 @@ const hubspotMock = {
   updateContact: jest.fn(),
 }
 
-const MailMock ={
+const MailMock = {
   sendEmail: jest.fn(),
 }
 
@@ -67,22 +74,21 @@ const notificationsMock = {
   notifyEndorseCandidates: jest.fn(),
 }
 
-  describe('CandidatesService', () => {
-    let service: CandidatesService;
-    let prisma: PrismaService;
+describe('CandidatesService', () => {
+  let service: CandidatesService;
+  let prisma: PrismaService;
 
-    
-    const mockUser = {
-      id: 'user-1',
-      organization_id: 'org-1',
-    } as any; // Cast as USER
 
-    beforeEach(async () => {
+  const mockUser = {
+    id: 'user-1',
+    organization_id: 'org-1',
+  } as any; // Cast as USER
+
+  beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CandidatesService,
-        { provide: PrismaService, useValue: mockPrisma,},
-        { provide: TextractService, useValue: textractMock},
+        { provide: PrismaService, useValue: mockPrisma, },
         { provide: S3Service, useValue: s3Mock },
         { provide: GoogledriveService, useValue: googleMock },
         { provide: OpenaiService, useValue: openAIMock },
@@ -106,11 +112,11 @@ const notificationsMock = {
         { id: '2', pipeline_status: '1087596819' }
       ];
       const mockTotal = 2;
-  
+
       mockPrisma.$transaction.mockResolvedValue([mockCandidates, mockTotal]);
-  
+
       const result = await service.findAll(mockUser);
-  
+
       expect(result).toEqual({
         data: [
           { id: '1', pipeline_status: 'Available Candidates' },
@@ -124,11 +130,11 @@ const notificationsMock = {
         }
       });
     });
-    
-  
+
+
     it('should throw BadGatewayException when prisma fails', async () => {
       mockPrisma.$transaction.mockRejectedValue(new Error('DB error'));
-  
+
       await expect(service.findAll(mockUser)).rejects.toThrow(BadGatewayException);
     });
   });
@@ -181,11 +187,11 @@ const notificationsMock = {
           },
         ],
       };
-    
+
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
-    
+
       const result = await service.findOne('1', mockUser);
-    
+
       expect(prisma.candidate.findUnique).toHaveBeenCalledWith({
         where: {
           id: '1',
@@ -262,7 +268,7 @@ const notificationsMock = {
           },
         },
       });
-  
+
       const expectedResult = {
         ...mockCandidate,
         pipeline_status: 'Unknown Stage',
@@ -274,10 +280,10 @@ const notificationsMock = {
           },
         ],
       };
-    
+
       expect(result).toEqual(expectedResult);
     });
-    
+
 
     it('should return 400 if the candidate Id is empty', async () => {
       await expect(service.findOne('', mockUser)).rejects.toThrow(BadRequestException);
@@ -301,9 +307,9 @@ const notificationsMock = {
     it('should return distinct languages when field is "languages"', async () => {
       const mockLanguages = [{ name: 'English' }, { name: 'Spanish' }];
       mockPrisma.candidateLanguage = { findMany: jest.fn().mockResolvedValue(mockLanguages) };
-  
+
       const result = await service.getProperties({ fields: 'languages' });
-  
+
       expect(mockPrisma.candidateLanguage.findMany).toHaveBeenCalledWith({
         where: {
           candidate: {
@@ -317,13 +323,13 @@ const notificationsMock = {
       });
       expect(result).toEqual({ languages: mockLanguages });
     });
-  
+
     it('should return distinct skills when field is "skills"', async () => {
       const mockSkills = [{ skill_name: 'JavaScript' }, { skill_name: 'TypeScript' }];
       mockPrisma.candidateSkill = { findMany: jest.fn().mockResolvedValue(mockSkills) };
-  
+
       const result = await service.getProperties({ fields: 'skills' });
-  
+
       expect(mockPrisma.candidateSkill.findMany).toHaveBeenCalledWith({
         where: {
           candidate: {
@@ -340,13 +346,13 @@ const notificationsMock = {
       });
       expect(result).toEqual({ skills: mockSkills });
     });
-  
+
     it('should return distinct values for other fields', async () => {
       const mockCountries = [{ country: 'USA' }, { country: 'Brazil' }];
       mockPrisma.candidate.findMany.mockResolvedValue(mockCountries);
-  
+
       const result = await service.getProperties({ fields: 'country' });
-  
+
       expect(mockPrisma.candidate.findMany).toHaveBeenCalledWith({
         where: {
           OR: [
@@ -364,32 +370,32 @@ const notificationsMock = {
                 not: 'N/A'
               }
             }
-          ] 
+          ]
         },
         distinct: ['country'],
         select: { country: true },
       });
       expect(result).toEqual({ country: mockCountries });
     });
-  
+
     it('should handle multiple fields', async () => {
       const mockLanguages = [{ name: 'English' }];
       const mockSkills = [{ skill_name: 'JavaScript' }];
       const mockCountries = [{ country: 'USA' }];
-  
+
       mockPrisma.candidateLanguage = { findMany: jest.fn().mockResolvedValue(mockLanguages) };
       mockPrisma.candidateSkill = { findMany: jest.fn().mockResolvedValue(mockSkills) };
       mockPrisma.candidate.findMany.mockResolvedValue(mockCountries);
-  
+
       const result = await service.getProperties({ fields: 'languages,skills,country' });
-  
+
       expect(result).toEqual({
         languages: mockLanguages,
         skills: mockSkills,
         country: mockCountries,
       });
     });
-  
+
     it('should throw BadRequestException on error', async () => {
       mockPrisma.candidate.findMany.mockReset();
       mockPrisma.candidate.findMany.mockImplementation(() => {
@@ -399,71 +405,71 @@ const notificationsMock = {
       await expect(service.getProperties({ fields: 'country' })).rejects.toThrow(BadRequestException);
     });
   });
-  
+
   describe('updateStatusHubspot', () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
     });
-  
+
     const mockCandidate = {
       id: '1',
       hubspot_id: 'hub-123',
     };
-  
+
     it('should throw BadRequestException if candidate id is missing', async () => {
       await expect(service.updateStatusHubspot('', { status: 'Available Candidates' }))
         .rejects
         .toThrow(BadRequestException);
     });
-  
+
     it('should throw BadRequestException if status is missing', async () => {
       await expect(service.updateStatusHubspot('1', { status: '' }))
         .rejects
         .toThrow(BadRequestException);
     });
-  
+
     it('should throw BadRequestException if status is invalid', async () => {
       await expect(service.updateStatusHubspot('1', { status: 'invalid-status' }))
         .rejects
         .toThrow(BadRequestException);
     });
-  
+
     it('should throw NotFoundException if candidate does not exist', async () => {
       mockPrisma.candidate.findUnique.mockResolvedValue(null);
-  
+
       await expect(service.updateStatusHubspot('1', { status: 'Available Candidates' }))
         .rejects
         .toThrow(NotFoundException);
     });
-  
+
     it('should throw BadGatewayException if HubSpot API fails', async () => {
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
       mockedAxios.patch.mockResolvedValue({ status: 500 } as any);
-  
+
       await expect(service.updateStatusHubspot('1', { status: 'Available Candidates' }))
         .rejects
         .toThrow(BadGatewayException);
     });
-  
+
     it('should throw BadGatewayException if prisma update fails', async () => {
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
       mockedAxios.patch.mockResolvedValue({ status: 200 } as any);
       mockPrisma.candidate.update.mockResolvedValue(null);
-  
+
       await expect(service.updateStatusHubspot('1', { status: 'Available Candidates' }))
         .rejects
         .toThrow(BadGatewayException);
     });
-  
+
     it('should update candidate status successfully', async () => {
       const updatedCandidate = { id: '1', pipeline_status: '261075105' };
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
       mockedAxios.patch.mockResolvedValue({ status: 200 } as any);
       mockPrisma.candidate.update.mockResolvedValue(updatedCandidate);
-  
+
       const result = await service.updateStatusHubspot('1', { status: 'Available Candidates' });
-  
+
       expect(mockPrisma.candidate.findUnique).toHaveBeenCalledWith({
         where: { id: '1' },
         select: { hubspot_id: true },
@@ -635,6 +641,107 @@ const notificationsMock = {
       expect(result.candidates).toHaveLength(1);
       expect(result.candidates[0].specialization).not.toBe('n/a');
       expect(result.candidates[0].specialization).not.toBe('N/A');
+    });
+  });
+
+  describe('processData', () => {
+    const candidateId = 'test-candidate-id';
+    const mockCandidate = {
+      id: candidateId,
+      resume_url: 'https://drive.google.com/file/d/test-file-id/view',
+      first_name: 'John',
+      last_name: 'Doe'
+    };
+
+    beforeEach(() => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
+      googleMock.downloadFile.mockResolvedValue(['/tmp/page1.png']);
+      openAIMock.organizeText.mockResolvedValue('{}');
+    });
+
+    it('should process candidate data successfully and map dates correctly', async () => {
+      const mockExtractedData = {
+        bio: 'Test Bio',
+        experience: [
+          {
+            company: 'Test Company',
+            role: 'Developer',
+            start_date: '2020-01-01',
+            end_date: null, // "Present" or missing
+            description: ['Worked hard']
+          }
+        ],
+        education: [
+          {
+            institution: 'Test University',
+            degree: 'BSc',
+            year: '2020-05-01'
+          },
+          {
+            institution: 'Missing Year Uni',
+            degree: 'PhD',
+            year: null
+          }
+        ],
+        skills: ['Node.js']
+      };
+
+      // Mock OpenAI service specific method for this test
+      // Note: We need to cast to any because extractDataFromResumeImages is not in the initial mock definition at top of file
+      (service['openai'] as any).extractDataFromResumeImages = jest.fn().mockResolvedValue(mockExtractedData);
+
+      // We need to mock updateFromJson or let it run. Since it uses prisma calls, we can let it run and verify prisma calls.
+      // But updateFromJson is private/internal. We are testing processData which calls it.
+
+      const result = await service.processData(candidateId);
+
+      expect(result).toBe(true);
+      expect(googleMock.downloadFile).toHaveBeenCalledWith('test-file-id');
+      expect((service['openai'] as any).extractDataFromResumeImages).toHaveBeenCalledWith(['/tmp/page1.png']);
+
+      // Verify Experience Mapping
+      expect(mockPrisma.candidateExperience.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            candidate_id: candidateId,
+            company: 'Test Company',
+            start_date: new Date('2020-01-01'),
+            end_date: null
+          })
+        ])
+      });
+
+      // Verify Education Mapping (Fix verification)
+      expect(mockPrisma.candidateEducation.createMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            candidate_id: candidateId,
+            institution: 'Test University',
+            degree: 'BSc',
+            year: '2020-05-01' // Should map year from item.year (which is '2020-05-01' here)
+          }),
+          expect.objectContaining({
+            candidate_id: candidateId,
+            institution: 'Missing Year Uni',
+            degree: 'PhD',
+            year: null // Should be null
+          })
+        ])
+      });
+    });
+
+    it('should return false if candidate not found', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(null);
+      const result = await service.processData('non-existent');
+      expect(result).toBe(false);
+    });
+
+    it('should invalid Google Drive URL', async () => {
+      const invalidCandidate = { ...mockCandidate, resume_url: 'invalid-url' };
+      mockPrisma.candidate.findUnique.mockResolvedValue(invalidCandidate);
+
+      const result = await service.processData(candidateId);
+      expect(result).toBe(false);
     });
   });
 

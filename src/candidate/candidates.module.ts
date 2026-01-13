@@ -3,7 +3,6 @@ import { CandidatesService } from './candidates.service';
 import { CandidatesController } from './candidates.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { GoogledriveModule } from '../googledrive/googledrive.module';
-import { TextractModule } from '../textract/textract.module';
 import { S3Module } from '../s3/s3.module';
 import { OpenaiModule } from '../openai/openai.module';
 import { HubspotModule } from '../hubspot/hubspot.module';
@@ -15,7 +14,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
   controllers: [CandidatesController],
   providers: [CandidatesService],
   imports: [forwardRef(() => HubspotModule),
-    PrismaModule, GoogledriveModule, TextractModule, S3Module, OpenaiModule, MailModule, HireRequestModule, NotificationsModule],
+    PrismaModule, GoogledriveModule, S3Module, OpenaiModule, MailModule, HireRequestModule, NotificationsModule],
   exports: [CandidatesService],
 })
 export class CandidatesModule {}
