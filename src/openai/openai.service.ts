@@ -272,22 +272,46 @@ export class OpenaiService {
         const contentPayload: any[] = [
             {
                 type: "text",
-                text: `You are a resume parser. Extract the following information into a strictly valid JSON object.
+                text: `You are a professional resume parser. Your goal is to extract **100% of the information** from the resume images provided. 
             
-            JSON Schema:
+            ### JSON Schema
+            Return a single valid JSON object. Do not wrap in markdown code blocks.
             {
-                "bio": "string (summary)",
-                "experience": [{ "company": "", "role": "", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "description": ["string"] }],
-                "education": [{ "institution": "", "degree": "", "year": "YYYY-MM-DD" }],
+                "bio": "string (professional summary, 3-5 sentences highlighting key skills and value)",
+                "experience": [
+                    { 
+                        "company": "string", 
+                        "role": "string", 
+                        "start_date": "YYYY-MM-DD (or null)", 
+                        "end_date": "YYYY-MM-DD (or null)", 
+                        "description": ["string (full sentence)"] 
+                    }
+                ],
+                "education": [
+                    { 
+                        "institution": "string", 
+                        "degree": "string", 
+                        "year": "YYYY-MM-DD (graduation date or latest date)" 
+                    }
+                ],
                 "skills": ["string"]
             }
 
-            - Do not invent information.
-            - If dates are "Present", use null for end_date.
-            - If dates are in "Month Year" format (e.g. "Mar 2025"), convert them to "YYYY-MM-01".
-            - Summarize the bio based on the visible text.
-            - Ensure "experience.description" is an array of strings (sentences).
-            - For education, extract the graduation date. If only year is available, use "YYYY-01-01".
+            ### Extraction Rules
+            1. **EXTRACT ALL DATA**: Do not summarize or select "top" roles. Extract **EVERY** single experience and education entry visible on the resume.
+            2. **Experience Descriptions**:
+               - Capture the full richness of the role. 
+               - Each distinct responsibility or achievement should be a separate string in the "description" array.
+               - Do not truncate sentences.
+            3. **Dates**:
+               - Format: "YYYY-MM-DD".
+               - "Present", "Current", "Now" -> null for end_date.
+               - "Jan 2020" -> "2020-01-01".
+               - "2020" -> "2020-01-01".
+               - If only a year is given for education, use "YYYY-01-01".
+            4. **Bio**:
+               - Synthesize a strong professional profile based on the visible text.
+               - Do not include the candidate's name or contact info in the bio.
             `
             }
         ];
@@ -306,7 +330,7 @@ export class OpenaiService {
 
         try {
             const response = await openai.chat.completions.create({
-                model: "gpt-4.1-nano",
+                model: "gpt-4o-mini",
                 messages: [
                     {
                         role: "user",
