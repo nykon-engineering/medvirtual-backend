@@ -20,6 +20,7 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { latinAmericaCountries } from '../common/constant/latin-america-countries';
 
 
 
@@ -160,7 +161,7 @@ export class CandidatesService {
     const where = {
       OR: [
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -175,7 +176,7 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -190,7 +191,7 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -205,7 +206,7 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
