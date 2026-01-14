@@ -161,7 +161,11 @@ export class CandidatesService {
     const where = {
       OR: [
         {
-          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -176,7 +180,11 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -191,7 +199,11 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -206,7 +218,11 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && country === 'latinAmerica' ? { country: { in: latinAmericaCountries } } : {country}),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
