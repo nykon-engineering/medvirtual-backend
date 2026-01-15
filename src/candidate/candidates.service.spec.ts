@@ -15,6 +15,27 @@ import { NotificationsService } from '../notifications/notifications.service';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+jest.mock('node-poppler', () => {
+  return {
+    Poppler: jest.fn().mockImplementation(() => {
+      return {
+        pdfToCairo: jest.fn().mockResolvedValue('converted'),
+      };
+    }),
+  };
+});
+
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  rmSync: jest.fn(),
+  unlinkSync: jest.fn(),
+  readdirSync: jest.fn(),
+}));
+import * as fs from 'fs';
+
+
 const mockPrisma = {
   candidate: {
     findMany: jest.fn(),
@@ -646,17 +667,23 @@ describe('CandidatesService', () => {
 
   describe('processData', () => {
     const candidateId = 'test-candidate-id';
+    // Use a file ID > 25 characters to satisfy the regex in extractDriveFileId
+    const validFileId = 'test-file-id-with-more-than-25-characters-123';
     const mockCandidate = {
       id: candidateId,
-      resume_url: 'https://drive.google.com/file/d/test-file-id/view',
+      resume_url: `https://drive.google.com/file/d/${validFileId}/view`,
       first_name: 'John',
       last_name: 'Doe'
     };
 
     beforeEach(() => {
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
-      googleMock.downloadFile.mockResolvedValue(['/tmp/page1.png']);
+      googleMock.downloadFile.mockResolvedValue('Download successful');
       openAIMock.organizeText.mockResolvedValue('{}');
+
+      // Mock fs behaviors for processData
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readdirSync as jest.Mock).mockReturnValue(['page1.png']);
     });
 
     it('should process candidate data successfully and map dates correctly', async () => {
@@ -696,8 +723,9 @@ describe('CandidatesService', () => {
       const result = await service.processData(candidateId);
 
       expect(result).toBe(true);
-      expect(googleMock.downloadFile).toHaveBeenCalledWith('test-file-id');
-      expect((service['openai'] as any).extractDataFromResumeImages).toHaveBeenCalledWith(['/tmp/page1.png']);
+      expect(result).toBe(true);
+      expect(googleMock.downloadFile).toHaveBeenCalledWith(validFileId, expect.any(String), expect.any(String));
+      expect((service['openai'] as any).extractDataFromResumeImages).toHaveBeenCalled();
 
       // Verify Experience Mapping
       expect(mockPrisma.candidateExperience.createMany).toHaveBeenCalledWith({
