@@ -1263,6 +1263,8 @@ export class HireRequestService {
           .find(key => HRTicketStatus[key] === 'New Agent Request'), //=> New
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'reopen_as_new'); 
         console.log('Hubspot hire request updated to New status');
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
