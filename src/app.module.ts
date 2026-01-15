@@ -10,7 +10,6 @@ import { HubspotModule } from './hubspot/hubspot.module';
 import { GoogledriveModule } from './googledrive/googledrive.module';
 import { OrganizationModule } from './organization/organization.module';
 import { CandidatesModule } from './candidate/candidates.module';
-import { TextractModule } from './textract/textract.module';
 import { S3Module } from './s3/s3.module';
 import { OpenaiModule } from './openai/openai.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -42,7 +41,6 @@ import { APP_GUARD } from '@nestjs/core';
     GoogledriveModule,
     OrganizationModule,
     CandidatesModule,
-    TextractModule,
     S3Module,
     OpenaiModule,
     DashboardModule,
