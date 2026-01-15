@@ -348,7 +348,6 @@ export class OpenaiService {
         } catch (error: any) {
 
             if (error?.type === 'insufficient_quota') {
-                console.error('[OpenAI] Insufficient Quota:');
 
                 const today = new Date();
                 const existingMail = await this.prisma.mail_Settings.findFirst({
@@ -370,9 +369,6 @@ export class OpenaiService {
                         subject: 'Insufficient Quota from OpenAI',
                         html: emailBody,
                     });
-                    if (!mailSent) {
-                        console.log('Failed to send insufficient quota email notification.');
-                    }
                     //Here I save in the database that I sent the email
                     await this.prisma.mail_Settings.create({
                         data: {
@@ -385,11 +381,8 @@ export class OpenaiService {
             }
 
             if (error?.type === 'rate_limit_error') {
-                console.log('[OpenAI] Rate Limit Exceeded:');
                 throw new BadRequestException('Rate limit exceeded. Please try again later.');
             }
-
-            console.error('Error in extractDataFromResumeImages:', error);
             throw new BadRequestException('Failed to extract data from resume images');
         }
     }
