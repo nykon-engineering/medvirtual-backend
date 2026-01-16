@@ -842,7 +842,7 @@ export class StaffService {
 
         const associations = response.data.results;
 
-        // Mapear os resultados de volta para cada deal
+        // Mapping the results back to each deal
         for (const deal of chunk) {
           const assoc = associations.find(
             (a: any) => a.from?.id === deal.hubspot_id
@@ -876,7 +876,7 @@ export class StaffService {
         }
         
       } catch (error: any) {
-        console.error("Erro ao buscar associações batch:", error.response?.data || error);
+        console.error("Error to find batch process :", error.response?.data || error);
       }
     }
     //console.log('Deals with candidates Associated: ', VADeals)
@@ -901,7 +901,7 @@ export class StaffService {
 
         const associations = response.data.results;
 
-        // Mapear os resultados de volta para cada deal
+        // Mapping the results back to each deal
         for (const deal of chunk) {
           const assoc = associations.find(
             (a: any) => a.from?.id === deal.hubspot_id
@@ -924,13 +924,13 @@ export class StaffService {
         }
         
       } catch (error: any) {
-        console.error("Erro ao buscar associações batch:", error.response?.data || error);
+        console.error("Error to find batch process :", error.response?.data || error);
       }
     }
 
-    console.log('Deals with companies Associated: ', CompanyDeals)
+    console.log('Deals with companies and candidates Associated: ', CompanyDeals)
 
-    const CHUNK_SIZE = 500; // Ajuste conforme necessidade
+    const CHUNK_SIZE = 500; // Adjust chunk size as needed
     for (let i = 0; i < CompanyDeals.length; i += CHUNK_SIZE) {
       const chunk = CompanyDeals.slice(i, i + CHUNK_SIZE);
       await this.prisma.staff.createMany({

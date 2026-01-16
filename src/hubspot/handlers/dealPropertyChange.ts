@@ -34,7 +34,11 @@ export class HandlerDealPropertyChange {
         }
         if(!deal) return;
 
-        if (deal && event.propertyName === 'pipeline' && event.propertyValue !== '5155250') { //5155250 => BV Operations
+        if (
+            deal && event.propertyName === 'pipeline' && 
+            event.propertyValue !== '5155250' && 
+            event.propertyValue !== '85165570'
+        ) { //5155250 => BV Operations || 85165570 => MV Operations
             return await this.dealDeletion.execute(event);
         }
 

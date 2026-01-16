@@ -29,7 +29,8 @@ export class HandlerDealCreation {
                 throw new BadRequestException('No object data found');
             }
             
-            if (getObject.data.properties.pipeline && getObject.data.properties.pipeline !== '5155250') return; //Only process deals from BV OPERATIONS PIPELINE (5155250)
+            if (
+                getObject.data.properties.pipeline && getObject.data.properties.pipeline !== '5155250' && getObject.data.properties.pipeline !== '85165570') return; //Only process deals from BV OPERATIONS PIPELINE (5155250) OU MV OPERATIONS (85165570)
 
             
             const dealData = mapDealToDb(getObject.data.properties);

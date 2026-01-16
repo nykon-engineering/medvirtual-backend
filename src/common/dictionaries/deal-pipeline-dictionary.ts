@@ -1,4 +1,4 @@
-//this dictionary handle with the stage deals inside the BV OPERATIONS PIPELINE (5155250)
+//this dictionary handle with the stage deals inside the BV OPERATIONS PIPELINE (5155250) OU MV OPERATIONS (85165570)
 export const dealPipelineToDbDictionary:Record<number,string> = {
     
     16981840: 'New Launch',
