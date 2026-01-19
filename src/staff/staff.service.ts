@@ -762,13 +762,16 @@ export class StaffService {
     let after: string | undefined = undefined;
     const allDeals: any[] = [];
     const properties = Object.keys(dealToDbDictionary)
-  
+    console.log('Fetching deals from HubSpot with properties:', properties);
+
+    
     while (hasMore) {
+      console.log('Fetching next batch of deals from HubSpot...');
       const body: any = {
         filterGroups: [
           {
             filters: [
-              { propertyName: 'pipeline', operator: 'EQ', value: '5155250' },
+              { propertyName: 'pipeline', operator: 'EQ', value: '85165570' }, // MV OPERATIONS PIPELINE
             ],
           }
         ],
@@ -788,7 +791,8 @@ export class StaffService {
           },
         },
       );
-  
+      console.log(JSON.stringify(body, null, 2));
+
       allDeals.push(...result.data.results);
       if (result.data.paging?.next?.after) {
         after = result.data.paging.next.after;
@@ -796,6 +800,8 @@ export class StaffService {
         hasMore = false;
       }
     }
+
+    console.log(`Total deals fetched from HubSpot: ${allDeals.length}`);
     
     const mappedDeals = allDeals.map(deal => {
       const mapped: any = { hubspot_id: deal.id };
@@ -879,7 +885,7 @@ export class StaffService {
         console.error("Error to find batch process :", error.response?.data || error);
       }
     }
-    //console.log('Deals with candidates Associated: ', VADeals)
+    console.log('Deals with candidates Associated: ', VADeals)
 
 
 
@@ -940,6 +946,7 @@ export class StaffService {
     }
   
     return `DB populated from HubSpot successfully with ${CompanyDeals.length} deals`;
+    
   }
 
 
