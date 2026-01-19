@@ -77,6 +77,7 @@ export class CandidatesService {
     const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined;
 
     const combinedFilters: Record<string, any>[] = [];
+    let positionsFilter: Record<string, any> | null = null
 
     const availabilityArray = availability
       ? availability.split(',').map((a) => a.trim()).filter(Boolean)
@@ -120,12 +121,15 @@ export class CandidatesService {
       );
     }
     if (positionsArray.length) {
-      combinedFilters.push(
-        ...positionsArray.map(spec => ({
-          approved_positions_pairing: { has: spec }
+      positionsFilter = {
+        OR: positionsArray.map(position => ({
+          approved_positions_pairing: {
+            has: position
+          }
         }))
-      );
+      };
     }
+
 
     // Calculate limit date
     let experienceFilter = {};
@@ -173,7 +177,10 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         },
@@ -192,7 +199,10 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         },
@@ -211,7 +221,10 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         },
@@ -230,7 +243,10 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         }
