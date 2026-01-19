@@ -1,10 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CandidateStatus, HireRequestStatus, OrganizationStatus, PanelCandidateStatus, PanelStatus } from '@prisma/client';
+import { HireRequestStatus, OrganizationStatus, PanelCandidateStatus, PanelStatus } from '@prisma/client';
 import { findMonthlySalary } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
-import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
+import { activePipelines } from '../common/constant/activeDealPipelines';
 
 @Injectable()
 export class PanelService {
@@ -115,13 +115,6 @@ export class PanelService {
             }
         })
         result.activeHireRequests = HrCount;
-
-        const activePipelines = Object.entries(dealPipelineToDbDictionary)
-            .filter(([key]) => key !== '148234581' &&
-                key !== '1012779094' &&
-                key !== '16981844' &&
-                key !== '31963952' &&
-                key !== '1172012586');
 
         const staffCount = await this.prisma.staff.count({
             where:{

@@ -14,6 +14,7 @@ import { staffStatusDictionary } from '../common/dictionaries/staff-status-dicti
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { activePipelines } from '../common/constant/activeDealPipelines';
 
 @Injectable()
 export class StaffService {
@@ -762,11 +763,9 @@ export class StaffService {
     let after: string | undefined = undefined;
     const allDeals: any[] = [];
     const properties = Object.keys(dealToDbDictionary)
-    console.log('Fetching deals from HubSpot with properties:', properties);
 
     
     while (hasMore) {
-      console.log('Fetching next batch of deals from HubSpot...');
       const body: any = {
         filterGroups: [
           {
@@ -877,7 +876,7 @@ export class StaffService {
             }
             deal.hubspot_candidate_id = hubspotCandidateId;
           }
-          deal.status = 'active'; // Set default status
+          deal.status = activePipelines.some(([key]) => key === deal.hubspot_dealstage) ? 'active' : 'inactive';
           VADeals.push(deal);
         }
         
@@ -886,7 +885,7 @@ export class StaffService {
       }
     }
     console.log('Deals with candidates Associated: ', VADeals)
-
+    
 
 
     for (let i = 0; i < VADeals.length; i += ASSOCIATION_BATCH_SIZE) {
@@ -933,6 +932,7 @@ export class StaffService {
         console.error("Error to find batch process :", error.response?.data || error);
       }
     }
+
 
     console.log('Deals with companies and candidates Associated: ', CompanyDeals)
 
