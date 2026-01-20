@@ -2278,6 +2278,10 @@ export class HireRequestService {
                 },
               },
               {
+                readable: true,
+              },
+
+              {
                 panelCandidates: {
                   some: {
                     createdBy: {
