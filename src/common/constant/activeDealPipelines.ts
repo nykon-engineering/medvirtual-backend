@@ -5,7 +5,6 @@ export const activePipelines = Object.entries(dealPipelineToDbDictionary)
         key !== '1012779094' &&
         key !== '16981844' &&
         key !== '31963952' &&
-        key !== '1172012586' &&
     
         key !== '159176450' &&
         key !== '1012777775' &&

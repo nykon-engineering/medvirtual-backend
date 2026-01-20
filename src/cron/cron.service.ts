@@ -288,7 +288,8 @@ export class CronService {
             const staffs = await this.prisma.staff.findMany({
                 where: {
                     hubspot_id: { not: null },
-                    hubspot_pipeline: '85165570', // MV OPERATIONS
+                    hubspot_pipeline: '5155250', //5155250 => BV OPERATIONS | 85165570 => MV OPERATIONS
+                    status: 'active',
                 },
                 select: {
                     id: true,
