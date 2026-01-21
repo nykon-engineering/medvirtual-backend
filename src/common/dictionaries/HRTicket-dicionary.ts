@@ -10,7 +10,6 @@ export const hrTicketToDbDictionary : Record<string, string | string> = {
     company_name: 'hubspot_company_name',
     company_url: 'hubspot_company_url',
     va_deployment_type: 'availability',
-    hs_ticket_priority: 'priority',
     va_type: 'hubspot_role_type',
     contract_amount: 'hubspot_contract_amount',
     language: 'hubspot_language',
