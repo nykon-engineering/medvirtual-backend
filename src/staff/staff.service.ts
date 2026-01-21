@@ -327,6 +327,7 @@ export class StaffService {
     const take = perPage;
 
     const where: any = {
+      status: { not: { in: ['terminated', 'inactive'] } },
       hireRequest: {},
       candidate: {},
     };

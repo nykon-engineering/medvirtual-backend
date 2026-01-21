@@ -73,7 +73,7 @@ export class HandlerOrganization {
     const hiredStaff = await this.prisma.staff.findMany({
       where:{
         status: {
-          not: 'terminated',
+          not: { in: ['terminated', 'inactive'] },
         },
         OR:[
           {
