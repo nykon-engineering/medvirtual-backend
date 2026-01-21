@@ -6,7 +6,7 @@ import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import systemReport from '../common/utils/email-templates/system-report';
 import { MailService } from '../mail/mail.service';
-import { dealPipelineToDbDictionary } from '../common/dictionaries/deal-pipeline-dictionary';
+import { activePipelines } from '../common/constant/activeDealPipelines';
 
 type Event = {
     objectId?: string;
@@ -234,13 +234,6 @@ export class CronService {
 
         try {
             //Get just active pipelines from hubspot
-            const activePipelines = Object.entries(dealPipelineToDbDictionary)
-            .filter(([key]) => key !== '148234581' &&
-                key !== '1012779094' &&
-                key !== '16981844' &&
-                key !== '31963952' &&
-                key !== '1172012586');
-            
 
             const inactiveClients = await this.prisma.organization.findMany({
                 where: {
@@ -289,17 +282,14 @@ export class CronService {
     }
 
     async syncStaffHubspotDealStages(): Promise<boolean> {
-        const activePipelines = Object.entries(dealPipelineToDbDictionary)
-            .filter(([key]) => key !== '148234581' &&
-                key !== '1012779094' &&
-                key !== '16981844' &&
-                key !== '31963952' &&
-                key !== '1172012586');
+        
 
         try {
             const staffs = await this.prisma.staff.findMany({
                 where: {
                     hubspot_id: { not: null },
+                    hubspot_pipeline: '5155250', //5155250 => BV OPERATIONS | 85165570 => MV OPERATIONS
+                    status: 'active',
                 },
                 select: {
                     id: true,
@@ -326,7 +316,7 @@ export class CronService {
                         where: { id: staff.id },
                         data: {
                             hubspot_dealstage: dealstage,
-                            status: activePipelines.some(([key]) => key === dealstage) ? 'active' : 'terminated',
+                            status: activePipelines.some(([key]) => key === dealstage) ? 'active' : 'inactive',
                         }
                     });
 

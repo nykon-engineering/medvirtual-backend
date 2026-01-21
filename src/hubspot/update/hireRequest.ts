@@ -57,6 +57,12 @@ export class HireRequestUpdateService {
                 case 'cancel_date':
                 hubspotProperties.ticket_cancel_date = new Date().toISOString().split("T")[0]; //YYYY-MM-DD
                 break;
+
+                case 'reopen_as_new':
+                  hubspotProperties.cancel_reason = '';
+                  hubspotProperties.ticket_cancel_date = '';
+                break;
+
               }
               
             }else{
@@ -83,8 +89,8 @@ export class HireRequestUpdateService {
                   : undefined;
 
               hubspotProperties.cancel_reason =
-                  data.cancel_reason ?
-                    data.cancel_reason
+                  data.cancel_reason 
+                  ? data.cancel_reason
                   : undefined;
                   
               //used to allow update datas on hubspot when the user schedule an interview on our side

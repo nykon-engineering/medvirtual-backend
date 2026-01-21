@@ -1,4 +1,4 @@
-//this dictionary handle with the stage deals inside the BV OPERATIONS PIPELINE (5155250)
+//this dictionary handle with the stage deals inside the BV OPERATIONS PIPELINE (5155250) OU MV OPERATIONS (85165570)
 export const dealPipelineToDbDictionary:Record<number,string> = {
     
     16981840: 'New Launch',
@@ -15,6 +15,20 @@ export const dealPipelineToDbDictionary:Record<number,string> = {
     224754753: 'Retention 4years+',
     224754754: 'Retention 5years+',
     1172012586: 'Converted Deployment',
+
+    159218492: 'MV - New Launch',
+    159218493: 'MV - Retention 1-2 months',
+    159218494: 'MV - Retention 3-5 months',
+    159218495: 'MV - Retention 6-11 months',
+    159218496: 'MV - Retention 1year+',
+    159218497: 'MV - Retention 2years+',
+    159218498: 'MV - Retention 3years+',
+    224962612: 'MV - Retention 4years+',
+    225153630: 'MV - Retention 5years+',
+    159176450: 'MV - Paused Deal (for replacement)',
+    1012777775: 'MV - Replaced - Endorsed to New Launch',
+    159176451: 'MV - Lost',
+    159176452: 'MV - In collections',
 
 }
 

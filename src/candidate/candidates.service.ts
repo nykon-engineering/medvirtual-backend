@@ -7,7 +7,6 @@ import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries
 import { PrismaService } from '../prisma/prisma.service';
 import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
 import { GoogledriveService } from '../googledrive/googledrive.service';
-import { TextractService } from '../textract/textract.service';
 import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
@@ -20,6 +19,7 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { latinAmericaCountries } from '../common/constant/latin-america-countries';
 
 
 
@@ -29,7 +29,6 @@ export class CandidatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly google: GoogledriveService,
-    private readonly textract: TextractService,
     private readonly s3: S3Service,
     private readonly openai: OpenaiService,
     @Inject(forwardRef(() => HubspotService))
@@ -78,6 +77,7 @@ export class CandidatesService {
     const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined;
 
     const combinedFilters: Record<string, any>[] = [];
+    let positionsFilter: Record<string, any> | null = null
 
     const availabilityArray = availability
       ? availability.split(',').map((a) => a.trim()).filter(Boolean)
@@ -121,12 +121,15 @@ export class CandidatesService {
       );
     }
     if (positionsArray.length) {
-      combinedFilters.push(
-        ...positionsArray.map(spec => ({
-          approved_positions_pairing: { has: spec }
+      positionsFilter = {
+        OR: positionsArray.map(position => ({
+          approved_positions_pairing: {
+            has: position
+          }
         }))
-      );
+      };
     }
+
 
     // Calculate limit date
     let experienceFilter = {};
@@ -160,7 +163,11 @@ export class CandidatesService {
     const where = {
       OR: [
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -170,12 +177,19 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -185,12 +199,19 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -200,12 +221,19 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         },
         {
-          ...(country && { country }),
+          ...(country && country === 'latinAmerica' 
+            ? { country: { in: latinAmericaCountries } } 
+            : country === 'otherCountries' 
+              ? { country: { notIn: latinAmericaCountries } } 
+              : {country}),
           ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
           ...(hourly_from !== undefined || hourly_to !== undefined ? {
             hourly_pay_rate: {
@@ -215,7 +243,10 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
-          ...(combinedFilters.length > 0 && { AND: combinedFilters }),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : [])
+          ],
           ...experienceFilter,
           ...searchFilter,
         }
@@ -556,7 +587,7 @@ export class CandidatesService {
             candidate_id: id,
             institution: item.institution || '',
             degree: item.degree || '',
-            year: item.end_date || '',
+            year: item.year || null,
           }))
         });
       }
@@ -571,8 +602,8 @@ export class CandidatesService {
             candidate_id: id,
             company: item.company || '',
             position: item.role || '',
-            start_date: new Date(item.start_date) || '',
-            end_date: new Date(item.end_date) || '',
+            start_date: item.start_date ? new Date(item.start_date) : null,
+            end_date: item.end_date ? new Date(item.end_date) : null,
             responsabilities: item.description || '',
 
           }))
@@ -696,8 +727,9 @@ export class CandidatesService {
         const pdfPath = path.join(downloadDir, pdfName);
         const outputPrefix = path.join(tempDir, 'page');
 
-       const { Poppler } = require('node-poppler');
-       const poppler = new Poppler('/opt/bin');
+        const { Poppler } = require('node-poppler');
+        const popplerPath = process.env.POPPLER_BIN_PATH || (fs.existsSync('/opt/bin/pdftocairo') ? '/opt/bin' : undefined);
+        const poppler = new Poppler(popplerPath);
 
         const options = {
           firstPageToConvert: 1,

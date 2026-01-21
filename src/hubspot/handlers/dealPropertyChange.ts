@@ -4,7 +4,7 @@ import { HandlerDealCreation } from "./dealCreation";
 import { HandlerDealDeletion } from "./dealDeletion";
 import { dealToDbDictionary } from "../../common/dictionaries/deal-dictionary";
 import axios from "axios";
-import { dealPipelineToDbDictionary } from "../../common/dictionaries/deal-pipeline-dictionary";
+import { activePipelines } from "../../common/constant/activeDealPipelines";
 
 
 @Injectable()
@@ -34,7 +34,11 @@ export class HandlerDealPropertyChange {
         }
         if(!deal) return;
 
-        if (deal && event.propertyName === 'pipeline' && event.propertyValue !== '5155250') { //5155250 => BV Operations
+        if (
+            deal && event.propertyName === 'pipeline' && 
+            event.propertyValue !== '5155250' && 
+            event.propertyValue !== '85165570'
+        ) { //5155250 => BV Operations || 85165570 => MV Operations
             return await this.dealDeletion.execute(event);
         }
 
@@ -90,14 +94,6 @@ export class HandlerDealPropertyChange {
                     }
                 })
                 if (OrganizationExists && OrganizationExists.status === 'inactive') {
-                    
-                    //get activePipelines from hubspot
-                    const activePipelines = Object.entries(dealPipelineToDbDictionary)
-                        .filter(([key]) => key !== '148234581' &&
-                            key !== '1012779094' &&
-                            key !== '16981844' &&
-                            key !== '31963952' &&
-                            key !== '1172012586');
 
                     //check if the event.propertyName == 'dealstage' && event.propertyValue is in activePipelines
                     if (event.propertyName === 'dealstage' && activePipelines.some(([key]) => key === event.propertyValue)) {
@@ -138,7 +134,13 @@ export class HandlerDealPropertyChange {
 
         if (deal && event.propertyName == 'dealstage' && event.propertyValue == '148234581' ||
             deal && event.propertyName == 'dealstage' && event.propertyValue == '1012779094' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '16981844'
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '16981844' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '31963952' ||
+
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '159176450' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '1012777775' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '159176451' ||
+            deal && event.propertyName == 'dealstage' && event.propertyValue == '159176452'
         ) {
             objectToUpdate.status='terminated';
         }else{
@@ -151,7 +153,7 @@ export class HandlerDealPropertyChange {
             fieldUpdated === 'start_date') {
             const timestamp = Number(event.propertyValue);
             if (!isNaN(timestamp)) {
-              value = new Date(timestamp).toISOString();
+              objectToUpdate[fieldUpdated] = new Date(timestamp).toISOString();
             }
         }
         

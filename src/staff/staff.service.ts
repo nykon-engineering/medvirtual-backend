@@ -14,6 +14,7 @@ import { staffStatusDictionary } from '../common/dictionaries/staff-status-dicti
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { activePipelines } from '../common/constant/activeDealPipelines';
 
 @Injectable()
 export class StaffService {
@@ -326,6 +327,7 @@ export class StaffService {
     const take = perPage;
 
     const where: any = {
+      status: { not: { in: ['terminated', 'inactive'] } },
       hireRequest: {},
       candidate: {},
     };
@@ -762,13 +764,14 @@ export class StaffService {
     let after: string | undefined = undefined;
     const allDeals: any[] = [];
     const properties = Object.keys(dealToDbDictionary)
-  
+
+    
     while (hasMore) {
       const body: any = {
         filterGroups: [
           {
             filters: [
-              { propertyName: 'pipeline', operator: 'EQ', value: '5155250' },
+              { propertyName: 'pipeline', operator: 'EQ', value: '85165570' }, // MV OPERATIONS PIPELINE
             ],
           }
         ],
@@ -788,7 +791,8 @@ export class StaffService {
           },
         },
       );
-  
+      console.log(JSON.stringify(body, null, 2));
+
       allDeals.push(...result.data.results);
       if (result.data.paging?.next?.after) {
         after = result.data.paging.next.after;
@@ -796,6 +800,8 @@ export class StaffService {
         hasMore = false;
       }
     }
+
+    console.log(`Total deals fetched from HubSpot: ${allDeals.length}`);
     
     const mappedDeals = allDeals.map(deal => {
       const mapped: any = { hubspot_id: deal.id };
@@ -842,7 +848,7 @@ export class StaffService {
 
         const associations = response.data.results;
 
-        // Mapear os resultados de volta para cada deal
+        // Mapping the results back to each deal
         for (const deal of chunk) {
           const assoc = associations.find(
             (a: any) => a.from?.id === deal.hubspot_id
@@ -871,16 +877,16 @@ export class StaffService {
             }
             deal.hubspot_candidate_id = hubspotCandidateId;
           }
-          deal.status = 'active'; // Set default status
+          deal.status = activePipelines.some(([key]) => key === deal.hubspot_dealstage) ? 'active' : 'inactive';
           VADeals.push(deal);
         }
         
       } catch (error: any) {
-        console.error("Erro ao buscar associações batch:", error.response?.data || error);
+        console.error("Error to find batch process :", error.response?.data || error);
       }
     }
-    //console.log('Deals with candidates Associated: ', VADeals)
-
+    console.log('Deals with candidates Associated: ', VADeals)
+    
 
 
     for (let i = 0; i < VADeals.length; i += ASSOCIATION_BATCH_SIZE) {
@@ -901,7 +907,7 @@ export class StaffService {
 
         const associations = response.data.results;
 
-        // Mapear os resultados de volta para cada deal
+        // Mapping the results back to each deal
         for (const deal of chunk) {
           const assoc = associations.find(
             (a: any) => a.from?.id === deal.hubspot_id
@@ -924,13 +930,14 @@ export class StaffService {
         }
         
       } catch (error: any) {
-        console.error("Erro ao buscar associações batch:", error.response?.data || error);
+        console.error("Error to find batch process :", error.response?.data || error);
       }
     }
 
-    console.log('Deals with companies Associated: ', CompanyDeals)
 
-    const CHUNK_SIZE = 500; // Ajuste conforme necessidade
+    console.log('Deals with companies and candidates Associated: ', CompanyDeals)
+
+    const CHUNK_SIZE = 500; // Adjust chunk size as needed
     for (let i = 0; i < CompanyDeals.length; i += CHUNK_SIZE) {
       const chunk = CompanyDeals.slice(i, i + CHUNK_SIZE);
       await this.prisma.staff.createMany({
@@ -940,6 +947,7 @@ export class StaffService {
     }
   
     return `DB populated from HubSpot successfully with ${CompanyDeals.length} deals`;
+    
   }
 
 
