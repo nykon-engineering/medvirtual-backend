@@ -32,6 +32,7 @@ model USER {
   createdByMethod              String              @default("self_signup")
   createdByUserId              String?
   hubspot_id                   String?             @unique
+  hubspot_contact_id           String?             @unique
   email_invitations            EmailInvitation[]
   email_verifications          EmailVerification[]
   hireRequestsSourcingAssigned HireRequest[]       @relation("AssignedSourcing")

@@ -27,8 +27,10 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
-import { ContactCreationService } from './create/contact';
 import { OrganizationUpdateService } from './update/organization';
+import { ContactCreationService } from './create/contact';
+import { ContactUpdateService } from './update/contact';
+import { ContactDeleteService } from './delete/contact';
 
 
 jest.mock('axios', () => ({
@@ -171,6 +173,14 @@ const contactCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const updateContactServiceMock = {
+  execute: jest.fn(),
+};
+
+const deleteContactServiceMock = {
+  execute: jest.fn(),
+};
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -219,7 +229,9 @@ describe('HubspotService => GetCandidates', () => {
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
         {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
-        {provide: ContactCreationService, useValue: contactCreationServiceMock}
+        {provide: ContactCreationService, useValue: contactCreationServiceMock},
+        {provide: ContactUpdateService, useValue: updateContactServiceMock},
+        {provide: ContactDeleteService, useValue: deleteContactServiceMock}
       ],
     }).compile();
 
@@ -289,7 +301,9 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
         {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
-        {provide: ContactCreationService, useValue: contactCreationServiceMock}
+        {provide: ContactCreationService, useValue: contactCreationServiceMock},
+        {provide: ContactUpdateService, useValue: updateContactServiceMock},
+        {provide: ContactDeleteService, useValue: deleteContactServiceMock}
       ]
     }).compile();
 

@@ -128,6 +128,7 @@ describe('HireRequestService', () => {
       createdByMethod: 'self_signup',
       createdByUserId: null,
       hubspot_id: null,
+      hubspot_contact_id: null,
     } ;
   });
 

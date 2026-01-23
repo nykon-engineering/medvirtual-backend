@@ -31,8 +31,10 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
-import { ContactCreationService } from './create/contact';
 import { OrganizationUpdateService } from './update/organization';
+import { ContactCreationService } from './create/contact';
+import { ContactUpdateService } from './update/contact';
+import { ContactDeleteService } from './delete/contact';
 
 
 
@@ -63,8 +65,10 @@ import { OrganizationUpdateService } from './update/organization';
     HireRequestUpdateService,
     OrganizationCreationService,
     OwnerCreationService,
+    OrganizationUpdateService,
     ContactCreationService,
-    OrganizationUpdateService
+    ContactUpdateService,
+    ContactDeleteService
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 

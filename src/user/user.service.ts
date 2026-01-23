@@ -506,12 +506,20 @@ export class UserService {
       } else {
         user = { ...userData };
       }
-      console.log(user);
+      
+
+      //create contact in hubspot
+      const userForHubspot = {
+        ...user,
+        hubspot_contact_id: currentUser.hubspot_contact_id,
+      }
+      await this.hubspotService.updateContactInHubspot(userForHubspot);
 
       return await this.prisma.uSER.update({
         where: { id },
         data: user,
       });
+      
     } catch (error) {
       throw new BadRequestException(`Failed to update user: ${error}`);
     }
@@ -554,6 +562,13 @@ export class UserService {
           }
         }
       }
+
+      //delete contact in hubspot
+      const userForHubspot = {
+        ...user,
+        hubspot_contact_id: user.hubspot_contact_id,
+      }
+      await this.hubspotService.deleteContactInHubspot(userForHubspot);
 
       // Use a transaction to handle all deletions atomically
       return await this.prisma.$transaction(async (tx) => {
@@ -607,6 +622,9 @@ export class UserService {
           where: { id },
         });
       });
+
+      
+
     } catch (error) {
       if (
         error instanceof NotFoundException ||
