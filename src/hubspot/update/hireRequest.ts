@@ -52,7 +52,7 @@ export class HireRequestUpdateService {
                 break;
 
                 case 'closed_date':
-                hubspotProperties.closed_date = new Date().toISOString();
+                hubspotProperties.closed_date = formatDateForCA(new Date(), 'America/Los_Angeles');
                 break;
 
                 case 'cancel_date':
