@@ -38,3 +38,23 @@ export function timestampToUSDate(timestamp) {
 
   return `${month}/${day}/${year}`;
 }
+
+//This function formats a Date object to 'YYYY-MM-DD' format for CA locale considering the specified time zone.
+//en-CA locale is used because it follows the 'YYYY-MM-DD' format.
+export function formatDateForCA(
+  date: Date,
+  timeZone: string
+): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find(p => p.type === 'year')!.value;
+  const month = parts.find(p => p.type === 'month')!.value;
+  const day = parts.find(p => p.type === 'day')!.value;
+
+  return `${year}-${month}-${day}`;
+}

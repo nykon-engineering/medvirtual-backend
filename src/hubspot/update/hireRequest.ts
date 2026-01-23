@@ -3,6 +3,7 @@ import axios from "axios";
 import { dbToHrTicketDictionary } from "../../common/dictionaries/HRTicket-dicionary";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OwnerCreationService } from "../create/Owner";
+import { formatDateForCA } from "../../common/utils/formatDate";
 
 @Injectable()
 
@@ -55,7 +56,7 @@ export class HireRequestUpdateService {
                 break;
 
                 case 'cancel_date':
-                hubspotProperties.ticket_cancel_date = new Date().toISOString().split("T")[0]; //YYYY-MM-DD
+                hubspotProperties.ticket_cancel_date = formatDateForCA(new Date(), 'America/Los_Angeles');
                 break;
 
                 case 'reopen_as_new':
