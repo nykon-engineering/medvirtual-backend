@@ -2424,15 +2424,15 @@ export class OrganizationService {
             const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
 
             if (existingStaff == undefined) {
-              const result = await this.dealCreation.execute({ objectId: dealHubspotId }, {id: org.id, hubspotId: org.hubspot_id})
-              if (result){
-                arrayReturn.push(
-                `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
+              staffPromises.push(
+                this.dealCreation.execute({ objectId: dealHubspotId }, {id: org.id, hubspotId: org.hubspot_id})
+                .then(newStaff => {
+                  if (newStaff)
+                    arrayReturn.push(
+                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
+                    );
+                }),
               );
-              }
-              
-              await sleep(400); // to avoid hitting rate limits
-              
             }
           }
         }
