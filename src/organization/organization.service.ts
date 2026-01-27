@@ -44,6 +44,7 @@ import { organizationIndustryToDbDictionary } from '../common/dictionaries/organ
 //import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
+import { assert } from 'console';
 
 
 @Injectable()
@@ -2350,9 +2351,18 @@ export class OrganizationService {
   }
 
   async syncOrganizationsWithDeals(): Promise<Object> {
+    /*
+    1. get all active organizations
+    2. for each organization, get all associated deals from hubspot
+    3. if the organization does not exist with the hubspotId, create it
+    4. for each organization, check if the associated deals exist as staff
+    5. if the staff does not exist, create it
+    */
     const arrayReturn: string[] = [];
     const chunkSize = 100;
     const concurrency = 5;
+    const sleep = (ms: number) =>
+      new Promise(resolve => setTimeout(resolve, ms));
   
     const organizations = await this.prisma.organization.findMany({
       where: {
@@ -2390,7 +2400,7 @@ export class OrganizationService {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
-            timeout: 20000, // 20s por segurança
+            timeout: 20000, // 20s by security
           },
         );
   
@@ -2398,7 +2408,7 @@ export class OrganizationService {
   
         for (const result of data.results) {
           const org = orgMap.get(result.from.id);
-  
+          
           if (!org) {
             staffPromises.push(
               this.organizationCreation.execute({ objectId: result.from }).then(newOrg => {
@@ -2410,16 +2420,19 @@ export class OrganizationService {
   
           for (const assoc of result.to) {
             const dealHubspotId = assoc.toObjectId;
-            const existingStaff = org.staff.find(s => s.hubspot_id === dealHubspotId);
-            if (!existingStaff) {
-              staffPromises.push(
-                this.dealCreation.execute({ objectId: dealHubspotId }).then(newStaff => {
-                  if (newStaff)
-                    arrayReturn.push(
-                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
-                    );
-                }),
+            
+            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
+
+            if (existingStaff == undefined) {
+              const result = await this.dealCreation.execute({ objectId: dealHubspotId }, {id: org.id, hubspotId: org.hubspot_id})
+              if (result){
+                arrayReturn.push(
+                `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
               );
+              }
+              
+              await sleep(400); // to avoid hitting rate limits
+              
             }
           }
         }
