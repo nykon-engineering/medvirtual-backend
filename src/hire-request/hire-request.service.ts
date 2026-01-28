@@ -3316,5 +3316,30 @@ export class HireRequestService {
     }
   };
 
+  async getPairingSessionOutcomeReasonOptions () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "pairing_outcome_reason"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Pairing Session Outcome Reason:", error.response?.data || error.message);
+      throw new Error("Failed to find Pairing Session Outcome Reason");
+    }
+  };
+
 
 }
