@@ -10,4 +10,19 @@ export class changeStatusHireRequesDTO  {
     @IsString()
     @IsOptional()
     reason?: string;
+
+    @ApiProperty({ example: '12345', description: 'staffing Coordinator to be updated on Hubspot', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    staffing_coordinator?: string;
+
+    @ApiProperty({ example: true, description: 'Indicates if the pairing session was conducted', required: false, type: String })
+    @IsString()
+     @IsOptional()
+    pairing_session_conducted?: String;
+
+    @ApiProperty({ example: 'Candidate no-show', description: 'The outcome reason for the pairing session', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    pairing_session_outcome_reason?: string;
 }

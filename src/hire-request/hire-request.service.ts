@@ -1198,12 +1198,18 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Pairing Lost'), //=> Pairing Lost
           cancel_reason: data.reason || 'No reason provided',
+          assign_sourcing_id: hireRequest.assigned_sourcing ? hireRequest.assigned_sourcing.id : undefined,
+          staffing_coordinator: data.staffing_coordinator || undefined,
+          pairing_session_conducted: data.pairing_session_conducted || undefined,
+          pairing_session_outcome_reason: data.pairing_session_outcome_reason || undefined,
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
 
 
         //Update cancel_date in hubspot
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'cancel_date');
+
+        
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }

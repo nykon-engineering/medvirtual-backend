@@ -51,7 +51,7 @@ export class HireRequestUpdateService {
                 hubspotProperties.pairing_specialist = data.assign_sourcing_id ? await this.getOwnerId(data.assign_sourcing_id) : undefined;
                 break;
 
-                case 'closed_date':
+                case 'closed_date': 
                 hubspotProperties.closed_date = formatDateForCA(new Date(), 'America/Los_Angeles');
                 break;
 
@@ -67,7 +67,22 @@ export class HireRequestUpdateService {
               }
               
             }else{
-              //fields came from Hire Request Update Page
+
+              //verify fields outside the dictionary
+              if (data.assign_sourcing_id) {
+                hubspotProperties.pairing_specialist = await this.getOwnerId(data.assign_sourcing_id);
+              }
+              if (data.staffing_coordinator){
+                hubspotProperties.staffing_coordinator = await this.getOwnerId(data.staffing_coordinator);
+              }
+
+              hubspotProperties.pairing_session_conducted = data.pairing_session_conducted;
+              hubspotProperties.pairing_outcome_reason = data.pairing_session_outcome_reason;
+              
+
+
+
+              //=======fields came from Hire Request Update Page
               for (const [dbKey, hubspotKey] of Object.entries(dbToHrTicketDictionary)) {
                 if (data[dbKey] !== undefined && data[dbKey] !== null) {
                   hubspotProperties[hubspotKey] = data[dbKey];
