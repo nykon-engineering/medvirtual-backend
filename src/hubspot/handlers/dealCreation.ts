@@ -123,7 +123,7 @@ export class HandlerDealCreation {
             return true;
 
         }catch (error) {
-            console.error('❌ Error fetching deal from HubSpot');
+            console.error(`❌ Error fetching deal ${event.objectId} from HubSpot`);
             console.error('Status:', error.response?.status);
             console.error('Data:', error.response?.data);
             console.error('Message:', error.message);

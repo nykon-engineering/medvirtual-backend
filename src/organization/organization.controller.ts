@@ -620,6 +620,14 @@ export class OrganizationController {
     return await this.organizationService.syncOrganizationsWithDeals();
   }
 
+    @Get('sync-all/organizations-with-deals2')
+  @UseGuards(AuthGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Sync all organizations with deals' })
+  async syncAllOrganizationsWithDeals2() {
+    return await this.organizationService.syncOrganizationsWithDealsNEW();
+  }
+
   @Get('get-organization/industry-types')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')

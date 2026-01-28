@@ -45,6 +45,7 @@ import { organizationIndustryToDbDictionary } from '../common/dictionaries/organ
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
 import { assert } from 'console';
+import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 
 
 @Injectable()
@@ -2467,114 +2468,85 @@ export class OrganizationService {
   }
   
   
-  async syncOrganizationsWithDealsNEW(): Promise<Object> { //created on 2025-10-30
-    const arrayReturn: string[] = [];
-    const chunkSize = 100;
-    const concurrency = 5;
-  
-    const organizations = await this.prisma.organization.findMany({
-      where: {
-        status: 'active',
-        organization_role: 'client',
-        hubspot_id: { not: null },
-      },
-      select: {
-        id: true,
-        hubspot_id: true,
-        staff: {
-          select: {
-            hubspot_id: true,
-            candidate: { select: { id: true, hubspot_id: true } },
-          },
-        },
-      },
-    });
-  
-    const orgMap = new Map(organizations.map(o => [o.hubspot_id, o]));
-    const organizationsId = organizations.map(org => org.hubspot_id);
+  async syncOrganizationsWithDealsNEW(): Promise<Object> { //trying to solve this problem at 2025-01-28
 
-    const chunks: any[] = [];
-    for (let i = 0; i < organizationsId.length; i += chunkSize) {
-      chunks.push(organizationsId.slice(i, i + chunkSize));
-    }
-  
-    let staffArray : string[] = [];
-    const processChunk = async (chunk: string[], index: number) => {
-      try {
-        const { data } = await axios.post(
-          'https://api.hubapi.com/crm/v4/associations/company/deal/batch/read',
-          { inputs: chunk.map(id => ({ id })) },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
+    try {
+
+      const dealArray: string[] = [];
+      const properties = Object.keys(dealToDbDictionary).join(',');
+      let after = true;
+
+      while (after){
+        const getObject = await axios.post('https://api.hubapi.com/crm/v3/objects/deals/search',
+        {
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: 'pipeline',
+                  operator: 'EQ',
+                  value: '85165570', // MV OPERATIONS PIPELINE
+                },
+              ],
             },
-            timeout: 20000,
+            {
+              filters: [
+                {
+                  propertyName: 'pipeline',
+                  operator: 'EQ',
+                  value: '5155250', // BV OPERATIONS PIPELINE
+                },
+              ],
+            },
+          ],
+          properties: properties.split(','),
+          limit: 100,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
           },
-        );
-  
-        const staffPromises: Promise<any>[] = [];
-  
-        for (const result of data.results) {
-          const org = orgMap.get(result.from.id);
-  
-          if (!org) {
-            staffPromises.push(
-              this.organizationCreation.execute({ objectId: result.from }).then(newOrg => {
-                if (newOrg) arrayReturn.push(`=> Organization ${result.from.id} created.`);
-              }),
-            );
-            continue;
-          }
-  
-          for (const assoc of result.to) {
-            const dealHubspotId = assoc.toObjectId;
-            const existingStaff = org.staff.find(s => s.hubspot_id === dealHubspotId);
-
-            if (!existingStaff) {
-              staffPromises.push(
-                this.dealCreation.execute({ objectId: dealHubspotId }).then(newStaff => {
-                  if (newStaff)
-                    arrayReturn.push(
-                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
-                    );
-                }),
-              );
-            }else{
-              staffArray.push(dealHubspotId); 
-            }
-          }
         }
-  
-        await Promise.allSettled(staffPromises);
-      } catch (error) {
-        console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
-      }
-    };
-  
-    const queue: Promise<void>[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const task = processChunk(chunks[i], i);
-      queue.push(task);
-      if (queue.length >= concurrency) {
-        await Promise.allSettled(queue);
-        queue.length = 0;
-      }
-    }
-    if (queue.length) await Promise.allSettled(queue);
-    
-    //here is the new function to handle with the candidates associated
-    await this.syncCandidatesAssociated(staffArray, orgMap, arrayReturn);
+      );
 
-    await this.prisma.sync.create({
-      data: { role: 'organizations', last_synced_at: new Date() },
-    });
-  
-    return {
-      message: 'Organization sync with deals completed',
-      status: 200,
-      data: { arrayReturn },
-    };
+        console.log(`Fetched ${getObject.data.results.length} deals from HubSpot.`);
+
+        for (const deal of getObject.data.results) {
+          dealArray.push(deal.id);
+          
+          /*const existingStaff = await this.prisma.staff.findUnique({
+            where: { hubspot_id: deal.id },
+            select: { id: true }
+          })
+
+          if (!existingStaff) {
+            dealArray.push(deal.id);
+          }
+            */
+        }
+
+        after = getObject.data.paging?.next?.after ? getObject.data.paging.next.after : false;
+      }
+
+      console.log(`Total deals to process: ${dealArray.length}`);
+
+      return {
+        message: 'Organization sync with deals completed',
+        status: 200,
+        data: { dealArray },
+      };
+
+    }catch (error) {
+      console.error('Error in syncOrganizationsWithDealsNEW:', error);
+      return {
+        message: 'Error during organization sync with deals',
+        status: 500,
+        data: { error: axios.isAxiosError(error) ? error.response?.data : error },
+      };
+    }
+
+    
   }
 
   //function used  to handle with candidates associated inside the function above
