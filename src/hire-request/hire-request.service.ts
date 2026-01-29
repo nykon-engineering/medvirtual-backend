@@ -250,7 +250,11 @@ export class HireRequestService {
       ...hubspotMappedFields,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       status: HireRequestStatus.new,
-      assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
+      assign_user_id: user.role.includes('system') 
+                        ? user.id
+                        : organizationSQL.admin_id 
+                          ? organizationSQL.admin_id 
+                          : undefined,
       assigned_sourcing:  user.role.includes('organization') 
                             ?  { connect: { id: organizationSQL.admin_id } } 
                             :  selectedCandidates && selectedCandidates.length > 0 
@@ -770,6 +774,25 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
+    const usersFromAssignUserId = await this.prisma.uSER.findMany({
+      where: {
+        id: {
+          in: hireRequest.assign_user_id
+            ? hireRequest.assign_user_id
+                .split(',')
+                .filter(Boolean)
+                .map(id => id.trim())
+            : [],
+        },
+      },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+      },
+    });
+
     //Add salary with automatic calculation
     const formatted = {
       ...hireRequest,
@@ -808,7 +831,8 @@ export class HireRequestService {
               })) : [],
             }}
         })
-      }))
+      })),
+      assign_user_id: usersFromAssignUserId,
     };
 
     return formatted;
@@ -985,34 +1009,63 @@ export class HireRequestService {
     });
      
 
-    const formatted = hireRequests.map(hr => ({
-      ...hr,
-      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
-      panels: hr.panels.map(panel => ({
-        ...panel,
-        interview_date: panel.interviews[0]?.scheduled_date || null,
-        interview_link: panel.interviews[0]?.link || null,
-        interviews: undefined,
-        panelCandidates: panel.panelCandidates.map(pc => ({
-          ...pc,
-          candidate:{
-            ...pc.candidate,
-            salary: findMonthlySalary(
-              pc.candidate.hourly_pay_rate?.toNumber() || 0,
-              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
-            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
-            .map(pcc => ({
-              panel_id: pcc.panel.id,
-              title: pcc.panel.hireRequest.title,
-              organization_name: pcc.panel.hireRequest.organization.name,
-              status: pcc.status,
-            })) : [],
-          }
-        }))
+    const formatted = await Promise.all(
+      hireRequests.map(async (hr) => ({
+        ...hr,
+
+        hubspot_pairing_date: hr.hubspot_pairing_date
+          ? timestampToUSDate(hr.hubspot_pairing_date)
+          : null,
+
+        panels: hr.panels.map(panel => ({
+          ...panel,
+          interview_date: panel.interviews[0]?.scheduled_date || null,
+          interview_link: panel.interviews[0]?.link || null,
+          interviews: undefined,
+          panelCandidates: panel.panelCandidates.map(pc => ({
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              salary: findMonthlySalary(
+                pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                pc.candidate.languages.length > 1
+                  ? 'Bilingual'
+                  : pc.candidate.languages[0]?.name,
+                pc.candidate.approved_positions_pairing?.[0] || ''
+              ),
+              avatar: pc.candidate.avatar_url
+                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                : null,
+              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                panel_id: pcc.panel.id,
+                title: pcc.panel.hireRequest.title,
+                organization_name: pcc.panel.hireRequest.organization.name,
+                status: pcc.status,
+              })) || [],
+            }
+          }))
+        })),
+
+        assign_user_id: hr.assign_user_id
+          ? await this.prisma.uSER.findMany({
+              where: {
+                id: {
+                  in: hr.assign_user_id
+                    .split(',')
+                    .filter(Boolean)
+                    .map(id => id.trim()),
+                },
+              },
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+              },
+            })
+          : [],
       }))
-    }));
+    );
 
     return formatted;
     

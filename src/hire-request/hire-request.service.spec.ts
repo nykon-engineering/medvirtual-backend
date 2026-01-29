@@ -73,6 +73,9 @@ const prismaMock = {
   organization: {
     findUnique: jest.fn(),
   },
+  uSER: {
+    findMany: jest.fn(),
+  },
   $transaction: jest.fn(),
 };
 const hubspotServiceMock = {

@@ -28,7 +28,7 @@ export function timestampToUSDate(timestamp) {
   const ts = Number(timestamp); 
 
   if (isNaN(ts)) {
-    console.error("invalid Timestamp:", timestamp);
+    //console.error("invalid Timestamp:", timestamp);
     return null;
   }
   const date = new Date(ts);
