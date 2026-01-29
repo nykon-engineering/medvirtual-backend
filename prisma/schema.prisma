@@ -36,7 +36,7 @@ model USER {
   email_invitations            EmailInvitation[]
   email_verifications          EmailVerification[]
   hireRequestsSourcingAssigned HireRequest[]       @relation("AssignedSourcing")
-  hireRequestsAssigned         HireRequest[]       @relation("AssignedUser")
+  hireRequestsAssignedMany     HireRequest[]       @relation("AssignedUsers")
   hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
   panelCandidatesCreated       PanelCandidate[]    @relation("PanelCandidateCreatedBy")
   adminOrganizations           Organization[]      @relation("OrganizationAdmin")
@@ -290,7 +290,7 @@ model HireRequest {
   old_status                   HireRequestStatus?
   panels                       CandidatePanel[]
   assigned_sourcing            USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
-  assigned_user                USER?              @relation("AssignedUser", fields: [assign_user_id], references: [id])
+  assigned_users               USER[]             @relation("AssignedUsers")
   createdBy                    USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
   organization                 Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
   skills                       HireRequestSkill[]

@@ -246,9 +246,7 @@ export class NotificationsService {
         createdBy: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
-        assigned_user: {
-          select: { id: true, email: true, first_name: true, last_name: true },
-        },
+        assign_user_id: true,
         assigned_sourcing: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -278,7 +276,15 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    if (!hr.assigned_user?.email)
+    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+   
+    // get all users to notify
+    const users = await this.prisma.uSER.findMany({
+      where: { id: { in: userIds } },
+      select: { email: true, first_name: true, last_name: true, id: true },
+    });
+    
+    if (!users || users.length === 0 || !users[0].email)
       throw new BadRequestException('Hire request has no assignee email');
     
 
@@ -311,7 +317,7 @@ export class NotificationsService {
     const companyName = emailTheme?.companyName || 'MedVirtual';
     
     const recipients = [
-      hr.assigned_user?.email,
+      ...users.map(user => user.email),
       hr.assigned_sourcing?.email,
       hr.createdBy?.email,
     ].filter((email): email is string => Boolean(email));
@@ -374,9 +380,7 @@ export class NotificationsService {
         expected_start_date: true,
         hubspot_role_type: true,
         availability: true,
-        assigned_user: {
-          select: { id: true, email: true, first_name: true, last_name: true },
-        },
+        assign_user_id: true,
         organization: {
           select: { name: true, id: true, business_unit: true },
         },
@@ -408,7 +412,14 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    if (!hr.assigned_user?.email)
+    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+   
+    // get all users to notify
+    const users = await this.prisma.uSER.findMany({
+      where: { id: { in: userIds } },
+      select: { email: true, first_name: true, last_name: true, id: true },
+    });
+    if (!users || users.length === 0 || !users[0].email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const startDate = hr.expected_start_date
@@ -476,21 +487,28 @@ export class NotificationsService {
         description: true,
         priority: true,
         specialization: true,
-        assigned_user: { select: { id: true, email: true } },
+        assign_user_id: true,
         organization: {
           select: { name: true },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    if (!hr.assigned_user?.email)
+    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+   
+    // get all users to notify
+    const users = await this.prisma.uSER.findMany({
+      where: { id: { in: userIds } },
+      select: { email: true, first_name: true, last_name: true, id: true },
+    });
+    if (!users || users.length === 0 || !users[0].email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const verb = action === 'edited' ? 'edited' : 'canceled';
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
     // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
 
     const html = this.buildEmail(
       `<h2>Hire Request ${verb.toUpperCase()}</h2>
@@ -516,7 +534,7 @@ export class NotificationsService {
 
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: [hr.assigned_user.email],
+      to: users.map(user => user.email),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
     });
@@ -586,24 +604,31 @@ export class NotificationsService {
         description: true,
         priority: true,
         specialization: true,
-        assigned_user: { select: { id: true, email: true, first_name: true, last_name: true } },
+        assign_user_id: true,
         organization: {
           select: { name: true },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    if (!hr.assigned_user?.email)
+    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+   
+    // get all users to notify
+    const users = await this.prisma.uSER.findMany({
+      where: { id: { in: userIds } },
+      select: { email: true, first_name: true, last_name: true, id: true },
+    });
+    if (!users || users.length === 0 || !users[0].email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const verb = action === 'for_review' ? 'For Review' : action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
     // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
 
     const html = this.buildEmail(
-      `<p>${hr.assigned_user.first_name ?? hr.assigned_user.first_name}</p>
+      `<p>${users[0].first_name ?? users[0].first_name}</p>
        <p><strong>Hire Request Ready For Review</strong></p>
        <p>This request requires your attention:</p>
        
@@ -627,7 +652,7 @@ export class NotificationsService {
 
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: [hr.assigned_user.email],
+      to: users.map(user => user.email).filter(Boolean),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
     });
@@ -647,9 +672,7 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         availability: true,
-        assigned_user: {
-          select: { id: true, email: true, first_name: true, last_name: true },
-        },
+        assign_user_id: true,
         assigned_sourcing: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -659,14 +682,24 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    let destin;
-    if (type === 'sourcing'){
-      destin = hr.assigned_sourcing;
-    }else{
-      destin = hr.assigned_user;
+
+    let userIds: string[] = [];
+    if (type === 'sourcing') {
+      if (!hr.assigned_sourcing?.email) throw new BadRequestException('Hire request has no assignee email');
+      userIds = [hr.assigned_sourcing.id];
+    } else {
+      if (!hr.assign_user_id) throw new BadRequestException('Hire request has no assignee');
+      userIds = hr.assign_user_id.split(',').map(id => id.trim()).filter(Boolean);
     }
-    if (!destin?.email)
-      throw new BadRequestException('Hire request has no assignee email');
+    if (userIds.length === 0) throw new BadRequestException('No valid user IDs to notify');
+
+    // get all users to notify
+    const users = await this.prisma.uSER.findMany({
+      where: { id: { in: userIds } },
+      select: { email: true, first_name: true, last_name: true, id: true },
+    });
+    const emails = users.map(u => u.email).filter(Boolean);
+    if (emails.length === 0) throw new BadRequestException('No assignee emails found');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
     const salaryRange = hr.salary_range_from && hr.salary_range_to
@@ -676,11 +709,11 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
+    // Usa o tema do primeiro usuário
+    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
 
     const html = this.buildEmail(
-      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
+      `<p>${users.map(u => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
       ${type === 'sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
        <p>You have been assigned ${type === 'sourcing' ? `to source` : `to`} this hire request:</p>
        
@@ -711,7 +744,7 @@ export class NotificationsService {
 
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: [destin.email],
+      to: emails,
       subject: `Hire Request Assigned: ${hr.title}`,
       html,
     });
@@ -731,9 +764,7 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         availability: true,
-        assigned_user: {
-          select: { id: true, email: true, first_name: true, last_name: true },
-        },
+        assign_user_id: true,
         assigned_sourcing: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -810,9 +841,7 @@ export class NotificationsService {
         salary_range_to: true,
         expected_start_date: true,
         availability: true,
-        assigned_user: {
-          select: { id: true, email: true, first_name: true, last_name: true },
-        },
+        assign_user_id: true,
         assigned_sourcing: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
@@ -883,23 +912,30 @@ export class NotificationsService {
         description: true,
         priority: true,
         specialization: true,
-        assigned_user: { select: { id: true, email: true, first_name: true, last_name: true } },
+        assign_user_id: true,
         organization: {
           select: { name: true },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    if (!hr.assigned_user?.email)
+    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+   
+    // get all users to notify
+    const users = await this.prisma.uSER.findMany({
+      where: { id: { in: userIds } },
+      select: { email: true, first_name: true, last_name: true, id: true },
+    });
+    if (!users || users.length === 0 || !users[0].email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
     // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
+    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
 
     const html = this.buildEmail(
-      `<p>${hr.assigned_user.first_name ?? hr.assigned_user.first_name} ${hr.assigned_user.last_name ?? hr.assigned_user.last_name}</p>
+      `<p>${users[0].first_name ?? users[0].first_name} ${users[0].last_name ?? users[0].last_name}</p>
        <p>The hire request received new candidates.</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
@@ -922,7 +958,7 @@ export class NotificationsService {
 
     return await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: [hr.assigned_user.email],
+      to: users.map(user => user.email),
       subject: `New candidates in Hire Request: ${hr.title}`,
       html,
     });

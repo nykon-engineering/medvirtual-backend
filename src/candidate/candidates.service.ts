@@ -1076,7 +1076,7 @@ export class CandidatesService {
     const hireRequests = await this.prisma.hireRequest.findMany({
       where: {
         status: 'sourcing',
-        assigned_user: user.role === 'system_admin' ? { is: { id: user.id } } : undefined,
+        //assigned_user: user.role === 'system_admin' ? { is: { id: user.id } } : undefined,
         panels: {
           some: {
             panelCandidates: {}

@@ -427,13 +427,6 @@ export class HireRequestService {
               last_name: true,
             }
           },
-          assigned_user:{
-            select: {
-              id: true,
-              first_name: true,
-              last_name: true,
-            }
-          },
           assigned_sourcing: {
             select: {
               id: true,
@@ -559,34 +552,69 @@ export class HireRequestService {
       };
     }
 
-    const formatted = hireRequests.map(hr => ({
-      ...hr,
-      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
-      panels: hr.panels.map(panel => ({
-        ...panel,
-        interview_date: panel.interviews[0]?.scheduled_date || null,
-        interview_link: panel.interviews[0]?.link || null,
-        interviews: undefined,
-        panelCandidates: panel.panelCandidates.map(pc => ({
-          ...pc,
-          candidate:{
-            ...pc.candidate,
-            salary: findMonthlySalary(
-              pc.candidate.hourly_pay_rate?.toNumber() || 0,
-              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
-            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
-            .map(pcc => ({
-              panel_id: pcc.panel.id,
-              title: pcc.panel.hireRequest.title,
-              organization_name: pcc.panel.hireRequest.organization.name,
-              status: pcc.status,
-            })) : [],
-          }
-        }))
+    //Get all users from hirerequests assign_user_id to optimize the next steps
+
+    
+
+
+    const formatted = await Promise.all(
+      hireRequests.map(async (hr) => ({
+        ...hr,
+
+        hubspot_pairing_date: hr.hubspot_pairing_date
+          ? timestampToUSDate(hr.hubspot_pairing_date)
+          : null,
+
+        panels: hr.panels.map(panel => ({
+          ...panel,
+          interview_date: panel.interviews[0]?.scheduled_date || null,
+          interview_link: panel.interviews[0]?.link || null,
+          interviews: undefined,
+          panelCandidates: panel.panelCandidates.map(pc => ({
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              salary: findMonthlySalary(
+                pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                pc.candidate.languages.length > 1
+                  ? 'Bilingual'
+                  : pc.candidate.languages[0]?.name,
+                pc.candidate.approved_positions_pairing?.[0] || ''
+              ),
+              avatar: pc.candidate.avatar_url
+                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                : null,
+              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                panel_id: pcc.panel.id,
+                title: pcc.panel.hireRequest.title,
+                organization_name: pcc.panel.hireRequest.organization.name,
+                status: pcc.status,
+              })) || [],
+            }
+          }))
+        })),
+
+        assign_user_id: hr.assign_user_id
+          ? await this.prisma.uSER.findMany({
+              where: {
+                id: {
+                  in: hr.assign_user_id
+                    .split(',')
+                    .filter(Boolean)
+                    .map(id => id.trim()),
+                },
+              },
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+              },
+            })
+          : [],
       }))
-    }));
+    );
+
 
     return {
       data: formatted,
@@ -615,13 +643,6 @@ export class HireRequestService {
         skills: true,
         organization: true,
         createdBy:{
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-          }
-        },
-        assigned_user:{
           select: {
             id: true,
             first_name: true,
@@ -852,13 +873,6 @@ export class HireRequestService {
           }
         },
         createdBy:{
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-          }
-        },
-        assigned_user:{
           select: {
             id: true,
             first_name: true,
@@ -1689,29 +1703,26 @@ export class HireRequestService {
   }
 
   async reassign(id: string, user: USER, data: reassignDTO, type: string): Promise<any> {
+    console.log(`[hire-request] Starting reassignment of hire request ${id} to user(s) ${data.user_id} as ${type}`);
     if (!user || user.role.includes("organization") && !user.organization_id) throw new NotFoundException('User not found or not part of an organization');
 
     if(!type) throw new BadRequestException('Type of reassignment is required');
 
     let fieldToUpdate = {};
-    if (type === 'concierge'){
+    if (type === 'concierge') {
       fieldToUpdate = {
-        assigned_user: data.user_id
-        ? { connect: { id: data.user_id } }
-        : { disconnect: true },
-      }
-    }else if (type === 'sourcing'){
+        assign_user_id: data.user_id || null
+      };
+    } else if (type === 'sourcing') {
       fieldToUpdate = {
         assigned_sourcing: data.user_id
-        ? { connect: { id: data.user_id } }
-        : { disconnect: true },
-      }
+          ? { connect: { id: data.user_id } }
+          : { disconnect: true },
+      };
     }
 
     const hireRequest = await this.prisma.hireRequest.update({
-      where: {
-        id: id
-      },
+      where: { id },
       data: fieldToUpdate
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -1719,9 +1730,9 @@ export class HireRequestService {
     const newHr = await this.findOne(id, user);
     await this.hubspot.updateHireRequestInHubspot(newHr, type === 'concierge' ? 'assign_user_id' : 'assign_sourcing_id');
 
-    // Notify newly assigned user via email (non-blocking)
+    // Notificação (não bloqueante)
     if (data.user_id) {
-      console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user ${data.user_id}`);
+      console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user(s) ${data.user_id}`);
       try {
         const result = await this.notifications.notifyHireRequestCreated(id, type);
         console.log(`[notifications] Hire request reassigned notification sent successfully:`, result);
