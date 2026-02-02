@@ -39,14 +39,15 @@ export class HireRequestCreationService {
           ? `${data.salary_range_from} - ${data.salary_range_to}` 
           : '';
           //console.log("Data arriving on HireRequestCreationService:", data);
+          const hrDescription = data.description ? data.description : undefined;
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/tickets",
             {
               properties: {
                 subject: data.title,
                 content: data.request_role 
-                  ? 'Requested Role: ' + data.request_role + ' | ' + data.description && data.description
-                  : data.description,
+                  ? 'Requested Role: ' + data.request_role + ' | ' + hrDescription
+                  : hrDescription,
                 hs_pipeline: "0", //=>Pairing Pipeline
                 hs_pipeline_stage: "1",  //=> New agent Request
                 pairing_request_type: data.hubspot_pairing_request_type || 'New Client',
