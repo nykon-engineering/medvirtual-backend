@@ -23,6 +23,7 @@ import { PanelModule } from './panel/panel.module';
 import { TalentPoolLeadsModule } from './talent-pool-leads/talent-pool-leads.module';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { SqsModule } from './sqs/sqs.module';
 
 @Module({
   imports: [
@@ -51,7 +52,8 @@ import { APP_GUARD } from '@nestjs/core';
     NotificationsModule,
     EmailTestModule,
     PanelModule,
-    TalentPoolLeadsModule
+    TalentPoolLeadsModule,
+    SqsModule
   ],
   controllers: [AppController],
   providers: [

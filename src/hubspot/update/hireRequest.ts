@@ -78,9 +78,11 @@ export class HireRequestUpdateService {
 
               hubspotProperties.pairing_session_conducted = data.pairing_session_conducted;
               hubspotProperties.pairing_outcome_reason = data.pairing_session_outcome_reason;
-              
-
-
+              hubspotProperties.count_of_candidates_invited_ = data.count_of_candidates_invited_ || undefined;
+              hubspotProperties.count_of_candidates_attended_ = data.count_of_candidates_attended_ || undefined;
+              hubspotProperties.count_of_candidates_interviewed_ = data.count_of_candidates_interviewed_ || undefined;
+              hubspotProperties.client_signed_contract = data.client_signed_contract || undefined;
+              hubspotProperties.client_signed_contract_closing_ticket = data.client_signed_contract_closing_ticket || undefined;
 
               //=======fields came from Hire Request Update Page
               for (const [dbKey, hubspotKey] of Object.entries(dbToHrTicketDictionary)) {

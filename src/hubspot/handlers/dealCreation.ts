@@ -1,9 +1,28 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
-import { ownerToDbDictionary } from "../../common/dictionaries/owner-dictionary";
-import { mapDealToDb, mapOwnerToDb } from "../../common/utils/hubspot.util";
+import { mapDealToDb } from "../../common/utils/hubspot.util";
 import { PrismaService } from "../../prisma/prisma.service";
 import { dealToDbDictionary } from "../../common/dictionaries/deal-dictionary";
+
+
+const sleep = (ms: number) =>
+        new Promise(resolve => setTimeout(resolve, ms));
+
+async function retry(fn, retries = 3, delay = 500) {
+    try {
+        return await fn();
+    } catch (err) {
+        if (
+        retries > 0 &&
+        axios.isAxiosError(err) &&
+        err.response?.status === 429
+        ) {
+        await sleep(delay);
+        return retry(fn, retries - 1, delay * 2); // exponential backoff
+        }
+        throw err;
+    }
+}
 
 
 @Injectable()
@@ -28,13 +47,15 @@ export class HandlerDealCreation {
             }
 
             const properties = Object.keys(dealToDbDictionary).join(',');
-            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}?properties=${properties}`,
-            {
-            headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-                },
-            });
+            const getObject = await retry(() => 
+                axios.get(`https://api.hubapi.com/crm/v3/objects/deals/${event.objectId}?properties=${properties}`,
+                {
+                headers: {
+                    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json',
+                    },
+                })
+            );
 
             if (!getObject) {
                 throw new BadRequestException('No object data found');

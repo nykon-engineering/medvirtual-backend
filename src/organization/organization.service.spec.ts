@@ -10,6 +10,7 @@ import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SqsService } from '../sqs/sqs.service';
 
 
 const userfake = { 
@@ -82,6 +83,10 @@ describe('OrganizationService', () => {
     notifyHireRequestSelectWinner: jest.fn(),
   };
 
+  const mockSqsService = {
+    sendMessage: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -95,6 +100,7 @@ describe('OrganizationService', () => {
         { provide: HandlerOrganizationCreation , useValue: handlerObjectCreationMock },
         { provide: HandlerDealCreation , useValue: handlerDealCreationMock },
         { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: SqsService, useValue: mockSqsService },
       ],
     }).compile();
 

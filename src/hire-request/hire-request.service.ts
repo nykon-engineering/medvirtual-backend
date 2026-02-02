@@ -1269,6 +1269,11 @@ export class HireRequestService {
           staffing_coordinator: data.staffing_coordinator || undefined,
           pairing_session_conducted: data.pairing_session_conducted || undefined,
           pairing_session_outcome_reason: data.pairing_session_outcome_reason || undefined,
+          count_of_candidates_invited_: data.count_of_candidates_invited_ || undefined,
+          count_of_candidates_attended_: data.count_of_candidates_attended_ || undefined,
+          count_of_candidates_interviewed_: data.count_of_candidates_interviewed_ || undefined,
+          client_signed_contract: data.client_signed_contract || undefined,
+          client_signed_contract_closing_ticket: data.client_signed_contract_closing_ticket || undefined,
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
 

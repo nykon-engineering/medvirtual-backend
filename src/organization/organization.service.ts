@@ -5,7 +5,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -44,9 +44,8 @@ import { organizationIndustryToDbDictionary } from '../common/dictionaries/organ
 //import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
-import { assert } from 'console';
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
-
+import { SqsService } from '../sqs/sqs.service';
 
 @Injectable()
 export class OrganizationService {
@@ -59,11 +58,12 @@ export class OrganizationService {
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService,
     @Inject(forwardRef (() => NotificationsService))
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+
+    private readonly sqs: SqsService
     
   ) {}
 
-  
   async delay(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   };
@@ -2425,20 +2425,40 @@ export class OrganizationService {
             const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
 
             if (existingStaff == undefined) {
-              staffPromises.push(
-                this.dealCreation.execute({ objectId: dealHubspotId }, {id: org.id, hubspotId: org.hubspot_id})
-                .then(newStaff => {
-                  if (newStaff)
-                    arrayReturn.push(
-                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
-                    );
-                }),
-              );
+
+                await this.sqs.sendMessage({
+                  QueueUrl: process.env.DEALS_QUEUE_URL,
+                  MessageBody: JSON.stringify({
+                    objectId: dealHubspotId,
+                    organization: {
+                      id: org.id,
+                      hubspot_id: org.hubspot_id,
+                    },
+                  }),
+                })
+                
+                /*
+                staffPromises.push(
+                  this.dealCreation.execute({ objectId: dealHubspotId }, {id: org.id, hubspotId: org.hubspot_id})
+                  .then(newStaff => {
+                    if (newStaff)
+                      arrayReturn.push(
+                        `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
+                      );
+                  })
+                );
+                */
             }
           }
         }
   
-        await Promise.allSettled(staffPromises);
+        const results = await Promise.allSettled(staffPromises);
+
+        results.forEach((r) => {
+          if (r.status === 'rejected') {
+            console.error('❌ Error processing staff:', r.reason);
+          }
+        });
       } catch (error) {
         console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
       }

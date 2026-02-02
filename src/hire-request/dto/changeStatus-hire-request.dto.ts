@@ -25,4 +25,29 @@ export class changeStatusHireRequesDTO  {
     @IsString()
     @IsOptional()
     pairing_session_outcome_reason?: string;
+
+    //Add these new fields
+    @ApiProperty({ example: 5, description: 'Count of candidates invited', required: false, type: Number })
+    @IsOptional()
+    count_of_candidates_invited_?: number;
+
+    @ApiProperty({ example: 5, description: 'Count of candidates attended', required: false, type: Number })
+    @IsOptional()
+    count_of_candidates_attended_?: number;
+
+    @ApiProperty({ example: 5, description: 'Count of candidates interviewed', required: false, type: Number })
+    @IsOptional()
+    count_of_candidates_interviewed_?: number;
+
+    @ApiProperty({ example: 'Not yet', description: 'Client signed contract status (Ticket submission)', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    client_signed_contract?: string;
+
+    @ApiProperty({ example: 'Not yet', description: 'Client signed contract status (Closing Ticket)', required: false, type: String })
+    @IsString()
+    @IsOptional()
+    client_signed_contract_closing_ticket?: string;
+
+
 }
