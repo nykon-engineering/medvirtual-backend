@@ -63,7 +63,6 @@ export class HireRequestUpdateService {
                   hubspotProperties.cancel_reason = '';
                   hubspotProperties.ticket_cancel_date = '';
                 break;
-
               }
               
             }else{
@@ -125,7 +124,6 @@ export class HireRequestUpdateService {
               hubspotProperties.va_pay_rate_range = data.salary_range_from && data.salary_range_to 
               ? `${data.salary_range_from} - ${data.salary_range_to}`
               : '';
-
             }
             
             //console.log(hubspotProperties)
