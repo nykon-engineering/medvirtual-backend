@@ -23,9 +23,10 @@ export class CreateHireRequestDto {
     @IsOptional()
     client_id: string;
 
-    @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: true,  type: String })
+    @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: false,  type: String })
     @IsString()
-    specialization: string;
+    @IsOptional()
+    specialization?: string;
 
     @ApiProperty({ example: 'Full-time, Part-time, On-demand, any', description: 'The availability for the hire request', required: true,  type: String, enum: ['Full-time', 'Part-time', 'On-demand', 'any'] })
     @IsString()
