@@ -42,7 +42,6 @@ export class CreateHireRequestDto {
     @Type(() => Date)
     expected_start_date: Date;
 
-
     @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: false,  type: String })
     @IsString()
     @IsOptional()
@@ -84,7 +83,6 @@ export class CreateHireRequestDto {
     @IsArray()
     @IsOptional()
     skills: HireRequestSkillDTO[];
-
 
     @ApiProperty({ type: String, description: 'Expected Tasks & Scope of Support', required: false })
     @IsString()
@@ -134,7 +132,6 @@ export class CreateHireRequestDto {
     @ApiProperty({ type: String, description: 'Requested Role', required: true })
     @IsString()
     request_role: string
-
 
     @ApiProperty({ description: 'The selected candidates for the hire request', required: false })
     @IsArray()
