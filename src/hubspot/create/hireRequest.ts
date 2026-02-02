@@ -44,7 +44,9 @@ export class HireRequestCreationService {
             {
               properties: {
                 subject: data.title,
-                content: data.description,
+                content: data.request_role 
+                  ? 'Requested Role: ' + data.request_role + ' | ' + data.description && data.description
+                  : data.description,
                 hs_pipeline: "0", //=>Pairing Pipeline
                 hs_pipeline_stage: "1",  //=> New agent Request
                 pairing_request_type: data.hubspot_pairing_request_type || 'New Client',

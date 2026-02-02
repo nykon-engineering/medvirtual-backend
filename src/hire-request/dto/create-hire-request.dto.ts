@@ -130,6 +130,10 @@ export class CreateHireRequestDto {
     @IsOptional()
     hubspot_pairing_request_type: string
 
+    @ApiProperty({ type: String, description: 'Requested Role', required: true })
+    @IsString()
+    request_role: string
+
 
     @ApiProperty({ description: 'The selected candidates for the hire request', required: false })
     @IsArray()
