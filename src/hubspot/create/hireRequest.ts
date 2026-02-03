@@ -67,7 +67,7 @@ export class HireRequestCreationService {
                 n2_monitors_required_: data.hubspot_n2_monitors_required,
                 va_shift_hours: data.hubspot_va_shift_hours ? data.hubspot_va_shift_hours : undefined,
                 tools_familiarization: data.hubspot_tools_familiarization ? data.hubspot_tools_familiarization : undefined,
-                training_request_notes: data.hubspot_training_request_notes ? data.hubspot_training_request_notes : undefined,
+                training_request_notes_: data.hubspot_training_request_notes ? data.hubspot_training_request_notes : undefined,
                 camera_on_shift: data.hubspot_camera_on_during_shift ? data.hubspot_camera_on_during_shift : undefined,
                 special_sourcing_needed: data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false',
                 special_requirements: data.hubspot_special_requirements ? data.hubspot_special_requirements : undefined,
