@@ -258,7 +258,7 @@ model HireRequest {
   expected_start_date          DateTime?
   salary_range_from            Decimal?
   salary_range_to              Decimal?
-  specialization               String
+  specialization               String?
   location                     String?
   assign_user_id               String?
   createdByUserId              String?
