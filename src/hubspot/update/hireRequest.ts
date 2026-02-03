@@ -125,6 +125,8 @@ export class HireRequestUpdateService {
               ? `${data.salary_range_from} - ${data.salary_range_to}`
               : '';
             }
+
+            //console.log("Updating Hubspot Ticket with properties:", hubspotProperties);
             
             //console.log(hubspotProperties)
             const response = await axios.patch(
