@@ -99,6 +99,21 @@ export class CreateHireRequestDto {
     @IsOptional()
     hubspot_va_shift_hours: string
 
+    @ApiProperty({ type: String, description: 'Tools Familiarization', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_tools_familiarization: string
+
+    @ApiProperty({ type: String, description: 'Training Request Notes', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_training_request_notes: string
+
+    @ApiProperty({ type: String, description: 'Camera On During Shift', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_camera_on_during_shift: string
+
     @ApiProperty({ type: String, description: 'Special Sourcing Needed[Yes/No]', required: false })
     @IsString()
     @IsOptional()

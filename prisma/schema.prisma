@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("PROD_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -277,12 +277,16 @@ model HireRequest {
   hubspot_tasks                String?
   hubspot_n2_monitors_required String?
   hubspot_va_shift_hours       String?
+  hubspot_tools_familiarization String?
+  hubspot_training_request_notes String?
+  hubspot_camera_on_during_shift String?
   hubspot_special_sourcing_needed String?
   hubspot_special_requirements String?
   hubspot_additional_training_requested String?
   hubspot_pairing_date         String? //String for avoid misunderstanding about timeZone
   hubspot_pairing_time         String?
   request_role                 String?
+
 
   cancel_date                  DateTime?
   cancel_reason                String?

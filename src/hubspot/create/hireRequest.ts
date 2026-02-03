@@ -66,12 +66,15 @@ export class HireRequestCreationService {
                 tasks: data.hubspot_tasks ? data.hubspot_tasks : undefined,
                 n2_monitors_required_: data.hubspot_n2_monitors_required,
                 va_shift_hours: data.hubspot_va_shift_hours ? data.hubspot_va_shift_hours : undefined,
+                tools_familiarization: data.hubspot_tools_familiarization ? data.hubspot_tools_familiarization : undefined,
+                training_request_notes: data.hubspot_training_request_notes ? data.hubspot_training_request_notes : undefined,
+                camera_on_shift: data.hubspot_camera_on_during_shift ? data.hubspot_camera_on_during_shift : undefined,
                 special_sourcing_needed: data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false',
                 special_requirements: data.hubspot_special_requirements ? data.hubspot_special_requirements : undefined,
                 additional_training_requested: data.hubspot_additional_training_requested ? data.hubspot_additional_training_requested : undefined,
                 pairing_date: data.hubspot_pairing_date ? data.hubspot_pairing_date : undefined, //  milisecnonds in timestamp,
                 pairing_time: data.hubspot_pairing_time ? data.hubspot_pairing_time : undefined,
-
+                
                 //ticketOwner
                 hubspot_owner_id: data.assign_user_id 
                   ? await this.getOwnerId(data.assign_user_id.length > 0 
