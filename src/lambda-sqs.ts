@@ -30,6 +30,7 @@ export const handler = async (event: SQSEvent) => {
 
     switch (type) {
       case 'CREATE_DEAL_STAFF':
+        console.log(`Creating staff for deal ${payload.objectId}`);
         //Process deal creation
         await dealService.execute(payload);
         break;

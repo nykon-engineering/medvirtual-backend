@@ -2428,7 +2428,6 @@ export class OrganizationService {
 
             if (existingStaff == undefined) {
 
-                /*  
                 await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
@@ -2440,8 +2439,6 @@ export class OrganizationService {
                     },
                   }),
                 })
-                */
-                
                 //arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
                 
             }else{
