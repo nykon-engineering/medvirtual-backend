@@ -19,7 +19,7 @@ export const handler = async (event: SQSEvent) => {
   const prisma = app.get(PrismaService);
 
   for (const record of event.Records) {
-    console.log('Processing record:', record.body);
+    //console.log('Processing record:', record.body);
     const payload = JSON.parse(record.body);
     switch (payload.type) {
       case 'CREATE_DEAL_STAFF':
@@ -28,6 +28,7 @@ export const handler = async (event: SQSEvent) => {
         break;
 
       case 'DEACTIVATE_DEAL_STAFF':
+        console.log(`Deactivating staff for deal ${payload.objectId}`);
         // Process deactivation
         await prisma.staff.update({
           where: { hubspot_id: String(payload.objectId) },
@@ -36,6 +37,7 @@ export const handler = async (event: SQSEvent) => {
         break;
 
       case 'REACTIVATE_DEAL_STAFF':
+        console.log(`Reactivating staff for deal ${payload.objectId}`);
         // Process reactivation
         await prisma.staff.update({
           where: { hubspot_id: String(payload.objectId) },
