@@ -2474,7 +2474,7 @@ export class OrganizationService {
               }
 
               if (staffMember && 
-                staffMember.status === 'inactive' && 
+                staffMember.status !== 'active' && 
                 activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
                 ) {
                 //update the staff to active - send new message to SQS
