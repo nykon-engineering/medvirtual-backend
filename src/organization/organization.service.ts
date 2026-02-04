@@ -2375,6 +2375,7 @@ export class OrganizationService {
       select: {
         id: true,
         hubspot_id: true,
+        name: true,
         staff: {
           select: {
             hubspot_id: true,
@@ -2438,6 +2439,7 @@ export class OrganizationService {
                     },
                   }),
                 })
+                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
                 
             }else{
 
@@ -2467,6 +2469,8 @@ export class OrganizationService {
                     },
                   }),
                 })
+                console.log(`Staff ${staffMember.id} set to inactive due to dealstage ${staffMember.hubspot_dealstage}`);
+                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for deactivation.`);
               }
 
               if (staffMember && 
@@ -2485,6 +2489,8 @@ export class OrganizationService {
                     },
                   }),
                 })
+                console.log(`Staff ${staffMember.id} reactivated due to dealstage ${staffMember.hubspot_dealstage}`);
+                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for activation.`);
               }
               
 
