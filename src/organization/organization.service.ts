@@ -2464,7 +2464,7 @@ export class OrganizationService {
                 await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
-                    Type: 'DEACTIVATE_DEAL_STAFF',
+                    Type: 'DEACTIVATE_STAFF',
                     objectId: dealHubspotId,
                   }),
                 })
@@ -2480,7 +2480,7 @@ export class OrganizationService {
                 const returnSQS = await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
-                    Type: 'REACTIVATE_DEAL_STAFF',
+                    Type: 'REACTIVATE_STAFF',
                     objectId: dealHubspotId,
                   }),
                 })

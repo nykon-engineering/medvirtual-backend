@@ -27,7 +27,7 @@ export const handler = async (event: SQSEvent) => {
         await dealService.execute(payload);
         break;
 
-      case 'DEACTIVATE_DEAL_STAFF':
+      case 'DEACTIVATE_STAFF':
         console.log(`Deactivating staff for deal ${payload.objectId}`);
         // Process deactivation
         await prisma.staff.update({
@@ -36,7 +36,7 @@ export const handler = async (event: SQSEvent) => {
         })
         break;
 
-      case 'REACTIVATE_DEAL_STAFF':
+      case 'REACTIVATE_STAFF':
         console.log(`Reactivating staff for deal ${payload.objectId}`);
         // Process reactivation
         await prisma.staff.update({
