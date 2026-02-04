@@ -19,18 +19,13 @@ export const handler = async (event: SQSEvent) => {
   const prisma = app.get(PrismaService);
 
   for (const record of event.Records) {
-    //console.log('Processing record:', record.body);
-    console.log('RAW record.body:', record.body);
-    const payload = JSON.parse(record.body);
+    let payload: any = JSON.parse(record.body);
 
-    console.log('RAW Type:', payload.Type);
-    console.log('Type length:', payload.Type?.length);
-    console.log(
-      'Chars:',
-      [...payload.Type].map(c => c.charCodeAt(0))
-    );
+    if (typeof payload === 'string') {
+      payload = JSON.parse(payload);
+    }
 
-    const type = String(payload.Type).trim().toUpperCase();
+    const type = payload.Type?.trim();
 
 
     switch (type) {
