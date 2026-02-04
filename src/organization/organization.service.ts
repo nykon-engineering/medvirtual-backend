@@ -2428,6 +2428,7 @@ export class OrganizationService {
 
             if (existingStaff == undefined) {
 
+                /*  
                 await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
@@ -2439,6 +2440,8 @@ export class OrganizationService {
                     },
                   }),
                 })
+                */
+                
                 //arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
                 
             }else{
@@ -2463,10 +2466,6 @@ export class OrganizationService {
                   MessageBody: JSON.stringify({
                     Type: 'DEACTIVATE_DEAL_STAFF',
                     objectId: dealHubspotId,
-                    organization: {
-                      id: org.id,
-                      hubspot_id: org.hubspot_id,
-                    },
                   }),
                 })
                 console.log(`Staff ${staffMember.id} set to inactive due to dealstage ${staffMember.hubspot_dealstage}`);
@@ -2478,17 +2477,14 @@ export class OrganizationService {
                 activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
                 ) {
                 //update the staff to active - send new message to SQS
-                await this.sqs.sendMessage({
+                const returnSQS = await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
                     Type: 'REACTIVATE_DEAL_STAFF',
                     objectId: dealHubspotId,
-                    organization: {
-                      id: org.id,
-                      hubspot_id: org.hubspot_id,
-                    },
                   }),
                 })
+                console.log('returnSQS', returnSQS);
                 console.log(`Staff ${staffMember.id} reactivated due to dealstage ${staffMember.hubspot_dealstage}`);
                 arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for activation.`);
               }
