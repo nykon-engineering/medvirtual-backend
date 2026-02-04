@@ -2439,7 +2439,7 @@ export class OrganizationService {
                     },
                   }),
                 })
-                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
+                //arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
                 
             }else{
 
