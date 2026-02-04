@@ -45,6 +45,9 @@ export const handler = async (event: SQSEvent) => {
           data: { status: 'active' },
         })
         break;
+      default:
+        console.warn('Event not handled:', payload);
+        break;
       
     }
     
