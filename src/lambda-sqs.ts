@@ -21,7 +21,18 @@ export const handler = async (event: SQSEvent) => {
   for (const record of event.Records) {
     //console.log('Processing record:', record.body);
     const payload = JSON.parse(record.body);
-    switch (payload.Type) {
+
+    console.log('RAW Type:', payload.Type);
+    console.log('Type length:', payload.Type?.length);
+    console.log(
+      'Chars:',
+      [...payload.Type].map(c => c.charCodeAt(0))
+    );
+
+    const type = String(payload.Type).trim().toUpperCase();
+
+
+    switch (type) {
       case 'CREATE_DEAL_STAFF':
         //Process deal creation
         await dealService.execute(payload);
