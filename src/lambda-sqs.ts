@@ -20,6 +20,7 @@ export const handler = async (event: SQSEvent) => {
 
   for (const record of event.Records) {
     //console.log('Processing record:', record.body);
+    console.log('RAW record.body:', record.body);
     const payload = JSON.parse(record.body);
 
     console.log('RAW Type:', payload.Type);
