@@ -17,7 +17,24 @@ export const handler = async (event: SQSEvent) => {
   const dealService = app.get(HandlerDealCreation);
 
   for (const record of event.Records) {
+    console.log('Processing record:', record.body);
     const payload = JSON.parse(record.body);
-    await dealService.execute(payload);
+    switch (payload.type) {
+      case 'CREATE_DEAL_STAFF':
+        // Process deal creation
+        //await dealService.execute(payload);
+        break;
+
+      case 'DEACTIVATE_DEAL_STAFF':
+        // Process deal creation
+        break;
+
+      case 'REACTIVATE_DEAL_STAFF':
+        // Process deal creation
+        break;
+      
+    }
+    
+    
   }
 };

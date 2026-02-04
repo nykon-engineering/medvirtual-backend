@@ -46,6 +46,7 @@ import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { SqsService } from '../sqs/sqs.service';
+import { activePipelines } from '../common/constant/activeDealPipelines';
 
 @Injectable()
 export class OrganizationService {
@@ -2429,6 +2430,7 @@ export class OrganizationService {
                 await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
+                    Type: 'CREATE_DEAL_STAFF',
                     objectId: dealHubspotId,
                     organization: {
                       id: org.id,
@@ -2437,17 +2439,55 @@ export class OrganizationService {
                   }),
                 })
                 
-                /*
-                staffPromises.push(
-                  this.dealCreation.execute({ objectId: dealHubspotId }, {id: org.id, hubspotId: org.hubspot_id})
-                  .then(newStaff => {
-                    if (newStaff)
-                      arrayReturn.push(
-                        `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
-                      );
-                  })
-                );
-                */
+            }else{
+
+              //verify if the staff is active but in pipeline_status different activePipelines
+              const staffMember = await this.prisma.staff.findUnique({
+                where: { hubspot_id: dealHubspotId.toString() },
+                select: { 
+                  id: true, 
+                  status: true, 
+                  hubspot_dealstage: true,  
+                }
+              });
+
+              if (staffMember  && 
+                staffMember.status === 'active' && 
+                !activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
+                ) {
+                //update the staff to inactive - send new message to SQS
+                await this.sqs.sendMessage({
+                  QueueUrl: process.env.DEALS_QUEUE_URL,
+                  MessageBody: JSON.stringify({
+                    Type: 'DEACTIVATE_DEAL_STAFF',
+                    objectId: dealHubspotId,
+                    organization: {
+                      id: org.id,
+                      hubspot_id: org.hubspot_id,
+                    },
+                  }),
+                })
+              }
+
+              if (staffMember && 
+                staffMember.status === 'inactive' && 
+                activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
+                ) {
+                //update the staff to active - send new message to SQS
+                await this.sqs.sendMessage({
+                  QueueUrl: process.env.DEALS_QUEUE_URL,
+                  MessageBody: JSON.stringify({
+                    Type: 'REACTIVATE_DEAL_STAFF',
+                    objectId: dealHubspotId,
+                    organization: {
+                      id: org.id,
+                      hubspot_id: org.hubspot_id,
+                    },
+                  }),
+                })
+              }
+              
+
             }
           }
         }
