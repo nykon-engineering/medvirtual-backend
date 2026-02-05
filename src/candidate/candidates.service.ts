@@ -16,7 +16,7 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { findHourlyPerRate, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { findHourlyPerRate, findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
@@ -399,7 +399,16 @@ export class CandidatesService {
         salary: findMonthlySalary(
           candidate.hourly_pay_rate?.toNumber() || 0,
           candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+        hourlySalary: findHourlySalary(
+          findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+          candidate.employment_type || ''
+        ),
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
         panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
@@ -1426,9 +1435,19 @@ export class CandidatesService {
       avatar_url: candidate.avatar_url
         ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
         : null,
-      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+      salary: findMonthlySalary(
+        candidate.hourly_pay_rate?.toNumber() || 0,
         candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+        candidate.employment_type || ''),
+      hourlySalary: findHourlySalary(
+          findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+          candidate.employment_type || ''
+        ),
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
     }));
 
@@ -1521,9 +1540,19 @@ export class CandidatesService {
       avatar_url: candidate.avatar_url
         ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
         : null,
-      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+      salary: findMonthlySalary(
+        candidate.hourly_pay_rate?.toNumber() || 0,
         candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+        candidate.employment_type || ''),
+      hourlySalary: findHourlySalary(
+          findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+          candidate.employment_type || ''
+        ),
       employment_type: transformedEmploymentType,
     };
 

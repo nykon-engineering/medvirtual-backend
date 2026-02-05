@@ -7,6 +7,7 @@ import { findMonthlySalary } from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
 import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
 import { changeLabelAvailability } from '../../common/utils/hubspot.util';
+import { findHourlySalary } from '../../common/utils/salary.util';
 
 @Injectable()
 export class HandlerOrganization {
@@ -250,7 +251,17 @@ export class HandlerOrganization {
           employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
           salary: findMonthlySalary(Number(pc.candidate?.hourly_pay_rate),
             pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+            pc.candidate.employment_type || ''
+          ),
+          hourlySalary: pc.candidate?.hourly_pay_rate ? findHourlySalary(
+            findMonthlySalary(Number(pc.candidate?.hourly_pay_rate),
+              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+              pc.candidate.employment_type || ''
+            ),
+            pc.candidate.employment_type || ''
+          ) : 0,
           avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
         }
       }))
@@ -318,7 +329,17 @@ export class HandlerOrganization {
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
       salary: findMonthlySalary(Number(talent?.hourly_pay_rate),
         talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
-        talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : ''),
+        talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : '',
+        talent.employment_type || ''
+      ),
+      hourlySalary: talent?.hourly_pay_rate ? findHourlySalary(
+        findMonthlySalary(Number(talent?.hourly_pay_rate),
+          talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
+          talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : '',
+          talent.employment_type || ''
+        ),
+        talent.employment_type || ''
+      ) : 0,
       avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` :  null,
     }))
     result.otherTalents = otherTalentsSalary;

@@ -12,11 +12,15 @@ export function getMinFloorPrice(dict: Record<string, number>): number {
 }
 
 
-export function findMonthlySalary(hourly_pay_rate: number, language: string , role: string): number {
+export function findMonthlySalary(hourly_pay_rate: number, language: string , role: string, availability: string): number {
   //console.log('Calculating salary for:', {hourly_pay_rate, language, role});
   //if(!hourly_pay_rate || hourly_pay_rate <= 0 || isNaN(hourly_pay_rate)) return 0;
 
-  const averageSalary = Number(process.env.CANDIDATE_HOUR_PER_MONTH) * (hourly_pay_rate + Number(process.env.CANDIDATE_COST_PER_HOUR));
+  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part-time' 
+    ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
+    : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
+
+  const averageSalary = hoursToBeCalculated * (hourly_pay_rate + Number(process.env.CANDIDATE_COST_PER_HOUR));
 
   //check if the averageSalary is fewer than the price from dictionary
   let floorPrice;
