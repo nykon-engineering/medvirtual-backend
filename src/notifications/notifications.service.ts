@@ -238,7 +238,6 @@ export class NotificationsService {
         description: true,
         status: true,
         priority: true,
-        specialization: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -264,7 +263,6 @@ export class NotificationsService {
                     first_name: true,
                     last_name: true,
                     name: true,
-                    specialization: true,
                     country: true,
                   },
                 },
@@ -301,7 +299,6 @@ export class NotificationsService {
       hr.panels?.[0].panelCandidates.map(pa =>
         `<p><div style='margin-left:3px; border-radius:8px; background-color:#CCC; padding:3px;'>
         <strong>${pa.candidate.name || `${pa.candidate.first_name || ''} ${pa.candidate.last_name || ''}`.trim()}</strong><br/>
-        Specialization: <strong>${pa.candidate.specialization || 'Specialization not specified'}</strong><br/>
         Location: <strong>${pa.candidate.country || 'Location not specified'}</strong>
         </div></p>`
       )
@@ -339,7 +336,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> 
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Selected Candidates:</strong> </p>
@@ -373,7 +369,6 @@ export class NotificationsService {
         description: true,
         status: true,
         priority: true,
-        specialization: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -461,7 +456,6 @@ export class NotificationsService {
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Company:</strong> ${hr.organization.name}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
-         <p>&nbsp;</p>
          <p><strong>Interview Date:</strong> ${interviewDateFormatted}</p>
          ${bodyLine}
        </div>
@@ -485,7 +479,6 @@ export class NotificationsService {
         title: true,
         description: true,
         priority: true,
-        specialization: true,
         assign_user_id: true,
         organization: {
           select: { name: true },
@@ -520,7 +513,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> 
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -547,7 +539,6 @@ export class NotificationsService {
         title: true,
         description: true,
         priority: true,
-        specialization: true,
         assigned_sourcing: { select: { id: true, email: true, first_name: true, last_name: true } },
         organization: {
           select: { name: true },
@@ -575,7 +566,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> 
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -602,7 +592,6 @@ export class NotificationsService {
         title: true,
         description: true,
         priority: true,
-        specialization: true,
         assign_user_id: true,
         organization: {
           select: { name: true },
@@ -638,7 +627,6 @@ export class NotificationsService {
          <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -666,7 +654,6 @@ export class NotificationsService {
         description: true,
         status: true,
         priority: true,
-        specialization: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -723,7 +710,6 @@ export class NotificationsService {
          <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
 
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
@@ -758,7 +744,6 @@ export class NotificationsService {
         description: true,
         status: true,
         priority: true,
-        specialization: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -801,7 +786,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> 
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
 
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
@@ -835,7 +819,6 @@ export class NotificationsService {
         description: true,
         status: true,
         priority: true,
-        specialization: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -878,7 +861,6 @@ export class NotificationsService {
          <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
@@ -910,7 +892,6 @@ export class NotificationsService {
         title: true,
         description: true,
         priority: true,
-        specialization: true,
         assign_user_id: true,
         organization: {
           select: { name: true },
@@ -944,7 +925,6 @@ export class NotificationsService {
          <p><strong>Description:</strong> 
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
        </div>
        
        <div style="text-align: left; margin: 30px 0;">
@@ -972,7 +952,6 @@ export class NotificationsService {
         description: true,
         status: true,
         priority: true,
-        specialization: true,
         salary_range_from: true,
         salary_range_to: true,
         expected_start_date: true,
@@ -1093,7 +1072,6 @@ export class NotificationsService {
          <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
-         <p><strong>Specialization:</strong> ${hr.specialization}</p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Selected Candidate:</strong> ${winnerName}</p>
