@@ -16,7 +16,7 @@ export function findMonthlySalary(hourly_pay_rate: number, language: string , ro
   //console.log('Calculating salary for:', {hourly_pay_rate, language, role});
   //if(!hourly_pay_rate || hourly_pay_rate <= 0 || isNaN(hourly_pay_rate)) return 0;
 
-  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part time' 
+  const hoursToBeCalculated = availability.trim() === '1087596819' 
     ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
     : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
 
@@ -33,12 +33,16 @@ export function findMonthlySalary(hourly_pay_rate: number, language: string , ro
   }
 
   //get the minimum floor price for the language
-  const minFloorPrice = language === 'Bilingual' 
+  let minFloorPrice = language === 'Bilingual' 
   ? getMinFloorPrice(floorPriceBilingualDictionary) 
   : language === 'English' 
     ? getMinFloorPrice(floorPriceEnglishDictionary) 
     : 0;
   
+    floorPrice = availability.trim() === '1087596819' 
+    ? floorPrice / 2 
+    : floorPrice;
+
   //return the minimun floor price if role is empty
   if (role === '') {
     return Math.round(minFloorPrice * 100) / 100;
@@ -61,7 +65,7 @@ export function findHourlyPerRate(salary: number): number {
 
 export function findHourlySalary(monthSalary: number, availability: string ): number {
 
-  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part time' 
+  const hoursToBeCalculated = availability.trim() === '1087596819' 
     ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
     : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
   
