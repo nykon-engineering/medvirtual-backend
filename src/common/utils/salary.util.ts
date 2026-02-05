@@ -16,7 +16,7 @@ export function findMonthlySalary(hourly_pay_rate: number, language: string , ro
   //console.log('Calculating salary for:', {hourly_pay_rate, language, role});
   //if(!hourly_pay_rate || hourly_pay_rate <= 0 || isNaN(hourly_pay_rate)) return 0;
 
-  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part-time' 
+  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part time' 
     ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
     : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
 
@@ -61,7 +61,7 @@ export function findHourlyPerRate(salary: number): number {
 
 export function findHourlySalary(monthSalary: number, availability: string ): number {
 
-  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part-time' 
+  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part time' 
     ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
     : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
   
