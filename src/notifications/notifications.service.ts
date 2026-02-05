@@ -45,7 +45,6 @@ export class NotificationsService {
     .email-wrapper {
       background-color: #f4f4f4;
       padding: 20px;
-      min-height: 100vh;
     }
     .container {
       max-width: 600px;
