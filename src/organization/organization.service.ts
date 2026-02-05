@@ -2473,19 +2473,13 @@ export class OrganizationService {
             
             // => Ignore deals not in allowed pipelines
             if (!pipeline) continue;
-            if (!ALLOWED_PIPELINES.includes(pipeline)) {
-              //arrayReturn.push(
-              //  `=> Deal ${dealHubspotId} ignored due to invalid pipeline`,
-              //);
-              // console.log(`=> Deal ${dealHubspotId} ignored due to invalid pipeline`);
-              continue;
-            }
+            if (!ALLOWED_PIPELINES.includes(pipeline)) continue;
             //============
             
             const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
 
             if (existingStaff == undefined) {
-                /*
+                
                 await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
@@ -2497,8 +2491,8 @@ export class OrganizationService {
                     },
                   }),
                 })
-                */
-                //arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
+                
+                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
                 console.log(`=> Create Deal ${dealHubspotId} in organization ${org.name} .`);
                 
             }else{
@@ -2518,7 +2512,7 @@ export class OrganizationService {
                 !activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
                 ) {
                 //update the staff to inactive - send new message to SQS
-                /*
+                
                 await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
@@ -2528,8 +2522,7 @@ export class OrganizationService {
                 })
                 console.log(`Staff ${staffMember.id} set to inactive due to dealstage ${staffMember.hubspot_dealstage}`);
                 arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for deactivation.`);
-                */
-               console.log(`Staff ${staffMember.id} is active but in inactive dealstage ${staffMember.hubspot_dealstage}`);
+                
               }
 
               if (staffMember && 
@@ -2537,7 +2530,7 @@ export class OrganizationService {
                 activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
                 ) {
                 //update the staff to active - send new message to SQS
-               /*
+               
                 const returnSQS = await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
@@ -2548,8 +2541,6 @@ export class OrganizationService {
                 console.log('returnSQS', returnSQS);
                 console.log(`Staff ${staffMember.id} reactivated due to dealstage ${staffMember.hubspot_dealstage}`);
                 arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for activation.`);
-                */
-               console.log(`Staff ${staffMember.id} is inactive but in active dealstage ${staffMember.hubspot_dealstage}`);
               }
               
 
