@@ -51,7 +51,17 @@ export function findMonthlySalary(hourly_pay_rate: number, language: string , ro
 }
 
 
-export function findHourlySalary(salary: number): number {
+export function findHourlyPerRate(salary: number): number {
   return salary / Number(process.env.CANDIDATE_HOUR_PER_MONTH) - Number(process.env.CANDIDATE_COST_PER_HOUR);
 }
 
+export function findHourlySalary(monthSalary: number, availability: string ): number {
+
+  const hoursToBeCalculated = availability.trim().toLowerCase() === 'part-time' 
+    ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
+    : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
+  
+  const roundedSalary = Math.round((monthSalary / hoursToBeCalculated) * 100) / 100;
+
+  return roundedSalary ;
+}

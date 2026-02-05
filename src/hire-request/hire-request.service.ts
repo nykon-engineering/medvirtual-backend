@@ -23,7 +23,7 @@ import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import {
-  findHourlySalary,
+  findHourlyPerRate,
   findMonthlySalary,
 } from '../common/utils/salary.util';
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
@@ -1831,11 +1831,11 @@ export class HireRequestService {
     const requiredSkills = hireRequest.skills.map(s => s.skill_name);
   
     const hourly_from = hireRequest.salary_range_from
-      ? findHourlySalary(Number(hireRequest.salary_range_from))
+      ? findHourlyPerRate(Number(hireRequest.salary_range_from))
       : undefined;
       
     const hourly_to = hireRequest.salary_range_to
-      ? findHourlySalary(Number(hireRequest.salary_range_to))
+      ? findHourlyPerRate(Number(hireRequest.salary_range_to))
       : undefined;
   
     const candidates = await this.prisma.candidate.findMany({
@@ -3143,10 +3143,10 @@ export class HireRequestService {
       if (hr.availability && candidate.employment_type === hr.availability) score += 1;
   
       const hourly_from = hr.salary_range_from
-        ? findHourlySalary(Number(hr.salary_range_from))
+        ? findHourlyPerRate(Number(hr.salary_range_from))
         : undefined;
       const hourly_to = hr.salary_range_to
-        ? findHourlySalary(Number(hr.salary_range_to))
+        ? findHourlyPerRate(Number(hr.salary_range_to))
         : undefined;
   
       if (

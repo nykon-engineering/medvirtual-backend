@@ -16,7 +16,7 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { findHourlyPerRate, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
@@ -73,8 +73,8 @@ export class CandidatesService {
 
     const { organization_id } = user;
 
-    const hourly_from = monthly_compensation_from ? findHourlySalary(Number(monthly_compensation_from)) : undefined;
-    const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined;
+    const hourly_from = monthly_compensation_from ? findHourlyPerRate(Number(monthly_compensation_from)) : undefined;
+    const hourly_to = monthly_compensation_to ? findHourlyPerRate(Number(monthly_compensation_to)) : undefined;
 
     const combinedFilters: Record<string, any>[] = [];
     let positionsFilter: Record<string, any> | null = null
@@ -1130,11 +1130,11 @@ export class CandidatesService {
       }
 
       const hourly_from = hr.salary_range_from
-        ? findHourlySalary(Number(hr.salary_range_from))
+        ? findHourlyPerRate(Number(hr.salary_range_from))
         : undefined;
 
       const hourly_to = hr.salary_range_to
-        ? findHourlySalary(Number(hr.salary_range_to))
+        ? findHourlyPerRate(Number(hr.salary_range_to))
         : undefined;
 
       if (
