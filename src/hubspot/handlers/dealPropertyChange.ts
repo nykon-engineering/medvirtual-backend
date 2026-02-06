@@ -161,6 +161,7 @@ export class HandlerDealPropertyChange {
             }
         }
         
+        console.log('====> objectToUpdate', objectToUpdate);
         
         await this.prisma.staff.update({
             where: {
