@@ -39,7 +39,8 @@ export class HireRequestCreationService {
           ? `${data.salary_range_from} - ${data.salary_range_to}` 
           : '';
           //console.log("Data arriving on HireRequestCreationService:", data);
-          const hrDescription = data.description ? data.description : undefined;
+          const hrDescription = data.description ? data.description : "";
+          
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/tickets",
             {
