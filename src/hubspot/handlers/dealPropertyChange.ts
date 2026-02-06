@@ -125,7 +125,6 @@ export class HandlerDealPropertyChange {
         let objectToUpdate: any = {};
 
         const fieldUpdated = dealToDbDictionary[event.propertyName];
-        console.log('====> field To Updated', fieldUpdated);
         let value = event.propertyValue;
 
         objectToUpdate = {
@@ -146,7 +145,6 @@ export class HandlerDealPropertyChange {
 
         if (fieldUpdated == 'hubspot_dealstage' && terminatedStages.includes(event.propertyValue)) {
             objectToUpdate.status='terminated';
-            console.log('====> Deal terminated due to dealstage change');
         }else{
             if(deal.status === 'terminated' && fieldUpdated == 'hubspot_dealstage'){
                 objectToUpdate.status='active';
@@ -161,7 +159,6 @@ export class HandlerDealPropertyChange {
             }
         }
         
-        console.log('====> objectToUpdate', objectToUpdate);
         
         await this.prisma.staff.update({
             where: {
