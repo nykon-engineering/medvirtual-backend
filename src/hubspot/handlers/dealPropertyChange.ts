@@ -148,7 +148,7 @@ export class HandlerDealPropertyChange {
             objectToUpdate.status='terminated';
             console.log('====> Deal terminated due to dealstage change');
         }else{
-            if(deal.status === 'terminated'){
+            if(deal.status === 'terminated' && fieldUpdated == 'hubspot_dealstage'){
                 objectToUpdate.status='active';
             }
         }
