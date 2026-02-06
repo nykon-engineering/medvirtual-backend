@@ -118,13 +118,14 @@ export class HandlerDealPropertyChange {
             }
             //=====>
 
-
+        if (!deal) return;
         const fieldExists = Object.keys(dealToDbDictionary).includes(event.propertyName);
         if(!fieldExists) return;
 
         let objectToUpdate: any = {};
 
         const fieldUpdated = dealToDbDictionary[event.propertyName];
+        console.log('====> field To Updated', fieldUpdated);
         let value = event.propertyValue;
 
         objectToUpdate = {
@@ -143,8 +144,9 @@ export class HandlerDealPropertyChange {
             '159176452'
         ];
 
-        if (deal && event.propertyName == 'dealstage' && terminatedStages.includes(event.propertyValue)) {
+        if (fieldUpdated == 'hubspot_dealstage' && terminatedStages.includes(event.propertyValue)) {
             objectToUpdate.status='terminated';
+            console.log('====> Deal terminated due to dealstage change');
         }else{
             if(deal.status === 'terminated'){
                 objectToUpdate.status='active';

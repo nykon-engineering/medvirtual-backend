@@ -2531,14 +2531,14 @@ export class OrganizationService {
                 ) {
                 //update the staff to active - send new message to SQS
                
-                const returnSQS = await this.sqs.sendMessage({
+                await this.sqs.sendMessage({
                   QueueUrl: process.env.DEALS_QUEUE_URL,
                   MessageBody: JSON.stringify({
                     Type: 'REACTIVATE_STAFF',
                     objectId: dealHubspotId,
                   }),
                 })
-                console.log('returnSQS', returnSQS);
+                
                 console.log(`Staff ${staffMember.id} reactivated due to dealstage ${staffMember.hubspot_dealstage}`);
                 arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for activation.`);
               }
