@@ -15,6 +15,15 @@ export class HandlerOrganization {
 
   async execute(user, page: number = 1, perPage: number = 10): Promise<object> {
     const result: any = {};
+
+    const loggedCompany = await this.prisma.organization.findUnique({
+      where: {
+        id: user.organization_id,
+      },
+      select: {
+        business_unit: true,
+      },
+    });
     //this variable will be used to otherTalents
     const select = {
       id: true,
@@ -66,9 +75,6 @@ export class HandlerOrganization {
 
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('User or organization not found');
-
-
-    
 
 
     const hiredStaff = await this.prisma.staff.findMany({
@@ -272,7 +278,7 @@ export class HandlerOrganization {
     const otherTalents = await this.prisma.candidate.findMany({
       where: {
         organization_id: null,
-        about_me: { not: null },
+        business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
         OR: [
           {
             pipeline_status: '261075105'

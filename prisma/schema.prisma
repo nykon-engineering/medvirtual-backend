@@ -170,6 +170,7 @@ model Candidate {
   headshot_url               String?
   shift_block                String?
   video_link                 String?
+  business_unit              String?
   educations                 CandidateEducation[]
   experiences                CandidateExperience[]
   languages                  CandidateLanguage[]

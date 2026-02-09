@@ -67,9 +67,19 @@ export class CandidatesService {
     const take = getAllCandidates ? undefined : perPage;
 
 
-
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('The current user doent have an organization_id');
+
+    if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
+
+    const loggedCompany = await this.prisma.organization.findUnique({
+      where: {
+        id: user.organization_id,
+      },
+      select: {
+        business_unit: true,
+      },
+    });
 
     const { organization_id } = user;
 
@@ -177,6 +187,7 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -199,6 +210,7 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -221,6 +233,7 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -243,6 +256,7 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -1324,14 +1338,14 @@ export class CandidatesService {
     return true;
   }
 
-  async getRandomTalentPoolCandidates(): Promise<any> {
+  async getRandomTalentPoolCandidates(business_unit: string): Promise<any> {
     // Base filter for "available" candidates in talent pool
     const pipelineStatusFilter = {
       pipeline_status: {
         in: ['261075105', '1087596819'],
       },
     };
-
+ 
     // Filtros adicionales solo para obtener los candidatos que se muestran
     const whereClauseForCandidates = {
       AND: [
@@ -1349,12 +1363,12 @@ export class CandidatesService {
           },
         },
         {
-          years_of_experience: { not: null },
+          business_unit: business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
         },
         {
           // Solo candidatos disponibles
           ...pipelineStatusFilter,
-        },
+        }
       ],
     };
 
@@ -1557,6 +1571,59 @@ export class CandidatesService {
     };
 
     return candidateWithFullAvatarUrl;
+  }
+
+  async syncBusinessUnits(): Promise<string> {
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        pipeline_status: {
+          in: ['261075105', '1087596819']
+        }
+      },
+      select: {
+        id: true,
+        hubspot_id: true
+      }
+    });
+
+    console.log(`Found ${candidates.length} candidates to sync business units.`);
+    let updatedCount = 0;
+    let errorCount = 0;
+
+    for (const candidate of candidates) {
+      try {
+        const response = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+          {
+            params: {
+              properties: 'business_units'
+            },
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`
+            }
+          }
+        );
+
+        const businessUnit = response.data.properties.business_units;
+
+        console.log(`Candidate ID: ${candidate.id}, HubSpot ID: ${candidate.hubspot_id}, Business Unit from HubSpot: ${businessUnit}`);
+
+        if (businessUnit) {
+          await this.prisma.candidate.update({
+            where: { id: candidate.id },
+            data: {
+              business_unit: businessUnit
+            }
+          });
+          updatedCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to sync business unit for candidate ${candidate.id} (HubSpot ID: ${candidate.hubspot_id}):`, error.message);
+        errorCount++;
+      }
+    }
+
+    return `Sync complete. Updated: ${updatedCount}, Errors: ${errorCount}`;
   }
 }
 

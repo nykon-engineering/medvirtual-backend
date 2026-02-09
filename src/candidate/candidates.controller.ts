@@ -260,8 +260,9 @@ export class CandidatesController {
     status: 429, 
     description: 'Too many requests. Rate limit exceeded.' 
   })
-  async getRandomTalentPoolCandidates() {
-    const result = await this.candidatesService.getRandomTalentPoolCandidates();
+
+  async getRandomTalentPoolCandidates(@Query('business_unit') business_unit: string) {
+    const result = await this.candidatesService.getRandomTalentPoolCandidates(business_unit);
     return {
       status: 200,
       message: 'Random candidates retrieved successfully',
@@ -301,6 +302,26 @@ export class CandidatesController {
       status: 200,
       message: 'Candidate retrieved successfully',
       data: candidate
+    };
+  }
+
+  @Get('sync-business-unit-count')
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Sync Business Unit Candidate Count (public endpoint)',
+    description: 'Update database with Business Unit from hubspot'
+  })
+  @ApiQuery({ name: 'business_unit', required: true, type: String, description: 'Business unit to filter candidates', example: "healthcare" })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Total count retrieved successfully'
+  })
+  async syncBusinessUnits(){
+    const result = await this.candidatesService.syncBusinessUnits();
+    return {
+      status: 200,
+      message: 'Business Unit Candidate Count synced successfully',
+      data: result
     };
   }
 
