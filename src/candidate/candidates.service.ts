@@ -69,17 +69,20 @@ export class CandidatesService {
 
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('The current user doent have an organization_id');
+    console.log('User in findAll candidates service:', user);
+    //if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
 
-    if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
-
-    const loggedCompany = await this.prisma.organization.findUnique({
-      where: {
-        id: user.organization_id,
-      },
-      select: {
-        business_unit: true,
-      },
-    });
+    let loggedCompany;
+    if (user.organization_id) { 
+      loggedCompany = await this.prisma.organization.findUnique({
+        where: {
+          id: user.organization_id,
+        },
+        select: {
+          business_unit: true,
+        },
+      });
+    }
 
     const { organization_id } = user;
 
