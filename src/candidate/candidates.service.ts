@@ -42,6 +42,7 @@ export class CandidatesService {
   async findAll(
     user: USER,
     country?: string,
+    shift_block?: string,
     availability?: string,
     monthly_compensation_from?: string,
     monthly_compensation_to?: string,
@@ -69,7 +70,7 @@ export class CandidatesService {
 
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('The current user doent have an organization_id');
-    console.log('User in findAll candidates service:', user);
+    
     //if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
 
     let loggedCompany;
@@ -191,6 +192,7 @@ export class CandidatesService {
           organization_id: organization_id,
           pipeline_status: '261075105',
           business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -214,6 +216,7 @@ export class CandidatesService {
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
           business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -237,6 +240,7 @@ export class CandidatesService {
           organization_id: organization_id,
           pipeline_status: '1087596819',
           business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -260,6 +264,7 @@ export class CandidatesService {
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
           business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -985,16 +990,7 @@ export class CandidatesService {
         }
 
         if (field === 'specialization') {
-          /*result[field] = [
-            ...new Set(
-              returned.flatMap(item =>
-                item.specialization.split(';').map(s => s.trim()).filter(s => s !== 'N/A')
-              )
-            )
-          ];
-          */
-
-
+         
           try {
             const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
             const response = await axios.get(url, {
@@ -1013,6 +1009,31 @@ export class CandidatesService {
             }
             const returnedSpecializations = vaTypeProperty.options.map((option) => option.value);
             result[field] = returnedSpecializations || [];
+            //return vaTypeProperty.options || [];
+          } catch (error) {
+            console.error("Failed to find types:", error.response?.data || error.message);
+            throw new Error("Failed to find VA types");
+          }
+        }else if (field === 'shift_block') {
+         
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            });
+
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === "shift_block"
+            );
+
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedShiftBlocks = vaTypeProperty.options.map((option) => option.value);
+            result[field] = returnedShiftBlocks || [];
             //return vaTypeProperty.options || [];
           } catch (error) {
             console.error("Failed to find types:", error.response?.data || error.message);

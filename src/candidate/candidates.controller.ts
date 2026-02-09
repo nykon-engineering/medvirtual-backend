@@ -23,7 +23,8 @@ export class CandidatesController {
 
   @Get()
   @ApiOperation({ summary: 'Get all candidates for the current user\'s organization filtered by status' })
-  @ApiQuery({ name: 'country', required: false, type: String, description: 'Filter candidates by conuntry of residence', example: "USA, France, Brazil" })
+  @ApiQuery({ name: 'country', required: false, type: String, description: 'Filter candidates by country of residence', example: "USA, France, Brazil" })
+  @ApiQuery({ name: 'shift_block', required: false, type: String, description: 'Filter candidates by shift block from hubspot', example: "Flexible, Full Time" })
   @ApiQuery({ name: 'availiability', required: false, type: String, description: 'Filter candidates by avaliability', example: "Full-time, Part-time" })
   @ApiQuery({ name: 'monthly_compensation_from', required: false, type: String, description: 'Filter candidates by monthly compensations start', example: "1000" })
   @ApiQuery({ name: 'monthly_compensation_to', required: false, type: String, description: 'Filter candidates by monthly compensations end', example: "5000" })
@@ -38,6 +39,7 @@ export class CandidatesController {
   async findAll(
     @CurrentUser() user: USER, 
     @Query('country') country: string, 
+    @Query('shift_block') shift_block: string, 
     @Query('availability') availability: string, 
     @Query('monthly_compensation_from') monthly_compensation_from: string, 
     @Query('monthly_compensation_to') monthly_compensation_to: string, 
@@ -54,6 +56,7 @@ export class CandidatesController {
     const result = await this.candidatesService.findAll( 
       user, 
       country, 
+      shift_block,
       availability, 
       monthly_compensation_from, 
       monthly_compensation_to, 
