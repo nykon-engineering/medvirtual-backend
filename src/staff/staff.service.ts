@@ -475,7 +475,7 @@ export class StaffService {
     start_date_to: Date,
   ): Promise<object> {
 
-    console.log('Organization ID in Service:', organizationId);
+    //console.log('Organization ID in Service:', organizationId);
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
 
