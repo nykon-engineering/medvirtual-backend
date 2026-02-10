@@ -35,6 +35,7 @@ import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 
 
 
@@ -49,6 +50,7 @@ import { ContactDeleteService } from './delete/contact';
     HandlerOrganizationCreation, 
     HandlerOrganizationPropertyChange,
     HandlerOrganizationDeletion,
+    HandlerOrganizationMerge,
     HandlerOrganizationAssociationChange,
     HandlerOwnerCreation,
     HandlerOwnerDeletion,
