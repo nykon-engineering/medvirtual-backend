@@ -580,6 +580,7 @@ export class HireRequestService {
             ...pc,
             candidate: {
               ...pc.candidate,
+              employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
               salary: findMonthlySalary(
                 pc.candidate.hourly_pay_rate?.toNumber() || 0,
                 pc.candidate.languages.length > 1
