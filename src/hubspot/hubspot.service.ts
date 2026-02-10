@@ -41,6 +41,7 @@ import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 
 
 
@@ -60,6 +61,7 @@ export class HubspotService {
       private readonly organizationCreation: HandlerOrganizationCreation,
       private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
       private readonly organizationDeletion : HandlerOrganizationDeletion,
+      private readonly organizationMerge: HandlerOrganizationMerge,
       private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
       private readonly organizationUpdateService: OrganizationUpdateService,
 
@@ -178,6 +180,10 @@ export class HubspotService {
                 
                 case 'company.deletion':
                     await this.organizationDeletion.execute(event);
+                    break;
+                
+                case 'company.merge':
+                    await this.organizationMerge.execute(event);
                     break;
 
                 case 'company.associationChange': 
