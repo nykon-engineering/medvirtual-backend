@@ -1246,16 +1246,12 @@ export class HireRequestService {
                     not: id,
                   },
                 },
-                candidate: {
-                  pipeline_status: {
-                    not: '261173428', // Lost status | dont consider candidates in Lost status, because they are not available anyway
-                  },
-                },
               },
               select: {
                 id: true,
               }
             });
+            if (c.candidate.pipeline_status_origin === '261173428') return; //if candidate is in Lost status, dont update his status to Available Candidates, because he is not available anyway
             if (thereOtherPanels.length === 0) {
               //only update candidate if he is not in other panels
               const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
