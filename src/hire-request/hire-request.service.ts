@@ -1246,6 +1246,11 @@ export class HireRequestService {
                     not: id,
                   },
                 },
+                candidate: {
+                  pipeline_status: {
+                    not: '261173428', // Lost status | dont consider candidates in Lost status, because they are not available anyway
+                  },
+                },
               },
               select: {
                 id: true,
