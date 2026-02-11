@@ -1398,7 +1398,12 @@ export class CandidatesService {
 
     // Para el conteo total de candidatos disponibles, solo usamos el filtro por pipeline_status
     const whereClauseForCount = {
-      AND: [pipelineStatusFilter],
+      AND: [
+        {...pipelineStatusFilter},
+        {
+          business_unit: business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
+        },
+      ],
     };
 
     // Get total count of available candidates (only by pipeline_status)
