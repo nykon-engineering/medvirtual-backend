@@ -427,12 +427,10 @@ export class OrganizationService {
         whereClause.business_unit = business_unit;
       }
 
-      // Apply hasUser filter: only organizations with at least one user that is not inactive
+      // Apply hasUser filter: only organizations with at least one user
       if (hasUser === true) {
         whereClause.users = {
-          some: {
-            status: { not: 'inactive' },
-          },
+          some: {},
         };
       }
 
@@ -529,8 +527,8 @@ export class OrganizationService {
         ).length;
 
         // Apply hasUser filter: skip organizations that don't meet the criteria
-        if (hasUser === true && userCount === 0) {
-          continue; // Skip this organization as it doesn't have active users
+        if (hasUser === true && org.users.length === 0) {
+          continue; // Skip this organization as it doesn't have users
         }
 
         // Apply hasStaff filter: skip organizations that don't meet the criteria
