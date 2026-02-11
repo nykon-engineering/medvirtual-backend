@@ -1235,6 +1235,7 @@ export class HireRequestService {
         //update candidates for their original status or 'Available Candidates' on database and hubspot
         await Promise.all(
           candidates.map(async c =>{
+
             const thereOtherPanels = await this.prisma.panelCandidate.findMany({
               where: {
                 candidate_id: c.candidate.id,
@@ -1251,7 +1252,7 @@ export class HireRequestService {
                 id: true,
               }
             });
-            if (c.candidate.pipeline_status_origin === '261173428') return; //if candidate is in Lost status, dont update his status to Available Candidates, because he is not available anyway
+            if (c.candidate.pipeline_status === '261173428') return; //if candidate is in Lost status, dont update his status to Available Candidates, because he is not available anyway
             if (thereOtherPanels.length === 0) {
               //only update candidate if he is not in other panels
               const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
