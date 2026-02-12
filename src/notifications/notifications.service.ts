@@ -677,7 +677,8 @@ export class NotificationsService {
       if (!hr.assigned_sourcing?.email) throw new BadRequestException('Hire request has no assignee email');
       userIds = [hr.assigned_sourcing.id];
     } else if (type === 'staffing_coordinator') {
-     
+      if (!hr.assigned_staffing?.email) throw new BadRequestException('Hire request has no assignee email');
+      userIds = [hr.assigned_staffing.id];
     } else {
       if (!hr.assign_user_id) throw new BadRequestException('Hire request has no assignee');
       userIds = hr.assign_user_id.split(',').map(id => id.trim()).filter(Boolean);
@@ -705,8 +706,8 @@ export class NotificationsService {
 
     const html = this.buildEmail(
       `<p>${users.map(u => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
-      ${type === 'sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
-       <p>You have been assigned ${type === 'sourcing' ? `to source` : `to`} this hire request:</p>
+      ${type === 'sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : type === 'staffing_coordinator' ? `<p><strong>Staffing Coordinator Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
+       <p>You have been assigned ${type === 'sourcing' ? `to source` : type === 'staffing_coordinator' ? `as a staffing coordinator` : `to`} this hire request:</p>
        
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
