@@ -14,6 +14,7 @@ export class HireRequestUpdateService {
      ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
+      //console.log('Getting owner ID for user ID:', userId);
       if (!userId) return null;
       const user = await this.prisma.uSER.findUnique({
         where: { id: userId },
@@ -26,7 +27,7 @@ export class HireRequestUpdateService {
         },
           
       });
-
+      //console.log('User found for owner ID:', user);
       /* => Commented because we cannot create owners using hubspot API
       if (user && !user.hubspot_id) {
         await this.ownerCreationService.execute(user)
@@ -38,13 +39,41 @@ export class HireRequestUpdateService {
 
     async execute(data: any, specificField?: string): Promise<any> {
         try {
+            //console.log("Starting update of Hubspot Ticket with data:", data, "and specificField:", specificField);
             const hubspotProperties: Record<string, any> = {};
 
             if (specificField) {
               switch (specificField) {
                 case 'assign_user_id':
-                const firstUserId = data.assign_user_id ? data.assign_user_id.split(',')[0].trim() : undefined;
-                hubspotProperties.hubspot_owner_id = firstUserId ? await this.getOwnerId(firstUserId) : undefined;
+
+                if (data.assign_user_id) {
+                  // If it's an array of objects (from log: [{id, first_name...}, ...])
+                  if (Array.isArray(data.assign_user_id)) {
+                      //console.log('length: ', data.assign_user_id.length);
+                      
+                      // Loop through all users and assign the first one that has a hubspot_id
+                      // (HubSpot only allows 1 owner per ticket)
+                      let hubspotOwnerId;
+                      for (const user of data.assign_user_id) {
+                          // user.id exists in the object
+                          if (user && user.id) {
+                              hubspotOwnerId = await this.getOwnerId(user.id);
+                              if (hubspotOwnerId) break; 
+                          }
+                      }
+                      hubspotProperties.hubspot_owner_id = hubspotOwnerId;
+
+                  } else if (typeof data.assign_user_id === 'string') {
+                    // Fallback for string case if it ever comes as "id1,id2"
+                    const userIds = data.assign_user_id.split(',').map((id: string) => id.trim());
+                    let hubspotOwnerId;
+                    for (const userId of userIds) {
+                      hubspotOwnerId = await this.getOwnerId(userId);
+                      if (hubspotOwnerId) break;
+                    }
+                    hubspotProperties.hubspot_owner_id = hubspotOwnerId;
+                  }
+                }
                 break;
 
                 case 'assign_sourcing_id':
@@ -74,9 +103,6 @@ export class HireRequestUpdateService {
               //verify fields outside the dictionary
               if (data.assign_sourcing_id) {
                 hubspotProperties.pairing_specialist = await this.getOwnerId(data.assign_sourcing_id);
-              }
-              if (data.staffing_coordinator){
-                hubspotProperties.staffing_coordinator = await this.getOwnerId(data.staffing_coordinator);
               }
 
               hubspotProperties.pairing_session_conducted = data.pairing_session_conducted;
@@ -130,9 +156,20 @@ export class HireRequestUpdateService {
               : '';
             }
 
+            //remove hubspot_pipeline and hubspot_pipeline_stage because we cannot update them using this endpoint, they are updated using the stage change endpoint
+
+            delete hubspotProperties.hs_pipeline;
+            delete hubspotProperties.hs_pipeline_stage;
+            delete hubspotProperties.ticket_type;
+            delete hubspotProperties.business_unit;
+            delete hubspotProperties.company_name;
+            delete hubspotProperties.company_url;
+            delete hubspotProperties.hs_ticket_priority;
+            delete hubspotProperties.cancel_reason;
+
             //console.log("Updating Hubspot Ticket with properties:", hubspotProperties);
             
-            //console.log(hubspotProperties)
+            
             const response = await axios.patch(
             `https://api.hubapi.com/crm/v3/objects/tickets/${Number(data.hubspot_ticket_id)}`,
             {
