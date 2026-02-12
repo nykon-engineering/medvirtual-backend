@@ -439,6 +439,13 @@ export class HireRequestService {
               last_name: true,
             }
           },
+          assigned_staffing: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+            }
+          },
           panels: {
             select: {
               id: true,
@@ -669,6 +676,13 @@ export class HireRequestService {
           }
         },
         assigned_sourcing: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+          }
+        },
+        assigned_staffing: {
           select: {
             id: true,
             first_name: true,
