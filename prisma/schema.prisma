@@ -287,6 +287,7 @@ model HireRequest {
   hubspot_pairing_date         String? //String for avoid misunderstanding about timeZone
   hubspot_pairing_time         String?
   request_role                 String?
+  staffing_coordinator        String?
 
 
   cancel_date                  DateTime?

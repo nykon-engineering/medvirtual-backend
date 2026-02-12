@@ -20,12 +20,10 @@ export class HandlerOrganizationMerge {
 
         for (const [key, value] of Object.entries(dbMapped)) {
             const primaryValue = primary[key];
-
             if ((primaryValue === null || primaryValue === undefined || primaryValue === '') && value) {
             updateData[key] = value;
             }
         }
-
         return updateData;
     }
 
