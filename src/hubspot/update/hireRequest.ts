@@ -51,6 +51,10 @@ export class HireRequestUpdateService {
                 hubspotProperties.pairing_specialist = data.assign_sourcing_id ? await this.getOwnerId(data.assign_sourcing_id) : undefined;
                 break;
 
+                case 'assign_staffing_coordinator':
+                  hubspotProperties.staffing_coordinator = data.assign_staffing_coordinator ? await this.getOwnerId(data.assign_staffing_coordinator) : undefined;
+                break;
+
                 case 'closed_date': 
                 hubspotProperties.closed_date = formatDateForCA(new Date(), 'America/Los_Angeles');
                 break;

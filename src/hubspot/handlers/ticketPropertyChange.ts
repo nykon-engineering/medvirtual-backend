@@ -89,6 +89,23 @@ export class HandlerTicketPropertyChange {
             return true;
         }
 
+        if (event.propertyName === 'staffing_coordinator') {
+            //assign_staffing_coordinator
+            value = await this.getUserId(event.propertyValue);
+
+            if(!value) return true;
+            await this.prisma.hireRequest.update({
+                where: {
+                    id: hr.id
+                },
+                data: {
+                    assign_staffing_coordinator: value
+                }
+            })
+            
+            return true;
+        }
+
         const fieldExists = Object.keys(hrTicketToDbDictionary).includes(event.propertyName);
         if(!fieldExists) return;
 
