@@ -662,6 +662,9 @@ export class NotificationsService {
         assigned_sourcing: {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
+        assigned_staffing: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
         organization: {
           select: { name: true },
         },
@@ -673,6 +676,8 @@ export class NotificationsService {
     if (type === 'sourcing') {
       if (!hr.assigned_sourcing?.email) throw new BadRequestException('Hire request has no assignee email');
       userIds = [hr.assigned_sourcing.id];
+    } else if (type === 'staffing_coordinator') {
+     
     } else {
       if (!hr.assign_user_id) throw new BadRequestException('Hire request has no assignee');
       userIds = hr.assign_user_id.split(',').map(id => id.trim()).filter(Boolean);
