@@ -515,9 +515,7 @@ export class OrganizationService {
       for (const org of organizations) {
         // Calculate userCount: exclude inactive, include pending as active
         // Count users where status !== 'inactive' (includes: active, pending, invited, suspended, etc.)
-        const userCount = org.users.filter(
-          user => user.status !== 'inactive'
-        ).length;
+        const userCount = org.users.length;
 
         
         // Calculate staffCount: exclude terminated
