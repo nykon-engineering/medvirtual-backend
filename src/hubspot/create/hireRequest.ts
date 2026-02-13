@@ -35,18 +35,20 @@ export class HireRequestCreationService {
 
     async execute(data: any): Promise<any> {
         try {
-
-
           const pay_range= data.salary_range_from && data.salary_range_to 
           ? `${data.salary_range_from} - ${data.salary_range_to}` 
           : '';
           //console.log("Data arriving on HireRequestCreationService:", data);
+          const hrDescription = data.description ? data.description : "";
+          
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/tickets",
             {
               properties: {
                 subject: data.title,
-                content: data.description,
+                content: data.request_role 
+                  ? 'Requested Role: ' + data.request_role + ' | ' + hrDescription
+                  : hrDescription,
                 hs_pipeline: "0", //=>Pairing Pipeline
                 hs_pipeline_stage: "1",  //=> New agent Request
                 pairing_request_type: data.hubspot_pairing_request_type || 'New Client',
@@ -65,14 +67,22 @@ export class HireRequestCreationService {
                 tasks: data.hubspot_tasks ? data.hubspot_tasks : undefined,
                 n2_monitors_required_: data.hubspot_n2_monitors_required,
                 va_shift_hours: data.hubspot_va_shift_hours ? data.hubspot_va_shift_hours : undefined,
+                tools_familiarization: data.hubspot_tools_familiarization ? data.hubspot_tools_familiarization : undefined,
+                training_request_notes_: data.hubspot_training_request_notes ? data.hubspot_training_request_notes : undefined,
+                camera_on_shift: data.hubspot_camera_on_during_shift ? data.hubspot_camera_on_during_shift : undefined,
                 special_sourcing_needed: data.hubspot_special_sourcing_needed === 'Yes' ? 'true' : 'false',
                 special_requirements: data.hubspot_special_requirements ? data.hubspot_special_requirements : undefined,
                 additional_training_requested: data.hubspot_additional_training_requested ? data.hubspot_additional_training_requested : undefined,
                 pairing_date: data.hubspot_pairing_date ? data.hubspot_pairing_date : undefined, //  milisecnonds in timestamp,
                 pairing_time: data.hubspot_pairing_time ? data.hubspot_pairing_time : undefined,
-
+                client_signed_contract: data.client_signed_contract_ticket_submission ? data.client_signed_contract_ticket_submission : undefined,
+                
                 //ticketOwner
-                hubspot_owner_id: data.assign_user_id ? await this.getOwnerId(data.assign_user_id) : undefined,
+                hubspot_owner_id: data.assign_user_id 
+                  ? await this.getOwnerId(data.assign_user_id.length > 0 
+                        ? data.assign_user_id[0].id 
+                        : null) 
+                  : undefined,
                 //pairing_specialist
                 pairing_specialist: data.assign_sourcing_id ? await this.getOwnerId(data.assign_sourcing_id) : undefined,
                 //hire_date__start_of_employment_: PairingDate, 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 

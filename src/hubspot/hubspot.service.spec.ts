@@ -10,12 +10,13 @@ import { CandidatesService } from '../candidate/candidates.service';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
+import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
 import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
-import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 import { HireRequestCreationService } from './create/hireRequest';
@@ -27,8 +28,11 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
-import { ContactCreationService } from './create/contact';
 import { OrganizationUpdateService } from './update/organization';
+import { ContactCreationService } from './create/contact';
+import { ContactUpdateService } from './update/contact';
+import { ContactDeleteService } from './delete/contact';
+
 
 
 jest.mock('axios', () => ({
@@ -98,6 +102,13 @@ const HandlerOrganizationAssociationChangeMock = {
   execute: jest.fn(),
 }
 
+const HandlerOrganizationDeletionMock = {
+  execute: jest.fn(),
+}
+
+const HandlerOrganizationMergeMock = {
+  execute: jest.fn(),
+}
 
 const HandlerObjectDeletionMock = {
   execute: jest.fn(),
@@ -171,6 +182,14 @@ const contactCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const updateContactServiceMock = {
+  execute: jest.fn(),
+};
+
+const deleteContactServiceMock = {
+  execute: jest.fn(),
+};
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -201,7 +220,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
-        {provide: HandlerOrganizationDeletion, useValue: HandlerObjectDeletionMock},
+        {provide: HandlerOrganizationDeletion, useValue: HandlerOrganizationDeletionMock},
+        {provide: HandlerOrganizationMerge, useValue: HandlerOrganizationMergeMock},
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
         {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
@@ -219,7 +239,9 @@ describe('HubspotService => GetCandidates', () => {
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
         {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
-        {provide: ContactCreationService, useValue: contactCreationServiceMock}
+        {provide: ContactCreationService, useValue: contactCreationServiceMock},
+        {provide: ContactUpdateService, useValue: updateContactServiceMock},
+        {provide: ContactDeleteService, useValue: deleteContactServiceMock}
       ],
     }).compile();
 
@@ -271,7 +293,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
-        {provide: HandlerOrganizationDeletion, useValue: HandlerObjectDeletionMock},
+        {provide: HandlerOrganizationDeletion, useValue: HandlerOrganizationDeletionMock},
+        {provide: HandlerOrganizationMerge, useValue: HandlerOrganizationMergeMock},
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
         {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
@@ -289,7 +312,9 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
         {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
-        {provide: ContactCreationService, useValue: contactCreationServiceMock}
+        {provide: ContactCreationService, useValue: contactCreationServiceMock},
+        {provide: ContactUpdateService, useValue: updateContactServiceMock},
+        {provide: ContactDeleteService, useValue: deleteContactServiceMock}
       ]
     }).compile();
 

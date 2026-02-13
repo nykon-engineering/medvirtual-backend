@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HireRequestStatus, OrganizationStatus, PanelCandidateStatus, PanelStatus } from '@prisma/client';
-import { findMonthlySalary } from '../common/utils/salary.util';
+import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
@@ -198,7 +198,18 @@ export class PanelService {
             salary: findMonthlySalary(
                 candidate.hourly_pay_rate?.toNumber() || 0,
                 candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+                candidate.employment_type || ''
+            ),
+            hourlySalary: candidate.hourly_pay_rate ? findHourlySalary(
+                findMonthlySalary(
+                    candidate.hourly_pay_rate?.toNumber() || 0,
+                    candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+                    candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+                    candidate.employment_type || ''
+                ),
+                candidate.employment_type || ''
+            ) : 0,
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,
@@ -229,7 +240,18 @@ export class PanelService {
             salary: findMonthlySalary(
                 candidate.hourly_pay_rate?.toNumber() || 0,
                 candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+                candidate.employment_type || ''
+            ),
+            hourlySalary: candidate.hourly_pay_rate ? findHourlySalary(
+                findMonthlySalary(
+                    candidate.hourly_pay_rate?.toNumber() || 0,
+                    candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+                    candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+                    candidate.employment_type || ''
+                ),
+                candidate.employment_type || ''
+            ) : 0,
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,
@@ -366,7 +388,18 @@ export class PanelService {
             salary: findMonthlySalary(
                 candidate.hourly_pay_rate?.toNumber() || 0,
                 candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+                candidate.employment_type || ''
+            ),
+            hourlySalary: candidate.hourly_pay_rate ? findHourlySalary(
+                findMonthlySalary(
+                    candidate.hourly_pay_rate?.toNumber() || 0,
+                    candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+                    candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+                    candidate.employment_type || ''
+                ),
+                candidate.employment_type || ''
+            ) : 0,
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,

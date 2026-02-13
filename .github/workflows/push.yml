@@ -12,6 +12,7 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME }}
+      LAMBDA_WORKER_NAME: ${{ secrets.LAMBDA_WORKER_NAME_DEV }}
       S3_LAMBDA_BUCKET: ${{ secrets.S3_LAMBDA_BUCKET }}
       NODE_OPTIONS: --max-old-space-size=4096
 
@@ -85,6 +86,15 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name $LAMBDA_FUNCTION_NAME \
+            --s3-bucket $S3_LAMBDA_BUCKET \
+            --s3-key lambda.zip \
+            --no-cli-pager \
+            --output text
+      
+      - name: 🚀 Deploy Worker at AWS Lambda (via S3)
+        run: |
+          aws lambda update-function-code \
+            --function-name $LAMBDA_WORKER_NAME \
             --s3-bucket $S3_LAMBDA_BUCKET \
             --s3-key lambda.zip \
             --no-cli-pager \

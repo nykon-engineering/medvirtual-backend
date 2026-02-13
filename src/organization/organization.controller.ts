@@ -297,8 +297,7 @@ export class OrganizationController {
 
   // Admin Staff Management Endpoints
   @Get(':id/staff')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
+  @UseGuards(AuthGuard)
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get staff for a specific organization',

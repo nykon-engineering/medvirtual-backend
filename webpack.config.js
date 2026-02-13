@@ -3,7 +3,11 @@ const webpack = require('webpack');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
-  entry: './src/lambda.ts',
+  //entry: './src/lambda.ts',
+  entry: {
+    index: './src/lambda.ts',        // API (keep index.js)
+    'lambda-sqs': './src/lambda-sqs.ts', // Worker SQS
+  },
   target: 'node',
   mode: 'production',
   performance: {
@@ -28,7 +32,7 @@ module.exports = {
     },
   },
   output: {
-    filename: 'index.js', //The lambda is configured to use index.js as the entry point
+    filename: '[name].js',           // gera index.js e lambda-sqs.js
     path: path.resolve(__dirname, 'dist'),
     libraryTarget: 'commonjs2',
   },

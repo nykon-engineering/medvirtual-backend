@@ -13,13 +13,16 @@ import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationMerge } from './handlers/organizationMerge';
+import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
+
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
 import { HandlerOwnerPropertyChange } from './handlers/ownerPropertyChange';
 import { HandlerDealCreation } from './handlers/dealCreation';
 import { HandlerDealPropertyChange } from './handlers/dealPropertyChange';
 import { HandlerDealDeletion } from './handlers/dealDeletion';
-import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
+
 import { HandlerDealAssociationChange } from './handlers/dealAssociationChange';
 import { HireRequestCreationService } from './create/hireRequest';
 import { HireRequestUpdateService } from './update/hireRequest';
@@ -31,8 +34,11 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
-import { ContactCreationService } from './create/contact';
 import { OrganizationUpdateService } from './update/organization';
+import { ContactCreationService } from './create/contact';
+import { ContactUpdateService } from './update/contact';
+import { ContactDeleteService } from './delete/contact';
+
 
 
 
@@ -47,6 +53,7 @@ import { OrganizationUpdateService } from './update/organization';
     HandlerOrganizationCreation, 
     HandlerOrganizationPropertyChange,
     HandlerOrganizationDeletion,
+    HandlerOrganizationMerge,
     HandlerOrganizationAssociationChange,
     HandlerOwnerCreation,
     HandlerOwnerDeletion,
@@ -63,8 +70,10 @@ import { OrganizationUpdateService } from './update/organization';
     HireRequestUpdateService,
     OrganizationCreationService,
     OwnerCreationService,
+    OrganizationUpdateService,
     ContactCreationService,
-    OrganizationUpdateService
+    ContactUpdateService,
+    ContactDeleteService
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 

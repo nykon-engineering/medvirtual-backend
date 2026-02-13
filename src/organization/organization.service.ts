@@ -5,7 +5,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -44,7 +44,9 @@ import { organizationIndustryToDbDictionary } from '../common/dictionaries/organ
 //import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
-
+import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
+import { SqsService } from '../sqs/sqs.service';
+import { activePipelines } from '../common/constant/activeDealPipelines';
 
 @Injectable()
 export class OrganizationService {
@@ -57,11 +59,12 @@ export class OrganizationService {
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService,
     @Inject(forwardRef (() => NotificationsService))
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+
+    private readonly sqs: SqsService
     
   ) {}
 
-  
   async delay(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   };
@@ -424,12 +427,10 @@ export class OrganizationService {
         whereClause.business_unit = business_unit;
       }
 
-      // Apply hasUser filter: only organizations with at least one user that is not inactive
+      // Apply hasUser filter: only organizations with at least one user
       if (hasUser === true) {
         whereClause.users = {
-          some: {
-            status: { not: 'inactive' },
-          },
+          some: {},
         };
       }
 
@@ -514,9 +515,7 @@ export class OrganizationService {
       for (const org of organizations) {
         // Calculate userCount: exclude inactive, include pending as active
         // Count users where status !== 'inactive' (includes: active, pending, invited, suspended, etc.)
-        const userCount = org.users.filter(
-          user => user.status !== 'inactive'
-        ).length;
+        const userCount = org.users.length;
 
         
         // Calculate staffCount: exclude terminated
@@ -526,8 +525,8 @@ export class OrganizationService {
         ).length;
 
         // Apply hasUser filter: skip organizations that don't meet the criteria
-        if (hasUser === true && userCount === 0) {
-          continue; // Skip this organization as it doesn't have active users
+        if (hasUser === true && org.users.length === 0) {
+          continue; // Skip this organization as it doesn't have users
         }
 
         // Apply hasStaff filter: skip organizations that don't meet the criteria
@@ -2350,9 +2349,20 @@ export class OrganizationService {
   }
 
   async syncOrganizationsWithDeals(): Promise<Object> {
+    /*
+    1. get all active organizations
+    2. for each organization, get all associated deals from hubspot
+    3. if the organization does not exist with the hubspotId, create it
+    4. for each organization, check if the associated deals exist as staff
+    5. if the staff does not exist, create it
+    */
     const arrayReturn: string[] = [];
     const chunkSize = 100;
     const concurrency = 5;
+    const ALLOWED_PIPELINES = ['5155250', '85165570'];
+
+    const sleep = (ms: number) =>
+      new Promise(resolve => setTimeout(resolve, ms));
   
     const organizations = await this.prisma.organization.findMany({
       where: {
@@ -2363,6 +2373,7 @@ export class OrganizationService {
       select: {
         id: true,
         hubspot_id: true,
+        name: true,
         staff: {
           select: {
             hubspot_id: true,
@@ -2390,168 +2401,173 @@ export class OrganizationService {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
               'Content-Type': 'application/json',
             },
-            timeout: 20000, // 20s por segurança
+            timeout: 20000, // 20s by security
           },
         );
-  
-        const staffPromises: Promise<any>[] = [];
-  
+
+        // => Get DealIds
+        const dealIds = new Set<string>();
+
         for (const result of data.results) {
-          const org = orgMap.get(result.from.id);
-  
-          if (!org) {
-            staffPromises.push(
-              this.organizationCreation.execute({ objectId: result.from }).then(newOrg => {
-                if (newOrg) arrayReturn.push(`=> Organization ${result.from.id} created.`);
-              }),
-            );
-            continue;
-          }
-  
           for (const assoc of result.to) {
-            const dealHubspotId = assoc.toObjectId;
-            const existingStaff = org.staff.find(s => s.hubspot_id === dealHubspotId);
-            if (!existingStaff) {
-              staffPromises.push(
-                this.dealCreation.execute({ objectId: dealHubspotId }).then(newStaff => {
-                  if (newStaff)
-                    arrayReturn.push(
-                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
-                    );
-                }),
-              );
-            }
+            dealIds.add(String(assoc.toObjectId));
+            //console.log(`Found deal association: Company ${result.from.id} -> Deal ${assoc.toObjectId}`);
           }
         }
-  
-        await Promise.allSettled(staffPromises);
-      } catch (error) {
-        console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
-      }
-    };
-  
-    const queue: Promise<void>[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const task = processChunk(chunks[i], i);
-      queue.push(task);
-      if (queue.length >= concurrency) {
-        await Promise.allSettled(queue);
-        queue.length = 0;
-      }
-    }
-    if (queue.length) await Promise.allSettled(queue);
-  
+        
+        if (dealIds.size === 0) return;
+        //==========
 
-    await this.prisma.sync.create({
-      data: { role: 'organizations', last_synced_at: new Date() },
-    });
-  
-    return {
-      message: 'Organization sync with deals completed',
-      status: 200,
-      data: { arrayReturn },
-    };
-  }
-  
-  
-  async syncOrganizationsWithDealsNEW(): Promise<Object> { //created on 2025-10-30
-    const arrayReturn: string[] = [];
-    const chunkSize = 100;
-    const concurrency = 5;
-  
-    const organizations = await this.prisma.organization.findMany({
-      where: {
-        status: 'active',
-        organization_role: 'client',
-        hubspot_id: { not: null },
-      },
-      select: {
-        id: true,
-        hubspot_id: true,
-        staff: {
-          select: {
-            hubspot_id: true,
-            candidate: { select: { id: true, hubspot_id: true } },
-          },
-        },
-      },
-    });
-  
-    const orgMap = new Map(organizations.map(o => [o.hubspot_id, o]));
-    const organizationsId = organizations.map(org => org.hubspot_id);
-
-    const chunks: any[] = [];
-    for (let i = 0; i < organizationsId.length; i += chunkSize) {
-      chunks.push(organizationsId.slice(i, i + chunkSize));
-    }
-  
-    let staffArray : string[] = [];
-    const processChunk = async (chunk: string[], index: number) => {
-      try {
-        const { data } = await axios.post(
-          'https://api.hubapi.com/crm/v4/associations/company/deal/batch/read',
-          { inputs: chunk.map(id => ({ id })) },
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 20000,
-          },
-        );
-  
-        const staffPromises: Promise<any>[] = [];
-  
-        for (const result of data.results) {
-          const org = orgMap.get(result.from.id);
-  
-          if (!org) {
-            staffPromises.push(
-              this.organizationCreation.execute({ objectId: result.from }).then(newOrg => {
-                if (newOrg) arrayReturn.push(`=> Organization ${result.from.id} created.`);
-              }),
-            );
-            continue;
-          }
-  
-          for (const assoc of result.to) {
-            const dealHubspotId = assoc.toObjectId;
-            const existingStaff = org.staff.find(s => s.hubspot_id === dealHubspotId);
-
-            if (!existingStaff) {
-              staffPromises.push(
-                this.dealCreation.execute({ objectId: dealHubspotId }).then(newStaff => {
-                  if (newStaff)
-                    arrayReturn.push(
-                      `=> Staff ${dealHubspotId} created under organization ${org.hubspot_id}.`,
-                    );
-                }),
-              );
-            }else{
-              staffArray.push(dealHubspotId); 
-            }
-          }
-        }
-  
-        await Promise.allSettled(staffPromises);
-      } catch (error) {
-        console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
-      }
-    };
-  
-    const queue: Promise<void>[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const task = processChunk(chunks[i], i);
-      queue.push(task);
-      if (queue.length >= concurrency) {
-        await Promise.allSettled(queue);
-        queue.length = 0;
-      }
-    }
-    if (queue.length) await Promise.allSettled(queue);
+        // => Get deals on batch
+        const dealPipelineMap = new Map<string, string>();
+        const dealIdArray = Array.from(dealIds);
     
-    //here is the new function to handle with the candidates associated
-    await this.syncCandidatesAssociated(staffArray, orgMap, arrayReturn);
+        for (let i = 0; i < dealIdArray.length; i += 100) {
+          const dealChunk = dealIdArray.slice(i, i + 100);
+          
+          const { data: dealsData } = await axios.post(
+            'https://api.hubapi.com/crm/v3/objects/deals/batch/read',
+            {
+              properties: ['pipeline', 'dealstage'],
+              inputs: dealChunk.map(id => ({ id })),
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+              timeout: 20000,
+            },
+          );
+          
+          for (const deal of dealsData.results) {
+            dealPipelineMap.set(String(deal.id), String(deal.properties.pipeline));
+          }
+
+          await sleep(200); //to avoid rate limits on hubspot
+        }
+        //============
+
+  
+        const staffPromises: Promise<any>[] = [];
+  
+        for (const result of data.results) {
+          const org = orgMap.get(result.from.id);
+          
+          if (!org) {
+            staffPromises.push(
+              this.organizationCreation.execute({ objectId: result.from }).then(newOrg => {
+                if (newOrg) arrayReturn.push(`=> Organization ${result.from.id} created.`);
+              }),
+            );
+            continue;
+          }
+  
+          for (const assoc of result.to) {
+            const dealHubspotId = String(assoc.toObjectId);
+            const pipeline = dealPipelineMap.get(dealHubspotId);
+            
+            // => Ignore deals not in allowed pipelines
+            if (!pipeline) continue;
+            if (!ALLOWED_PIPELINES.includes(pipeline)) continue;
+            //============
+            
+            const existingStaff = org.staff.find(s => s.hubspot_id == dealHubspotId);
+
+            if (existingStaff == undefined) {
+                
+                
+              await this.sqs.sendMessage({
+                  QueueUrl: process.env.DEALS_QUEUE_URL,
+                  MessageBody: JSON.stringify({
+                    Type: 'CREATE_DEAL_STAFF',
+                    objectId: dealHubspotId,
+                    organization: {
+                      id: org.id,
+                      hubspot_id: org.hubspot_id,
+                    },
+                  }),
+                })
+                
+                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for creation.`);
+                console.log(`=> Create Deal ${dealHubspotId} in organization ${org.name} .`);
+                
+            }else{
+
+              //verify if the staff is active but in pipeline_status different activePipelines
+              const staffMember = await this.prisma.staff.findUnique({
+                where: { hubspot_id: dealHubspotId.toString() },
+                select: { 
+                  id: true, 
+                  status: true, 
+                  hubspot_dealstage: true,  
+                }
+              });
+
+              if (staffMember  && 
+                staffMember.status === 'active' && 
+                !activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
+                ) {
+                //update the staff to inactive - send new message to SQS
+                
+                await this.sqs.sendMessage({
+                  QueueUrl: process.env.DEALS_QUEUE_URL,
+                  MessageBody: JSON.stringify({
+                    Type: 'DEACTIVATE_STAFF',
+                    objectId: dealHubspotId,
+                  }),
+                })
+                console.log(`Staff ${staffMember.id} set to inactive due to dealstage ${staffMember.hubspot_dealstage}`);
+                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for deactivation.`);
+                
+              }
+
+              if (staffMember && 
+                staffMember.status !== 'active' && 
+                activePipelines.some(([key]) => key === staffMember.hubspot_dealstage)
+                ) {
+                //update the staff to active - send new message to SQS
+               
+                await this.sqs.sendMessage({
+                  QueueUrl: process.env.DEALS_QUEUE_URL,
+                  MessageBody: JSON.stringify({
+                    Type: 'REACTIVATE_STAFF',
+                    objectId: dealHubspotId,
+                  }),
+                })
+                
+                console.log(`Staff ${staffMember.id} reactivated due to dealstage ${staffMember.hubspot_dealstage}`);
+                arrayReturn.push(`=> Deal ${dealHubspotId} in organization ${org.name} queued for activation.`);
+              }
+              
+
+            }
+          }
+        }
+  
+        const results = await Promise.allSettled(staffPromises);
+
+        results.forEach((r) => {
+          if (r.status === 'rejected') {
+            console.error('❌ Error processing staff:', r.reason);
+          }
+        });
+      } catch (error) {
+        console.error(`Error in batch ${index + 1}:`, axios.isAxiosError(error) ? error.response?.data : error);
+      }
+    };
+  
+    const queue: Promise<void>[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const task = processChunk(chunks[i], i);
+      queue.push(task);
+      if (queue.length >= concurrency) {
+        await Promise.allSettled(queue);
+        queue.length = 0;
+      }
+    }
+    if (queue.length) await Promise.allSettled(queue);
+  
 
     await this.prisma.sync.create({
       data: { role: 'organizations', last_synced_at: new Date() },
@@ -2563,75 +2579,7 @@ export class OrganizationService {
       data: { arrayReturn },
     };
   }
-
-  //function used  to handle with candidates associated inside the function above
-  private async syncCandidatesAssociated(
-    staffArray: string[],
-    orgMap: Map<any, any>,
-    arrayReturn: string[],
-  ): Promise<void> {
-    if (!staffArray.length) {
-      console.log('Nenhum staff encontrado para sincronizar candidatos.');
-      return;
-    }
   
-    try {
-      const { data } = await axios.post(
-        `https://api.hubapi.com/crm/v4/associations/deal/${process.env.HUBSPOT_CUSTOM_OBJECT}/batch/read`,
-        { inputs: staffArray.map(id => ({ id })) },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 20000,
-        },
-      );
-  
-      for (const result of data.results) {
-        const dealHubspotId = result.from.id;
-        const org = [...orgMap.values()].find(o =>
-          o.staff.some((s: any) => s.hubspot_id === dealHubspotId),
-        );
-        if (!org) continue;
-  
-        const staffMember = org.staff.find((s: any) => s.hubspot_id === dealHubspotId);
-        if (!staffMember) continue;
-  
-        for (const assoc of result.to) {
-          const candidateHubspotId = assoc.toObjectId;
-  
-          if (staffMember.candidate && staffMember.candidate.hubspot_id === candidateHubspotId) {
-            continue; // já está associado
-          }
-  
-          const candidate = await this.prisma.candidate.findFirst({
-            where: { hubspot_id: candidateHubspotId.toString() },
-            select: { id: true, hubspot_id: true },
-          });
-  
-          if (candidate) {
-            await this.prisma.staff.update({
-              where: { id: staffMember.id },
-              data: {
-                candidate_id: candidate.id,
-                hubspot_candidate_id: candidate.hubspot_id,
-              },
-            });
-            console.log(`==> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
-            arrayReturn.push(`=> Staff ${dealHubspotId} updated with candidate ${candidateHubspotId}.`);
-          } else {
-            console.log(`==> Candidate ${candidateHubspotId} not found in local DB.`);
-          }
-        }
-      }
-    } catch (error) {
-      console.error(
-        'Error while syncing candidates:',
-        axios.isAxiosError(error) ? error.response?.data : error,
-      );
-    }
-  }
 
   async getOrganizationIndustryTypes () : Promise<any> {
     try {

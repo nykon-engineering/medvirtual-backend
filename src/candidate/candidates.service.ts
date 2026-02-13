@@ -16,7 +16,7 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { findHourlyPerRate, findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
@@ -42,6 +42,7 @@ export class CandidatesService {
   async findAll(
     user: USER,
     country?: string,
+    shift_block?: string,
     availability?: string,
     monthly_compensation_from?: string,
     monthly_compensation_to?: string,
@@ -67,14 +68,27 @@ export class CandidatesService {
     const take = getAllCandidates ? undefined : perPage;
 
 
-
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('The current user doent have an organization_id');
+    
+    //if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
+
+    let loggedCompany;
+    if (user.organization_id) { 
+      loggedCompany = await this.prisma.organization.findUnique({
+        where: {
+          id: user.organization_id,
+        },
+        select: {
+          business_unit: true,
+        },
+      });
+    }
 
     const { organization_id } = user;
 
-    const hourly_from = monthly_compensation_from ? findHourlySalary(Number(monthly_compensation_from)) : undefined;
-    const hourly_to = monthly_compensation_to ? findHourlySalary(Number(monthly_compensation_to)) : undefined;
+    const hourly_from = monthly_compensation_from ? findHourlyPerRate(Number(monthly_compensation_from)) : undefined;
+    const hourly_to = monthly_compensation_to ? findHourlyPerRate(Number(monthly_compensation_to)) : undefined;
 
     const combinedFilters: Record<string, any>[] = [];
     let positionsFilter: Record<string, any> | null = null
@@ -177,6 +191,8 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -199,6 +215,8 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -221,6 +239,8 @@ export class CandidatesService {
           } : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -243,6 +263,8 @@ export class CandidatesService {
           } : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
+          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
             ...(positionsFilter ? [positionsFilter] : [])
@@ -399,7 +421,16 @@ export class CandidatesService {
         salary: findMonthlySalary(
           candidate.hourly_pay_rate?.toNumber() || 0,
           candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+        hourlySalary: findHourlySalary(
+          findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+          candidate.employment_type || ''
+        ),
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
         panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
@@ -959,16 +990,7 @@ export class CandidatesService {
         }
 
         if (field === 'specialization') {
-          /*result[field] = [
-            ...new Set(
-              returned.flatMap(item =>
-                item.specialization.split(';').map(s => s.trim()).filter(s => s !== 'N/A')
-              )
-            )
-          ];
-          */
-
-
+         
           try {
             const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
             const response = await axios.get(url, {
@@ -987,6 +1009,31 @@ export class CandidatesService {
             }
             const returnedSpecializations = vaTypeProperty.options.map((option) => option.value);
             result[field] = returnedSpecializations || [];
+            //return vaTypeProperty.options || [];
+          } catch (error) {
+            console.error("Failed to find types:", error.response?.data || error.message);
+            throw new Error("Failed to find VA types");
+          }
+        }else if (field === 'shift_block') {
+         
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            });
+
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === "shift_block"
+            );
+
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedShiftBlocks = vaTypeProperty.options.map((option) => option.value);
+            result[field] = returnedShiftBlocks || [];
             //return vaTypeProperty.options || [];
           } catch (error) {
             console.error("Failed to find types:", error.response?.data || error.message);
@@ -1076,7 +1123,7 @@ export class CandidatesService {
     const hireRequests = await this.prisma.hireRequest.findMany({
       where: {
         status: 'sourcing',
-        assigned_user: user.role === 'system_admin' ? { is: { id: user.id } } : undefined,
+        //assigned_user: user.role === 'system_admin' ? { is: { id: user.id } } : undefined,
         panels: {
           some: {
             panelCandidates: {}
@@ -1130,11 +1177,11 @@ export class CandidatesService {
       }
 
       const hourly_from = hr.salary_range_from
-        ? findHourlySalary(Number(hr.salary_range_from))
+        ? findHourlyPerRate(Number(hr.salary_range_from))
         : undefined;
 
       const hourly_to = hr.salary_range_to
-        ? findHourlySalary(Number(hr.salary_range_to))
+        ? findHourlyPerRate(Number(hr.salary_range_to))
         : undefined;
 
       if (
@@ -1315,14 +1362,14 @@ export class CandidatesService {
     return true;
   }
 
-  async getRandomTalentPoolCandidates(): Promise<any> {
+  async getRandomTalentPoolCandidates(business_unit: string): Promise<any> {
     // Base filter for "available" candidates in talent pool
     const pipelineStatusFilter = {
       pipeline_status: {
         in: ['261075105', '1087596819'],
       },
     };
-
+ 
     // Filtros adicionales solo para obtener los candidatos que se muestran
     const whereClauseForCandidates = {
       AND: [
@@ -1340,18 +1387,23 @@ export class CandidatesService {
           },
         },
         {
-          years_of_experience: { not: null },
+          business_unit: business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
         },
         {
           // Solo candidatos disponibles
           ...pipelineStatusFilter,
-        },
+        }
       ],
     };
 
     // Para el conteo total de candidatos disponibles, solo usamos el filtro por pipeline_status
     const whereClauseForCount = {
-      AND: [pipelineStatusFilter],
+      AND: [
+        {...pipelineStatusFilter},
+        {
+          business_unit: business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
+        },
+      ],
     };
 
     // Get total count of available candidates (only by pipeline_status)
@@ -1426,9 +1478,19 @@ export class CandidatesService {
       avatar_url: candidate.avatar_url
         ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
         : null,
-      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+      salary: findMonthlySalary(
+        candidate.hourly_pay_rate?.toNumber() || 0,
         candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+        candidate.employment_type || ''),
+      hourlySalary: findHourlySalary(
+          findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+          candidate.employment_type || ''
+        ),
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
     }));
 
@@ -1521,13 +1583,76 @@ export class CandidatesService {
       avatar_url: candidate.avatar_url
         ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
         : null,
-      salary: findMonthlySalary(candidate.hourly_pay_rate?.toNumber() || 0,
+      salary: findMonthlySalary(
+        candidate.hourly_pay_rate?.toNumber() || 0,
         candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : ''),
+        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+        candidate.employment_type || ''),
+      hourlySalary: findHourlySalary(
+          findMonthlySalary(
+          candidate.hourly_pay_rate?.toNumber() || 0,
+          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
+          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
+          candidate.employment_type || ''),
+          candidate.employment_type || ''
+        ),
       employment_type: transformedEmploymentType,
     };
 
     return candidateWithFullAvatarUrl;
+  }
+
+  async syncBusinessUnits(): Promise<string> {
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        pipeline_status: {
+          in: ['261075105', '1087596819']
+        }
+      },
+      select: {
+        id: true,
+        hubspot_id: true
+      }
+    });
+
+    console.log(`Found ${candidates.length} candidates to sync business units.`);
+    let updatedCount = 0;
+    let errorCount = 0;
+
+    for (const candidate of candidates) {
+      try {
+        const response = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+          {
+            params: {
+              properties: 'business_units'
+            },
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`
+            }
+          }
+        );
+
+        const businessUnit = response.data.properties.business_units;
+
+        console.log(`Candidate ID: ${candidate.id}, HubSpot ID: ${candidate.hubspot_id}, Business Unit from HubSpot: ${businessUnit}`);
+
+        if (businessUnit) {
+          await this.prisma.candidate.update({
+            where: { id: candidate.id },
+            data: {
+              business_unit: businessUnit
+            }
+          });
+          updatedCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to sync business unit for candidate ${candidate.id} (HubSpot ID: ${candidate.hubspot_id}):`, error.message);
+        errorCount++;
+      }
+    }
+
+    return `Sync complete. Updated: ${updatedCount}, Errors: ${errorCount}`;
   }
 }
 

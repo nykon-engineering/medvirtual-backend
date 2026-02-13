@@ -488,6 +488,19 @@ export class HireRequestController {
     }
   };
 
+  @Get('pairing-session-outcome-reason/options')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get Cancel reason options' })
+
+  async getPairingSessionOutcomeReasonOptions() {
+    const result = await this.hireRequestService.getPairingSessionOutcomeReasonOptions();
+    return {
+      status: 200,
+      message: 'Pairing session outcome reason options retrieved successfully',
+      data: result,
+    }
+  };
+
   
 
 }

@@ -544,7 +544,7 @@ describe('CandidatesService', () => {
 
       mockPrisma.$transaction.mockResolvedValue([mockCandidates, 20]);
 
-      const result = await service.getRandomTalentPoolCandidates();
+      const result = await service.getRandomTalentPoolCandidates('berryvirtual');
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
 
@@ -583,7 +583,7 @@ describe('CandidatesService', () => {
 
       mockPrisma.$transaction.mockResolvedValue([mockCandidates, 10]);
 
-      const result = await service.getRandomTalentPoolCandidates();
+      const result = await service.getRandomTalentPoolCandidates('berryvirtual');
 
       expect(result.candidates).toHaveLength(5);
       expect(result.total).toBe(10);
@@ -593,7 +593,7 @@ describe('CandidatesService', () => {
     it('should return empty array if no candidates available', async () => {
       mockPrisma.$transaction.mockResolvedValue([[], 25]);
 
-      const result = await service.getRandomTalentPoolCandidates();
+      const result = await service.getRandomTalentPoolCandidates('berryvirtual' );
 
       expect(result.candidates).toHaveLength(0);
       expect(Array.isArray(result.candidates)).toBe(true);
@@ -602,8 +602,8 @@ describe('CandidatesService', () => {
     it('should handle database errors', async () => {
       mockPrisma.$transaction.mockRejectedValue(new Error('Database error'));
 
-      await expect(service.getRandomTalentPoolCandidates())
-        .rejects.toThrow('Database error');
+      await expect(service.getRandomTalentPoolCandidates('berryvirtual')).
+        rejects.toThrow('Database error');
     });
 
     it('should exclude candidates with specialization "n/a"', async () => {
@@ -654,7 +654,7 @@ describe('CandidatesService', () => {
 
       mockPrisma.$transaction.mockResolvedValue([[mockCandidates[0]], 25]); // Only the first one should be returned
 
-      const result = await service.getRandomTalentPoolCandidates();
+      const result = await service.getRandomTalentPoolCandidates('berryvirtual');
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
 

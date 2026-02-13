@@ -23,6 +23,7 @@ import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import {
+  findHourlyPerRate,
   findHourlySalary,
   findMonthlySalary,
 } from '../common/utils/salary.util';
@@ -250,7 +251,11 @@ export class HireRequestService {
       ...hubspotMappedFields,
       organization: user.role.includes('organization') ?  {connect: {id: user.organization_id || undefined}} : { connect : { id: client_id } },
       status: HireRequestStatus.new,
-      assigned_user: organizationSQL.admin_id ? { connect: { id: organizationSQL.admin_id } } : undefined,
+      assign_user_id: user.role.includes('system') 
+                        ? user.id
+                        : organizationSQL.admin_id 
+                          ? organizationSQL.admin_id 
+                          : undefined,
       assigned_sourcing:  user.role.includes('organization') 
                             ?  { connect: { id: organizationSQL.admin_id } } 
                             :  selectedCandidates && selectedCandidates.length > 0 
@@ -427,14 +432,14 @@ export class HireRequestService {
               last_name: true,
             }
           },
-          assigned_user:{
+          assigned_sourcing: {
             select: {
               id: true,
               first_name: true,
               last_name: true,
             }
           },
-          assigned_sourcing: {
+          assigned_staffing: {
             select: {
               id: true,
               first_name: true,
@@ -467,6 +472,7 @@ export class HireRequestService {
                       avatar_url: true,
                       approved_positions_pairing: true,
                       video_link: true,
+                      employment_type: true,
                       skills: {
                         select: {
                           skill_name: true,
@@ -559,34 +565,82 @@ export class HireRequestService {
       };
     }
 
-    const formatted = hireRequests.map(hr => ({
-      ...hr,
-      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
-      panels: hr.panels.map(panel => ({
-        ...panel,
-        interview_date: panel.interviews[0]?.scheduled_date || null,
-        interview_link: panel.interviews[0]?.link || null,
-        interviews: undefined,
-        panelCandidates: panel.panelCandidates.map(pc => ({
-          ...pc,
-          candidate:{
-            ...pc.candidate,
-            salary: findMonthlySalary(
-              pc.candidate.hourly_pay_rate?.toNumber() || 0,
-              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
-            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
-            .map(pcc => ({
-              panel_id: pcc.panel.id,
-              title: pcc.panel.hireRequest.title,
-              organization_name: pcc.panel.hireRequest.organization.name,
-              status: pcc.status,
-            })) : [],
-          }
-        }))
+    //Get all users from hirerequests assign_user_id to optimize the next steps
+
+    
+
+
+    const formatted = await Promise.all(
+      hireRequests.map(async (hr) => ({
+        ...hr,
+
+        hubspot_pairing_date: hr.hubspot_pairing_date
+          ? timestampToUSDate(hr.hubspot_pairing_date)
+          : null,
+
+        panels: hr.panels.map(panel => ({
+          ...panel,
+          interview_date: panel.interviews[0]?.scheduled_date || null,
+          interview_link: panel.interviews[0]?.link || null,
+          interviews: undefined,
+          panelCandidates: panel.panelCandidates.map(pc => ({
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+              salary: findMonthlySalary(
+                pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                pc.candidate.languages.length > 1
+                  ? 'Bilingual'
+                  : pc.candidate.languages[0]?.name,
+                pc.candidate.approved_positions_pairing?.[0] || '',
+                pc.candidate.employment_type || ''
+              ),
+              hourlySalary: findHourlySalary(
+                findMonthlySalary(
+                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                  pc.candidate.languages.length > 1
+                    ? 'Bilingual'
+                    : pc.candidate.languages[0]?.name,
+                  pc.candidate.approved_positions_pairing?.[0] || '',
+                  pc.candidate.employment_type || ''
+                ),
+                pc.candidate.employment_type || ''
+              ),
+              avatar: pc.candidate.avatar_url
+                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                : null,
+              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                panel_id: pcc.panel.id,
+                title: pcc.panel.hireRequest.title,
+                organization_name: pcc.panel.hireRequest.organization.name,
+                status: pcc.status,
+              })) || [],
+            }
+          }))
+        })),
+
+        assign_user_id: hr.assign_user_id
+          ? await this.prisma.uSER.findMany({
+              where: {
+                id: {
+                  in: hr.assign_user_id
+                    .split(',')
+                    .filter(Boolean)
+                    .map(id => id.trim()),
+                },
+              },
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+              },
+            })
+          : [],
       }))
-    }));
+    );
+
 
     return {
       data: formatted,
@@ -621,14 +675,14 @@ export class HireRequestService {
             last_name: true,
           }
         },
-        assigned_user:{
+        assigned_sourcing: {
           select: {
             id: true,
             first_name: true,
             last_name: true,
           }
         },
-        assigned_sourcing: {
+        assigned_staffing: {
           select: {
             id: true,
             first_name: true,
@@ -749,6 +803,25 @@ export class HireRequestService {
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
+    const usersFromAssignUserId = await this.prisma.uSER.findMany({
+      where: {
+        id: {
+          in: hireRequest.assign_user_id
+            ? hireRequest.assign_user_id
+                .split(',')
+                .filter(Boolean)
+                .map(id => id.trim())
+            : [],
+        },
+      },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+      },
+    });
+
     //Add salary with automatic calculation
     const formatted = {
       ...hireRequest,
@@ -775,7 +848,18 @@ export class HireRequestService {
               salary: findMonthlySalary(
                 pc.candidate.hourly_pay_rate?.toNumber() || 0,
                 pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+                pc.candidate.employment_type || ''
+              ),
+              hourlySalary: findHourlySalary(
+                findMonthlySalary(
+                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                  pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+                  pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+                  pc.candidate.employment_type || ''
+                ),
+                pc.candidate.employment_type || ''
+              ),
               years_of_experience: years_of_experience,
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
@@ -787,7 +871,8 @@ export class HireRequestService {
               })) : [],
             }}
         })
-      }))
+      })),
+      assign_user_id: usersFromAssignUserId,
     };
 
     return formatted;
@@ -858,13 +943,6 @@ export class HireRequestService {
             last_name: true,
           }
         },
-        assigned_user:{
-          select: {
-            id: true,
-            first_name: true,
-            last_name: true,
-          }
-        },
         assigned_sourcing: {
           select: {
             id: true,
@@ -904,6 +982,7 @@ export class HireRequestService {
                     avatar_url: true,
                     approved_positions_pairing: true,
                     video_link: true,
+                    employment_type: true,
                     skills: {
                       select: {
                         skill_name: true,
@@ -971,34 +1050,75 @@ export class HireRequestService {
     });
      
 
-    const formatted = hireRequests.map(hr => ({
-      ...hr,
-      hubspot_pairing_date: hr.hubspot_pairing_date ? timestampToUSDate(hr.hubspot_pairing_date) : null,
-      panels: hr.panels.map(panel => ({
-        ...panel,
-        interview_date: panel.interviews[0]?.scheduled_date || null,
-        interview_link: panel.interviews[0]?.link || null,
-        interviews: undefined,
-        panelCandidates: panel.panelCandidates.map(pc => ({
-          ...pc,
-          candidate:{
-            ...pc.candidate,
-            salary: findMonthlySalary(
-              pc.candidate.hourly_pay_rate?.toNumber() || 0,
-              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
-            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-            panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
-            .map(pcc => ({
-              panel_id: pcc.panel.id,
-              title: pcc.panel.hireRequest.title,
-              organization_name: pcc.panel.hireRequest.organization.name,
-              status: pcc.status,
-            })) : [],
-          }
-        }))
+    const formatted = await Promise.all(
+      hireRequests.map(async (hr) => ({
+        ...hr,
+
+        hubspot_pairing_date: hr.hubspot_pairing_date
+          ? timestampToUSDate(hr.hubspot_pairing_date)
+          : null,
+
+        panels: hr.panels.map(panel => ({
+          ...panel,
+          interview_date: panel.interviews[0]?.scheduled_date || null,
+          interview_link: panel.interviews[0]?.link || null,
+          interviews: undefined,
+          panelCandidates: panel.panelCandidates.map(pc => ({
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              salary: findMonthlySalary(
+                pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                pc.candidate.languages.length > 1
+                  ? 'Bilingual'
+                  : pc.candidate.languages[0]?.name,
+                pc.candidate.approved_positions_pairing?.[0] || '',
+                pc.candidate.employment_type || ''
+              ),
+              hourlySalary: findHourlySalary(
+                findMonthlySalary(
+                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
+                  pc.candidate.languages.length > 1
+                    ? 'Bilingual'
+                    : pc.candidate.languages[0]?.name,
+                  pc.candidate.approved_positions_pairing?.[0] || '',
+                  pc.candidate.employment_type || ''
+                ),
+                pc.candidate.employment_type || ''
+              ),
+              avatar: pc.candidate.avatar_url
+                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                : null,
+              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                panel_id: pcc.panel.id,
+                title: pcc.panel.hireRequest.title,
+                organization_name: pcc.panel.hireRequest.organization.name,
+                status: pcc.status,
+              })) || [],
+            }
+          }))
+        })),
+
+        assign_user_id: hr.assign_user_id
+          ? await this.prisma.uSER.findMany({
+              where: {
+                id: {
+                  in: hr.assign_user_id
+                    .split(',')
+                    .filter(Boolean)
+                    .map(id => id.trim()),
+                },
+              },
+              select: {
+                id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+              },
+            })
+          : [],
       }))
-    }));
+    );
 
     return formatted;
     
@@ -1052,7 +1172,12 @@ export class HireRequestService {
 
     
     const newHr = await this.findOne(id, user, 'hubspot');
-    await this.hubspot.updateHireRequestInHubspot(newHr);
+    //removing the fields that are not necessary for the update on hubspot and can cause issues if they are sent to hubspot
+    const {
+      hubspotData,
+      ...hubspot_pipeline_stage
+    } = newHr;
+    await this.hubspot.updateHireRequestInHubspot(hubspotData);
     
     // Notify assignee via email when hire request is edited (non-blocking)
     try {
@@ -1129,6 +1254,7 @@ export class HireRequestService {
         //update candidates for their original status or 'Available Candidates' on database and hubspot
         await Promise.all(
           candidates.map(async c =>{
+
             const thereOtherPanels = await this.prisma.panelCandidate.findMany({
               where: {
                 candidate_id: c.candidate.id,
@@ -1145,6 +1271,7 @@ export class HireRequestService {
                 id: true,
               }
             });
+            if (c.candidate.pipeline_status === '261173428') return; //if candidate is in Lost status, dont update his status to Available Candidates, because he is not available anyway
             if (thereOtherPanels.length === 0) {
               //only update candidate if he is not in other panels
               const  pipeline_treated = c.candidate.pipeline_status_origin || pipelineStatus;
@@ -1173,6 +1300,8 @@ export class HireRequestService {
         data: {
           cancel_date: new Date().toISOString(),
           cancel_reason: data.reason || 'No reason provided',
+          assigned_staffing: { connect: data.staffing_coordinator ? { id: data.staffing_coordinator } : undefined },
+          client_signed_contract_closing_ticket: data.client_signed_contract_closing_ticket || undefined,
         },
       });
 
@@ -1198,12 +1327,24 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Pairing Lost'), //=> Pairing Lost
           cancel_reason: data.reason || 'No reason provided',
+          assign_sourcing_id: hireRequest.assigned_sourcing ? hireRequest.assigned_sourcing.id : undefined,
+          staffing_coordinator: data.staffing_coordinator || undefined,
+          pairing_session_conducted: data.pairing_session_conducted || undefined,
+          pairing_session_outcome_reason: data.pairing_session_outcome_reason || undefined,
+          count_of_candidates_invited_: data.count_of_candidates_invited_ || undefined,
+          count_of_candidates_attended_: data.count_of_candidates_attended_ || undefined,
+          count_of_candidates_interviewed_: data.count_of_candidates_interviewed_ || undefined,
+          //Removed on 02/12/2026 regarding this task: https://regenta-company.monday.com/boards/9328303960/pulses/11225813994?doc_id=18399284084
+          //client_signed_contract: data.client_signed_contract || undefined,
+          client_signed_contract_closing_ticket: data.client_signed_contract_closing_ticket || undefined,
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
 
 
         //Update cancel_date in hubspot
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'cancel_date');
+
+        
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
@@ -1688,34 +1829,37 @@ export class HireRequestService {
     if(!type) throw new BadRequestException('Type of reassignment is required');
 
     let fieldToUpdate = {};
-    if (type === 'concierge'){
+    if (type === 'concierge') {
       fieldToUpdate = {
-        assigned_user: data.user_id
-        ? { connect: { id: data.user_id } }
-        : { disconnect: true },
-      }
-    }else if (type === 'sourcing'){
+        assign_user_id: data.user_id || null
+      };
+    } else if (type === 'sourcing') {
       fieldToUpdate = {
         assigned_sourcing: data.user_id
-        ? { connect: { id: data.user_id } }
-        : { disconnect: true },
-      }
+          ? { connect: { id: data.user_id } }
+          : { disconnect: true },
+      };
+    }else if (type === 'staffing_coordinator') {
+      fieldToUpdate = {
+        assigned_staffing: data.user_id
+          ? { connect: { id: data.user_id } }
+          : { disconnect: true },
+      };
     }
 
+
     const hireRequest = await this.prisma.hireRequest.update({
-      where: {
-        id: id
-      },
+      where: { id },
       data: fieldToUpdate
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
     const newHr = await this.findOne(id, user);
-    await this.hubspot.updateHireRequestInHubspot(newHr, type === 'concierge' ? 'assign_user_id' : 'assign_sourcing_id');
+    await this.hubspot.updateHireRequestInHubspot(newHr, type === 'concierge' ? 'assign_user_id' : type === 'staffing_coordinator' ? 'assign_staffing_coordinator' : 'assign_sourcing_id');
 
-    // Notify newly assigned user via email (non-blocking)
+    // Notificação (não bloqueante)
     if (data.user_id) {
-      console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user ${data.user_id}`);
+      console.log(`[notifications] Attempting to send hire request reassigned notification for HR ${id} to user(s) ${data.user_id}`);
       try {
         const result = await this.notifications.notifyHireRequestCreated(id, type);
         console.log(`[notifications] Hire request reassigned notification sent successfully:`, result);
@@ -1756,11 +1900,11 @@ export class HireRequestService {
     const requiredSkills = hireRequest.skills.map(s => s.skill_name);
   
     const hourly_from = hireRequest.salary_range_from
-      ? findHourlySalary(Number(hireRequest.salary_range_from))
+      ? findHourlyPerRate(Number(hireRequest.salary_range_from))
       : undefined;
       
     const hourly_to = hireRequest.salary_range_to
-      ? findHourlySalary(Number(hireRequest.salary_range_to))
+      ? findHourlyPerRate(Number(hireRequest.salary_range_to))
       : undefined;
   
     const candidates = await this.prisma.candidate.findMany({
@@ -1894,7 +2038,20 @@ export class HireRequestService {
       salary: findMonthlySalary(
         c.hourly_pay_rate?.toNumber() || 0,
         c.languages.length > 1 ? 'Bilingual' : c.languages[0]?.name,
-        c.approved_positions_pairing && c.approved_positions_pairing.length > 0 ? c.approved_positions_pairing[0] : ''),
+        c.approved_positions_pairing && c.approved_positions_pairing.length > 0 ? c.approved_positions_pairing[0] : '',
+        c.employment_type || ''
+      ),
+      hourlySalary: findHourlySalary(
+        findMonthlySalary(
+          c.hourly_pay_rate?.toNumber() || 0,
+          c.languages.length > 1
+            ? 'Bilingual'
+            : c.languages[0]?.name,
+          c.approved_positions_pairing?.[0] || '',
+          c.employment_type || ''
+        ),
+        c.employment_type || ''
+      ),
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
       panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
@@ -2317,7 +2474,20 @@ export class HireRequestService {
           salary: findMonthlySalary(
             pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
             pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+            pc.candidate.employment_type || ''
+          ),
+          hourlySalary: findHourlySalary(
+            findMonthlySalary(
+              pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
+              pc.candidate.languages && pc.candidate.languages.length > 1
+                ? 'Bilingual'
+                : pc.candidate.languages[0]?.name,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+              pc.candidate.employment_type || ''
+            ),
+            pc.candidate.employment_type || ''
+          ),
           avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
         }
       }))
@@ -2865,7 +3035,15 @@ export class HireRequestService {
           select: {
             id: true,
             hubspot_id: true,
-            pipeline_status_origin: true
+            pipeline_status_origin: true,
+            panelCandidates: {
+              where: {
+                panel_id: { not: panelExists.id }
+              },
+              select: {
+                status: true
+              }
+            }
           },
         },
       },
@@ -2923,18 +3101,21 @@ export class HireRequestService {
     if( !others) throw new BadRequestException(`Panel not updated to set other candidates as not selected`);
     
     if (loserExists){
-      const candidateLosers = loserExists.map(c => c.candidate);
       //update losers to 'available candidates' on database
       await Promise.all(
-        candidateLosers.map(async c =>{
+        loserExists.map(async loser =>{
+          const c = loser.candidate;
+
+          const canUpdate = c.panelCandidates.every(pc => ['selected', 'returned_to_pool'].includes(pc.status));
+          if (!canUpdate) return;
+
           const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
           await this.prisma.candidate.update({
             where: { id: c.id },
             data: { pipeline_status: pipeline_treated},
           });
           await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
-        }
-        )
+        })
       );
     }
 
@@ -3019,7 +3200,20 @@ export class HireRequestService {
             salary: findMonthlySalary(
               pc.candidate.hourly_pay_rate?.toNumber() || 0,
               pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+              pc.candidate.employment_type || ''
+            ),
+            hourlySalary: findHourlySalary(
+              findMonthlySalary(
+                pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
+                pc.candidate.languages && pc.candidate.languages.length > 1
+                  ? 'Bilingual'
+                  : pc.candidate.languages[0]?.name,
+                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+                pc.candidate.employment_type || ''
+              ),
+              pc.candidate.employment_type || ''
+            ),
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
           },
         };
@@ -3068,10 +3262,10 @@ export class HireRequestService {
       if (hr.availability && candidate.employment_type === hr.availability) score += 1;
   
       const hourly_from = hr.salary_range_from
-        ? findHourlySalary(Number(hr.salary_range_from))
+        ? findHourlyPerRate(Number(hr.salary_range_from))
         : undefined;
       const hourly_to = hr.salary_range_to
-        ? findHourlySalary(Number(hr.salary_range_to))
+        ? findHourlyPerRate(Number(hr.salary_range_to))
         : undefined;
   
       if (
@@ -3121,7 +3315,9 @@ export class HireRequestService {
     }
 
     const panel = await this.prisma.candidatePanel.findFirst({
-      where: { hire_request_id: hireRequestId },
+      where: { 
+        hire_request_id: hireRequestId,
+      },
       include: {
         panelCandidates: {
           include: {
@@ -3161,13 +3357,12 @@ export class HireRequestService {
 
     const panelCandidates = panel.panelCandidates;
 
-    //Here I cant filter this because this specific candidate got 'Endorsed via platform' when they were added to the panel
-    //const availableCandidates = panelCandidates.filter(pc => 
-    //  pc.candidate.pipeline_status === '261075105' || pc.candidate.pipeline_status === '1087596819'
-    //);
+    const filteredCandidates = panelCandidates.filter(pc => 
+      pc.candidate.pipeline_status === '1172847191' // show just Endorsed via platform candidates
+    );
     const availableCandidates = (
       await Promise.all(
-        panelCandidates.map(async (pc) => {
+        filteredCandidates.map(async (pc) => {
           const existInOtherPanel = await this.prisma.panelCandidate.findFirst({
             where: {
               candidate_id: pc.candidate.id,
@@ -3202,7 +3397,19 @@ export class HireRequestService {
       salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(
         pc.candidate.hourly_pay_rate.toNumber(),
         pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-        pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''
+        pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+        pc.candidate.employment_type || ''
+      ) : null,
+      hourlySalary: pc.candidate.hourly_pay_rate ? findHourlySalary(
+        findMonthlySalary(
+          pc.candidate.hourly_pay_rate.toNumber(),
+          pc.candidate.languages && pc.candidate.languages.length > 1
+            ? 'Bilingual'
+            : pc.candidate.languages[0]?.name,
+          pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+          pc.candidate.employment_type || ''
+        ),
+        pc.candidate.employment_type || ''
       ) : null,
       avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
@@ -3313,6 +3520,31 @@ export class HireRequestService {
     } catch (error) {
       console.error("Failed to find Cancel Reason:", error.response?.data || error.message);
       throw new Error("Failed to find Cancel Reason");
+    }
+  };
+
+  async getPairingSessionOutcomeReasonOptions () : Promise<any> {
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/tickets";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "pairing_outcome_reason"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      return vaTypeProperty.options || [];
+    } catch (error) {
+      console.error("Failed to find Pairing Session Outcome Reason:", error.response?.data || error.message);
+      throw new Error("Failed to find Pairing Session Outcome Reason");
     }
   };
 

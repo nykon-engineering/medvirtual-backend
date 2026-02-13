@@ -403,6 +403,8 @@ export class StaffService {
           employment_type: true,
           country: true,
           about_me: true,
+          avatar_url: true,
+          gender: true,
           languages: {
             select: {
               name: true,
@@ -453,9 +455,17 @@ export class StaffService {
       this.prisma.staff.count({ where }),
     ]);
 
+    const hiredStaffWithAvatar = staff.map((staff) => ({
+      ...staff,
+      candidate: {
+        ...staff.candidate,
+        avatar: staff.candidate?.avatar_url ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}` :  null,
+      }
+    }))
+
     return {
       status: 200,
-      data: staff,
+      data: hiredStaffWithAvatar,
       meta: {
         total,
         page,
@@ -475,7 +485,7 @@ export class StaffService {
     start_date_to: Date,
   ): Promise<object> {
 
-    console.log('Organization ID in Service:', organizationId);
+    //console.log('Organization ID in Service:', organizationId);
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
 

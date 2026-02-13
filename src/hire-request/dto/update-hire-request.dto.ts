@@ -23,8 +23,9 @@ export class UpdateHireRequestDto {
     @IsOptional()
     client_id: string;
 
-    @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: true,  type: String })
+    @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: false,  type: String })
     @IsString()
+    @IsOptional()
     specialization: string;
 
     @ApiProperty({ example: 'Full-time, Part-time, On-demand, any', description: 'The availability for the hire request', required: true,  type: String, enum: ['Full-time', 'Part-time', 'On-demand', 'any'] })
@@ -101,6 +102,21 @@ export class UpdateHireRequestDto {
     @IsString()
     @IsOptional()
     hubspot_va_shift_hours: string
+
+    @ApiProperty({ type: String, description: 'Tools Familiarization', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_tools_familiarization: string
+
+    @ApiProperty({ type: String, description: 'Training Request Notes', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_training_request_notes: string
+
+    @ApiProperty({ type: String, description: 'Camera On During Shift', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_camera_on_during_shift: string
 
     @ApiProperty({ type: String, description: 'Special Sourcing Needed[Yes/No]', required: false })
     @IsString()

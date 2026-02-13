@@ -10,7 +10,6 @@ export const hrTicketToDbDictionary : Record<string, string | string> = {
     company_name: 'hubspot_company_name',
     company_url: 'hubspot_company_url',
     va_deployment_type: 'availability',
-    hs_ticket_priority: 'priority',
     va_type: 'hubspot_role_type',
     contract_amount: 'hubspot_contract_amount',
     language: 'hubspot_language',
@@ -19,11 +18,17 @@ export const hrTicketToDbDictionary : Record<string, string | string> = {
     tasks: 'hubspot_tasks',
     n2_monitors_required_: 'hubspot_n2_monitors_required',
     va_shift_hours: 'hubspot_va_shift_hours',
+    tools_familiarization: 'hubspot_tools_familiarization',
+    training_request_notes_: 'hubspot_training_request_notes',
+    camera_on_shift: 'hubspot_camera_on_during_shift',
     special_sourcing_needed: 'hubspot_special_sourcing_needed',
     special_requirements: 'hubspot_special_requirements',
     additional_training_requested: 'hubspot_additional_training_requested',
     pairing_date: 'hubspot_pairing_date',
     pairing_time: 'hubspot_pairing_time',
+    client_signed_contract: 'client_signed_contract_ticket_submission',
+    client_signed_contract_closing_ticket: 'client_signed_contract_closing_ticket'
+    
     //hire_date__start_of_employment_: 'expected_start_date', => issue form hubspot saying 'Enter a date before ${currentDate}': 
 }
 

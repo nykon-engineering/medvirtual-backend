@@ -23,9 +23,10 @@ export class CreateHireRequestDto {
     @IsOptional()
     client_id: string;
 
-    @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: true,  type: String })
+    @ApiProperty({ example: 'Engineering', description: 'The specialization for the hire request', required: false,  type: String })
     @IsString()
-    specialization: string;
+    @IsOptional()
+    specialization?: string;
 
     @ApiProperty({ example: 'Full-time, Part-time, On-demand, any', description: 'The availability for the hire request', required: true,  type: String, enum: ['Full-time', 'Part-time', 'On-demand', 'any'] })
     @IsString()
@@ -40,7 +41,6 @@ export class CreateHireRequestDto {
     @IsDate()
     @Type(() => Date)
     expected_start_date: Date;
-
 
     @ApiProperty({ example: '50000', description: 'The salary range from for the hire request', required: false,  type: String })
     @IsString()
@@ -84,7 +84,6 @@ export class CreateHireRequestDto {
     @IsOptional()
     skills: HireRequestSkillDTO[];
 
-
     @ApiProperty({ type: String, description: 'Expected Tasks & Scope of Support', required: false })
     @IsString()
     @IsOptional()
@@ -99,6 +98,21 @@ export class CreateHireRequestDto {
     @IsString()
     @IsOptional()
     hubspot_va_shift_hours: string
+
+    @ApiProperty({ type: String, description: 'Tools Familiarization', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_tools_familiarization: string
+
+    @ApiProperty({ type: String, description: 'Training Request Notes', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_training_request_notes: string
+
+    @ApiProperty({ type: String, description: 'Camera On During Shift', required: false })
+    @IsString()
+    @IsOptional()
+    hubspot_camera_on_during_shift: string
 
     @ApiProperty({ type: String, description: 'Special Sourcing Needed[Yes/No]', required: false })
     @IsString()
@@ -130,6 +144,14 @@ export class CreateHireRequestDto {
     @IsOptional()
     hubspot_pairing_request_type: string
 
+    @ApiProperty({ type: String, description: 'Requested Role', required: true })
+    @IsString()
+    request_role: string
+    
+    @ApiProperty({ type: String, description: 'Client Signed Contract Ticket Submission', required: false })
+    @IsString()
+    @IsOptional()
+    client_signed_contract_ticket_submission: string
 
     @ApiProperty({ description: 'The selected candidates for the hire request', required: false })
     @IsArray()

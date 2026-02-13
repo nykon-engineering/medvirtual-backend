@@ -12,11 +12,15 @@ export function getMinFloorPrice(dict: Record<string, number>): number {
 }
 
 
-export function findMonthlySalary(hourly_pay_rate: number, language: string , role: string): number {
+export function findMonthlySalary(hourly_pay_rate: number, language: string , role: string, availability: string): number {
   //console.log('Calculating salary for:', {hourly_pay_rate, language, role});
   //if(!hourly_pay_rate || hourly_pay_rate <= 0 || isNaN(hourly_pay_rate)) return 0;
 
-  const averageSalary = Number(process.env.CANDIDATE_HOUR_PER_MONTH) * (hourly_pay_rate + Number(process.env.CANDIDATE_COST_PER_HOUR));
+  const hoursToBeCalculated = availability.trim() === '1087596819' 
+    ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
+    : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
+
+  const averageSalary = hoursToBeCalculated * (hourly_pay_rate + Number(process.env.CANDIDATE_COST_PER_HOUR));
 
   //check if the averageSalary is fewer than the price from dictionary
   let floorPrice;
@@ -29,12 +33,16 @@ export function findMonthlySalary(hourly_pay_rate: number, language: string , ro
   }
 
   //get the minimum floor price for the language
-  const minFloorPrice = language === 'Bilingual' 
+  let minFloorPrice = language === 'Bilingual' 
   ? getMinFloorPrice(floorPriceBilingualDictionary) 
   : language === 'English' 
     ? getMinFloorPrice(floorPriceEnglishDictionary) 
     : 0;
   
+    floorPrice = availability.trim() === '1087596819' 
+    ? floorPrice / 2 
+    : floorPrice;
+
   //return the minimun floor price if role is empty
   if (role === '') {
     return Math.round(minFloorPrice * 100) / 100;
@@ -51,7 +59,17 @@ export function findMonthlySalary(hourly_pay_rate: number, language: string , ro
 }
 
 
-export function findHourlySalary(salary: number): number {
+export function findHourlyPerRate(salary: number): number {
   return salary / Number(process.env.CANDIDATE_HOUR_PER_MONTH) - Number(process.env.CANDIDATE_COST_PER_HOUR);
 }
 
+export function findHourlySalary(monthSalary: number, availability: string ): number {
+
+  const hoursToBeCalculated = availability.trim() === '1087596819' 
+    ? Number(process.env.CANDIDATE_HOUR_PER_MONTH) / 2 
+    : Number(process.env.CANDIDATE_HOUR_PER_MONTH);
+  
+  const roundedSalary = Math.round((monthSalary / hoursToBeCalculated) * 100) / 100;
+
+  return roundedSalary ;
+}

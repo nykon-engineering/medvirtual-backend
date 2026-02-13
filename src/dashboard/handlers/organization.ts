@@ -7,6 +7,7 @@ import { findMonthlySalary } from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
 import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
 import { changeLabelAvailability } from '../../common/utils/hubspot.util';
+import { findHourlySalary } from '../../common/utils/salary.util';
 
 @Injectable()
 export class HandlerOrganization {
@@ -14,6 +15,15 @@ export class HandlerOrganization {
 
   async execute(user, page: number = 1, perPage: number = 10): Promise<object> {
     const result: any = {};
+
+    const loggedCompany = await this.prisma.organization.findUnique({
+      where: {
+        id: user.organization_id,
+      },
+      select: {
+        business_unit: true,
+      },
+    });
     //this variable will be used to otherTalents
     const select = {
       id: true,
@@ -65,9 +75,6 @@ export class HandlerOrganization {
 
     if (!user || user.role.includes("organization") && !user.organization_id)
       throw new BadRequestException('User or organization not found');
-
-
-    
 
 
     const hiredStaff = await this.prisma.staff.findMany({
@@ -250,7 +257,17 @@ export class HandlerOrganization {
           employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
           salary: findMonthlySalary(Number(pc.candidate?.hourly_pay_rate),
             pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : ''),
+            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+            pc.candidate.employment_type || ''
+          ),
+          hourlySalary: pc.candidate?.hourly_pay_rate ? findHourlySalary(
+            findMonthlySalary(Number(pc.candidate?.hourly_pay_rate),
+              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
+              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
+              pc.candidate.employment_type || ''
+            ),
+            pc.candidate.employment_type || ''
+          ) : 0,
           avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
         }
       }))
@@ -261,7 +278,7 @@ export class HandlerOrganization {
     const otherTalents = await this.prisma.candidate.findMany({
       where: {
         organization_id: null,
-        about_me: { not: null },
+        business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
         OR: [
           {
             pipeline_status: '261075105'
@@ -318,7 +335,17 @@ export class HandlerOrganization {
       employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
       salary: findMonthlySalary(Number(talent?.hourly_pay_rate),
         talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
-        talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : ''),
+        talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : '',
+        talent.employment_type || ''
+      ),
+      hourlySalary: talent?.hourly_pay_rate ? findHourlySalary(
+        findMonthlySalary(Number(talent?.hourly_pay_rate),
+          talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
+          talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : '',
+          talent.employment_type || ''
+        ),
+        talent.employment_type || ''
+      ) : 0,
       avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` :  null,
     }))
     result.otherTalents = otherTalentsSalary;

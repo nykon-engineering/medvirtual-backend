@@ -18,8 +18,8 @@ export const candidadeToDbDictionary : Record<string, string | string[]> = {
     gender: 'gender',
     va_role_s: 'approved_positions_pairing',
     shift_block: 'shift_block',
-    video_link: 'video_link'
-
+    video_link: 'video_link',
+    business_units: 'business_unit',
 }
 
 export const dbToCandidateDictionary : Record<string, string> = Object.fromEntries(

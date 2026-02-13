@@ -118,7 +118,7 @@ export class HandlerDealPropertyChange {
             }
             //=====>
 
-
+        if (!deal) return;
         const fieldExists = Object.keys(dealToDbDictionary).includes(event.propertyName);
         if(!fieldExists) return;
 
@@ -132,19 +132,21 @@ export class HandlerDealPropertyChange {
         }
 
 
-        if (deal && event.propertyName == 'dealstage' && event.propertyValue == '148234581' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '1012779094' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '16981844' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '31963952' ||
+        const terminatedStages = [
+            '148234581',
+            '1012779094',
+            '16981844',
+            '31963952',
+            '159176450',
+            '1012777775',
+            '159176451',
+            '159176452'
+        ];
 
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '159176450' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '1012777775' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '159176451' ||
-            deal && event.propertyName == 'dealstage' && event.propertyValue == '159176452'
-        ) {
+        if (fieldUpdated == 'hubspot_dealstage' && terminatedStages.includes(event.propertyValue)) {
             objectToUpdate.status='terminated';
         }else{
-            if(deal.status === 'terminated'){
+            if(deal.status === 'terminated' && fieldUpdated == 'hubspot_dealstage'){
                 objectToUpdate.status='active';
             }
         }

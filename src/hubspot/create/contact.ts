@@ -75,7 +75,11 @@ export class ContactCreationService {
               },
             }
           );
-         
+          await this.prisma.uSER.update({
+            where: { id: data.id },
+            data: { hubspot_contact_id: response.data.id },
+          });
+          
           return true;
         } catch (error) {
           if (error.response) {

@@ -73,6 +73,9 @@ const prismaMock = {
   organization: {
     findUnique: jest.fn(),
   },
+  uSER: {
+    findMany: jest.fn(),
+  },
   $transaction: jest.fn(),
 };
 const hubspotServiceMock = {
@@ -128,6 +131,7 @@ describe('HireRequestService', () => {
       createdByMethod: 'self_signup',
       createdByUserId: null,
       hubspot_id: null,
+      hubspot_contact_id: null,
     } ;
   });
 

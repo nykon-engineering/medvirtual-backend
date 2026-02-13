@@ -143,13 +143,12 @@ describe('NotificationsService', () => {
       salary_range_from: 5000,
       salary_range_to: 8000,
       expected_start_date: new Date('2024-02-01'),
-      assigned_user: {
-        email: 'assignee@example.com',
-        first_name: 'John',
-        last_name: 'Doe',
-      },
+      assign_user_id: 'user1',
+      assigned_sourcing: { id: 'user2', email: 'sourcing@example.com', first_name: 'Jane', last_name: 'Smith' },
+      createdBy: { id: 'user3', email: 'creator@example.com', first_name: 'Bob', last_name: 'Johnson' },
       organization: {
         name: 'Test Company',
+        business_unit: 'Berry Virtual',
       },
       panels: [
         {
@@ -170,6 +169,9 @@ describe('NotificationsService', () => {
 
     it('should send notification email successfully', async () => {
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyHireRequestPlacementCompleted('hr1');
@@ -181,8 +183,8 @@ describe('NotificationsService', () => {
       });
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: ['assignee@example.com'],
+          from: expect.any(String),
+          to: expect.arrayContaining(['assignee@example.com', 'sourcing@example.com', 'creator@example.com']),
           subject: 'Placement completed: Senior Developer',
           html: expect.stringContaining('placement completed'),
         })
@@ -213,6 +215,9 @@ describe('NotificationsService', () => {
       };
       
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequestWithoutWinner);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyHireRequestPlacementCompleted('hr1');
@@ -226,8 +231,9 @@ describe('NotificationsService', () => {
     });
 
     it('should throw BadRequestException when no assignee email', async () => {
-      const hireRequestWithoutEmail = { ...mockHireRequest, assigned_user: { email: null } };
+      const hireRequestWithoutEmail = { ...mockHireRequest, assign_user_id: 'user1' };
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(hireRequestWithoutEmail);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
 
       await expect(service.notifyHireRequestPlacementCompleted('hr1'))
         .rejects.toThrow(BadRequestException);
@@ -241,6 +247,9 @@ describe('NotificationsService', () => {
         expected_start_date: null,
       };
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(hireRequestMinimal);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyHireRequestPlacementCompleted('hr1');
@@ -260,7 +269,6 @@ describe('NotificationsService', () => {
       description: 'Looking for a senior developer',
       priority: 'high',
       specialization: 'Frontend',
-      assigned_user: { email: 'assignee@example.com' },
       organization: { name: 'Test Company' },
     };
 
@@ -302,8 +310,9 @@ describe('NotificationsService', () => {
     });
 
     it('should throw BadRequestException when no assignee email', async () => {
-      const hireRequestWithoutEmail = { ...mockHireRequest, assigned_user: { email: null } };
+      const hireRequestWithoutEmail = { ...mockHireRequest, assign_user_id: 'user1' };
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(hireRequestWithoutEmail);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
 
       await expect(service.notifyHireRequestClientChange('hr1', 'edited'))
         .rejects.toThrow(BadRequestException);
@@ -323,16 +332,15 @@ describe('NotificationsService', () => {
       expected_start_date: new Date('2024-02-01'),
       availability: 'full-time',
       contract_length: '6 months',
-      assigned_user: {
-        email: 'assignee@example.com',
-        first_name: 'John',
-        last_name: 'Doe',
-      },
+      assign_user_id: 'user1',
       organization: { name: 'Test Company' },
     };
 
     it('should send notification email successfully', async () => {
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyHireRequestCreated('hr1');
@@ -358,8 +366,9 @@ describe('NotificationsService', () => {
     });
 
     it('should throw BadRequestException when no assignee email', async () => {
-      const hireRequestWithoutEmail = { ...mockHireRequest, assigned_user: { email: null } };
+      const hireRequestWithoutEmail = { ...mockHireRequest, assign_user_id: 'user1' };
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(hireRequestWithoutEmail);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
 
       await expect(service.notifyHireRequestCreated('hr1'))
         .rejects.toThrow(BadRequestException);
@@ -375,6 +384,9 @@ describe('NotificationsService', () => {
         expected_start_date: null,
       };
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(hireRequestMinimal);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyHireRequestCreated('hr1');
@@ -986,11 +998,14 @@ describe('NotificationsService', () => {
         expected_start_date: new Date('2024-02-01'),
         availability: 'full-time',
         contract_length: '6 months',
-        assigned_user: { email: 'test@example.com', first_name: 'John', last_name: 'Doe' },
+        assign_user_id: 'user1',
         organization: { name: 'Test Company' },
       };
 
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'test@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyHireRequestCreated('hr1');
@@ -1046,11 +1061,14 @@ describe('NotificationsService', () => {
         expected_start_date: new Date('2024-02-01'),
         availability: 'full-time',
         contract_length: '6 months',
-        assigned_user: { email: 'test@example.com', first_name: 'John', last_name: 'Doe' },
+        assign_user_id: 'user1',
         organization: { name: 'Test Company' },
       };
 
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'test@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockRejectedValue(new Error('Mail service error'));
 
       await expect(service.notifyHireRequestCreated('hr1'))
