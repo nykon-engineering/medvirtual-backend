@@ -163,7 +163,7 @@ export class HireRequestUpdateService {
             //remove hubspot_pipeline and hubspot_pipeline_stage because we cannot update them using this endpoint, they are updated using the stage change endpoint
 
             delete hubspotProperties.hs_pipeline;
-            delete hubspotProperties.hs_pipeline_stage;
+            //delete hubspotProperties.hs_pipeline_stage; => Responsible to update the ticket on hubspot
             delete hubspotProperties.ticket_type;
             delete hubspotProperties.business_unit;
             delete hubspotProperties.company_name;

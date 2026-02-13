@@ -1172,7 +1172,12 @@ export class HireRequestService {
 
     
     const newHr = await this.findOne(id, user, 'hubspot');
-    await this.hubspot.updateHireRequestInHubspot(newHr);
+    //removing the fields that are not necessary for the update on hubspot and can cause issues if they are sent to hubspot
+    const {
+      hubspotData,
+      ...hubspot_pipeline_stage
+    } = newHr;
+    await this.hubspot.updateHireRequestInHubspot(hubspotData);
     
     // Notify assignee via email when hire request is edited (non-blocking)
     try {
