@@ -105,6 +105,10 @@ export class HireRequestUpdateService {
                 hubspotProperties.pairing_specialist = await this.getOwnerId(data.assign_sourcing_id);
               }
 
+              if (data.assign_staffing_coordinator) {
+                hubspotProperties.staffing_coordinator = await this.getOwnerId(data.assign_staffing_coordinator);
+              }
+
               hubspotProperties.pairing_session_conducted = data.pairing_session_conducted;
               hubspotProperties.pairing_outcome_reason = data.pairing_session_outcome_reason;
               hubspotProperties.count_of_candidates_invited_ = data.count_of_candidates_invited_ || undefined;

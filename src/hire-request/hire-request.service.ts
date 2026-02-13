@@ -1295,6 +1295,7 @@ export class HireRequestService {
         data: {
           cancel_date: new Date().toISOString(),
           cancel_reason: data.reason || 'No reason provided',
+          assigned_staffing: { connect: data.staffing_coordinator ? { id: data.staffing_coordinator } : undefined },
           client_signed_contract_closing_ticket: data.client_signed_contract_closing_ticket || undefined,
         },
       });
@@ -1330,7 +1331,7 @@ export class HireRequestService {
           count_of_candidates_interviewed_: data.count_of_candidates_interviewed_ || undefined,
           //Removed on 02/12/2026 regarding this task: https://regenta-company.monday.com/boards/9328303960/pulses/11225813994?doc_id=18399284084
           //client_signed_contract: data.client_signed_contract || undefined,
-          //client_signed_contract_closing_ticket: data.client_signed_contract_closing_ticket || undefined,
+          client_signed_contract_closing_ticket: data.client_signed_contract_closing_ticket || undefined,
         }
         await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
 

@@ -75,6 +75,7 @@ export class HireRequestCreationService {
                 additional_training_requested: data.hubspot_additional_training_requested ? data.hubspot_additional_training_requested : undefined,
                 pairing_date: data.hubspot_pairing_date ? data.hubspot_pairing_date : undefined, //  milisecnonds in timestamp,
                 pairing_time: data.hubspot_pairing_time ? data.hubspot_pairing_time : undefined,
+                client_signed_contract: data.client_signed_contract_ticket_submission ? data.client_signed_contract_ticket_submission : undefined,
                 
                 //ticketOwner
                 hubspot_owner_id: data.assign_user_id 
