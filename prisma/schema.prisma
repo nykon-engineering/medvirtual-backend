@@ -248,63 +248,65 @@ model CandidateEducation {
 }
 
 model HireRequest {
-  id                           String             @id @default(uuid())
-  org_id                       String
-  title                        String
-  description                  String?
-  status                       HireRequestStatus  @default(new)
-  priority                     Priority           @default(medium)
-  createdAt                    DateTime           @default(now())
-  availability                 String
-  contract_length              String?
-  expected_start_date          DateTime?
-  salary_range_from            Decimal?
-  salary_range_to              Decimal?
-  specialization               String?
-  location                     String?
-  assign_user_id               String?
-  createdByUserId              String?
-  hubspot_contract_amount      Decimal?
-  hubspot_language             String?
-  hubspot_numberVA             Int?
-  hubspot_role_type            String?
-  hubspot_ticket_id            String?            @unique
-  hubspot_business_unit        String?
-  hubspot_company_name         String?
-  hubspot_company_url          String?
-  hubspot_pairing_request_type String?
-  hubspot_pipeline             String?
-  hubspot_pipeline_stage       String?
-  hubspot_ticket_type          String?
-  hubspot_tasks                String?
-  hubspot_n2_monitors_required String?
-  hubspot_va_shift_hours       String?
-  hubspot_tools_familiarization String?
-  hubspot_training_request_notes String?
-  hubspot_camera_on_during_shift String?
-  hubspot_special_sourcing_needed String?
-  hubspot_special_requirements String?
+  id                                String             @id @default(uuid())
+  org_id                            String
+  title                             String
+  description                       String?
+  status                            HireRequestStatus  @default(new)
+  priority                          Priority           @default(medium)
+  createdAt                         DateTime           @default(now())
+  availability                      String
+  contract_length                   String?
+  expected_start_date               DateTime?
+  salary_range_from                 Decimal?
+  salary_range_to                   Decimal?
+  specialization                    String?
+  location                          String?
+  assign_user_id                    String?
+  createdByUserId                   String?
+  hubspot_contract_amount           Decimal?
+  hubspot_language                  String?
+  hubspot_numberVA                  Int?
+  hubspot_role_type                 String?
+  hubspot_ticket_id                 String?            @unique
+  hubspot_business_unit             String?
+  hubspot_company_name              String?
+  hubspot_company_url               String?
+  hubspot_pairing_request_type      String?
+  hubspot_pipeline                  String?
+  hubspot_pipeline_stage            String?
+  hubspot_ticket_type               String?
+  hubspot_tasks                     String?
+  hubspot_n2_monitors_required      String?
+  hubspot_va_shift_hours            String?
+  hubspot_tools_familiarization     String?
+  hubspot_training_request_notes    String?
+  hubspot_camera_on_during_shift    String?
+  hubspot_special_sourcing_needed   String?
+  hubspot_special_requirements      String?
   hubspot_additional_training_requested String?
-  hubspot_pairing_date         String? //String for avoid misunderstanding about timeZone
-  hubspot_pairing_time         String?
-  request_role                 String?
-  assign_staffing_coordinator        String?
+  hubspot_pairing_date              String? //String for avoid misunderstanding about timeZone
+  hubspot_pairing_time              String?
+  request_role                      String?
+  assign_staffing_coordinator       String?
+  client_signed_contract_ticket_submission String?
+  client_signed_contract_closing_ticket String?
 
 
-  cancel_date                  DateTime?
-  cancel_reason                String?
+  cancel_date                       DateTime?
+  cancel_reason                     String?
 
-  assign_sourcing_id           String?
-  old_status                   HireRequestStatus?
-  panels                       CandidatePanel[]
-  assigned_sourcing            USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
-  assigned_staffing            USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
-  assigned_users               USER[]             @relation("AssignedUsers")
-  createdBy                    USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
-  organization                 Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  skills                       HireRequestSkill[]
-  staff                        Staff[]
-  tickets                      Ticket[]
+  assign_sourcing_id                String?
+  old_status                        HireRequestStatus?
+  panels                            CandidatePanel[]
+  assigned_sourcing                 USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
+  assigned_staffing                 USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
+  assigned_users                    USER[]             @relation("AssignedUsers")
+  createdBy                         USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
+  organization                      Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  skills                            HireRequestSkill[]
+  staff                             Staff[]
+  tickets                           Ticket[]
 
   @@index([org_id], map: "idx_hire_requests_org_id")
   @@index([status], map: "idx_hire_requests_status")

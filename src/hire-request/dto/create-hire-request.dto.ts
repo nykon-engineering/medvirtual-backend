@@ -147,6 +147,11 @@ export class CreateHireRequestDto {
     @ApiProperty({ type: String, description: 'Requested Role', required: true })
     @IsString()
     request_role: string
+    
+    @ApiProperty({ type: String, description: 'Client Signed Contract Ticket Submission', required: false })
+    @IsString()
+    @IsOptional()
+    client_signed_contract_ticket_submission: string
 
     @ApiProperty({ description: 'The selected candidates for the hire request', required: false })
     @IsArray()
