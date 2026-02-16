@@ -14,6 +14,7 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       LAMBDA_FUNCTION_NAME: ${{ secrets.LAMBDA_FUNCTION_NAME_PROD }}
+      LAMBDA_WORKER_NAME: ${{ secrets.LAMBDA_WORKER_NAME_PROD }}
       S3_LAMBDA_BUCKET: ${{ secrets.S3_LAMBDA_BUCKET_PROD }}
       NODE_OPTIONS: --max-old-space-size=4096
 
@@ -81,6 +82,15 @@ jobs:
             --s3-bucket $S3_LAMBDA_BUCKET \
             --s3-key lambda-${GITHUB_SHA}.zip \
             --no-cli-pager
+
+      - name: 🚀 Deploy Worker at AWS Lambda (via S3)
+        run: |
+          aws lambda update-function-code \
+            --function-name $LAMBDA_WORKER_NAME \
+            --s3-bucket $S3_LAMBDA_BUCKET \
+            --s3-key lambda-${GITHUB_SHA}.zip \
+            --no-cli-pager \
+            --output text
 
       - name: 🧹 Clean temp files
         run: rm -rf lambda-package lambda-${GITHUB_SHA}.zip
