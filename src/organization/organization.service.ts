@@ -2367,7 +2367,6 @@ export class OrganizationService {
     const organizations = await this.prisma.organization.findMany({
       where: {
         status: 'active',
-        organization_role: 'client',
         hubspot_id: { not: null },
       },
       select: {
