@@ -645,6 +645,7 @@ enum OrganizationRole {
 enum OrganizationStatus {
   active
   inactive
+  deleted
 }
 
 enum Priority_new {

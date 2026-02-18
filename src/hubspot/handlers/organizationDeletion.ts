@@ -34,7 +34,7 @@ export class HandlerOrganizationDeletion {
                     id: organizationExists.id
                 },
                 data:{
-                    status: OrganizationStatus.inactive
+                    status: OrganizationStatus.deleted
                 }
             });
         }catch (error) {
