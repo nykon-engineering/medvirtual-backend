@@ -339,9 +339,7 @@ export class OrganizationService {
       const skip = (page - 1) * limit;
 
       // Build where clause
-      const whereClause: any = {
-        status: { not : OrganizationStatus.deleted }, // Exclude deleted organizations
-      };
+      const whereClause: any = {};
 
       // Add user-specific filtering based on role
       if (user.role === 'system_super_admin' || user.role === 'system_admin') {
@@ -622,6 +620,7 @@ export class OrganizationService {
         admin_id: org.admin_id || undefined,
         createdAt: org.createdAt,
         updatedAt: org.updatedAt,
+        deletedAt: org.deletedAt || undefined,
         owner: org.owner || undefined,
         admin: org.admin || undefined,
         userCount: org.userCount,
