@@ -3,7 +3,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dictionary";
 import { HandlerObjectCreation } from "./objectCreation";
 import { CandidatesService } from "../../candidate/candidates.service";
-import { PanelCandidateStatus } from "@prisma/client";
+import { HireRequestStatus, PanelCandidateStatus, PanelStatus } from "@prisma/client";
 
 @Injectable()
 
@@ -105,12 +105,47 @@ export class HandlerObjectPropertyChange {
             //if the property changed is related to pipeline stage, we need to remove this candidate from all panels
             if (event.propertyName === 'hs_pipeline_stage' && 
                 event.propertyValue === '261173428' /*Lost*/){
-                await this.prisma.panelCandidate.deleteMany({
+                    
+                const candidatesToRemove = await this.prisma.panelCandidate.findMany({
                     where: {
                         candidate_id: candidate.id,
                         status: { not: PanelCandidateStatus.selected_by_client}
+                    },
+                    select: {
+                        id: true,
+                        panel_id: true 
                     }
                 });
+
+                for(const pc of candidatesToRemove){
+                    await this.prisma.panelCandidate.delete({
+                        where: { id: pc.id }
+                    });
+
+                    const count = await this.prisma.panelCandidate.count({
+                        where: { panel_id: pc.panel_id }
+                    });
+
+                    if(count === 0){
+                        const panel = await this.prisma.candidatePanel.findUnique({
+                            where: { id: pc.panel_id },
+                            select: { hire_request_id: true }
+                        });
+
+
+                        if(panel && panel.hire_request_id){
+                            await this.prisma.candidatePanel.update({
+                                where: { id: pc.panel_id },
+                                data: { status: PanelStatus.created }
+                            });
+
+                            await this.prisma.hireRequest.update({
+                                where: { id: panel.hire_request_id },
+                                data: { status: HireRequestStatus.sourcing }
+                            });
+                        }
+                    }
+                }
             }
             
            
