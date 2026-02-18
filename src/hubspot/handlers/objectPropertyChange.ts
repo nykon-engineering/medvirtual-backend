@@ -3,6 +3,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dictionary";
 import { HandlerObjectCreation } from "./objectCreation";
 import { CandidatesService } from "../../candidate/candidates.service";
+import { PanelCandidateStatus } from "@prisma/client";
 
 @Injectable()
 
@@ -76,7 +77,7 @@ export class HandlerObjectPropertyChange {
                     }
                 });
 
-        }
+            }
         }else{
             
             const fieldUpdated = candidadeToDbDictionary[event.propertyName];
@@ -95,29 +96,26 @@ export class HandlerObjectPropertyChange {
             return acc;
             }, {} as Record<string, any>);
 
+
             await this.prisma.candidate.update({
-            where: { id: candidate.id },
-            data: updateData,
+                where: { id: candidate.id },
+                data: updateData,
             });
-            
-            /* => removed when we added the pipeline status field
-            const fieldExists = Object.keys(candidadeToDbDictionary).includes(event.propertyName);
-            if(!fieldExists) return;
 
-            const fieldUpdated = candidadeToDbDictionary[event.propertyName];
+            //if the property changed is related to pipeline stage, we need to remove this candidate from all panels
+            if (event.propertyName === 'hs_pipeline_stage' && 
+                event.propertyValue === '261173428' /*Lost*/){
+                await this.prisma.panelCandidate.deleteMany({
+                    where: {
+                        candidate_id: candidate.id,
+                        status: { not: PanelCandidateStatus.selected_by_client}
+                    }
+                });
+            }
             
-            await this.prisma.candidate.update({
-                where: {
-                    id: candidate.id
-                },
-                data: {
-                    [fieldUpdated]: event.propertyValue
-                }
-            })
-            */
+           
 
-            // Re-run the resume pipeline if this chnge is related to the resume
-            
+            // Re-run the resume pipeline if this change is related to the resume
                 if (process.env.ENVIRONMENT === 'PROD') {
                     if(event.propertyName === 'resume_link') {
                         await this.candidateService.processData(candidate.id);
