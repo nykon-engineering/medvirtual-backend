@@ -58,3 +58,34 @@ export function formatDateForCA(
 
   return `${year}-${month}-${day}`;
 }
+
+export function getNowInTimezone(timeZone: string): Date {
+  const date = new Date();
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,
+    hour12: false,
+  };
+  const formatter = new Intl.DateTimeFormat('en-US', options);
+  const parts = formatter.formatToParts(date);
+  const extract = (type: string) => parts.find((p) => p.type === type)?.value;
+
+  const year = extract('year');
+  const month = extract('month');
+  const day = extract('day');
+  const hour = extract('hour');
+  const minute = extract('minute');
+  const second = extract('second');
+  const fractionalSecond = extract('fractionalSecond') || '000';
+
+  // Create date as UTC so the "wall clock" time is preserved in the Date object
+  // e.g. 15:00 Sao Paulo -> 15:00 UTC
+  const isoString = `${year}-${month}-${day}T${hour}:${minute}:${second}.${fractionalSecond}Z`;
+  return new Date(isoString);
+}
