@@ -117,7 +117,6 @@ export class HandlerTicketPropertyChange {
         if (fieldUpdated === 'hubspot_numberVA') {
             value = parseInt(event.propertyValue);
         }
-        
         if (fieldUpdated === 'expected_start_date') {
             value = timestampToDate(event.propertyValue);
         }
