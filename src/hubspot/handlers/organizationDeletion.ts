@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OrganizationStatus } from "@prisma/client";
+import { getNowInTimezone } from "../../common/utils/formatDate";
 
 @Injectable()
 export class HandlerOrganizationDeletion {
@@ -34,7 +35,8 @@ export class HandlerOrganizationDeletion {
                     id: organizationExists.id
                 },
                 data:{
-                    status: OrganizationStatus.inactive
+                    status: OrganizationStatus.deleted,
+                    deletedAt: getNowInTimezone('UTC')
                 }
             });
         }catch (error) {

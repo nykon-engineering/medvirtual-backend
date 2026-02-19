@@ -284,7 +284,7 @@ export class OrganizationService {
       }
       // For system_admin: return only organizations they are admin or concierge of
       else if (user.role === 'system_admin') {
-        whereClause.OR = [{ admin_id: user.id }];
+        //whereClause.OR = [{ admin_id: user.id }]; //Updated on 2026-02-19 asked by Pauli
       }
       // For organization users: return organizations they are associated with
       else {
@@ -620,6 +620,7 @@ export class OrganizationService {
         admin_id: org.admin_id || undefined,
         createdAt: org.createdAt,
         updatedAt: org.updatedAt,
+        deletedAt: org.deletedAt || undefined,
         owner: org.owner || undefined,
         admin: org.admin || undefined,
         userCount: org.userCount,
@@ -930,6 +931,7 @@ export class OrganizationService {
       if (error instanceof BadRequestException) {
         throw error;
       }
+      console.error('Failed to update organization:', error);
       throw new BadRequestException('Failed to update organization');
     }
   }
