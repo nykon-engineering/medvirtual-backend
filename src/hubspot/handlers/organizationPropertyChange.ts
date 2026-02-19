@@ -82,22 +82,24 @@ export class HandlerOrganizationPropertyChange {
                         data: {
                             admin: { connect: { id: owner.id } }
                         }
-                    })
+                    })   
                     
-                    return true;
                 }
+                return true;
             }
             
             
-
-            await this.prisma.organization.update({
-                where: {
-                    id: organization.id
-                },
-                data: {
-                    [fieldUpdated]: value
-                }
-            })
+            if (event.propertyName !== 'hubspot_owner_id') {
+                
+                await this.prisma.organization.update({
+                    where: {
+                        id: organization.id
+                    },
+                    data: {
+                        [fieldUpdated]: value
+                    }
+                })
+            }
             
             return true;
 
