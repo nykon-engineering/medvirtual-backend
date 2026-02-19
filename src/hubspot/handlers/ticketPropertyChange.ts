@@ -118,10 +118,6 @@ export class HandlerTicketPropertyChange {
             value = parseInt(event.propertyValue);
         }
         
-        if (fieldUpdated === 'expected_start_date') {
-            value = timestampToUSDate(event.propertyValue);
-        }
-        
 
         await this.prisma.hireRequest.update({
             where: {
