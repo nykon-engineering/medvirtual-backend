@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { hrTicketToDbDictionary } from "../../common/dictionaries/HRTicket-dicionary";
-import { timestampToUSDate } from "../../common/utils/formatDate";
+import { timestampToDate } from "../../common/utils/formatDate";
 
 @Injectable()
 
@@ -116,6 +116,10 @@ export class HandlerTicketPropertyChange {
         if (fieldUpdated === 'hubspot_pipeline_stage') return false; // skip updating pipeline stage for Ticket / HR
         if (fieldUpdated === 'hubspot_numberVA') {
             value = parseInt(event.propertyValue);
+        }
+        
+        if (fieldUpdated === 'expected_start_date') {
+            value = timestampToDate(event.propertyValue);
         }
         
 

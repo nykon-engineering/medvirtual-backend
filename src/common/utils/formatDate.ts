@@ -39,6 +39,23 @@ export function timestampToUSDate(timestamp) {
   return `${month}/${day}/${year}`;
 }
 
+export function timestampToDate(timestamp) {
+  if (!timestamp) return null;
+
+  const ts = Number(timestamp); 
+
+  if (isNaN(ts)) {
+    //console.error("invalid Timestamp:", timestamp);
+    return null;
+  }
+  const date = new Date(ts);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 //This function formats a Date object to 'YYYY-MM-DD' format for CA locale considering the specified time zone.
 //en-CA locale is used because it follows the 'YYYY-MM-DD' format.
 export function formatDateForCA(
