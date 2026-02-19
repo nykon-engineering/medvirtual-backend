@@ -13,7 +13,12 @@ export class PanelService {
         private readonly prisma: PrismaService
     ){}
 
-    async getPanelData(): Promise<any> {
+    async getPanelData(dateFrom?: string, dateTo?: string): Promise<any> {
+
+        const dateFilterCreated: any = {};
+        if (dateFrom) dateFilterCreated.gte = new Date(dateFrom);
+        if (dateTo) dateFilterCreated.lte = new Date(dateTo);
+
 
         const selectCandidates = {
             id: true,
@@ -94,6 +99,103 @@ export class PanelService {
         }
 
         const result: any = {};
+
+        // New Metrics Implementation
+
+        // 1. Number of Active Client users (system users excluded)
+        const activeClientUsers = await this.prisma.uSER.count({
+            where: {
+                role: {
+                    in: ['organization_admin', 'organization_super_admin']
+                },
+                status: 'active',
+                ...(dateTo ? { createdAt: { lte: new Date(dateTo) } } : {})
+            }
+        });
+        result.activeClientUsers = activeClientUsers;
+
+        // 2. Number of Verified Client users
+        const verifiedClientUsers = await this.prisma.uSER.count({
+            where: {
+                role: {
+                    in: ['organization_admin', 'organization_super_admin']
+                },
+                verified: true,
+                ...(dateTo ? { createdAt: { lte: new Date(dateTo) } } : {})
+            }
+        });
+        result.verifiedClientUsers = verifiedClientUsers;
+
+        // 3. Average Ticket Aging (Hire Request Created → Placement Completed)
+        
+        const decidedDateFilter: any = {};
+        if (dateFrom) decidedDateFilter.gte = new Date(dateFrom);
+        if (dateTo) decidedDateFilter.lte = new Date(dateTo);
+        const hasDecidedDateFilter = Object.keys(decidedDateFilter).length > 0;
+
+        const completedHireRequests = await this.prisma.hireRequest.findMany({
+            where: {
+                status: HireRequestStatus.placement_completed,
+                panels: {
+                    some: {
+                        status: PanelStatus.decision_made,
+                        // Apply date filter to decided_date
+                        ...(hasDecidedDateFilter ? { decided_date: decidedDateFilter } : {})
+                    }
+                }
+            },
+            select: {
+                createdAt: true,
+                panels: {
+                    where: {
+                        status: PanelStatus.decision_made,
+                        // Select the panel that matches the date criteria
+                        ...(hasDecidedDateFilter ? { decided_date: decidedDateFilter } : {})
+                    },
+                    select: {
+                        decided_date: true
+                    },
+                    take: 1
+                }
+            }
+        });
+
+        let totalAgingDays = 0;
+        let validRequestsCount = 0;
+
+        if (completedHireRequests.length > 0) {
+            totalAgingDays = completedHireRequests.reduce((acc, req) => {
+                const decisionDate = req.panels[0]?.decided_date;
+                // If for some reason we rely on 'updatedAt' fallback or skip
+                // Since we filtered by having panels, strictly we should have one.
+                if (!decisionDate) return acc;
+                
+                const diffTime = Math.abs(decisionDate.getTime() - req.createdAt.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                validRequestsCount++;
+                return acc + diffDays;
+            }, 0);
+            
+            result.averageTicketAging = validRequestsCount > 0 
+                ? Number((totalAgingDays / validRequestsCount).toFixed(2)) 
+                : 0;
+        } else {
+            result.averageTicketAging = 0;
+        }
+
+        // 4. Number of Hire Requests submitted by Client users
+        const hrSubmittedByClient = await this.prisma.hireRequest.count({
+            where: {
+                createdBy: {
+                    role: {
+                        in: ['organization_admin', 'organization_super_admin']
+                    }
+                },
+                ...(Object.keys(dateFilterCreated).length > 0 ? { createdAt: dateFilterCreated } : {})
+            }
+        });
+        result.hrSubmittedByClient = hrSubmittedByClient;
+
 
         const organizationsCount = await this.prisma.organization.count({
             where:{
