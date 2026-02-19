@@ -36,7 +36,7 @@ export class HandlerOrganizationDeletion {
                 },
                 data:{
                     status: OrganizationStatus.deleted,
-                    deletedAt: getNowInTimezone('America/Sao_Paulo')
+                    deletedAt: getNowInTimezone('UTC')
                 }
             });
         }catch (error) {
