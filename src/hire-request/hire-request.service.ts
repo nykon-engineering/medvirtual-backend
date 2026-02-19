@@ -874,7 +874,7 @@ export class HireRequestService {
       })),
       assign_user_id: usersFromAssignUserId,
     };
-
+    //console.log('HireRequestService.findOne - formatted hire request:', formatted);
     return formatted;
   }
 
@@ -1170,12 +1170,15 @@ export class HireRequestService {
       result.skills = newSkills;
     }
 
+    //console.log('Hire Request updated in database with data:', result);
     
     const newHr = await this.findOne(id, user, 'hubspot');
+
     //removing the fields that are not necessary for the update on hubspot and can cause issues if they are sent to hubspot
     const {
-      hubspotData,
-      ...hubspot_pipeline_stage
+      
+      hubspot_pipeline_stage,
+      ...hubspotData
     } = newHr;
     await this.hubspot.updateHireRequestInHubspot(hubspotData);
     
