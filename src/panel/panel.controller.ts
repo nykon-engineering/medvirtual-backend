@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, Query, UseGuards } from '@nestjs/common';
 import { PanelService } from './panel.service';
 
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -21,8 +21,11 @@ export class PanelController {
     @Roles('system_super_admin', 'system_admin')
     @HttpCode(200)
     @ApiOperation({ summary: 'Get data to populate Dashboard' })
-    async getPanelData(): Promise<any> {
-        return await this.panelService.getPanelData();
+    async getPanelData(
+        @Query('dateFrom') dateFrom?: string,
+        @Query('dateTo') dateTo?: string
+    ): Promise<any> {
+        return await this.panelService.getPanelData(dateFrom, dateTo);
 
     }
 }

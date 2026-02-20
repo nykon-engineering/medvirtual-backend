@@ -39,6 +39,7 @@ export class HireRequestUpdateService {
 
     async execute(data: any, specificField?: string): Promise<any> {
         try {
+            
             //console.log("Starting update of Hubspot Ticket with data:", data, "and specificField:", specificField);
             const hubspotProperties: Record<string, any> = {};
 
@@ -171,7 +172,7 @@ export class HireRequestUpdateService {
             delete hubspotProperties.hs_ticket_priority;
             delete hubspotProperties.cancel_reason;
 
-            //console.log("Updating Hubspot Ticket with properties:", hubspotProperties);
+            console.log("Updating Hubspot Ticket with properties:", hubspotProperties);
             
             
             const response = await axios.patch(
