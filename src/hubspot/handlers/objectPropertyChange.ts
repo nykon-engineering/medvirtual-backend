@@ -4,6 +4,7 @@ import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dic
 import { HandlerObjectCreation } from "./objectCreation";
 import { CandidatesService } from "../../candidate/candidates.service";
 import { HireRequestStatus, PanelCandidateStatus, PanelStatus } from "@prisma/client";
+import { read } from "node:fs";
 
 @Injectable()
 
@@ -136,12 +137,17 @@ export class HandlerObjectPropertyChange {
                         if(panel && panel.hire_request_id){
                             await this.prisma.candidatePanel.update({
                                 where: { id: pc.panel_id },
-                                data: { status: PanelStatus.created }
+                                data: { 
+                                    status: PanelStatus.created,
+                                    readable: false
+                                }
                             });
 
                             await this.prisma.hireRequest.update({
                                 where: { id: panel.hire_request_id },
-                                data: { status: HireRequestStatus.sourcing }
+                                data: { 
+                                    status: HireRequestStatus.sourcing
+                                 }
                             });
                         }
                     }

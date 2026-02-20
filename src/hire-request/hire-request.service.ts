@@ -2417,6 +2417,7 @@ export class HireRequestService {
     -panel_ready
     */
 
+    console.log('Ariived')
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         AND: [
