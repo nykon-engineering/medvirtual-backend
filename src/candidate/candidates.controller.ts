@@ -328,4 +328,24 @@ export class CandidatesController {
     };
   }
 
+  @Get('sync-va-score-card')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Sync VA Score Card fields from HubSpot',
+    description: 'Fetches all VA Score Card fields from HubSpot and updates available candidates in the database. One-way sync: HubSpot → Platform.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'VA Score Card fields synced successfully'
+  })
+  async syncVaScoreCardFields() {
+    const result = await this.candidatesService.syncVaScoreCardFields();
+    return {
+      status: 200,
+      message: 'VA Score Card fields synced successfully',
+      data: result
+    };
+  }
+
+
 }

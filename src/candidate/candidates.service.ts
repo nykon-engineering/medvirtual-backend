@@ -295,6 +295,40 @@ export class CandidatesService {
       gender: true,
       shift_block: true,
       video_link: true,
+      // VA Score Card fields
+      active_listening_and_comprehension_demonstrated: true,
+      adaptability_to_different_client_personalities_and_workflows: true,
+      can_articulate_experience_clearly_to_clients: true,
+      can_multitask_between_systems_or_windows_efficiently: true,
+      client_readiness___fit_evaluator_notes: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+      comfortable_with_camera_on_setup: true,
+      communication_skills_evaluator_notes: true,
+      confident_on_video_and_phone_calls: true,
+      cultural_alignment_with_us_healthcare_environment: true,
+      demonstrates_problem_solving_and_tech_adaptability: true,
+      demonstrates_stability_and_commitment: true,
+      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+      exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+      for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+      grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+      handles_feedback_constructively: true,
+      has_functioning_headset__webcam__and_backup_device: true,
+      knowledge_of_hipaa_compliance_and_confidentiality: true,
+      medical_knowledge_evaluator_notes: true,
+      no_medical_industry_experience: true,
+      positive_attitude_and_professional_demeanor: true,
+      prior_experience_in_healthcare_or_medical_va_roles: true,
+      professionalism___work_readiness_evaluator_notes: true,
+      punctual_and_responsive_during_recruitment_stages: true,
+      remote_work_discipline_and_time_management: true,
+      speaks_clearly_and_professionally: true,
+      stable_internet_connection__min__20_mbps_: true,
+      technical_competence_evaluator_notes: true,
+      tier_level: true,
+      total_points: true,
+      understands_workflow_in_medical_offices___telehealth_environments: true,
       languages: {
         select: {
           name: true,
@@ -483,6 +517,40 @@ export class CandidatesService {
       gender: true,
       shift_block: true,
       video_link: true,
+      // VA Score Card fields
+      active_listening_and_comprehension_demonstrated: true,
+      adaptability_to_different_client_personalities_and_workflows: true,
+      can_articulate_experience_clearly_to_clients: true,
+      can_multitask_between_systems_or_windows_efficiently: true,
+      client_readiness___fit_evaluator_notes: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+      comfortable_with_camera_on_setup: true,
+      communication_skills_evaluator_notes: true,
+      confident_on_video_and_phone_calls: true,
+      cultural_alignment_with_us_healthcare_environment: true,
+      demonstrates_problem_solving_and_tech_adaptability: true,
+      demonstrates_stability_and_commitment: true,
+      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+      exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+      for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+      grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+      handles_feedback_constructively: true,
+      has_functioning_headset__webcam__and_backup_device: true,
+      knowledge_of_hipaa_compliance_and_confidentiality: true,
+      medical_knowledge_evaluator_notes: true,
+      no_medical_industry_experience: true,
+      positive_attitude_and_professional_demeanor: true,
+      prior_experience_in_healthcare_or_medical_va_roles: true,
+      professionalism___work_readiness_evaluator_notes: true,
+      punctual_and_responsive_during_recruitment_stages: true,
+      remote_work_discipline_and_time_management: true,
+      speaks_clearly_and_professionally: true,
+      stable_internet_connection__min__20_mbps_: true,
+      technical_competence_evaluator_notes: true,
+      tier_level: true,
+      total_points: true,
+      understands_workflow_in_medical_offices___telehealth_environments: true,
       languages: {
         select: {
           name: true,
@@ -1654,6 +1722,97 @@ export class CandidatesService {
 
     return `Sync complete. Updated: ${updatedCount}, Errors: ${errorCount}`;
   }
+
+  async syncVaScoreCardFields(): Promise<string> {
+    const vaScoreCardProperties = [
+      'active_listening_and_comprehension_demonstrated',
+      'adaptability_to_different_client_personalities_and_workflows',
+      'can_articulate_experience_clearly_to_clients',
+      'can_multitask_between_systems_or_windows_efficiently',
+      'client_readiness___fit_evaluator_notes',
+      'comfortable_with_basic_tools__google_workspace__zoom__ehr_software_',
+      'comfortable_with_camera_on_setup',
+      'communication_skills_evaluator_notes',
+      'confident_on_video_and_phone_calls',
+      'cultural_alignment_with_us_healthcare_environment',
+      'demonstrates_problem_solving_and_tech_adaptability',
+      'demonstrates_stability_and_commitment',
+      'demonstrates_understanding_of_medical_terminology_and_procedures',
+      'exhibits_confidence_and_empathy_in_roleplay_scenarios',
+      'familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__',
+      'for_bilinguals__fluent_and_accurate_in_both_english_and_spanish',
+      'grammar__vocabulary__and_tone_are_appropriate_for_us_clients',
+      'handles_feedback_constructively',
+      'has_functioning_headset__webcam__and_backup_device',
+      'knowledge_of_hipaa_compliance_and_confidentiality',
+      'medical_knowledge_evaluator_notes',
+      'no_medical_industry_experience',
+      'positive_attitude_and_professional_demeanor',
+      'prior_experience_in_healthcare_or_medical_va_roles',
+      'professionalism___work_readiness_evaluator_notes',
+      'punctual_and_responsive_during_recruitment_stages',
+      'remote_work_discipline_and_time_management',
+      'speaks_clearly_and_professionally',
+      'stable_internet_connection__min__20_mbps_',
+      'technical_competence_evaluator_notes',
+      'tier_level',
+      'total_points',
+      'understands_workflow_in_medical_offices___telehealth_environments',
+    ];
+
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        pipeline_status: {
+          in: ['261075105', '1087596819']
+        }
+      },
+      select: {
+        id: true,
+        hubspot_id: true
+      }
+    });
+
+    console.log(`Found ${candidates.length} available candidates to sync VA Score Card fields.`);
+    let updatedCount = 0;
+    let errorCount = 0;
+
+    for (const candidate of candidates) {
+      try {
+        const response = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+          {
+            params: {
+              properties: vaScoreCardProperties.join(',')
+            },
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`
+            }
+          }
+        );
+
+        const properties = response.data.properties;
+        console.log('Properties fetched from HubSpot for candidate ID:', candidate.id, properties);
+
+        const updateData: Record<string, string | null> = {};
+        for (const prop of vaScoreCardProperties) {
+          updateData[prop] = properties[prop] || null;
+        }
+
+        await this.prisma.candidate.update({
+          where: { id: candidate.id },
+          data: updateData
+        });
+
+        updatedCount++;
+      } catch (error) {
+        console.error(`Failed to sync VA Score Card fields for candidate ${candidate.id} (HubSpot ID: ${candidate.hubspot_id}):`, error.message);
+        errorCount++;
+      }
+    }
+
+    return `Sync complete. Updated: ${updatedCount}, Errors: ${errorCount}`;
+  }
+
 }
 
 

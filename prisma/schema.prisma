@@ -173,6 +173,42 @@ model Candidate {
   shift_block                String?
   video_link                 String?
   business_unit              String?
+
+  //Fields from VA Score Card
+  active_listening_and_comprehension_demonstrated               String?
+  adaptability_to_different_client_personalities_and_workflows  String?
+  can_articulate_experience_clearly_to_clients                  String?
+  can_multitask_between_systems_or_windows_efficiently          String?
+  client_readiness___fit_evaluator_notes                        String?
+  comfortable_with_basic_tools__google_workspace__zoom__ehr_software_ String?
+  comfortable_with_camera_on_setup                              String?
+  communication_skills_evaluator_notes                          String?
+  confident_on_video_and_phone_calls                            String?
+  cultural_alignment_with_us_healthcare_environment             String?
+  demonstrates_problem_solving_and_tech_adaptability            String?
+  demonstrates_stability_and_commitment                         String?
+  demonstrates_understanding_of_medical_terminology_and_procedures String?
+  exhibits_confidence_and_empathy_in_roleplay_scenarios         String?
+  familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__ String?
+  for_bilinguals__fluent_and_accurate_in_both_english_and_spanish String?
+  grammar__vocabulary__and_tone_are_appropriate_for_us_clients  String?
+  handles_feedback_constructively                               String?
+  has_functioning_headset__webcam__and_backup_device            String?
+  knowledge_of_hipaa_compliance_and_confidentiality             String?
+  medical_knowledge_evaluator_notes                             String?
+  no_medical_industry_experience                                String?
+  positive_attitude_and_professional_demeanor                   String?
+  prior_experience_in_healthcare_or_medical_va_roles            String?
+  professionalism___work_readiness_evaluator_notes              String?
+  punctual_and_responsive_during_recruitment_stages             String?
+  remote_work_discipline_and_time_management                    String?
+  speaks_clearly_and_professionally                             String?
+  stable_internet_connection__min__20_mbps_                     String?
+  technical_competence_evaluator_notes                          String?
+  tier_level                                                    String?
+  total_points                                                  String?
+  understands_workflow_in_medical_offices___telehealth_environments String?
+
   educations                 CandidateEducation[]
   experiences                CandidateExperience[]
   languages                  CandidateLanguage[]
