@@ -1659,6 +1659,30 @@ export class CandidatesService {
           }
         },
         approved_positions_pairing: true,
+        panelCandidates: {
+        select: {
+          id: true,
+          status: true,
+          panel: {
+            select: {
+              hire_request_id: true,
+              hireRequest: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  organization: {
+                    select: {
+                      id: true,
+                      name: true,
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       },
     });
 
