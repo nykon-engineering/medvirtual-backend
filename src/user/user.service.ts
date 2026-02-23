@@ -922,7 +922,7 @@ export class UserService {
 
       // Generate invitation token
       const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
-        expiresIn: '24h',
+        expiresIn: '48h',
       });
 
       // Get user email theme
@@ -952,7 +952,7 @@ export class UserService {
       }
 
       // Store the verification code in the database with an expiration time
-      const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours - same time as JWT
+      const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours - same time as JWT
       const storeCode = await this.prisma.emailInvitation.create({
         data: {
           userId: newUser.id,

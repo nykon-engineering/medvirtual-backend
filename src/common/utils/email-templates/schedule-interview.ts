@@ -146,7 +146,7 @@ export default function scheduleInterview(inviteLink: string, theme?: EmailTheme
         </a>
       </div>
 
-      <strong>⏰ Important:</strong> This invitation will expire in 24 hours for security reasons.
+      <strong>⏰ Important:</strong> This invitation will expire in 48 hours for security reasons.
    
       <div class="text-link">
         Having trouble with the button? Copy and paste this link into your browser:<br>

@@ -470,7 +470,7 @@ export class AuthService {
     });
 
     const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
-      expiresIn: '24h',
+      expiresIn: '48h',
     });
 
     if (!code) {
@@ -479,11 +479,11 @@ export class AuthService {
 
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
-    
+
     // Send signup link via email
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
-      ? `${baseInviteLink}&company=berry` 
+    const inviteLink = emailTheme?.companyName === 'Berry Virtual'
+      ? `${baseInviteLink}&company=berry`
       : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
@@ -504,7 +504,7 @@ export class AuthService {
     }
 
     // Store the verification code in the database with an expiration time
-    const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours - same time as JWT
+    const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours - same time as JWT
     const storeCode = await this.prisma.emailInvitation.create({
       data: {
         userId: newUser.id,
@@ -528,7 +528,7 @@ export class AuthService {
     }
 
     const code = jwt.sign({ id: userToReInvite.id }, process.env.JWT_SECRET, {
-      expiresIn: '24h',
+      expiresIn: '48h',
     });
 
     if (!code) {
@@ -537,11 +537,11 @@ export class AuthService {
 
     // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, userToReInvite.id);
-    
+
     // Send signup link via email
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
-      ? `${baseInviteLink}&company=berry` 
+    const inviteLink = emailTheme?.companyName === 'Berry Virtual'
+      ? `${baseInviteLink}&company=berry`
       : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
@@ -562,7 +562,7 @@ export class AuthService {
     }
 
     // Store the verification code in the database with an expiration time
-    const codeExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours - same time as JWT
+    const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours - same time as JWT
     const storeCode = await this.prisma.emailInvitation.create({
       data: {
         userId: userToReInvite.id,
