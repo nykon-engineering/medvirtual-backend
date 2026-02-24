@@ -268,6 +268,7 @@ export class HireRequestService {
       numberVA: undefined,
       salary_range_from: sanitizeDecimal(hireRequestData.salary_range_from),
       salary_range_to: sanitizeDecimal(hireRequestData.salary_range_to),
+      hubspot_contract_amount: sanitizeDecimal(hubspotMappedFields.hubspot_contract_amount),
       hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
       hubspot_pairing_time: hireRequestData.hubspot_pairing_time ? hireRequestData.hubspot_pairing_time : null,
     };
