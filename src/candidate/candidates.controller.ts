@@ -33,16 +33,17 @@ export class CandidatesController {
   @ApiQuery({ name: 'skills', required: false, type: Number, description: 'Filter candidates by skills', example: "office, communication" })
   @ApiQuery({ name: 'languages', required: false, type: Number, description: 'Filter candidates by languages spoken', example: "English, Spanish" })
   @ApiQuery({ name: 'all', required: false, type: Boolean, description: 'If true, returns all candidates without pagination' })
+  @ApiQuery({ name: 'scorecard_fields', required: false, type: String, description: 'Comma-separated list of VA score card fields to filter by (candidates must have a value for each field)', example: 'speaks_clearly_and_professionally,stable_internet_connection__min__20_mbps_' })
   @ApiResponse({ status: 200, description: 'Candidates retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Failed to fetch candidates' })
   @UseGuards(AuthGuard)
   async findAll(
-    @CurrentUser() user: USER, 
-    @Query('country') country: string, 
-    @Query('shift_block') shift_block: string, 
-    @Query('availability') availability: string, 
-    @Query('monthly_compensation_from') monthly_compensation_from: string, 
-    @Query('monthly_compensation_to') monthly_compensation_to: string, 
+    @CurrentUser() user: USER,
+    @Query('country') country: string,
+    @Query('shift_block') shift_block: string,
+    @Query('availability') availability: string,
+    @Query('monthly_compensation_from') monthly_compensation_from: string,
+    @Query('monthly_compensation_to') monthly_compensation_to: string,
     @Query('years_of_experience') years_of_experience: string,
     @Query('specializations') specializations: string,
     @Query('positions') positions: string,
@@ -52,14 +53,15 @@ export class CandidatesController {
     @Query('perPage') perPage,
     @Query('search') search: string,
     @Query('all') all: string,
+    @Query('scorecard_fields') scorecard_fields: string,
   ) {
-    const result = await this.candidatesService.findAll( 
-      user, 
-      country, 
+    const result = await this.candidatesService.findAll(
+      user,
+      country,
       shift_block,
-      availability, 
-      monthly_compensation_from, 
-      monthly_compensation_to, 
+      availability,
+      monthly_compensation_from,
+      monthly_compensation_to,
       years_of_experience,
       specializations,
       positions,
@@ -69,6 +71,7 @@ export class CandidatesController {
       perPage,
       search,
       all,
+      scorecard_fields,
     );
     return result
   }
