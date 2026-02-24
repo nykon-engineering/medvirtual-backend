@@ -504,7 +504,7 @@ describe('HireRequestService', () => {
     
       expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
         where: { id: 'hr1' },
-        data: { title: 'Updated', hubspot_pairing_date: null }, 
+        data: { title: 'Updated', hubspot_pairing_date: null, hubspot_contract_amount: null }, 
       });
       expect(prismaMock.hireRequestSkill.deleteMany).toHaveBeenCalledWith({
         where: { hire_request_id: 'hr1' },

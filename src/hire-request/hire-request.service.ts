@@ -1132,10 +1132,15 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
+    const sanitizeDecimal = (value?: string | null) => {
+      return value && value.trim() !== "" ? value : null;
+    };
+
     const {skills, ...hireRequestData} = data;
     const sanitizeData = {
       ...hireRequestData,
       hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
+      hubspot_contract_amount: sanitizeDecimal(hireRequestData.hubspot_contract_amount),
     }
     const requestUpdated = await this.prisma.hireRequest.update({
       where: {
