@@ -338,6 +338,7 @@ export class CandidatesService {
       years_of_experience: true,
       pipeline_status: true, // This will be converted to name later
       about_me: true,
+      description_summary: true,
       specialization: true,
       tools: true,
       medical_tools: true,
@@ -563,6 +564,7 @@ export class CandidatesService {
       years_of_experience: true,
       pipeline_status: true, // This will be converted to name later
       about_me: true,
+      description_summary: true,
       specialization: true,
       tools: true,
       medical_tools: true,
@@ -1555,6 +1557,7 @@ export class CandidatesService {
           hourly_pay_rate: true,
           years_of_experience: true,
           about_me: true,
+          description_summary: true,
           specialization: true,
           tools: true,
           medical_tools: true,
@@ -1655,6 +1658,7 @@ export class CandidatesService {
         hourly_pay_rate: true,
         years_of_experience: true,
         about_me: true,
+        description_summary: true,
         specialization: true,
         tools: true,
         medical_tools: true,
