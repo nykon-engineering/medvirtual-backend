@@ -149,6 +149,7 @@ model Candidate {
   last_name                  String?
   resume_url                 String?
   about_me                   String?
+  description_summary        String?
   processed_resume_data      Json?
   processing_status          ProcessingStatus        @default(pending)
   processing_error           String?

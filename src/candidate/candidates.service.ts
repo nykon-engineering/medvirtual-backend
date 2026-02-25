@@ -827,7 +827,7 @@ export class CandidatesService {
         id: id
       }
     });
-
+    //console.log('Candidate data retrieved:', candidate);
     if (candidate && candidate.resume_url && candidate.resume_url.includes('http')) {
 
       const idFile = extractDriveFileId(candidate.resume_url);
@@ -836,6 +836,7 @@ export class CandidatesService {
 
       if (!idFile) {
         await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
+        console.log('Error in extracting file ID from URL');
         return false;
       }
 
@@ -930,6 +931,18 @@ export class CandidatesService {
 
         console.log('Data extracted successfully by OpenAI');
 
+        // Generate a short bio summary when the bio exceeds the character threshold
+        let bioSummary: string | null = null;
+        if (transformedData.bio && transformedData.bio.length > 300) {
+          try {
+            bioSummary = await this.openai.summarizeCandidateBio(transformedData.bio);
+            console.log(`[candidate] Bio summary generated for candidate ${id}`);
+          } catch (err) {
+            console.warn(`[candidate] Bio summary generation failed for candidate ${id}:`, err?.message || err);
+            // Non-critical: processing continues, description_summary stays null
+          }
+        }
+
         //processing_updateCandidate
         await this.prisma.candidate.update({
           where: { id: id },
@@ -938,6 +951,7 @@ export class CandidatesService {
             processed_resume_data: transformedData,
             processed_at: new Date(),
             about_me: transformedData.bio,
+            description_summary: bioSummary,
             years_of_experience: transformedData.years_of_experience || 0,
           }
         });
