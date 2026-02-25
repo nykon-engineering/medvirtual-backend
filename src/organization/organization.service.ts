@@ -400,6 +400,8 @@ export class OrganizationService {
       // Add status filter
       if (status) {
         whereClause.status = status;
+      }else{
+        whereClause.status = { not: OrganizationStatus.deleted };
       }
 
       // Add industry filter
