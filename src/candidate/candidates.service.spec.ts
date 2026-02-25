@@ -264,6 +264,7 @@ describe('CandidatesService', () => {
           employment_type: true,
           pipeline_status: true,
           about_me: true,
+          description_summary: true,
           tools: true,
           medical_tools: true,
           gender: true,
