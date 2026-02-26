@@ -212,7 +212,7 @@ describe('PanelService', () => {
     // Verify activeClientUsers date filter
     expect(prisma.uSER.count).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({
-             createdAt: { lte: new Date(dateTo) }
+             createdAt: { gte: new Date(dateFrom), lte: new Date(dateTo) }
         })
     }));
 
