@@ -1523,6 +1523,11 @@ export class NotificationsService {
       filteredRecipients = uniqueRecipients.filter(recipient => recipient.isSystemAdmin);
     }
 
+    // Always notify fixed email for Support tickets
+    if (isSupportTicket && !filteredRecipients.some(r => r.email === 'pauli@regenta.ai')) {
+      filteredRecipients = [...filteredRecipients, { email: 'pauli@regenta.ai', isSystemAdmin: true }];
+    }
+
     if (filteredRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
 
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
