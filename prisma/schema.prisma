@@ -331,6 +331,9 @@ model HireRequest {
   client_signed_contract_closing_ticket String?
 
 
+  description_summary               String?
+  summary_generated_at              DateTime?
+
   cancel_date                       DateTime?
   cancel_reason                     String?
 

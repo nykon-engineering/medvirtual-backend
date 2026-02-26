@@ -10,6 +10,7 @@ import { HireRequestStatus, PanelCandidateStatus, PanelStatus, USER } from '@pri
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OpenaiService } from '../openai/openai.service';
 
 import { CreateHireRequestDto } from './dto/create-hire-request.dto';
 import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
@@ -40,6 +41,7 @@ export class HireRequestService {
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
+    private readonly openai: OpenaiService,
   ) {}
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split("T");
@@ -277,9 +279,21 @@ export class HireRequestService {
       data: hireRequest,
     })
     if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
-    
-    
-    
+
+    if (data.description && data.description.length >= 500) {
+      try {
+        const summary = await this.openai.generateTextSummary(data.description);
+        await this.prisma.hireRequest.update({
+          where: { id: newHireRequest.id },
+          data: { description_summary: summary, summary_generated_at: new Date() },
+        });
+        newHireRequest.description_summary = summary;
+        newHireRequest.summary_generated_at = new Date();
+      } catch (err) {
+        console.warn('[HireRequest] AI summary generation failed on create:', err?.message || err);
+      }
+    }
+
     if (skills && skills.length > 0) {
       const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
         data: skills.map(skill => ({
@@ -1137,6 +1151,11 @@ export class HireRequestService {
     };
 
     const {skills, ...hireRequestData} = data;
+
+    const currentHireRequest = data.description !== undefined
+      ? await this.prisma.hireRequest.findUnique({ where: { id }, select: { description: true } })
+      : null;
+
     const sanitizeData = {
       ...hireRequestData,
       hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
@@ -1151,6 +1170,19 @@ export class HireRequestService {
     if (!requestUpdated) throw new BadRequestException(`Hire request not updated`);
 
     result = requestUpdated;
+
+    const descriptionChanged = currentHireRequest && data.description !== currentHireRequest.description;
+    if (descriptionChanged && data.description && data.description.length >= 500) {
+      try {
+        const summary = await this.openai.generateTextSummary(data.description);
+        await this.prisma.hireRequest.update({
+          where: { id },
+          data: { description_summary: summary, summary_generated_at: new Date() },
+        });
+      } catch (err) {
+        console.warn('[HireRequest] AI summary generation failed on update:', err?.message || err);
+      }
+    }
 
     //delete all skills independently if the array is empty or not
     await this.prisma.hireRequestSkill.deleteMany({
@@ -2594,6 +2626,8 @@ export class HireRequestService {
             id: true,
             title: true,
             description: true,
+            description_summary: true,
+            summary_generated_at: true,
             status: true,
             priority: true,
             createdAt: true,
