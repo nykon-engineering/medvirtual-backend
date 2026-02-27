@@ -334,6 +334,9 @@ model HireRequest {
   description_summary               String?
   summary_generated_at              DateTime?
 
+  hubspot_tasks_summary             String?
+  hubspot_tasks_summary_generated_at DateTime?
+
   cancel_date                       DateTime?
   cancel_reason                     String?
 

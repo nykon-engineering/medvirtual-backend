@@ -294,6 +294,20 @@ export class HireRequestService {
       }
     }
 
+    if (hireRequestData.hubspot_tasks && hireRequestData.hubspot_tasks.length >= 500) {
+      try {
+        const tasksSummary = await this.openai.generateTextSummary(hireRequestData.hubspot_tasks);
+        await this.prisma.hireRequest.update({
+          where: { id: newHireRequest.id },
+          data: { hubspot_tasks_summary: tasksSummary, hubspot_tasks_summary_generated_at: new Date() },
+        });
+        newHireRequest.hubspot_tasks_summary = tasksSummary;
+        newHireRequest.hubspot_tasks_summary_generated_at = new Date();
+      } catch (err) {
+        console.warn('[HireRequest] AI tasks summary generation failed on create:', err?.message || err);
+      }
+    }
+
     if (skills && skills.length > 0) {
       const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
         data: skills.map(skill => ({
@@ -1152,8 +1166,8 @@ export class HireRequestService {
 
     const {skills, ...hireRequestData} = data;
 
-    const currentHireRequest = data.description !== undefined
-      ? await this.prisma.hireRequest.findUnique({ where: { id }, select: { description: true } })
+    const currentHireRequest = (data.description !== undefined || data.hubspot_tasks !== undefined)
+      ? await this.prisma.hireRequest.findUnique({ where: { id }, select: { description: true, hubspot_tasks: true } })
       : null;
 
     const sanitizeData = {
@@ -1181,6 +1195,19 @@ export class HireRequestService {
         });
       } catch (err) {
         console.warn('[HireRequest] AI summary generation failed on update:', err?.message || err);
+      }
+    }
+
+    const hubspotTasksChanged = currentHireRequest && data.hubspot_tasks !== currentHireRequest.hubspot_tasks;
+    if (hubspotTasksChanged && data.hubspot_tasks && data.hubspot_tasks.length >= 500) {
+      try {
+        const tasksSummary = await this.openai.generateTextSummary(data.hubspot_tasks);
+        await this.prisma.hireRequest.update({
+          where: { id },
+          data: { hubspot_tasks_summary: tasksSummary, hubspot_tasks_summary_generated_at: new Date() },
+        });
+      } catch (err) {
+        console.warn('[HireRequest] AI tasks summary generation failed on update:', err?.message || err);
       }
     }
 
