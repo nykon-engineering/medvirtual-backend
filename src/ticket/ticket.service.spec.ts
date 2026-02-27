@@ -85,7 +85,7 @@ describe('TicketService', () => {
       title: 'Ticket title',
       description: 'Ticket description',
       priority: 'HIGH' as Priority,
-      assigned_user_id: 'user1',
+      assigned_user_id: ['user1'],
     };
   
     const mockTicket = { id: '1', ...dto, type: ticketTypeDictionary[dto.type] ?? null };
@@ -131,7 +131,7 @@ describe('TicketService', () => {
     });
   
     it('should create a ticket without assigned user', async () => {
-      const dtoNoUser = { ...dto, assigned_user_id: '' };
+      const dtoNoUser = { ...dto, assigned_user_id: [''] };
       const mockTicketNoUser = { id: '3', ...dtoNoUser, type: ticketTypeDictionary[dto.type] ?? null };
       mockPrisma.ticket.create.mockResolvedValue(mockTicketNoUser);
   

@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsIn, IsOptional, IsString } from "class-validator";
+import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
 import { ticketTypeDictionary } from "../../common/dictionaries/ticket-type";
 import { Priority } from "@prisma/client";
 
@@ -27,10 +27,11 @@ export class CreateTicketDto {
     @IsIn(Object.values(Priority), { message: `Priority must be one of the following values: ${Object.values(Priority).join(', ')}` })
     priority: Priority;
 
-    @ApiProperty({ description: 'ID of the user assigned to the ticket', required: true, type: String })
-    @IsString()
+    @ApiProperty({ description: 'IDs of users assigned to the ticket', required: false, type: [String] })
+    @IsArray()
+    @IsString({ each: true })
     @IsOptional()
-    assigned_user_id: string;
+    assigned_user_id: string[];
 
     @ApiProperty({ description: 'ID of the candidate (required for Interview Request tickets)', required: false, type: String })
     @IsString()
