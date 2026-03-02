@@ -2072,7 +2072,7 @@ export class HireRequestService {
         tier_level: true,
         total_points: true,
         understands_workflow_in_medical_offices___telehealth_environments: true,
-        
+
         languages: {
           select: {
             name: true,
@@ -2583,11 +2583,7 @@ export class HireRequestService {
                 readable: true,
               },
               //if has at least one candidate created by organization user, it should be retrieved
-              //panel_ready is excluded here: it requires readable=true (handled by the condition above)
               {
-                hireRequest: {
-                  status: { not: HireRequestStatus.panel_ready },
-                },
                 panelCandidates: {
                   some: {
                     createdBy: {
