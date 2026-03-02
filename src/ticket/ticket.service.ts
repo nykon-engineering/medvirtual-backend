@@ -206,7 +206,7 @@ export class TicketService {
     
     // For support and hire request cancellation tickets, organization is optional
     if (createTicketDto.type === 'Support' || createTicketDto.type === 'hire_request_cancellation') {
-      assignedValidatedUser = createTicketDto.assigned_user_id;
+      assignedValidatedUser = Array.isArray(createTicketDto.assigned_user_id) ? createTicketDto.assigned_user_id[0] : createTicketDto.assigned_user_id;
       assignedValidatedOrg = createTicketDto.client_id;
     } else {
       // For other ticket types, organization is required
@@ -225,7 +225,7 @@ export class TicketService {
         assignedValidatedUser = org.admin_id;
         assignedValidatedOrg = org.id;
       } else {
-        assignedValidatedUser = createTicketDto.assigned_user_id;
+        assignedValidatedUser = Array.isArray(createTicketDto.assigned_user_id) ? createTicketDto.assigned_user_id[0] : createTicketDto.assigned_user_id;
         assignedValidatedOrg = createTicketDto.client_id;
       }
     }
