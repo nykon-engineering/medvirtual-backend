@@ -2583,15 +2583,19 @@ export class HireRequestService {
                 readable: true,
               },
               //if has at least one candidate created by organization user, it should be retrieved
+              //panel_ready is excluded here: it requires readable=true (handled by the condition above)
               {
+                hireRequest: {
+                  status: { not: HireRequestStatus.panel_ready },
+                },
                 panelCandidates: {
                   some: {
                     createdBy: {
                       role: {
-                        in: 
+                        in:
                           user.role.includes("organization")
                           ? ['organization_admin', 'organization_super_admin']
-                          : ['system_admin', 'system_super_admin'], 
+                          : ['system_admin', 'system_super_admin'],
                       },
                     },
                   },
