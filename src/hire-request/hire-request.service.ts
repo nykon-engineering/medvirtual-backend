@@ -921,9 +921,9 @@ export class HireRequestService {
         baseWhere = { 
           organization: { id: user.organization_id },
           OR: [
-            {status: { in: ['new', 'pending_signature', 'sourcing', 'for_review', 'panel_ready'] }},
+            {status: { in: [HireRequestStatus.new, HireRequestStatus.pending_signature, HireRequestStatus.sourcing, HireRequestStatus.for_review, HireRequestStatus.panel_ready] }},
             {
-              status: 'interview_scheduled',
+              status: HireRequestStatus.interview_scheduled,
               panels: {
                 some: {
                   interviews: {
@@ -1077,7 +1077,6 @@ export class HireRequestService {
         createdAt: 'desc'
       }
     });
-     
 
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
@@ -1149,6 +1148,7 @@ export class HireRequestService {
       }))
     );
 
+    console.log('result:', formatted)
     return formatted;
     
 
@@ -2493,6 +2493,7 @@ export class HireRequestService {
           },
           {
             OR: [
+              //if is in awaiting_decision or placement_completed status, it should be retrieved 
               {
                 hireRequest: {
                   status: {
@@ -2503,10 +2504,11 @@ export class HireRequestService {
                   },
                 },
               },
+              //if it was marked as readable by the system or organization admin, it should be retrieved
               {
                 readable: true,
               },
-
+              //if has at least one candidate created by organization user, it should be retrieved
               {
                 panelCandidates: {
                   some: {
@@ -2521,6 +2523,7 @@ export class HireRequestService {
                   },
                 },
               },
+              
             ],
           },
         ],
