@@ -18,6 +18,7 @@ export class PanelService {
         const dateFilterCreated: any = {};
         if (dateFrom) dateFilterCreated.gte = new Date(dateFrom);
         if (dateTo) dateFilterCreated.lte = new Date(dateTo);
+        const hasDateFilter = Object.keys(dateFilterCreated).length > 0;
 
 
         const selectCandidates = {
@@ -109,7 +110,7 @@ export class PanelService {
                     in: ['organization_admin', 'organization_super_admin']
                 },
                 status: 'active',
-                ...(dateTo ? { createdAt: { lte: new Date(dateTo) } } : {})
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         });
         result.activeClientUsers = activeClientUsers;
@@ -121,13 +122,13 @@ export class PanelService {
                     in: ['organization_admin', 'organization_super_admin']
                 },
                 verified: true,
-                ...(dateTo ? { createdAt: { lte: new Date(dateTo) } } : {})
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         });
         result.verifiedClientUsers = verifiedClientUsers;
 
         // 3. Average Ticket Aging (Hire Request Created → Placement Completed)
-        
+
         const decidedDateFilter: any = {};
         if (dateFrom) decidedDateFilter.gte = new Date(dateFrom);
         if (dateTo) decidedDateFilter.lte = new Date(dateTo);
@@ -136,10 +137,10 @@ export class PanelService {
         const completedHireRequests = await this.prisma.hireRequest.findMany({
             where: {
                 status: HireRequestStatus.placement_completed,
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
                 panels: {
                     some: {
                         status: PanelStatus.decision_made,
-                        // Apply date filter to decided_date
                         ...(hasDecidedDateFilter ? { decided_date: decidedDateFilter } : {})
                     }
                 }
@@ -149,7 +150,6 @@ export class PanelService {
                 panels: {
                     where: {
                         status: PanelStatus.decision_made,
-                        // Select the panel that matches the date criteria
                         ...(hasDecidedDateFilter ? { decided_date: decidedDateFilter } : {})
                     },
                     select: {
@@ -166,18 +166,16 @@ export class PanelService {
         if (completedHireRequests.length > 0) {
             totalAgingDays = completedHireRequests.reduce((acc, req) => {
                 const decisionDate = req.panels[0]?.decided_date;
-                // If for some reason we rely on 'updatedAt' fallback or skip
-                // Since we filtered by having panels, strictly we should have one.
                 if (!decisionDate) return acc;
-                
+
                 const diffTime = Math.abs(decisionDate.getTime() - req.createdAt.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 validRequestsCount++;
                 return acc + diffDays;
             }, 0);
-            
-            result.averageTicketAging = validRequestsCount > 0 
-                ? Number((totalAgingDays / validRequestsCount).toFixed(2)) 
+
+            result.averageTicketAging = validRequestsCount > 0
+                ? Number((totalAgingDays / validRequestsCount).toFixed(2))
                 : 0;
         } else {
             result.averageTicketAging = 0;
@@ -191,7 +189,7 @@ export class PanelService {
                         in: ['organization_admin', 'organization_super_admin']
                     }
                 },
-                ...(Object.keys(dateFilterCreated).length > 0 ? { createdAt: dateFilterCreated } : {})
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         });
         result.hrSubmittedByClient = hrSubmittedByClient;
@@ -199,21 +197,24 @@ export class PanelService {
 
         const organizationsCount = await this.prisma.organization.count({
             where:{
-                status: OrganizationStatus.active
+                status: OrganizationStatus.active,
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         })
         result.activeOrganizations = organizationsCount;
 
         const usersCount = await this.prisma.uSER.count({
             where:{
-                status: 'active'
+                status: 'active',
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         });
         result.activeUsers = usersCount;
 
         const HrCount = await this.prisma.hireRequest.count({
             where:{
-                status:{ not: HireRequestStatus.cancelled}
+                status:{ not: { in: [HireRequestStatus.deleted, HireRequestStatus.cancelled] } },
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         })
         result.activeHireRequests = HrCount;
@@ -221,9 +222,10 @@ export class PanelService {
         const staffCount = await this.prisma.staff.count({
             where:{
                 status: 'active',
-                hubspot_dealstage: { 
+                hubspot_dealstage: {
                     in: activePipelines.map(([key, _value]) => String(key))
-                }
+                },
+                ...(hasDateFilter ? { created_at: dateFilterCreated } : {})
             }
         })
         result.activeStaff = staffCount;
@@ -234,21 +236,11 @@ export class PanelService {
                 OR:[
                     { pipeline_status: '261075105'},
                     { pipeline_status: '1087596819'}
-                ]
+                ],
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         })
         result.candidatesAvailable = candidatesAvailable;
-
-        /*const candidatesEndorsed = await this.prisma.candidate.count({
-            where:{
-                pipeline_status: '1172847191',
-                panelCandidates: {
-                    none:{
-                        status:  PanelCandidateStatus.selected_by_client
-                    }
-                }
-            }
-        })*/
 
         const candidatesEndorsed = await this.prisma.candidate.count({
             where:{
@@ -256,7 +248,8 @@ export class PanelService {
                     some:{
                         panel:{
                             hireRequest:{
-                                status: HireRequestStatus.awaiting_decision
+                                status: HireRequestStatus.awaiting_decision,
+                                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
                             }
                         }
                     }
@@ -274,6 +267,7 @@ export class PanelService {
                     panel: {
                     hireRequest: {
                         status: { not: HireRequestStatus.deleted },
+                        ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
                     },
                     },
                 },
@@ -290,6 +284,7 @@ export class PanelService {
                 },
                 processing_status: 'failed',
                 resume_url: { not: null },
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             },
             select: selectCandidates
         });
@@ -317,7 +312,7 @@ export class PanelService {
               title: pc.panel.hireRequest.title,
               organization_name: pc.panel.hireRequest.organization.name,
               status: 'test',
-              
+
             })) : []
           }));
         result.failedResumeParsing = failedResume;
@@ -331,7 +326,8 @@ export class PanelService {
                     { headshot_url: null },
                     { headshot_url: 'n/a' },
                     { headshot_url: 'N/A' },
-                ],              
+                ],
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             },
             select: selectCandidates
         });
@@ -359,35 +355,59 @@ export class PanelService {
               title: pc.panel.hireRequest.title,
               organization_name: pc.panel.hireRequest.organization.name,
               status: 'test',
-              
+
             })) : []
           }));
         result.withoutHeadshot = CandwithoutHeadshot;
 
 
+        // Monthly data: dynamic range based on dateFrom/dateTo, defaults to last 12 months
         const today = new Date();
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth();
-       
-        for (let i = 11; i >= 0; i--) {
-            const date = new Date(currentYear, currentMonth - i, 1);
-            
+
+        // Parse "YYYY-MM-DD" strings directly to avoid UTC-to-local timezone shift.
+        // Using new Date("YYYY-MM-DD") parses as UTC midnight, and .getMonth()/.getFullYear()
+        // return LOCAL values — on servers with negative UTC offset (e.g. UTC-3) this shifts
+        // the date back one day, causing the wrong month to be used as loop start/end.
+        const parseDateSafe = (dateStr: string): { year: number; month: number } => {
+            const [y, m] = dateStr.split('-').map(Number);
+            return { year: y, month: m - 1 }; // month is 0-indexed
+        };
+
+        let monthsToIterate: Date[] = [];
+        if (dateFrom || dateTo) {
+            const start = dateFrom
+                ? (() => { const { year, month } = parseDateSafe(dateFrom); return new Date(year, month, 1); })()
+                : new Date(currentYear, currentMonth - 11, 1);
+            const end = dateTo
+                ? (() => { const { year, month } = parseDateSafe(dateTo); return new Date(year, month, 1); })()
+                : new Date(currentYear, currentMonth, 1);
+            let cursor = new Date(start);
+            while (cursor <= end) {
+                monthsToIterate.push(new Date(cursor));
+                cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+            }
+        } else {
+            for (let i = 11; i >= 0; i--) {
+                monthsToIterate.push(new Date(currentYear, currentMonth - i, 1));
+            }
+        }
+
+        for (const date of monthsToIterate) {
+            const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+            const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+
             const candidatesCreated = await this.prisma.candidate.count({
                 where: {
-                    createdAt: {
-                        gte: new Date(date.getFullYear(), date.getMonth(), 1),
-                        lt: new Date(date.getFullYear(), date.getMonth() + 1, 1),
-                    },
+                    createdAt: { gte: monthStart, lt: monthEnd },
                     pipeline_status:{ in: ['261075105', '1087596819']}
                 },
             });
 
             const hireRequestsCreated = await this.prisma.hireRequest.count({
                 where: {
-                    createdAt: {
-                        gte: new Date(date.getFullYear(), date.getMonth(), 1),
-                        lt: new Date(date.getFullYear(), date.getMonth() + 1, 1),
-                    },
+                    createdAt: { gte: monthStart, lt: monthEnd },
                 },
             });
 
@@ -397,10 +417,7 @@ export class PanelService {
                     panels: {
                         some: {
                             status: PanelStatus.decision_made,
-                            decided_date: {
-                                gte: new Date(date.getFullYear(), date.getMonth(), 1),
-                                lt: new Date(date.getFullYear(), date.getMonth() + 1, 1),
-                            },
+                            decided_date: { gte: monthStart, lt: monthEnd },
                         },
                     },
                 }
@@ -408,19 +425,14 @@ export class PanelService {
 
             const interviewsScheduled = await this.prisma.interview.count({
                 where: {
-                    scheduled_date: {
-                        gte: new Date(date.getFullYear(), date.getMonth(), 1),
-                        lt: new Date(date.getFullYear(), date.getMonth() + 1, 1),
-                    },
+                    scheduled_date: { gte: monthStart, lt: monthEnd },
                 },
             });
 
             if(!result.monthlyData) result.monthlyData = [];
-            
-           
+
             result.monthlyData.push({
-                //monthName
-                month: date.toLocaleString('default', { month: 'short' }),
+                month: date.toLocaleString('default', { month: 'short', year: '2-digit' }),
                 candidates: candidatesCreated,
                 hireRequests_created: hireRequestsCreated,
                 hireRequests_endorsed: hireRequestsEndorsed,
@@ -429,41 +441,37 @@ export class PanelService {
         }
 
 
-       
-        for (let i = 11; i >= 0; i--) {
-            const date = new Date(currentYear, currentMonth - i, 1);
+        for (const date of monthsToIterate) {
+            const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+            const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+
             const newClients = await this.prisma.organization.count({
                 where: {
-                    createdAt: {
-                        gte: new Date(date.getFullYear(), date.getMonth(), 1),
-                        lt: new Date(date.getFullYear(), date.getMonth() + 1, 1),
-                    },
+                    createdAt: { gte: monthStart, lt: monthEnd },
                 },
             });
 
             if(!result.newClients) result.newClients = [];
 
             result.newClients.push({
-                month: date.toLocaleString('default', { month: 'short' }),
+                month: date.toLocaleString('default', { month: 'short', year: '2-digit' }),
                 newClients: newClients,
             });
         }
 
-        for (let i = 11; i >= 0; i--) {
-            const date = new Date(currentYear, currentMonth - i, 1);
+        for (const date of monthsToIterate) {
+            const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+            const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
 
             const accessUsers = await this.prisma.session.count({
                 where: {
-                    createdAt: {
-                        gte: new Date(date.getFullYear(), date.getMonth(), 1),
-                        lt: new Date(date.getFullYear(), date.getMonth() + 1, 1),
-                    },
+                    createdAt: { gte: monthStart, lt: monthEnd },
                 },
             });
 
             if(!result.userAccess) result.userAccess = [];
             result.userAccess.push({
-                month: date.toLocaleString('default', { month: 'short' }),
+                month: date.toLocaleString('default', { month: 'short', year: '2-digit' }),
                 accessUsers: accessUsers,
             });
         }
@@ -471,6 +479,7 @@ export class PanelService {
 
         const candidatesWithInterviews = await this.prisma.candidate.findMany({
             where:{
+                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
                 panelCandidates:{
                     some:{
                         panel:{

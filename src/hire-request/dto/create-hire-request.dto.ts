@@ -157,7 +157,6 @@ export class CreateHireRequestDto {
     @IsArray()
     @IsOptional()
     selectedCandidates: any[];
-
     
     
 }

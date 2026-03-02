@@ -260,6 +260,54 @@ export class OpenaiService {
     }
 
 
+    async generateTextSummary(text: string): Promise<string> {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) {
+            throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
+        }
+        const openai = new OpenAI({ apiKey });
+
+        const prompt = `
+        You are a professional content summarizer for a medical staffing platform.
+        Summarize the following hire request description in up to 3 clear, concise sentences.
+        Focus on the role, key responsibilities, and main requirements.
+        Do not include personal or patient information.
+        Return ONLY the summary text, no JSON, no markdown, no extra formatting.
+
+        Description:
+        ${text}
+        `;
+
+        try {
+            const response = await openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                messages: [
+                    { role: 'system', content: 'You are a professional content summarizer. Return only plain text.' },
+                    { role: 'user', content: prompt },
+                ],
+                temperature: 0.3,
+                max_tokens: 300,
+            });
+
+            const content = response.choices?.[0]?.message?.content?.trim();
+            if (!content) {
+                throw new BadRequestException('OpenAI did not return a valid summary.');
+            }
+            return content;
+
+        } catch (error: any) {
+            if (error?.type === 'insufficient_quota') {
+                console.error('[OpenAI] Insufficient Quota on generateTextSummary');
+                throw new BadRequestException('You dont have credits. Check your plan/billing.');
+            }
+            if (error?.type === 'rate_limit_error') {
+                throw new BadRequestException('Rate limit exceeded. Please try again later.');
+            }
+            console.error('[OpenAI] generateTextSummary unexpected error:', error);
+            throw new BadRequestException('Unexpected error requesting OpenAI.');
+        }
+    }
+
     async extractDataFromResumeImages(imagePaths: string[]): Promise<any> {
         const apiKey = process.env.OPENAI_API_KEY_RESUME_EXTRACTION || process.env.OPENAI_API_KEY;
         if (!apiKey) {

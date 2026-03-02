@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { OpenaiService } from '../openai/openai.service';
 
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
@@ -92,6 +93,10 @@ const notificationsServiceMock = {
   deleteNotification: jest.fn(),
 };
 
+const openAIServiceMock = {
+  generateTextSummary: jest.fn(),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
@@ -104,7 +109,8 @@ describe('HireRequestService', () => {
         HireRequestService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: HubspotService, useValue: hubspotServiceMock },
-        { provide: NotificationsService, useValue: notificationsServiceMock }
+        { provide: NotificationsService, useValue: notificationsServiceMock },
+        { provide: OpenaiService, useValue: openAIServiceMock },
       ],
     }).compile();
 
@@ -504,7 +510,7 @@ describe('HireRequestService', () => {
     
       expect(prismaMock.hireRequest.update).toHaveBeenCalledWith({
         where: { id: 'hr1' },
-        data: { title: 'Updated', hubspot_pairing_date: null }, 
+        data: { title: 'Updated', hubspot_pairing_date: null, hubspot_contract_amount: null }, 
       });
       expect(prismaMock.hireRequestSkill.deleteMany).toHaveBeenCalledWith({
         where: { hire_request_id: 'hr1' },

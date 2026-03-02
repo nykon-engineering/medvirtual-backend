@@ -10,6 +10,7 @@ import { HireRequestStatus, PanelCandidateStatus, PanelStatus, USER } from '@pri
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OpenaiService } from '../openai/openai.service';
 
 import { CreateHireRequestDto } from './dto/create-hire-request.dto';
 import { UpdateHireRequestDto } from './dto/update-hire-request.dto';
@@ -40,6 +41,7 @@ export class HireRequestService {
     @Inject(forwardRef (() => HubspotService))
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
+    private readonly openai: OpenaiService,
   ) {}
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split("T");
@@ -268,6 +270,7 @@ export class HireRequestService {
       numberVA: undefined,
       salary_range_from: sanitizeDecimal(hireRequestData.salary_range_from),
       salary_range_to: sanitizeDecimal(hireRequestData.salary_range_to),
+      hubspot_contract_amount: sanitizeDecimal(hubspotMappedFields.hubspot_contract_amount),
       hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
       hubspot_pairing_time: hireRequestData.hubspot_pairing_time ? hireRequestData.hubspot_pairing_time : null,
     };
@@ -276,9 +279,35 @@ export class HireRequestService {
       data: hireRequest,
     })
     if (!newHireRequest) throw new BadRequestException(`Hire request not created`);
-    
-    
-    
+
+    if (data.description && data.description.length >= 500) {
+      try {
+        const summary = await this.openai.generateTextSummary(data.description);
+        await this.prisma.hireRequest.update({
+          where: { id: newHireRequest.id },
+          data: { description_summary: summary, summary_generated_at: new Date() },
+        });
+        newHireRequest.description_summary = summary;
+        newHireRequest.summary_generated_at = new Date();
+      } catch (err) {
+        console.warn('[HireRequest] AI summary generation failed on create:', err?.message || err);
+      }
+    }
+
+    if (hireRequestData.hubspot_tasks && hireRequestData.hubspot_tasks.length >= 500) {
+      try {
+        const tasksSummary = await this.openai.generateTextSummary(hireRequestData.hubspot_tasks);
+        await this.prisma.hireRequest.update({
+          where: { id: newHireRequest.id },
+          data: { hubspot_tasks_summary: tasksSummary, hubspot_tasks_summary_generated_at: new Date() },
+        });
+        newHireRequest.hubspot_tasks_summary = tasksSummary;
+        newHireRequest.hubspot_tasks_summary_generated_at = new Date();
+      } catch (err) {
+        console.warn('[HireRequest] AI tasks summary generation failed on create:', err?.message || err);
+      }
+    }
+
     if (skills && skills.length > 0) {
       const newHireRequestSkills = await this.prisma.hireRequestSkill.createMany({
         data: skills.map(skill => ({
@@ -473,6 +502,44 @@ export class HireRequestService {
                       approved_positions_pairing: true,
                       video_link: true,
                       employment_type: true,
+
+                      //Va score cards fields
+                      active_listening_and_comprehension_demonstrated: true,
+                      adaptability_to_different_client_personalities_and_workflows: true,
+                      can_articulate_experience_clearly_to_clients: true,
+                      can_multitask_between_systems_or_windows_efficiently: true,
+                      client_readiness___fit_evaluator_notes: true,
+                      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+                      comfortable_with_camera_on_setup: true,
+                      communication_skills_evaluator_notes: true,
+                      confident_on_video_and_phone_calls: true,
+                      cultural_alignment_with_us_healthcare_environment: true,
+                      demonstrates_problem_solving_and_tech_adaptability: true,
+                      demonstrates_stability_and_commitment: true,
+                      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+                      exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+                      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+                      for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+                      grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+                      handles_feedback_constructively: true,
+                      has_functioning_headset__webcam__and_backup_device: true,
+                      knowledge_of_hipaa_compliance_and_confidentiality: true,
+                      medical_knowledge_evaluator_notes: true,
+                      no_medical_industry_experience: true,
+                      positive_attitude_and_professional_demeanor: true,
+                      prior_experience_in_healthcare_or_medical_va_roles: true,
+                      professionalism___work_readiness_evaluator_notes: true,
+                      punctual_and_responsive_during_recruitment_stages: true,
+                      remote_work_discipline_and_time_management: true,
+                      speaks_clearly_and_professionally: true,
+                      stable_internet_connection__min__20_mbps_: true,
+                      technical_competence_evaluator_notes: true,
+                      tier_level: true,
+                      total_points: true,
+                      understands_workflow_in_medical_offices___telehealth_environments: true,
+
+
+
                       skills: {
                         select: {
                           skill_name: true,
@@ -892,9 +959,9 @@ export class HireRequestService {
         baseWhere = { 
           organization: { id: user.organization_id },
           OR: [
-            {status: { in: ['new', 'pending_signature', 'sourcing', 'for_review', 'panel_ready'] }},
+            {status: { in: [HireRequestStatus.new, HireRequestStatus.pending_signature, HireRequestStatus.sourcing, HireRequestStatus.for_review, HireRequestStatus.panel_ready] }},
             {
-              status: 'interview_scheduled',
+              status: HireRequestStatus.interview_scheduled,
               panels: {
                 some: {
                   interviews: {
@@ -1048,7 +1115,6 @@ export class HireRequestService {
         createdAt: 'desc'
       }
     });
-     
 
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
@@ -1120,6 +1186,7 @@ export class HireRequestService {
       }))
     );
 
+    console.log('result:', formatted)
     return formatted;
     
 
@@ -1131,10 +1198,20 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
+    const sanitizeDecimal = (value?: string | null) => {
+      return value && value.trim() !== "" ? value : null;
+    };
+
     const {skills, ...hireRequestData} = data;
+
+    const currentHireRequest = (data.description !== undefined || data.hubspot_tasks !== undefined)
+      ? await this.prisma.hireRequest.findUnique({ where: { id }, select: { description: true, hubspot_tasks: true } })
+      : null;
+
     const sanitizeData = {
       ...hireRequestData,
       hubspot_pairing_date: dateToTimestamp(hireRequestData.hubspot_pairing_date) || null,
+      hubspot_contract_amount: sanitizeDecimal(hireRequestData.hubspot_contract_amount),
     }
     const requestUpdated = await this.prisma.hireRequest.update({
       where: {
@@ -1145,6 +1222,34 @@ export class HireRequestService {
     if (!requestUpdated) throw new BadRequestException(`Hire request not updated`);
 
     result = requestUpdated;
+
+    //console.log('Hire Request updated in database with data:', data.description);
+    const descriptionChanged = currentHireRequest && data.description !== currentHireRequest.description;
+    //console.log('Description changed:', descriptionChanged);
+    if (descriptionChanged && data.description && data.description.length >= 500) {
+      try {
+        const summary = await this.openai.generateTextSummary(data.description);
+        await this.prisma.hireRequest.update({
+          where: { id },
+          data: { description_summary: summary, summary_generated_at: new Date() },
+        });
+      } catch (err) {
+        console.warn('[HireRequest] AI summary generation failed on update:', err?.message || err);
+      }
+    }
+
+    const hubspotTasksChanged = currentHireRequest && data.hubspot_tasks !== currentHireRequest.hubspot_tasks;
+    if (hubspotTasksChanged && data.hubspot_tasks && data.hubspot_tasks.length >= 500) {
+      try {
+        const tasksSummary = await this.openai.generateTextSummary(data.hubspot_tasks);
+        await this.prisma.hireRequest.update({
+          where: { id },
+          data: { hubspot_tasks_summary: tasksSummary, hubspot_tasks_summary_generated_at: new Date() },
+        });
+      } catch (err) {
+        console.warn('[HireRequest] AI tasks summary generation failed on update:', err?.message || err);
+      }
+    }
 
     //delete all skills independently if the array is empty or not
     await this.prisma.hireRequestSkill.deleteMany({
@@ -1932,6 +2037,42 @@ export class HireRequestService {
         avatar_url: true,
         gender: true,
         approved_positions_pairing: true,
+
+        //Va score cards fields
+        active_listening_and_comprehension_demonstrated: true,
+        adaptability_to_different_client_personalities_and_workflows: true,
+        can_articulate_experience_clearly_to_clients: true,
+        can_multitask_between_systems_or_windows_efficiently: true,
+        client_readiness___fit_evaluator_notes: true,
+        comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+        comfortable_with_camera_on_setup: true,
+        communication_skills_evaluator_notes: true,
+        confident_on_video_and_phone_calls: true,
+        cultural_alignment_with_us_healthcare_environment: true,
+        demonstrates_problem_solving_and_tech_adaptability: true,
+        demonstrates_stability_and_commitment: true,
+        demonstrates_understanding_of_medical_terminology_and_procedures: true,
+        exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+        for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+        grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+        handles_feedback_constructively: true,
+        has_functioning_headset__webcam__and_backup_device: true,
+        knowledge_of_hipaa_compliance_and_confidentiality: true,
+        medical_knowledge_evaluator_notes: true,
+        no_medical_industry_experience: true,
+        positive_attitude_and_professional_demeanor: true,
+        prior_experience_in_healthcare_or_medical_va_roles: true,
+        professionalism___work_readiness_evaluator_notes: true,
+        punctual_and_responsive_during_recruitment_stages: true,
+        remote_work_discipline_and_time_management: true,
+        speaks_clearly_and_professionally: true,
+        stable_internet_connection__min__20_mbps_: true,
+        technical_competence_evaluator_notes: true,
+        tier_level: true,
+        total_points: true,
+        understands_workflow_in_medical_offices___telehealth_environments: true,
+
         languages: {
           select: {
             name: true,
@@ -2416,8 +2557,6 @@ export class HireRequestService {
     -awaiting_decision + readable = true
     -panel_ready
     */
-
-    console.log('Ariived')
     const panels = await this.prisma.candidatePanel.findMany({
       where: {
         AND: [
@@ -2428,6 +2567,7 @@ export class HireRequestService {
           },
           {
             OR: [
+              //if is in awaiting_decision or placement_completed status, it should be retrieved 
               {
                 hireRequest: {
                   status: {
@@ -2438,24 +2578,26 @@ export class HireRequestService {
                   },
                 },
               },
+              //if it was marked as readable by the system or organization admin, it should be retrieved
               {
                 readable: true,
               },
-
+              //if has at least one candidate created by organization user, it should be retrieved
               {
                 panelCandidates: {
                   some: {
                     createdBy: {
                       role: {
-                        in: 
+                        in:
                           user.role.includes("organization")
                           ? ['organization_admin', 'organization_super_admin']
-                          : ['system_admin', 'system_super_admin'], 
+                          : ['system_admin', 'system_super_admin'],
                       },
                     },
                   },
                 },
               },
+              
             ],
           },
         ],
@@ -2535,6 +2677,7 @@ export class HireRequestService {
                 last_name: true,
                 name: true,
                 about_me: true,
+
                 hourly_pay_rate: true,
                 years_of_experience: true,
                 country: true,
@@ -2589,6 +2732,8 @@ export class HireRequestService {
             id: true,
             title: true,
             description: true,
+            description_summary: true,
+            summary_generated_at: true,
             status: true,
             priority: true,
             createdAt: true,
