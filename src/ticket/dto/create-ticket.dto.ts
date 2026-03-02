@@ -1,5 +1,6 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { IsArray, IsIn, IsOptional, IsString } from "class-validator";
+import { Transform } from "class-transformer";
 import { ticketTypeDictionary } from "../../common/dictionaries/ticket-type";
 import { Priority } from "@prisma/client";
 
@@ -28,6 +29,7 @@ export class CreateTicketDto {
     priority: Priority;
 
     @ApiProperty({ description: 'IDs of users assigned to the ticket', required: false, type: [String] })
+    @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
     @IsArray()
     @IsString({ each: true })
     @IsOptional()

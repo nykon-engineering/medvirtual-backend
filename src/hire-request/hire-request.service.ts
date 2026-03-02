@@ -1185,7 +1185,9 @@ export class HireRequestService {
 
     result = requestUpdated;
 
+    //console.log('Hire Request updated in database with data:', data.description);
     const descriptionChanged = currentHireRequest && data.description !== currentHireRequest.description;
+    //console.log('Description changed:', descriptionChanged);
     if (descriptionChanged && data.description && data.description.length >= 500) {
       try {
         const summary = await this.openai.generateTextSummary(data.description);
