@@ -57,7 +57,7 @@ describe('PanelService', () => {
     // 1. activeClientUsers (uSER.count)
     (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(50); 
     
-    // 2. verifiedClientUsers (uSER.count)
+    // 2. invitedClientUsers (uSER.count)
     (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(45);
 
     // 3. completedHireRequests (hireRequest.findMany for Average Ticket Aging)
@@ -187,7 +187,7 @@ describe('PanelService', () => {
 
     // Verify New Metrics
     expect(result.activeClientUsers).toBe(50);
-    expect(result.verifiedClientUsers).toBe(45);
+    expect(result.invitedClientUsers).toBe(45);
     expect(result.averageTicketAging).toBe(6.5);
     expect(result.hrSubmittedByClient).toBe(12);
   });
