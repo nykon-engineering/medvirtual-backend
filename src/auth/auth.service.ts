@@ -487,12 +487,12 @@ export class AuthService {
       : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: data.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
       headers: {
-        'X-Mailer': 'MedVirtual Platform',
+        'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
         'X-Priority': '3',
         'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
         'X-Entity-Ref-ID': `invite-${newUser.id}`,
@@ -545,12 +545,12 @@ export class AuthService {
       : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: userToReInvite.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
       headers: {
-        'X-Mailer': 'MedVirtual Platform',
+        'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
         'X-Priority': '3',
         'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
         'X-Entity-Ref-ID': `invite-${userToReInvite.id}`,
