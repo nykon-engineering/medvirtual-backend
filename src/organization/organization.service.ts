@@ -910,20 +910,29 @@ export class OrganizationService {
         console.log('Status not updated, invalid value:', data.status);
       }
 
-      const res = await this.prisma.organization.update({
-        where: { id },
-        data: 
-        {
-          status: updateData.status as OrganizationStatus,
-          admin_id: updateData.admin_id,
-        },
-        include: {
-          owner: true,
-          admin: true,
-          users: true,
-        },
+      const res = await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.organization.update({
+          where: { id },
+          data: {
+            status: updateData.status as OrganizationStatus,
+            admin_id: updateData.admin_id,
+          },
+          include: {
+            owner: true,
+            admin: true,
+            users: true,
+          },
+        });
+
+        if (updateData.status === OrganizationStatus.inactive) {
+          await tx.uSER.updateMany({
+            where: { organization_id: id },
+            data: { status: 'inactive' },
+          });
+        }
+
+        return updated;
       });
-      //console.log('Update result:', res);
 
       //updateOrganizationInHubspot
       await this.hubspot.updateOrganizationInHubspot(res);
