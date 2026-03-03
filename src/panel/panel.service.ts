@@ -116,16 +116,16 @@ export class PanelService {
         result.activeClientUsers = activeClientUsers;
 
         // 2. Number of Verified Client users
-        const verifiedClientUsers = await this.prisma.uSER.count({
+        const invitedClientUsers = await this.prisma.uSER.count({
             where: {
                 role: {
                     in: ['organization_admin', 'organization_super_admin']
                 },
-                verified: true,
+                status: 'invited',
                 ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         });
-        result.verifiedClientUsers = verifiedClientUsers;
+        result.invitedClientUsers = invitedClientUsers;
 
         // 3. Average Ticket Aging (Hire Request Created → Placement Completed)
 
@@ -189,6 +189,7 @@ export class PanelService {
                         in: ['organization_admin', 'organization_super_admin']
                     }
                 },
+                status: {not: { in: [HireRequestStatus.deleted, HireRequestStatus.cancelled] } },
                 ...(hasDateFilter ? { createdAt: dateFilterCreated } : {})
             }
         });
