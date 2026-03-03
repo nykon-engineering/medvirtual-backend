@@ -4,90 +4,645 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
-
 const mockPrisma = {
   staff: {
     create: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     update: jest.fn(),
-    findOne: jest.fn(),
-  }
-}
+    count: jest.fn(),
+    createMany: jest.fn(),
+  },
+  organization: {
+    findUnique: jest.fn(),
+  },
+  uSER: {
+    findUnique: jest.fn(),
+  },
+  bonus: {
+    create: jest.fn(),
+  },
+  ticket: {
+    create: jest.fn(),
+  },
+  $transaction: jest.fn(),
+};
+
+const HandlerObjectCreationMock = {
+  execute: jest.fn(),
+};
 
 describe('StaffService', () => {
   let service: StaffService;
-  let prisma: PrismaService;
-
-
-  const HandlerObjectCreationMock = {
-    execute: jest.fn(),
-  }
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [StaffService,
+      providers: [
+        StaffService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: HandlerObjectCreation, useValue: HandlerObjectCreationMock }
+        { provide: HandlerObjectCreation, useValue: HandlerObjectCreationMock },
       ],
     }).compile();
 
     service = module.get<StaffService>(StaffService);
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // create
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('create', () => {
+    const mockUser = { id: 'user-1', role: 'system_admin' } as any;
+    const mockDto = {
+      candidate_id: 'cand-1',
+      hirerequest_id: 'hr-1',
+      status: 'Active',
+      salary: 1000,
+      start_date: new Date('2024-01-01'),
+    } as any;
+    const mockCreated = { id: 'staff-1' };
+    const mockFindOneResult = { id: 'staff-1', status: 'active', candidate: null, hireRequest: null, bonus: [] };
 
+    it('should create staff and return findOne result', async () => {
+      mockPrisma.staff.create.mockResolvedValue(mockCreated);
+      mockPrisma.staff.findUnique.mockResolvedValue(mockFindOneResult);
+
+      const result = await service.create(mockDto, mockUser);
+
+      expect(mockPrisma.staff.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          candidate_id: mockDto.candidate_id,
+          hirerequest_id: mockDto.hirerequest_id,
+          status: 'active', // staffStatusDictionary['Active']
+          created_by: mockUser.id,
+        }),
+      });
+      expect(result).toEqual(mockFindOneResult);
+    });
+
+    it('should throw BadRequestException if creation fails', async () => {
+      mockPrisma.staff.create.mockRejectedValue(new Error('DB error'));
+
+      await expect(service.create(mockDto, mockUser)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // addBonus
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('addBonus', () => {
+    const mockSystemUser = { id: 'user-1', role: 'system_admin', organization_id: undefined } as any;
+    const mockOrgUser = { id: 'user-2', role: 'organization_admin', organization_id: 'org-1' } as any;
+    const mockData = { staff_id: 'staff-1', bonus: 500, description: 'Holiday bonus' } as any;
+    const mockStaff = {
+      id: 'staff-1',
+      status: 'active',
+      hubspot_deal_name: 'Deal A',
+      candidate_id: 'cand-1',
+      candidate: { id: 'cand-1', first_name: 'John', last_name: 'Doe', name: 'John Doe' },
+    };
+    const mockFindOneResult = { id: 'staff-1', status: 'active', candidate: null, hireRequest: null, bonus: [] };
+
+    it('should throw NotFoundException if staff not found', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(null);
+
+      await expect(service.addBonus(mockData, mockSystemUser)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if staff is not active', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue({ ...mockStaff, status: 'terminated' });
+
+      await expect(service.addBonus(mockData, mockSystemUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException if org user has no organization_id', async () => {
+      const userWithoutOrg = { id: 'user-3', role: 'organization_admin', organization_id: null } as any;
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+
+      await expect(service.addBonus(mockData, userWithoutOrg)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if organization not found for org user', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+      mockPrisma.organization.findUnique.mockResolvedValue(null);
+
+      await expect(service.addBonus(mockData, mockOrgUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if creator user not found', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+
+      await expect(service.addBonus(mockData, mockSystemUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if assigned user not found for org user', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+      mockPrisma.organization.findUnique.mockResolvedValue({ admin_id: 'admin-1' });
+      mockPrisma.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'user-2' })  // creator found
+        .mockResolvedValueOnce(null);              // assigned not found
+
+      await expect(service.addBonus(mockData, mockOrgUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should add bonus for system user and return updated staff', async () => {
+      mockPrisma.staff.findUnique
+        .mockResolvedValueOnce(mockStaff)          // initial staff check
+        .mockResolvedValueOnce(mockFindOneResult); // findOne after transaction
+      mockPrisma.uSER.findUnique.mockResolvedValue({ id: 'user-1' });
+      mockPrisma.bonus.create.mockResolvedValue({ id: 'bonus-1' });
+      mockPrisma.ticket.create.mockResolvedValue({ id: 'ticket-1' });
+      mockPrisma.$transaction.mockImplementation((arr: any[]) => Promise.all(arr));
+
+      const result = await service.addBonus(mockData, mockSystemUser);
+
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(mockPrisma.organization.findUnique).not.toHaveBeenCalled();
+      expect(result).toEqual(mockFindOneResult);
+    });
+
+    it('should resolve org admin and add bonus for org user', async () => {
+      mockPrisma.staff.findUnique
+        .mockResolvedValueOnce(mockStaff)
+        .mockResolvedValueOnce(mockFindOneResult);
+      mockPrisma.organization.findUnique.mockResolvedValue({ admin_id: 'admin-1' });
+      mockPrisma.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'user-2' })   // creator
+        .mockResolvedValueOnce({ id: 'admin-1' }); // assigned
+      mockPrisma.bonus.create.mockResolvedValue({ id: 'bonus-1' });
+      mockPrisma.ticket.create.mockResolvedValue({ id: 'ticket-1' });
+      mockPrisma.$transaction.mockImplementation((arr: any[]) => Promise.all(arr));
+
+      const result = await service.addBonus(mockData, mockOrgUser);
+
+      expect(mockPrisma.organization.findUnique).toHaveBeenCalledWith({
+        where: { id: 'org-1' },
+        select: { admin_id: true },
+      });
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(result).toEqual(mockFindOneResult);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // requestTermination
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('requestTermination', () => {
+    const mockSystemUser = { id: 'user-1', role: 'system_admin', organization_id: undefined } as any;
+    const mockOrgUser = { id: 'user-2', role: 'organization_admin', organization_id: 'org-1' } as any;
+    const mockData = { staff_id: 'staff-1', description: 'Performance issues' } as any;
+    const mockStaff = {
+      id: 'staff-1',
+      status: 'active',
+      hubspot_deal_name: 'Deal A',
+      candidate: { id: 'cand-1', first_name: 'Jane', last_name: 'Doe', name: 'Jane Doe' },
+    };
+    const mockFindOneResult = { id: 'staff-1', status: 'termination-requested', candidate: null, hireRequest: null, bonus: [] };
+
+    it('should throw NotFoundException if staff not found', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(null);
+
+      await expect(service.requestTermination(mockData, mockSystemUser)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if org user has no organization_id', async () => {
+      const userWithoutOrg = { id: 'u', role: 'organization_admin', organization_id: null } as any;
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+
+      await expect(service.requestTermination(mockData, userWithoutOrg)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if organization not found for org user', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+      mockPrisma.organization.findUnique.mockResolvedValue(null);
+
+      await expect(service.requestTermination(mockData, mockOrgUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if creator user not found', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+
+      await expect(service.requestTermination(mockData, mockSystemUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if assigned user not found for org user', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockStaff);
+      mockPrisma.organization.findUnique.mockResolvedValue({ admin_id: 'admin-1' });
+      mockPrisma.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'user-2' })
+        .mockResolvedValueOnce(null);
+
+      await expect(service.requestTermination(mockData, mockOrgUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should create termination ticket and return updated staff for system user', async () => {
+      mockPrisma.staff.findUnique
+        .mockResolvedValueOnce(mockStaff)
+        .mockResolvedValueOnce(mockFindOneResult);
+      mockPrisma.uSER.findUnique.mockResolvedValue({ id: 'user-1' });
+      mockPrisma.staff.update.mockResolvedValue({ id: 'staff-1', status: 'termination-requested' });
+      mockPrisma.ticket.create.mockResolvedValue({ id: 'ticket-1' });
+      mockPrisma.$transaction.mockImplementation((arr: any[]) => Promise.all(arr));
+
+      const result = await service.requestTermination(mockData, mockSystemUser);
+
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(result).toEqual(mockFindOneResult);
+    });
+
+    it('should resolve org admin and create termination for org user', async () => {
+      mockPrisma.staff.findUnique
+        .mockResolvedValueOnce(mockStaff)
+        .mockResolvedValueOnce(mockFindOneResult);
+      mockPrisma.organization.findUnique.mockResolvedValue({ admin_id: 'admin-1' });
+      mockPrisma.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'user-2' })
+        .mockResolvedValueOnce({ id: 'admin-1' });
+      mockPrisma.staff.update.mockResolvedValue({ id: 'staff-1', status: 'termination-requested' });
+      mockPrisma.ticket.create.mockResolvedValue({ id: 'ticket-1' });
+      mockPrisma.$transaction.mockImplementation((arr: any[]) => Promise.all(arr));
+
+      await service.requestTermination(mockData, mockOrgUser);
+
+      expect(mockPrisma.organization.findUnique).toHaveBeenCalledWith({
+        where: { id: 'org-1' },
+        select: { admin_id: true },
+      });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // getStaffForTickets
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('getStaffForTickets', () => {
+    const mockStaffList = [
+      { id: 'staff-1', status: 'active', candidate: { first_name: 'John' }, hireRequest: { title: 'Job A' } },
+    ];
+
+    it('should return all staff for system user without org filter', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+      mockPrisma.staff.findMany.mockResolvedValue(mockStaffList);
+
+      const result = await service.getStaffForTickets(systemUser);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.hireRequest).toEqual({});
+      expect(result).toEqual(mockStaffList);
+    });
+
+    it('should filter by org_id for organization user', async () => {
+      const orgUser = { id: 'u2', role: 'organization_admin', organization_id: 'org-1' } as any;
+      mockPrisma.staff.findMany.mockResolvedValue(mockStaffList);
+
+      await service.getStaffForTickets(orgUser);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.hireRequest.org_id).toBe('org-1');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // findAll
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('findAll', () => {
+    const mockStaffData = [{ id: 'staff-1', status: 'active', candidate: { avatar_url: 'avatar.png' } }];
+    const mockTotal = 1;
+
+    beforeEach(() => {
+      mockPrisma.staff.findMany.mockResolvedValue(mockStaffData);
+      mockPrisma.staff.count.mockResolvedValue(mockTotal);
+      mockPrisma.$transaction.mockImplementation((arr: any[]) => Promise.all(arr));
+    });
+
+    it('should return paginated staff with default pagination', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+
+      const result: any = await service.findAll(systemUser, null as any, null as any, null as any, null as any, null as any);
+
+      expect(result.meta.page).toBe(1);
+      expect(result.meta.perPage).toBe(10);
+      expect(result.meta.total).toBe(mockTotal);
+      expect(result.meta.totalPages).toBe(1);
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should return paginated staff with custom pagination', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+
+      const result: any = await service.findAll(systemUser, 2, 5, null as any, null as any, null as any);
+
+      expect(result.meta.page).toBe(2);
+      expect(result.meta.perPage).toBe(5);
+    });
+
+    it('should not add AND condition for system user without search', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+
+      await service.findAll(systemUser, 1, 10, null as any, null as any, null as any);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.AND).toBeUndefined();
+    });
+
+    it('should add only org filter in AND for org user without search', async () => {
+      const orgUser = { id: 'u2', role: 'organization_admin', organization_id: 'org-1' } as any;
+
+      await service.findAll(orgUser, 1, 10, null as any, null as any, null as any);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.AND).toHaveLength(1);
+      expect(whereArg.AND[0].OR).toEqual(
+        expect.arrayContaining([
+          { hireRequest: { org_id: 'org-1' } },
+          { organization_id: 'org-1' },
+        ]),
+      );
+    });
+
+    it('should add only search filter in AND for system user with search', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+
+      await service.findAll(systemUser, 1, 10, 'John', null as any, null as any);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.AND).toHaveLength(1);
+      expect(whereArg.AND[0].OR).toEqual(
+        expect.arrayContaining([
+          { candidate: { first_name: { contains: 'John', mode: 'insensitive' } } },
+        ]),
+      );
+    });
+
+    it('should combine org AND search filters for org user with search (AND with two ORs)', async () => {
+      const orgUser = { id: 'u2', role: 'organization_admin', organization_id: 'org-1' } as any;
+
+      await service.findAll(orgUser, 1, 10, 'John', null as any, null as any);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.AND).toHaveLength(2);
+
+      // First AND condition: org filter
+      expect(whereArg.AND[0].OR).toEqual(
+        expect.arrayContaining([
+          { hireRequest: { org_id: 'org-1' } },
+          { organization_id: 'org-1' },
+        ]),
+      );
+
+      // Second AND condition: search filter
+      expect(whereArg.AND[1].OR).toEqual(
+        expect.arrayContaining([
+          { candidate: { first_name: { contains: 'John', mode: 'insensitive' } } },
+          { candidate: { last_name: { contains: 'John', mode: 'insensitive' } } },
+          { hubspot_deal_name: { contains: 'John', mode: 'insensitive' } },
+        ]),
+      );
+    });
+
+    it('should apply start_date range when both dates are provided', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+      const from = new Date('2024-01-01');
+      const to = new Date('2024-12-31');
+
+      await service.findAll(systemUser, 1, 10, null as any, from, to);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.start_date.gte).toEqual(new Date(from));
+      expect(whereArg.start_date.lte).toEqual(new Date(to));
+    });
+
+    it('should apply only start_date.gte when only start_date_from is provided', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+      const from = new Date('2024-01-01');
+
+      await service.findAll(systemUser, 1, 10, null as any, from, null as any);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.start_date.gte).toEqual(new Date(from));
+      expect(whereArg.start_date.lte).toBeUndefined();
+    });
+
+    it('should map avatar_url to avatar with AVATAR_URL env var', async () => {
+      process.env.AVATAR_URL = 'https://cdn.example.com/';
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+
+      const result: any = await service.findAll(systemUser, 1, 10, null as any, null as any, null as any);
+
+      expect(result.data[0].candidate.avatar).toBe('https://cdn.example.com/avatar.png');
+      delete process.env.AVATAR_URL;
+    });
+
+    it('should set avatar to null when avatar_url is absent', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-2', status: 'active', candidate: { avatar_url: null } },
+      ]);
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+
+      const result: any = await service.findAll(systemUser, 1, 10, null as any, null as any, null as any);
+
+      expect(result.data[0].candidate.avatar).toBeNull();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // findByOrganization
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('findByOrganization', () => {
+    const mockSystemUser = { id: 'u1', role: 'system_admin' } as any;
+    const orgId = 'org-1';
+    const mockStaffData = [{ id: 'staff-1', status: 'active' }];
+    const mockTotal = 1;
+
+    beforeEach(() => {
+      mockPrisma.staff.findMany.mockResolvedValue(mockStaffData);
+      mockPrisma.staff.count.mockResolvedValue(mockTotal);
+      mockPrisma.$transaction.mockImplementation((arr: any[]) => Promise.all(arr));
+    });
+
+    it('should return paginated staff for the given organization', async () => {
+      const result: any = await service.findByOrganization(
+        mockSystemUser, orgId, 1, 10, null as any, null as any, null as any,
+      );
+
+      expect(result.status).toBe(200);
+      expect(result.data).toEqual(mockStaffData);
+      expect(result.meta.total).toBe(mockTotal);
+    });
+
+    it('should use default pagination if page/perPage not provided', async () => {
+      const result: any = await service.findByOrganization(
+        mockSystemUser, orgId, null as any, null as any, null as any, null as any, null as any,
+      );
+
+      expect(result.meta.page).toBe(1);
+      expect(result.meta.perPage).toBe(10);
+    });
+
+    it('should filter by organizationId in OR condition', async () => {
+      await service.findByOrganization(
+        mockSystemUser, orgId, 1, 10, null as any, null as any, null as any,
+      );
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.OR).toEqual(
+        expect.arrayContaining([
+          { hireRequest: { org_id: orgId } },
+          { organization_id: orgId },
+        ]),
+      );
+    });
+
+    it('should apply start_date range filter', async () => {
+      const from = new Date('2024-01-01');
+      const to = new Date('2024-12-31');
+
+      await service.findByOrganization(mockSystemUser, orgId, 1, 10, null as any, from, to);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.start_date.gte).toEqual(new Date(from));
+      expect(whereArg.start_date.lte).toEqual(new Date(to));
+    });
+
+    it('should calculate totalPages correctly', async () => {
+      mockPrisma.staff.count.mockResolvedValue(25);
+
+      const result: any = await service.findByOrganization(
+        mockSystemUser, orgId, 1, 10, null as any, null as any, null as any,
+      );
+
+      expect(result.meta.totalPages).toBe(3);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // updateStaff
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('updateStaff', () => {
+    const mockUser = { id: 'u1', role: 'system_admin' } as any;
+    const staffId = 'staff-1';
+    const mockExistingStaff = { id: staffId, status: 'active', candidate: { id: 'cand-1' } };
+    const mockUpdatedResult = { id: staffId, status: 'termination-requested' };
+
+    it('should throw NotFoundException if staff not found', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateStaff(staffId, { status: 'Termination Requested' }, mockUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should update staff status and return result with status 200', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockExistingStaff);
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txMock = {
+          staff: {
+            update: jest.fn().mockResolvedValue(mockExistingStaff),
+            findUnique: jest.fn().mockResolvedValue(mockUpdatedResult),
+          },
+        };
+        return fn(txMock);
+      });
+
+      const result: any = await service.updateStaff(
+        staffId, { status: 'Termination Requested' }, mockUser,
+      );
+
+      expect(result.status).toBe(200);
+      expect(result.message).toBe('Staff updated successfully');
+      expect(result.data).toEqual(mockUpdatedResult);
+    });
+
+    it('should translate status via staffStatusDictionary', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockExistingStaff);
+      let capturedUpdateData: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txMock = {
+          staff: {
+            update: jest.fn().mockImplementation(({ data }) => {
+              capturedUpdateData = data;
+              return Promise.resolve(mockExistingStaff);
+            }),
+            findUnique: jest.fn().mockResolvedValue(mockUpdatedResult),
+          },
+        };
+        return fn(txMock);
+      });
+
+      await service.updateStaff(staffId, { status: 'Termination Requested' }, mockUser);
+
+      expect(capturedUpdateData.status).toBe('termination-requested');
+    });
+
+    it('should throw BadRequestException on unexpected DB error', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockExistingStaff);
+      mockPrisma.$transaction.mockRejectedValue(new Error('DB error'));
+
+      await expect(
+        service.updateStaff(staffId, { status: 'Active' }, mockUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should re-throw NotFoundException if thrown inside transaction', async () => {
+      mockPrisma.staff.findUnique.mockResolvedValue(mockExistingStaff);
+      mockPrisma.$transaction.mockRejectedValue(new NotFoundException('Staff not found inside tx'));
+
+      await expect(
+        service.updateStaff(staffId, { status: 'Active' }, mockUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // moveStaffBackToActive
+  // ─────────────────────────────────────────────────────────────────────────────
   describe('moveStaffBackToActive', () => {
     const mockStaffId = '123';
     const mockStaffData = { id: mockStaffId, status: 'termination-requested' };
     const mockUpdatedStaff = { id: mockStaffId, status: 'active' };
     const mockFindOneResult = { id: mockStaffId, name: 'John Doe' };
-  
-    beforeEach(() => {
-      mockPrisma.staff.findUnique.mockReset();
-      mockPrisma.staff.update.mockReset();
-    });
-  
-    it('Should throw BadRequestException if staffId is not provided', async () => {
+
+    it('should throw BadRequestException if staffId is not provided', async () => {
       await expect(service.moveStaffBackToActive('')).rejects.toThrow(BadRequestException);
     });
-  
-    it('Should throw NotFoundException if staff is not found', async () => {
+
+    it('should throw NotFoundException if staff is not found or not in termination-requested status', async () => {
       mockPrisma.staff.findUnique.mockResolvedValue(null);
-  
+
       await expect(service.moveStaffBackToActive(mockStaffId)).rejects.toThrow(NotFoundException);
       expect(mockPrisma.staff.findUnique).toHaveBeenCalledWith({
         where: { id: mockStaffId, status: 'termination-requested' },
         select: { id: true },
       });
     });
-  
-    it('Should throw BadRequestException if update fails', async () => {
+
+    it('should throw BadRequestException if update returns null', async () => {
       mockPrisma.staff.findUnique.mockResolvedValue(mockStaffData);
       mockPrisma.staff.update.mockResolvedValue(null);
-  
+
       await expect(service.moveStaffBackToActive(mockStaffId)).rejects.toThrow(BadRequestException);
       expect(mockPrisma.staff.update).toHaveBeenCalledWith({
         where: { id: mockStaffId },
         data: { status: 'active' },
       });
     });
-  
-    it('Must update status to "active" and return updated staff', async () => {
+
+    it('should update status to active and return updated staff', async () => {
       mockPrisma.staff.findUnique
-      .mockResolvedValueOnce(mockStaffData)
-      .mockResolvedValueOnce(mockFindOneResult); 
+        .mockResolvedValueOnce(mockStaffData)
+        .mockResolvedValueOnce(mockFindOneResult);
       mockPrisma.staff.update.mockResolvedValue(mockUpdatedStaff);
-  
+
       const result = await service.moveStaffBackToActive(mockStaffId);
-  
-      expect(mockPrisma.staff.findUnique).toHaveBeenCalledWith({
-        where: { id: mockStaffId, status: 'termination-requested' },
-        select: { id: true },
-      });
+
       expect(mockPrisma.staff.update).toHaveBeenCalledWith({
         where: { id: mockStaffId },
         data: { status: 'active' },
@@ -95,9 +650,4 @@ describe('StaffService', () => {
       expect(result).toEqual(mockFindOneResult);
     });
   });
-
-  
 });
-
-
-

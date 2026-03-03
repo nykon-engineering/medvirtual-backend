@@ -332,38 +332,30 @@ export class StaffService {
       candidate: {},
     };
 
+    const andConditions: any[] = [];
+
     if (user.role.includes('organization')) {
-      //where.hireRequest.org_id = user.organization_id;
-      where.OR = [
-        {
-          hireRequest: {
-            org_id: user.organization_id,
-          },
-        },
-        {
-          organization_id: user.organization_id,
-        },
-      ];
+      andConditions.push({
+        OR: [
+          { hireRequest: { org_id: user.organization_id } },
+          { organization_id: user.organization_id },
+        ],
+      });
     }
-    
+
     if (search) {
-      where.OR = [
-        {
-          hireRequest: {
-            title: { contains: search, mode: 'insensitive' },
-          },
-        },
-        {
-          candidate: {
-            first_name: { contains: search, mode: 'insensitive' },
-          },
-        },
-        {
-          candidate: {
-            last_name: { contains: search, mode: 'insensitive' },
-          },
-        },
-      ];
+      andConditions.push({
+        OR: [
+          { hireRequest: { title: { contains: search, mode: 'insensitive' } } },
+          { candidate: { first_name: { contains: search, mode: 'insensitive' } } },
+          { candidate: { last_name: { contains: search, mode: 'insensitive' } } },
+          { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     if (start_date_from || start_date_to) {
@@ -444,6 +436,8 @@ export class StaffService {
         },
       },
     };
+
+    console.log('Where clause for findAll:', JSON.stringify(where, null, 2));
 
     const [staff, total] = await this.prisma.$transaction([
       this.prisma.staff.findMany({
