@@ -437,8 +437,6 @@ export class StaffService {
       },
     };
 
-    console.log('Where clause for findAll:', JSON.stringify(where, null, 2));
-
     const [staff, total] = await this.prisma.$transaction([
       this.prisma.staff.findMany({
         where,
