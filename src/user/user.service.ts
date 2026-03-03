@@ -654,6 +654,65 @@ export class UserService {
     }
   }
 
+  async searchOrganizationUsers(query: Omit<SearchUsersDto, 'role'>): Promise<any[]> {
+    const { search, status, organization_id, limit } = query;
+
+    const whereClause: Prisma.USERWhereInput = {
+      role: { in: ['organization_admin', 'organization_super_admin'] },
+    };
+
+    if (search) {
+      whereClause.OR = [
+        { first_name: { contains: search, mode: 'insensitive' } },
+        { last_name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { job_title: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (organization_id) {
+      whereClause.organization_id = organization_id;
+    }
+
+    const queryOptions: Prisma.USERFindManyArgs = {
+      where: whereClause,
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        job_title: true,
+        role: true,
+        status: true,
+        organization_name: true,
+        organization_id: true,
+        avatar: true,
+        phone: true,
+        verified: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    };
+
+    if (limit) {
+      queryOptions.take = limit;
+    }
+
+    const users = await this.prisma.uSER.findMany(queryOptions);
+
+    return users.map((user) => ({
+      ...user,
+      avatar:
+        user.avatar ||
+        this.generateDefaultAvatar(user.first_name, user.last_name),
+      full_name: `${user.first_name} ${user.last_name}`.trim(),
+    }));
+  }
+
   async searchUsers(query: SearchUsersDto): Promise<any[]> {
     const { search, role, status, organization_id, limit } = query;
 
