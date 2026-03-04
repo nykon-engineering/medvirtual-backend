@@ -278,6 +278,140 @@ export class StaffService {
     return await this.findOne(data.staff_id);
   }
 
+  async searchStaff(query: {
+    search?: string;
+    status?: string;
+    organization_id?: string;
+    limit?: number;
+  }): Promise<any> {
+    const { search, status, organization_id, limit } = query;
+
+    const where: any = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (organization_id) {
+      where.organization_id = organization_id;
+    }
+
+    if (search) {
+      where.OR = [
+        { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
+        { hubspot_client_name: { contains: search, mode: 'insensitive' } },
+        { hubspot_company_name: { contains: search, mode: 'insensitive' } },
+        { candidate: { first_name: { contains: search, mode: 'insensitive' } } },
+        { candidate: { last_name: { contains: search, mode: 'insensitive' } } },
+        { candidate: { email: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const queryOptions: any = {
+      where,
+      select: {
+        id: true,
+        hirerequest_id: true,
+        status: true,
+        salary: true,
+        start_date: true,
+        terminated_date: true,
+        organization_id: true,
+        created_at: true,
+        updated_at: true,
+        hubspot_id: true,
+        hubspot_close_date: true,
+        hubspot_deal_name: true,
+        hubspot_dealstage: true,
+        hubspot_dealtype: true,
+        hubspot_deployment_type: true,
+        hubspot_description: true,
+        hubspot_hs_acv: true,
+        hubspot_pipeline: true,
+        hubspot_business_unit: true,
+        hubspot_candidate_id: true,
+        hubspot_client_name: true,
+        hubspot_company_name: true,
+        hubspot_organization_id: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        candidate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            name: true,
+            email: true,
+            specialization: true,
+            employment_type: true,
+            country: true,
+            about_me: true,
+            avatar_url: true,
+            gender: true,
+            languages: {
+              select: {
+                name: true,
+              },
+            },
+            skills: {
+              select: {
+                skill_name: true,
+              },
+            },
+            createdAt: true,
+          },
+        },
+        hireRequest: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            availability: true,
+            contract_length: true,
+            expected_start_date: true,
+            salary_range_from: true,
+            salary_range_to: true,
+            specialization: true,
+            location: true,
+          },
+        },
+        bonus: {
+          select: {
+            id: true,
+            amount: true,
+            description: true,
+            created_at: true,
+            created_by: true,
+          },
+          orderBy: { created_at: 'asc' },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    };
+
+    if (limit) {
+      queryOptions.take = Number(limit);
+    }
+
+    const staff: any[] = await this.prisma.staff.findMany(queryOptions);
+
+    return staff.map((s) => ({
+      ...s,
+      candidate: s.candidate
+        ? {
+            ...s.candidate,
+            avatar: s.candidate.avatar_url ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}` : null,
+          }
+        : null,
+    }));
+  }
+
   async getStaffForTickets(user: USER): Promise<object> {
     const where: any = {
       hireRequest: {},

@@ -688,12 +688,16 @@ export class UserService {
         job_title: true,
         role: true,
         status: true,
-        organization_name: true,
-        organization_id: true,
         avatar: true,
         phone: true,
         verified: true,
         createdAt: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     };
@@ -706,9 +710,6 @@ export class UserService {
 
     return users.map((user) => ({
       ...user,
-      avatar:
-        user.avatar ||
-        this.generateDefaultAvatar(user.first_name, user.last_name),
       full_name: `${user.first_name} ${user.last_name}`.trim(),
     }));
   }

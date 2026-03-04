@@ -110,6 +110,24 @@ export class StaffController {
     };
   }
 
+  @Get('search')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Search staff members', description: 'Search staff by candidate name, email, deal name or hire request title' })
+  @ApiResponse({ status: 200, description: 'Staff found successfully.' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search term for candidate name, email, deal name or hire request title' })
+  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by staff status' })
+  @ApiQuery({ name: 'organization_id', required: false, type: String, description: 'Filter by organization ID' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of results to return' })
+  async searchStaff(
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('organization_id') organization_id?: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.staffService.searchStaff({ search, status, organization_id, limit });
+  }
+
   @Get('for-tickets')
   @UseGuards(AuthGuard)
   @ApiOperation({
