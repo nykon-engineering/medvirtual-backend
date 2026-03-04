@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, USER } from '@prisma/client';
+import { OrganizationStatus, Prisma, USER } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
@@ -696,6 +696,7 @@ export class UserService {
           select: {
             id: true,
             name: true,
+            status: true,
           },
         },
       },
