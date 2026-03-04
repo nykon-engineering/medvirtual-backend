@@ -268,14 +268,12 @@ export class OrganizationService {
     }
   }
 
-  async getAll(status: string, user: USER): Promise<Organization[]> {
+  async getAll(user: USER, status?: string): Promise<Organization[]> {
     
     try {
       
       const whereClause: any = {
-        status: status
-        ? { equals: status as OrganizationStatus }
-        : undefined
+        ...(status && { status: { equals: status as OrganizationStatus } }),
       };
 
       // For system_super_admin: return all organizations

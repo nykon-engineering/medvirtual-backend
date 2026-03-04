@@ -62,8 +62,8 @@ export class OrganizationController {
     status: 200,
     description: 'List of organizations retrieved successfully',
   })
-  async getAll(@Query('status') status: string, @CurrentUser() user: USER) {
-    return await this.organizationService.getAll(status, user);
+  async getAll(@CurrentUser() user: USER, @Query('status') status?: string) {
+    return await this.organizationService.getAll(user, status);
   }
 
   @Get('paginated')
