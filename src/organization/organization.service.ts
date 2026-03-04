@@ -273,7 +273,9 @@ export class OrganizationService {
     try {
       
       const whereClause: any = {
-        ...(status && { status: { equals: status as OrganizationStatus } }),
+        ...(status 
+           ? { status: { equals: status as OrganizationStatus } }
+           : {status: { in: [OrganizationStatus.active, OrganizationStatus.inactive] } }), //keep only active and inactive by default, hide deleted, but allow filter by status if needed
       };
 
       // For system_super_admin: return all organizations
