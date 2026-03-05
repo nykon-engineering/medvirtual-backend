@@ -322,6 +322,87 @@ describe('OrganizationService', () => {
   
   
 
+  describe('getAllForFilters', () => {
+    const filterOrgs = [
+      { id: '1', name: 'Alpha Org', status: OrganizationStatus.active },
+      { id: '2', name: 'Beta Org', status: OrganizationStatus.inactive },
+    ];
+
+    it('should return id, name, status for system_super_admin without status filter', async () => {
+      mockPrismaService.organization.findMany.mockResolvedValue(filterOrgs);
+
+      const superAdmin = { ...userfake, role: 'system_super_admin' };
+      const result = await service.getAllForFilters(superAdmin);
+
+      expect(result).toEqual(filterOrgs);
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { status: { in: [OrganizationStatus.active, OrganizationStatus.inactive] } },
+          select: { id: true, name: true, status: true },
+          orderBy: { name: 'asc' },
+        }),
+      );
+    });
+
+    it('should filter by status when status param is provided', async () => {
+      const activeOrgs = [{ id: '1', name: 'Alpha Org', status: OrganizationStatus.active }];
+      mockPrismaService.organization.findMany.mockResolvedValue(activeOrgs);
+
+      const superAdmin = { ...userfake, role: 'system_super_admin' };
+      const result = await service.getAllForFilters(superAdmin, 'active');
+
+      expect(result).toEqual(activeOrgs);
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { status: { equals: OrganizationStatus.active } },
+        }),
+      );
+    });
+
+    it('should return all active+inactive orgs for system_admin (no extra filtering)', async () => {
+      mockPrismaService.organization.findMany.mockResolvedValue(filterOrgs);
+
+      const adminUser = { ...userfake, role: 'system_admin' };
+      const result = await service.getAllForFilters(adminUser);
+
+      expect(result).toEqual(filterOrgs);
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { status: { in: [OrganizationStatus.active, OrganizationStatus.inactive] } },
+        }),
+      );
+    });
+
+    it('should apply OR clause with user id for organization_admin role', async () => {
+      mockPrismaService.organization.findMany.mockResolvedValue([filterOrgs[0]]);
+
+      const orgAdmin = { ...userfake, id: 'user-org-1', role: 'organization_admin' };
+      await service.getAllForFilters(orgAdmin);
+
+      const callArgs = (prisma.organization.findMany as jest.Mock).mock.calls[0][0];
+      expect(callArgs.where).toHaveProperty('OR');
+      expect(callArgs.where.OR.some((c: any) => c.admin_id === 'user-org-1' || c.owner_id === 'user-org-1')).toBe(true);
+    });
+
+    it('should throw NotFoundException when prisma throws', async () => {
+      mockPrismaService.organization.findMany.mockRejectedValue(new Error('DB error'));
+
+      const superAdmin = { ...userfake, role: 'system_super_admin' };
+      await expect(service.getAllForFilters(superAdmin)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return results ordered by name ascending', async () => {
+      mockPrismaService.organization.findMany.mockResolvedValue(filterOrgs);
+
+      const superAdmin = { ...userfake, role: 'system_super_admin' };
+      await service.getAllForFilters(superAdmin);
+
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { name: 'asc' } }),
+      );
+    });
+  });
+
   describe('assignAdmin', () => {
     it('should assign admin successfully', async () => {
       const admin = {

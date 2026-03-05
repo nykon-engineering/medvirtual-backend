@@ -66,6 +66,20 @@ export class OrganizationController {
     return await this.organizationService.getAll(user, status);
   }
 
+  @Get('get-all-for-filters')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Get all organizations for filters' })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'List of organizations retrieved successfully',
+  })
+  async getAllForFilters(@CurrentUser() user: USER, @Query('status') status?: string) {
+    return await this.organizationService.getAllForFilters(user, status);
+  }
+
   @Get('paginated')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(
