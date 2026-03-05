@@ -45,8 +45,65 @@ describe('NotificationsService', () => {
     // Set up environment variables for tests
     process.env.FRONTEND_URL = 'https://test.example.com';
     process.env.RESEND_API_KEY = 'test-api-key';
+    // Ensure non-production by default so [DEV] prefix is applied
+    delete process.env.ENVIRONMENT;
 
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.ENVIRONMENT;
+  });
+
+  describe('sendMailWithPrefix', () => {
+    const baseOptions = {
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: ['user@example.com'],
+      subject: 'Test Subject',
+      html: '<p>Test</p>',
+    };
+
+    beforeEach(() => {
+      mockMailService.sendMail.mockResolvedValue(true);
+    });
+
+    it('should add [DEV] prefix in non-production environment', async () => {
+      // ENVIRONMENT is deleted in global beforeEach → non-prod
+      await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ subject: '[DEV] Test Subject' }),
+      );
+    });
+
+    it('should NOT add prefix when ENVIRONMENT=PROD', async () => {
+      process.env.ENVIRONMENT = 'PROD';
+
+      await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ subject: 'Test Subject' }),
+      );
+    });
+
+    it('should preserve all other email properties unchanged', async () => {
+      await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: ['user@example.com'],
+        subject: '[DEV] Test Subject',
+        html: '<p>Test</p>',
+      });
+    });
+
+    it('should propagate the return value from mail.sendMail', async () => {
+      mockMailService.sendMail.mockResolvedValue(false);
+
+      const result = await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(result).toBe(false);
+    });
   });
 
   describe('buildEmail', () => {
@@ -185,7 +242,7 @@ describe('NotificationsService', () => {
         expect.objectContaining({
           from: expect.any(String),
           to: expect.arrayContaining(['assignee@example.com', 'sourcing@example.com', 'creator@example.com']),
-          subject: 'Placement completed: Senior Developer',
+          subject: '[DEV] Placement completed: Senior Developer',
           html: expect.stringContaining('placement completed'),
         })
       );
@@ -282,7 +339,7 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: 'Hire Request edited: Senior Developer',
+        subject: '[DEV] Hire Request edited: Senior Developer',
         html: expect.stringContaining('Hire Request EDITED'),
       });
     });
@@ -297,7 +354,7 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: 'Hire Request canceled: Senior Developer',
+        subject: '[DEV] Hire Request canceled: Senior Developer',
         html: expect.stringContaining('Hire Request CANCELED'),
       });
     });
@@ -353,7 +410,7 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: 'Hire Request Assigned: Senior Developer',
+        subject: '[DEV] Hire Request Assigned: Senior Developer',
         html: expect.stringContaining('Hire Request'),
       });
     });
