@@ -291,6 +291,21 @@ describe('HandlerTicketPropertyChange', () => {
   // ─── buildTitle (via syncTitle) ────────────────────────────────────────────
 
   describe('buildTitle — title formula', () => {
+    let savedEnvironment: string | undefined;
+
+    beforeEach(() => {
+      savedEnvironment = process.env.ENVIRONMENT;
+      delete process.env.ENVIRONMENT; // ensure non-production by default
+    });
+
+    afterEach(() => {
+      if (savedEnvironment === undefined) {
+        delete process.env.ENVIRONMENT;
+      } else {
+        process.env.ENVIRONMENT = savedEnvironment;
+      }
+    });
+
     const triggerSyncTitle = async (hrData: Partial<{
       hubspot_pairing_request_type: string | null;
       hubspot_numberVA: number | null;
@@ -363,12 +378,10 @@ describe('HandlerTicketPropertyChange', () => {
     });
 
     it('should use HR (not TEST HR) in production environment', async () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+      process.env.ENVIRONMENT = 'PROD';
 
       const title = await triggerSyncTitle({});
 
-      process.env.NODE_ENV = originalEnv;
       expect(title).toMatch(/^HR - /);
       expect(title).not.toContain('TEST');
     });
