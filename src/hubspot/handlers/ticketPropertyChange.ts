@@ -21,7 +21,7 @@ export class HandlerTicketPropertyChange {
         availability?: string | null;
         organization: { name: string };
     }): string {
-        const isProduction = process.env.NODE_ENV === 'production';
+        const isProduction = process.env.ENVIRONMENT === 'PROD';
         const basePrefix = isProduction ? 'HR' : 'TEST HR';
         const requestType = hr.hubspot_pairing_request_type || '';
         const firstPrefix = requestType === 'Upsell Agent' ? 'UPS '
