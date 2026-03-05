@@ -533,7 +533,7 @@ export class UserService {
       }
 
       // Additional safety check: Prevent deletion of kind admins
-      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin') {
+      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin' && user.status !== 'invited') {
         throw new BadRequestException(
           'Cannot delete Admin users for security reasons',
         );
