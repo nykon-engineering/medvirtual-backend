@@ -314,52 +314,6 @@ export class OrganizationService {
     }
   }
 
-  async getAllForFilters(user: USER, status?: string): Promise<Object[]> {
-    
-    try {
-      
-      const whereClause: any = {
-        ...(status 
-           ? { status: { equals: status as OrganizationStatus } }
-           : {status: { in: [OrganizationStatus.active, OrganizationStatus.inactive] } }), //keep only active and inactive by default, hide deleted, but allow filter by status if needed
-      };
-
-      // For system_super_admin: return all organizations
-      if (user.role === 'system_super_admin') {
-        // No additional filtering needed - return all active organizations
-      }
-      // For system_admin: return only organizations they are admin or concierge of
-      else if (user.role === 'system_admin') {
-        //whereClause.OR = [{ admin_id: user.id }]; //Updated on 2026-02-19 asked by Pauli
-      }
-      // For organization users: return organizations they are associated with
-      else {
-        whereClause.OR = [
-          { admin_id: user.id },
-          { owner_id: user.id },
-          { admin_id: user.id },
-          {
-            admin_id: user.role.includes('organization') ? user.id : undefined,
-          },
-        ].filter(Boolean);
-      }
-
-      return await this.prisma.organization.findMany({
-        where: whereClause,
-        orderBy: {
-          name: 'asc',
-        },
-        select: {
-          id: true,
-          name: true,
-          status: true,
-        }
-      });
-    } catch {
-      throw new NotFoundException('Organizations not found');
-    }
-  }
-
   async getAllPaginated(
     user: USER,
     query: GetOrganizationsDto,
