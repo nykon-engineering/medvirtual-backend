@@ -39,6 +39,11 @@ export class AuthService {
   ) {}
 
 
+  private buildFromWithPrefix(from: string): string {
+    const isProduction = process.env.ENVIRONMENT === 'PROD';
+    return isProduction ? from : `[DEV] ${from}`;
+  }
+
   async signIn(data: AuthSignInDto): Promise<object> {
     const timeToExpires = data.rememberMe
       ? 7 * 24 * 60 * 60 * 1000
@@ -221,7 +226,7 @@ export class AuthService {
     // Send verification code via email
     const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
     const mailSent = await this.mailService.sendMail({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
       to: data.email,
       subject: 'Verification Code',
       html: emailBody,
@@ -391,7 +396,7 @@ export class AuthService {
     // Send verification code via email
     const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
     const mailSent = await this.mailService.sendMail({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
       to: user.email,
       subject: 'Verify Your MedVirtual Account - Verification Code',
       html: emailBody,
@@ -487,7 +492,7 @@ export class AuthService {
       : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
       to: data.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
@@ -545,7 +550,7 @@ export class AuthService {
       : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
       to: userToReInvite.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
