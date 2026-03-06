@@ -13,6 +13,7 @@ export class NotificationsService {
   ) { }
 
   /**
+   * 
    * Builds the correct ticket detail URL based on user role
    * Clients (organization admins) use /profile?ticket=, system admins use /tickets?ticket=
    */
@@ -24,8 +25,8 @@ export class NotificationsService {
 
   private async sendMailWithPrefix(options: { from: string; to: string | string[]; subject: string; html: string }): Promise<boolean> {
     const isProduction = process.env.ENVIRONMENT === 'PROD';
-    const subject = isProduction ? options.subject : `[DEV] ${options.subject}`;
-    return this.mail.sendMail({ ...options, subject });
+    const from = isProduction ? options.from : `[DEV] ${options.from}`;
+    return this.mail.sendMail({ ...options, from });
   }
 
   private buildEmail(htmlInner: string, theme?: any): string {
@@ -470,7 +471,7 @@ export class NotificationsService {
       emailTheme
     );
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emailsUsers.map(u => u.email),
       subject: `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
       html,
@@ -530,7 +531,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map(user => user.email),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
@@ -583,7 +584,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [hr.assigned_sourcing.email],
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
@@ -644,7 +645,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map(user => user.email).filter(Boolean),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
@@ -740,7 +741,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
       subject: `Hire Request Assigned: ${hr.title}`,
       html,
@@ -815,7 +816,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
       subject: `Hire Request Assigned: ${hr.title}`,
       html,
@@ -889,7 +890,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
       subject: `Panel Reviewed and Ready: ${hr.title}`,
       html,
@@ -948,7 +949,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map(user => user.email),
       subject: `New candidates in Hire Request: ${hr.title}`,
       html,
@@ -1324,7 +1325,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
       subject: `Your ticket changed to ${statusDisplay} status: ${ticket.title}`,
       html,
@@ -1425,7 +1426,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
       subject: `Your ticket has been reopened: ${ticket.title}`,
       html,
@@ -1639,7 +1640,7 @@ export class NotificationsService {
         );
 
         return this.sendMailWithPrefix({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: `${isSystemAdmin ? 'MedVirtual' : (emailTheme?.companyName || 'MedVirtual')} <noreply@medvirtual.ai>`,
           to: [recipient.email],
           subject: emailSubject,
           html,
@@ -1684,7 +1685,7 @@ export class NotificationsService {
         );
 
         return this.sendMailWithPrefix({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: `${isSystemAdmin ? 'MedVirtual' : (emailTheme?.companyName || 'MedVirtual')} <noreply@medvirtual.ai>`,
           to: [recipient.email],
           subject: `Ticket ${event}: ${ticket.title}`,
           html,
@@ -1759,7 +1760,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [ticket.user.email],
       subject: `You received a response on your ticket: ${ticket.title}`,
       html,
@@ -1815,7 +1816,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creator.email],
       subject: `You received a response on your ticket: ${ticket.title}`,
       html,

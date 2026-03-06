@@ -67,12 +67,12 @@ describe('NotificationsService', () => {
       mockMailService.sendMail.mockResolvedValue(true);
     });
 
-    it('should add [DEV] prefix in non-production environment', async () => {
+    it('should add [DEV] prefix to from in non-production environment', async () => {
       // ENVIRONMENT is deleted in global beforeEach → non-prod
       await (service as any).sendMailWithPrefix(baseOptions);
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ subject: '[DEV] Test Subject' }),
+        expect.objectContaining({ from: '[DEV] MedVirtual <noreply@medvirtual.ai>' }),
       );
     });
 
@@ -82,7 +82,7 @@ describe('NotificationsService', () => {
       await (service as any).sendMailWithPrefix(baseOptions);
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ subject: 'Test Subject' }),
+        expect.objectContaining({ from: 'MedVirtual <noreply@medvirtual.ai>' }),
       );
     });
 
@@ -90,9 +90,9 @@ describe('NotificationsService', () => {
       await (service as any).sendMailWithPrefix(baseOptions);
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: ['user@example.com'],
-        subject: '[DEV] Test Subject',
+        subject: 'Test Subject',
         html: '<p>Test</p>',
       });
     });
@@ -242,7 +242,7 @@ describe('NotificationsService', () => {
         expect.objectContaining({
           from: expect.any(String),
           to: expect.arrayContaining(['assignee@example.com', 'sourcing@example.com', 'creator@example.com']),
-          subject: '[DEV] Placement completed: Senior Developer',
+          subject: 'Placement completed: Senior Developer',
           html: expect.stringContaining('placement completed'),
         })
       );
@@ -337,9 +337,9 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: '[DEV] Hire Request edited: Senior Developer',
+        subject: 'Hire Request edited: Senior Developer',
         html: expect.stringContaining('Hire Request EDITED'),
       });
     });
@@ -352,9 +352,9 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: '[DEV] Hire Request canceled: Senior Developer',
+        subject: 'Hire Request canceled: Senior Developer',
         html: expect.stringContaining('Hire Request CANCELED'),
       });
     });
@@ -408,9 +408,9 @@ describe('NotificationsService', () => {
         select: expect.any(Object),
       });
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
-        subject: '[DEV] Hire Request Assigned: Senior Developer',
+        subject: 'Hire Request Assigned: Senior Developer',
         html: expect.stringContaining('Hire Request'),
       });
     });
@@ -521,7 +521,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
           to: expect.arrayContaining([
             'assignee@example.com',
             'sourcing@example.com',
@@ -544,7 +544,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Berry Virtual <noreply@medvirtual.ai>',
+          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -567,7 +567,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -640,7 +640,7 @@ describe('NotificationsService', () => {
       // Even though organization is Berry Virtual, system admins always get MedVirtual
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -669,7 +669,7 @@ describe('NotificationsService', () => {
       // Organization is Berry Virtual and no system admins, so use Berry Virtual
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Berry Virtual <noreply@medvirtual.ai>',
+          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -703,7 +703,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -754,7 +754,7 @@ describe('NotificationsService', () => {
       // Even though organization is Berry Virtual, system admins always get MedVirtual
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -787,7 +787,7 @@ describe('NotificationsService', () => {
       // Organization is Berry Virtual and no system admins, so use Berry Virtual
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Berry Virtual <noreply@medvirtual.ai>',
+          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -826,7 +826,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -860,7 +860,7 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledTimes(2); // Once for creator, once for assignee
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
           to: expect.arrayContaining([expect.any(String)]),
           subject: expect.stringMatching(/Ticket Created|Bug Report/),
           html: expect.stringContaining('Bug Report'),
@@ -891,7 +891,7 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: expect.arrayContaining([expect.any(String)]),
         subject: expect.stringContaining('Bug Report'),
         html: expect.stringContaining('The ticket was <strong>assigned</strong>'),
@@ -907,7 +907,7 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: expect.arrayContaining([expect.any(String)]),
         subject: expect.stringContaining('Bug Report'),
         html: expect.stringContaining('The ticket was <strong>closed</strong>'),
