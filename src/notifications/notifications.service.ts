@@ -169,73 +169,6 @@ export class NotificationsService {
 </html>`;
   }
 
-  /**
-   * Determines the correct fromEmail based on company name and recipient roles.
-   * System admins always receive emails from MedVirtual, never from Berry Virtual.
-   * If any organization admin recipient belongs to Berry Virtual organization, use Berry Virtual.
-   */
-  private async getFromEmail(
-    companyName: string,
-    recipientEmails: string[]
-  ): Promise<string> {
-    // Check recipients with their roles and organizations
-    const recipients = await this.prisma.uSER.findMany({
-      where: {
-        email: { in: recipientEmails },
-      },
-      select: {
-        email: true,
-        role: true,
-        organization_id: true,
-      },
-    });
-
-    const hasSystemAdmin = recipients.some(
-      (r) => r.role === 'system_admin' || r.role === 'system_super_admin'
-    );
-
-    // If there are system admins, always use MedVirtual
-    if (hasSystemAdmin) {
-      return 'MedVirtual <noreply@medvirtual.ai>';
-    }
-
-    // Check if any organization admin recipient belongs to Berry Virtual organization
-    const organizationAdminRecipients = recipients.filter(
-      (r) => r.role === 'organization_admin' || r.role === 'organization_super_admin'
-    );
-
-    if (organizationAdminRecipients.length > 0) {
-      const recipientOrgIds = organizationAdminRecipients
-        .map(r => r.organization_id)
-        .filter((id): id is string => Boolean(id));
-
-      if (recipientOrgIds.length > 0) {
-        const organizations = await this.prisma.organization.findMany({
-          where: {
-            id: { in: recipientOrgIds },
-          },
-          select: {
-            id: true,
-            business_unit: true,
-          },
-        });
-
-        const hasBerryVirtual = organizations.some(
-          org => org.business_unit === 'Berry Virtual'
-        );
-
-        if (hasBerryVirtual) {
-          return 'Berry Virtual <noreply@medvirtual.ai>';
-        }
-      }
-    }
-
-    // Otherwise, use the company name from theme
-    return companyName === 'Berry Virtual'
-      ? 'Berry Virtual <noreply@medvirtual.ai>'
-      : 'MedVirtual <noreply@medvirtual.ai>';
-  }
-
   async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
@@ -311,26 +244,17 @@ export class NotificationsService {
       )
       .join('')
     : '';
-    // Get user email theme
-    //const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_user.id);
-    //here, I'm calling direct the function to get theme by business unit since I have the business unit on organization
-    const emailTheme = await getEmailThemeByBusinessUnit(hr.organization.business_unit);
-    
-    // Determine company name from theme
-    const companyName = emailTheme?.companyName || 'MedVirtual';
-    
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+
     const recipients = [
       ...users.map(user => user.email),
       hr.assigned_sourcing?.email,
       hr.createdBy?.email,
     ].filter((email): email is string => Boolean(email));
-    
+
     if (recipients.length === 0) {
       throw new BadRequestException('No valid recipient emails found');
     }
-
-    // Get fromEmail considering recipient roles
-    const fromEmail = await this.getFromEmail(companyName, recipients);
 
     const html = this.buildEmail(
       `<h2>Placement Completed</h2>
@@ -359,7 +283,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: fromEmail,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: recipients,
       subject: `Placement completed: ${hr.title}`,
       html,
@@ -488,13 +412,13 @@ export class NotificationsService {
         priority: true,
         assign_user_id: true,
         organization: {
-          select: { name: true },
+          select: { name: true, business_unit: true },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
     const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
-   
+
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
@@ -506,8 +430,7 @@ export class NotificationsService {
     const verb = action === 'edited' ? 'edited' : 'canceled';
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<h2>Hire Request ${verb.toUpperCase()}</h2>
@@ -531,7 +454,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map(user => user.email),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
@@ -548,7 +471,7 @@ export class NotificationsService {
         priority: true,
         assigned_sourcing: { select: { id: true, email: true, first_name: true, last_name: true } },
         organization: {
-          select: { name: true },
+          select: { name: true, business_unit: true },
         },
       },
     });
@@ -559,8 +482,7 @@ export class NotificationsService {
     const verb = action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, hr.assigned_sourcing.id);
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>${hr.assigned_sourcing.first_name ?? hr.assigned_sourcing.first_name} ${hr.assigned_sourcing.last_name ?? hr.assigned_sourcing.last_name}</p>
@@ -584,7 +506,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [hr.assigned_sourcing.email],
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
@@ -601,13 +523,13 @@ export class NotificationsService {
         priority: true,
         assign_user_id: true,
         organization: {
-          select: { name: true },
+          select: { name: true, business_unit: true },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
     const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
-   
+
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
@@ -619,8 +541,7 @@ export class NotificationsService {
     const verb = action === 'for_review' ? 'For Review' : action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>${users[0].first_name ?? users[0].first_name}</p>
@@ -645,7 +566,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map(user => user.email).filter(Boolean),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
@@ -673,7 +594,7 @@ export class NotificationsService {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
-          select: { name: true },
+          select: { name: true, business_unit: true },
         },
       },
     });
@@ -708,8 +629,7 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    // Usa o tema do primeiro usuário
-    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>${users.map(u => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
@@ -741,7 +661,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
       subject: `Hire Request Assigned: ${hr.title}`,
       html,
@@ -766,7 +686,7 @@ export class NotificationsService {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
-          select: { name: true },
+          select: { name: true, business_unit: true },
         },
       },
     });
@@ -784,8 +704,7 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
@@ -816,7 +735,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
       subject: `Hire Request Assigned: ${hr.title}`,
       html,
@@ -841,7 +760,10 @@ export class NotificationsService {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
-          select: { name: true },
+          select: { 
+            name: true,
+            business_unit: true,
+           },
         },
       },
     });
@@ -859,8 +781,8 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, destin.id);
+    // Get email theme by organization business unit
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
@@ -890,7 +812,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: `${hr.organization?.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
       subject: `Panel Reviewed and Ready: ${hr.title}`,
       html,
@@ -907,13 +829,13 @@ export class NotificationsService {
         priority: true,
         assign_user_id: true,
         organization: {
-          select: { name: true },
+          select: { name: true, business_unit: true },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
     const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
-   
+
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
@@ -924,8 +846,7 @@ export class NotificationsService {
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    // Get user email theme
-    const emailTheme = await getUserEmailTheme(this.prisma, users[0].id);
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>${users[0].first_name ?? users[0].first_name} ${users[0].last_name ?? users[0].last_name}</p>
@@ -949,7 +870,7 @@ export class NotificationsService {
     );
 
     return await this.sendMailWithPrefix({
-      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map(user => user.email),
       subject: `New candidates in Hire Request: ${hr.title}`,
       html,
@@ -1055,25 +976,7 @@ export class NotificationsService {
       ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
       : 'Not specified';
 
-    // Get user email theme using the first admin's ID
-    const firstAdminId = uniqueRecipients[0]?.id;
-    const emailTheme = firstAdminId 
-      ? await getUserEmailTheme(this.prisma, firstAdminId)
-      : null;
-    
-    // Determine company name: prioritize organization business_unit if Berry Virtual,
-    // otherwise use theme from user, fallback to MedVirtual
-    let companyName = 'MedVirtual';
-    if (hr.organization.business_unit === 'Berry Virtual') {
-      // If organization is Berry Virtual, use Berry Virtual theme
-      companyName = 'Berry Virtual';
-    } else if (emailTheme?.companyName) {
-      // Otherwise, use the theme from the user
-      companyName = emailTheme.companyName;
-    }
-    
-    // Get fromEmail considering recipient roles
-    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>Your hire request has been completed.</p>
@@ -1099,7 +1002,7 @@ export class NotificationsService {
       emailTheme
     );
     const results = this.sendMailWithPrefix({
-      from: fromEmail,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: uniqueRecipients.map(r => r.email),
       subject: `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
       html,
@@ -1182,25 +1085,7 @@ export class NotificationsService {
         })
       : 'Not specified';
 
-    // Get user email theme using the first admin's ID
-    const firstAdminId = uniqueRecipients[0]?.id;
-    const emailTheme = firstAdminId 
-      ? await getUserEmailTheme(this.prisma, firstAdminId)
-      : null;
-    
-    // Determine company name: prioritize organization business_unit if Berry Virtual,
-    // otherwise use theme from user, fallback to MedVirtual
-    let companyName = 'MedVirtual';
-    if (hr.organization.business_unit === 'Berry Virtual') {
-      // If organization is Berry Virtual, use Berry Virtual theme
-      companyName = 'Berry Virtual';
-    } else if (emailTheme?.companyName) {
-      // Otherwise, use the theme from the user
-      companyName = emailTheme.companyName;
-    }
-    
-    // Get fromEmail considering recipient roles
-    const fromEmail = await this.getFromEmail(companyName, uniqueRecipients.map(r => r.email));
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
 
     const html = this.buildEmail(
       `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
@@ -1217,7 +1102,7 @@ export class NotificationsService {
       emailTheme
     );
     const results = this.sendMailWithPrefix({
-      from: fromEmail,
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: uniqueRecipients.map(r => r.email),
       subject: `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
       html,
