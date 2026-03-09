@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StaffService } from './staff.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 const mockPrisma = {
@@ -32,6 +33,10 @@ const HandlerObjectCreationMock = {
   execute: jest.fn(),
 };
 
+const HandlerOrganizationCreationMock = {
+  execute: jest.fn(),
+};
+
 describe('StaffService', () => {
   let service: StaffService;
 
@@ -41,6 +46,7 @@ describe('StaffService', () => {
         StaffService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: HandlerObjectCreation, useValue: HandlerObjectCreationMock },
+        { provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock },
       ],
     }).compile();
 

@@ -305,6 +305,18 @@ export class StaffController {
     return await this.staffService.populateDbFromHubspot();
   }
 
+  //This action is to used manually when we need to sync the organization ids for the staffs that were created before we implemented the relation between staff and organization
+  @Get('sync/organization-ids')
+  
+  @ApiOperation({
+    summary: 'Sync organization IDs',
+    description: 'For each staff with hubspot_organization_id but no organization_id, finds the matching Organization and updates the relation.',
+  })
+  @ApiResponse({ status: 200, description: 'Sync completed successfully' })
+  async syncOrganizationIds() {
+    return await this.staffService.syncOrganizationIds();
+  }
+
 
   @Get('back-to-active/:id')
   @UseGuards(AuthGuard)
