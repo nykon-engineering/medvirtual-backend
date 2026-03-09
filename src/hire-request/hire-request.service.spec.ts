@@ -138,6 +138,7 @@ describe('HireRequestService', () => {
       createdByUserId: null,
       hubspot_id: null,
       hubspot_contact_id: null,
+      status_before_deactivation: null,
     } ;
   });
 

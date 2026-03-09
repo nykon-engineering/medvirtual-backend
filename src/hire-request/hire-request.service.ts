@@ -1304,7 +1304,8 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
-    if (data.status !== 'cancelled' && data.status !== 'sourcing' && data.status !== 'new' ){ //allow user cancell or star sourcing HireRequest even if all candidates are blocked
+    //allow user cancell or star sourcing HireRequest even if all candidates are blocked
+    if (data.status !== 'cancelled' && data.status !== 'sourcing' && data.status !== 'new' ){ 
       const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
       if (verifyCandidates) {
         throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
@@ -3255,7 +3256,9 @@ export class HireRequestService {
         loserExists.map(async loser =>{
           const c = loser.candidate;
 
-          const canUpdate = c.panelCandidates.every(pc => ['selected', 'returned_to_pool'].includes(pc.status));
+          // Only return to pool if the candidate is NOT in another active panel.
+          // If they exist in another panel with any status other than 'returned_to_pool' or 'selected', keep their current pipeline_status.
+          const canUpdate = c.panelCandidates.every(pc => ['returned_to_pool', 'selected'].includes(pc.status));
           if (!canUpdate) return;
 
           const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;

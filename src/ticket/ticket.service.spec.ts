@@ -28,7 +28,8 @@ const userfake = {
   createdByMethod: 'self_signup',
   createdByUserId: null,
   hubspot_id: '1',
-  hubspot_contact_id: '1'
+  hubspot_contact_id: '1',
+  status_before_deactivation: null,
 }
 
 describe('TicketService', () => {

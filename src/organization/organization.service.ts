@@ -925,10 +925,20 @@ export class OrganizationService {
         });
 
         if (updateData.status === OrganizationStatus.inactive) {
-          await tx.uSER.updateMany({
-            where: { organization_id: id },
-            data: { status: 'inactive' },
-          });
+          await tx.$executeRaw`
+            UPDATE "USER"
+            SET "status_before_deactivation" = "status", "status" = 'inactive'
+            WHERE "organization_id" = ${id}
+          `;
+        }
+
+        if (updateData.status === OrganizationStatus.active) {
+          await tx.$executeRaw`
+            UPDATE "USER"
+            SET "status" = COALESCE("status_before_deactivation", 'active'),
+                "status_before_deactivation" = NULL
+            WHERE "organization_id" = ${id}
+          `;
         }
 
         return updated;
