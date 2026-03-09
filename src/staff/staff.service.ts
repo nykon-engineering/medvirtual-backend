@@ -288,6 +288,10 @@ export class StaffService {
 
     const where: any = {};
 
+    where.hubspot_dealstage = {
+        in: activePipelines.map(([key, _value]) => String(key))
+    };
+
     if (status) {
       where.status = status;
     }
