@@ -6,6 +6,7 @@ import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import systemReport from '../common/utils/email-templates/system-report';
 import clientUsersDeactivationReport from '../common/utils/email-templates/client-users-deactivation-report';
+import cronJobErrorReport from '../common/utils/email-templates/cron-job-error-report';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 
@@ -378,6 +379,18 @@ export class CronService {
             return true;
         } catch (error) {
             console.error('Error in deactivateClientUsersWithNoStaff:', error);
+            try {
+                const emailBody = cronJobErrorReport('deactivate-client-users-no-staff', error, new Date());
+                await this.mailService.sendMail({
+                    from: 'MedVirtual <noreply@medvirtual.ai>',
+                    to: 'paulo@regenta.ai',
+                    cc: ['paulo@regenta.ai'],
+                    subject: '[ERROR] Client Users Deactivation Cron Job Failed',
+                    html: emailBody,
+                });
+            } catch (mailError) {
+                console.error('Failed to send error report email:', mailError);
+            }
             return false;
         }
     }
