@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { CronService } from './cron.service';
 import { ApiProperty, ApiQuery } from '@nestjs/swagger';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
@@ -52,6 +52,17 @@ export class CronController {
         return {
             status: 200,
             message: 'the sync was successful',
+            data: result
+        }
+    }
+
+    @Get('deactivate-client-users-no-staff')
+    @ApiProperty({ description: 'Deactivate active client users and remove invited ones on clients with no active staff after 60 days of user creation' })
+    async deactivateClientUsersWithNoStaff() {
+        const result = await this.cron.deactivateClientUsersWithNoStaff();
+        return {
+            status: 200,
+            message: 'Client users deactivation completed successfully',
             data: result
         }
     }

@@ -5,6 +5,7 @@ import { CandidatesService } from '../candidate/candidates.service';
 import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import systemReport from '../common/utils/email-templates/system-report';
+import clientUsersDeactivationReport from '../common/utils/email-templates/client-users-deactivation-report';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 
@@ -240,7 +241,7 @@ export class CronService {
                     status: 'inactive',
                     staff: {
                         some: {
-                            hubspot_dealstage: { in: activePipelines.map(([key, value]) => key) },
+                            hubspot_dealstage: { in: activePipelines.map(([key]) => key) },
                         }
                     }
                 },
@@ -277,8 +278,108 @@ export class CronService {
             console.error('Error syncing clients with active staffs:', error);
             return false;
         }
+    }
 
-    
+    async deactivateClientUsersWithNoStaff(): Promise<boolean> {
+        console.log('Starting deactivateClientUsersWithNoStaff cron job...');
+
+        try {
+            const sixtyDaysAgo = new Date();
+            sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+            // Find organizations that have NO staff at all (regardless of status)
+            const clientsWithNoActiveStaff = await this.prisma.organization.findMany({
+                where: {
+                    staff: {
+                        none: {},
+                    },
+                },
+                select: { id: true, name: true },
+            });
+
+            if (clientsWithNoActiveStaff.length === 0) {
+                console.log('No clients found with no active staff.');
+                return true;
+            }
+
+            const organizationIds = clientsWithNoActiveStaff.map((org) => org.id);
+            const orgNameById = Object.fromEntries(clientsWithNoActiveStaff.map((org) => [org.id, org.name]));
+            console.log(`Found ${organizationIds.length} clients with no staff.`);
+
+            const userSelect = {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+                organization_id: true,
+            };
+
+            // Collect active users for the report before updating
+            const usersToDeactivate = await this.prisma.uSER.findMany({
+                where: {
+                    organization_id: { in: organizationIds },
+                    status: 'active',
+                    createdAt: { lte: sixtyDaysAgo },
+                },
+                select: userSelect,
+            });
+
+            await this.prisma.uSER.updateMany({
+                where: { id: { in: usersToDeactivate.map((u) => u.id) } },
+                data: { status: 'inactive', status_before_deactivation: 'active' },
+            });
+
+            console.log(`Deactivated ${usersToDeactivate.length} active users.`);
+
+            // Find invited users created more than 60 days ago to delete
+            const invitedUsersToDelete = await this.prisma.uSER.findMany({
+                where: {
+                    organization_id: { in: organizationIds },
+                    status: 'invited',
+                    createdAt: { lte: sixtyDaysAgo },
+                },
+                select: userSelect,
+            });
+
+            console.log(`Found ${invitedUsersToDelete.length} invited users to delete.`);
+
+            for (const user of invitedUsersToDelete) {
+                await this.prisma.$transaction(async (tx) => {
+                    await tx.emailVerification.deleteMany({ where: { userId: user.id } });
+                    await tx.emailInvitation.deleteMany({ where: { userId: user.id } });
+                    await tx.uSER.delete({ where: { id: user.id } });
+                });
+                console.log(`Deleted invited user: ${user.email}`);
+            }
+
+            // Send report email
+            const toReportUser = (u: typeof usersToDeactivate[number]) => ({
+                email: u.email,
+                first_name: u.first_name,
+                last_name: u.last_name,
+                organization_name: u.organization_id ? (orgNameById[u.organization_id] ?? 'N/A') : 'N/A',
+            });
+
+            const emailBody = clientUsersDeactivationReport(
+                usersToDeactivate.map(toReportUser),
+                invitedUsersToDelete.map(toReportUser),
+                new Date(),
+            );
+
+            await this.mailService.sendMail({
+                from: 'MedVirtual <noreply@medvirtual.ai>',
+                to: 'paulo@regenta.ai',
+                cc: ['paulo@regenta.ai'],
+                subject: 'Client Users Deactivation Report',
+                html: emailBody,
+            });
+
+            console.log('deactivateClientUsersWithNoStaff cron job completed.');
+            return true;
+        } catch (error) {
+            console.error('Error in deactivateClientUsersWithNoStaff:', error);
+            return false;
+        }
     }
 
     async syncStaffHubspotDealStages(): Promise<boolean> {
