@@ -2481,6 +2481,16 @@ export class HireRequestService {
       console.error('[notifications] hire request Panel Ready failed', err?.message || err);
     }
 
+    //Send email to the client if the panel is marked as readable by the system or organization admin (non-blocking)
+    if (data.readable) {
+      try {
+        const result = await this.notifications.notifyClientPanelReady(data.hireRequest_id);
+        console.log(`[notifications] Client Panel Ready notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] client panel ready email failed', err?.message || err);
+      }
+    }
+
     return this.findOne(data.hireRequest_id, user);
   }
 

@@ -742,6 +742,84 @@ export class NotificationsService {
     });
   }
 
+  async notifyClientPanelReady(hireRequestId: string): Promise<boolean> {
+    const hr = await this.prisma.hireRequest.findUnique({
+      where: { id: hireRequestId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        salary_range_from: true,
+        salary_range_to: true,
+        expected_start_date: true,
+        availability: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            business_unit: true,
+          },
+        },
+      },
+    });
+    if (!hr) throw new NotFoundException('Hire request not found');
+
+    const orgUsers = await this.prisma.uSER.findMany({
+      where: {
+        organization_id: hr.organization.id,
+        status: 'active',
+      },
+      select: { email: true },
+    });
+
+    const emails = orgUsers.map(u => u.email).filter(Boolean);
+    if (emails.length === 0) throw new BadRequestException('No active organization users found to notify');
+
+    const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
+    const salaryRange = hr.salary_range_from && hr.salary_range_to
+      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+      : 'Not specified';
+    const startDate = hr.expected_start_date
+      ? new Date(hr.expected_start_date).toLocaleDateString()
+      : 'Not specified';
+
+    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+
+    const html = this.buildEmail(
+      `<p><strong>Your candidate panel is ready for review!</strong></p>
+       <p>The panel for the following hire request has been reviewed and is now ready for your follow-up:</p>
+
+       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+         <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
+         <p><strong>Title:</strong> ${hr.title}</p>
+         <p><strong>Organization:</strong> ${hr.organization.name}</p>
+         <p><strong>Description:</strong>
+         <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
+         </p>
+         <p><strong>Availability:</strong> ${hr.availability}</p>
+         <p><strong>Salary Range:</strong> ${salaryRange}</p>
+         <p><strong>Expected Start Date:</strong> ${startDate}</p>
+       </div>
+
+       <p>Please review the details and candidates within this panel.</p>
+       <div style="text-align: left; margin: 30px 0;">
+         <a href="${detailUrl}" class="cta-button">
+           View Candidates
+         </a>
+       </div>`,
+      emailTheme
+    );
+
+    return await this.sendMailWithPrefix({
+      from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: emails,
+      subject: `Your candidate panel is ready: ${hr.title}`,
+      html,
+    });
+  }
+
   async notifyHireRequestPanelReady(hireRequestId: string,): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
