@@ -16,7 +16,7 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { findBillRateHourly, findBillRateMonthly, findHourlyPerRate, findJustMonthlySalary } from '../common/utils/salary.util';
+import { buildConfigMap, computeCandidateRates, findHourlyPerRate, findJustMonthlySalary } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -500,28 +500,17 @@ export class CandidatesService {
       );
 
       const _pConfigs1 = await this.positionRateConfigService.findAll();
-      const _configMap1 = new Map(_pConfigs1.map(c => [c.position, c]));
+      const _configMap1 = buildConfigMap(_pConfigs1);
 
       const candidatesWithScheduledInterview = candidates.map(candidate => {
-        const _pos = candidate.approved_positions_pairing?.[0] || '';
-        const _lang = candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name;
-        const _cfg = _configMap1.get(_pos);
-        const _agreed = candidate.hourly_pay_rate?.toNumber() || 0;
-        const _minH = _lang === 'Bilingual' ? _cfg?.hourly_rate_bilingual?.toNumber() ?? null : _cfg?.hourly_rate_english?.toNumber() ?? null;
-        const _margin = _cfg?.margin_per_hour?.toNumber() ?? null;
-        const _billH = findBillRateHourly(_agreed, _minH, _margin);
-        const _billM = findBillRateMonthly(_billH, candidate.employment_type || '');
+        const rates = computeCandidateRates(candidate, _configMap1);
         return ({
         ...candidate,
-
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
-        salary: _billM,
-        hourlySalary: _billH,
-        bill_rate_hourly: _billH,
-        bill_rate_monthly: _billM,
+        ...rates,
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
         panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
@@ -1601,24 +1590,14 @@ export class CandidatesService {
     // Construct full avatar URL for each candidate and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
     const _pConfigs2 = await this.positionRateConfigService.findAll();
-    const _configMap2 = new Map(_pConfigs2.map(c => [c.position, c]));
+    const _configMap2 = buildConfigMap(_pConfigs2);
     const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => {
-      const _pos = candidate.approved_positions_pairing?.[0] || '';
-      const _lang = candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name;
-      const _cfg = _configMap2.get(_pos);
-      const _agreed = candidate.hourly_pay_rate?.toNumber() || 0;
-      const _minH = _lang === 'Bilingual' ? _cfg?.hourly_rate_bilingual?.toNumber() ?? null : _cfg?.hourly_rate_english?.toNumber() ?? null;
-      const _margin = _cfg?.margin_per_hour?.toNumber() ?? null;
-      const _billH = findBillRateHourly(_agreed, _minH, _margin);
-      const _billM = findBillRateMonthly(_billH, candidate.employment_type || '');
+      const rates = computeCandidateRates(candidate, _configMap2);
       return {
         ...candidate,
         avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
-        salary: _billM,
-        hourlySalary: _billH,
-        bill_rate_hourly: _billH,
-        bill_rate_monthly: _billM,
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+        ...rates,
       };
     });
 
@@ -1752,24 +1731,14 @@ export class CandidatesService {
     const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
 
     const _pConfigs3 = await this.positionRateConfigService.findAll();
-    const _configMap3 = new Map(_pConfigs3.map(c => [c.position, c]));
-    const _pos3 = candidate.approved_positions_pairing?.[0] || '';
-    const _lang3 = candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name;
-    const _cfg3 = _configMap3.get(_pos3);
-    const _agreed3 = candidate.hourly_pay_rate?.toNumber() || 0;
-    const _minH3 = _lang3 === 'Bilingual' ? _cfg3?.hourly_rate_bilingual?.toNumber() ?? null : _cfg3?.hourly_rate_english?.toNumber() ?? null;
-    const _margin3 = _cfg3?.margin_per_hour?.toNumber() ?? null;
-    const _billH3 = findBillRateHourly(_agreed3, _minH3, _margin3);
-    const _billM3 = findBillRateMonthly(_billH3, candidate.employment_type || '');
+    const _configMap3 = buildConfigMap(_pConfigs3);
+    const rates3 = computeCandidateRates(candidate, _configMap3);
 
     const candidateWithFullAvatarUrl = {
       ...candidate,
       avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
-      salary: _billM3,
-      hourlySalary: _billH3,
-      bill_rate_hourly: _billH3,
-      bill_rate_monthly: _billM3,
       employment_type: transformedEmploymentType,
+      ...rates3,
     };
 
     return candidateWithFullAvatarUrl;

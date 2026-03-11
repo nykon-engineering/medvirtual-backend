@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { findBillRateHourly, findBillRateMonthly } from '../../common/utils/salary.util';
+import { buildConfigMap, computeCandidateRates } from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
 import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
 import { changeLabelAvailability } from '../../common/utils/hubspot.util';
@@ -253,27 +253,17 @@ export class HandlerOrganization {
 
     //change candidate employment_type and calculate salary
     const _pCfgsA = await this.positionRateConfigService.findAll();
-    const _cfgMapA = new Map(_pCfgsA.map(c => [c.position, c]));
+    const _cfgMapA = buildConfigMap(_pCfgsA);
     const awaitingDecisionSanitized = awaitingDecision.map((item) => ({
       ...item,
       panelCandidates: item.panelCandidates.map((pc) => {
-        const _pos = pc.candidate.approved_positions_pairing?.[0] || '';
-        const _lang = pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name;
-        const _cfg = _cfgMapA.get(_pos);
-        const _agreed = Number(pc.candidate?.hourly_pay_rate) || 0;
-        const _minH = _lang === 'Bilingual' ? _cfg?.hourly_rate_bilingual?.toNumber() ?? null : _cfg?.hourly_rate_english?.toNumber() ?? null;
-        const _margin = _cfg?.margin_per_hour?.toNumber() ?? null;
-        const _billH = findBillRateHourly(_agreed, _minH, _margin);
-        const _billM = findBillRateMonthly(_billH, pc.candidate.employment_type || '');
+        const rates = computeCandidateRates(pc.candidate, _cfgMapA);
         return {
           ...pc,
           candidate: {
             ...pc.candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-            salary: _billM,
-            hourlySalary: _billH,
-            bill_rate_hourly: _billH,
-            bill_rate_monthly: _billM,
+            ...rates,
             avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
           }
         };
@@ -338,23 +328,13 @@ export class HandlerOrganization {
     result.interviews = interviewSanitized;
 
     const _pCfgsB = await this.positionRateConfigService.findAll();
-    const _cfgMapB = new Map(_pCfgsB.map(c => [c.position, c]));
+    const _cfgMapB = buildConfigMap(_pCfgsB);
     const otherTalentsSalary = otherTalents.map((talent) => {
-      const _pos = talent.approved_positions_pairing?.[0] || '';
-      const _lang = talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name;
-      const _cfg = _cfgMapB.get(_pos);
-      const _agreed = Number(talent?.hourly_pay_rate) || 0;
-      const _minH = _lang === 'Bilingual' ? _cfg?.hourly_rate_bilingual?.toNumber() ?? null : _cfg?.hourly_rate_english?.toNumber() ?? null;
-      const _margin = _cfg?.margin_per_hour?.toNumber() ?? null;
-      const _billH = findBillRateHourly(_agreed, _minH, _margin);
-      const _billM = findBillRateMonthly(_billH, talent.employment_type || '');
+      const rates = computeCandidateRates(talent, _cfgMapB);
       return {
         ...talent,
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
-        salary: _billM,
-        hourlySalary: _billH,
-        bill_rate_hourly: _billH,
-        bill_rate_monthly: _billM,
+        ...rates,
         avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` : null,
       };
     })

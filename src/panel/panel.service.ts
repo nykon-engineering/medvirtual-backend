@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HireRequestStatus, OrganizationStatus, PanelCandidateStatus, PanelStatus } from '@prisma/client';
-import { findBillRateHourly, findBillRateMonthly } from '../common/utils/salary.util';
+import { buildConfigMap, computeCandidateRates } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
@@ -293,26 +293,14 @@ export class PanelService {
         });
 
         const positionConfigs = await this.positionRateConfigService.findAll();
-        const configByPosition = new Map(positionConfigs.map(c => [c.position, c]));
+        const configByPosition = buildConfigMap(positionConfigs);
 
         const failedResume = failedResumeParsing.map(candidate => {
-            const _position = candidate.approved_positions_pairing?.[0] || '';
-            const _language = candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name;
-            const _config = configByPosition.get(_position);
-            const _agreed_hourly = candidate.hourly_pay_rate?.toNumber() || 0;
-            const _min_hourly = _language === 'Bilingual'
-                ? _config?.hourly_rate_bilingual?.toNumber() ?? null
-                : _config?.hourly_rate_english?.toNumber() ?? null;
-            const _margin = _config?.margin_per_hour?.toNumber() ?? null;
-            const _bill_hourly = findBillRateHourly(_agreed_hourly, _min_hourly, _margin);
-            const _bill_monthly = findBillRateMonthly(_bill_hourly, candidate.employment_type || '');
+            const rates = computeCandidateRates(candidate, configByPosition);
             return ({
             ...candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-            salary: _bill_monthly,
-            hourlySalary: _bill_hourly,
-            bill_rate_hourly: _bill_hourly,
-            bill_rate_monthly: _bill_monthly,
+            ...rates,
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,
@@ -340,21 +328,11 @@ export class PanelService {
         });
 
         const CandwithoutHeadshot = withoutHeadshot.map(candidate => {
-            const _pos = candidate.approved_positions_pairing?.[0] || '';
-            const _lang = candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name;
-            const _cfg = configByPosition.get(_pos);
-            const _agreed = candidate.hourly_pay_rate?.toNumber() || 0;
-            const _minH = _lang === 'Bilingual' ? _cfg?.hourly_rate_bilingual?.toNumber() ?? null : _cfg?.hourly_rate_english?.toNumber() ?? null;
-            const _margin = _cfg?.margin_per_hour?.toNumber() ?? null;
-            const _billH = findBillRateHourly(_agreed, _minH, _margin);
-            const _billM = findBillRateMonthly(_billH, candidate.employment_type || '');
+            const rates = computeCandidateRates(candidate, configByPosition);
             return {
               ...candidate,
               employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-              salary: _billM,
-              hourlySalary: _billH,
-              bill_rate_hourly: _billH,
-              bill_rate_monthly: _billM,
+              ...rates,
               avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
               panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
                 title: pc.panel.hireRequest.title,
@@ -499,21 +477,11 @@ export class PanelService {
         });
 
         const processed = candidatesWithInterviews.map(candidate => {
-            const _pos = candidate.approved_positions_pairing?.[0] || '';
-            const _lang = candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name;
-            const _cfg = configByPosition.get(_pos);
-            const _agreed = candidate.hourly_pay_rate?.toNumber() || 0;
-            const _minH = _lang === 'Bilingual' ? _cfg?.hourly_rate_bilingual?.toNumber() ?? null : _cfg?.hourly_rate_english?.toNumber() ?? null;
-            const _margin = _cfg?.margin_per_hour?.toNumber() ?? null;
-            const _billH = findBillRateHourly(_agreed, _minH, _margin);
-            const _billM = findBillRateMonthly(_billH, candidate.employment_type || '');
+            const rates = computeCandidateRates(candidate, configByPosition);
             return {
               ...candidate,
               employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-              salary: _billM,
-              hourlySalary: _billH,
-              bill_rate_hourly: _billH,
-              bill_rate_monthly: _billM,
+              ...rates,
               avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
               panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
                 title: pc.panel.hireRequest.title,
