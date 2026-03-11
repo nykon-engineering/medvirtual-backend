@@ -24,10 +24,11 @@ import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import {
+  findBillRateHourly,
+  findBillRateMonthly,
   findHourlyPerRate,
-  findHourlySalary,
-  findMonthlySalary,
 } from '../common/utils/salary.util';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
@@ -42,6 +43,7 @@ export class HireRequestService {
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
     private readonly openai: OpenaiService,
+    private readonly positionRateConfigService: PositionRateConfigService,
   ) {}
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split("T");
@@ -637,6 +639,9 @@ export class HireRequestService {
     
 
 
+    const _pCfgs_A = await this.positionRateConfigService.findAll();
+    const _cfgMap_A = new Map(_pCfgs_A.map(c => [c.position, c]));
+
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
         ...hr,
@@ -650,41 +655,36 @@ export class HireRequestService {
           interview_date: panel.interviews[0]?.scheduled_date || null,
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
-          panelCandidates: panel.panelCandidates.map(pc => ({
-            ...pc,
-            candidate: {
-              ...pc.candidate,
-              employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-              salary: findMonthlySalary(
-                pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                pc.candidate.languages.length > 1
-                  ? 'Bilingual'
-                  : pc.candidate.languages[0]?.name,
-                pc.candidate.approved_positions_pairing?.[0] || '',
-                pc.candidate.employment_type || ''
-              ),
-              hourlySalary: findHourlySalary(
-                findMonthlySalary(
-                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                  pc.candidate.languages.length > 1
-                    ? 'Bilingual'
-                    : pc.candidate.languages[0]?.name,
-                  pc.candidate.approved_positions_pairing?.[0] || '',
-                  pc.candidate.employment_type || ''
-                ),
-                pc.candidate.employment_type || ''
-              ),
-              avatar: pc.candidate.avatar_url
-                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
-                : null,
-              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
-                panel_id: pcc.panel.id,
-                title: pcc.panel.hireRequest.title,
-                organization_name: pcc.panel.hireRequest.organization.name,
-                status: pcc.status,
-              })) || [],
-            }
-          }))
+          panelCandidates: panel.panelCandidates.map(pc => {
+            const _pos_A = pc.candidate.approved_positions_pairing?.[0] || '';
+            const _lang_A = pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name;
+            const _cfg_A = _cfgMap_A.get(_pos_A);
+            const _agreed_A = pc.candidate.hourly_pay_rate?.toNumber() || 0;
+            const _minH_A = _lang_A === 'Bilingual' ? _cfg_A?.hourly_rate_bilingual?.toNumber() ?? null : _cfg_A?.hourly_rate_english?.toNumber() ?? null;
+            const _margin_A = _cfg_A?.margin_per_hour?.toNumber() ?? null;
+            const _billH_A = findBillRateHourly(_agreed_A, _minH_A, _margin_A);
+            const _billM_A = findBillRateMonthly(_billH_A, pc.candidate.employment_type || '');
+            return {
+              ...pc,
+              candidate: {
+                ...pc.candidate,
+                employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+                salary: _billM_A,
+                hourlySalary: _billH_A,
+                bill_rate_hourly: _billH_A,
+                bill_rate_monthly: _billM_A,
+                avatar: pc.candidate.avatar_url
+                  ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                  : null,
+                panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                  panel_id: pcc.panel.id,
+                  title: pcc.panel.hireRequest.title,
+                  organization_name: pcc.panel.hireRequest.organization.name,
+                  status: pcc.status,
+                })) || [],
+              }
+            };
+          })
         })),
 
         assign_user_id: hr.assign_user_id
@@ -890,6 +890,9 @@ export class HireRequestService {
     });
 
     //Add salary with automatic calculation
+    const _pCfgs_B = await this.positionRateConfigService.findAll();
+    const _cfgMap_B = new Map(_pCfgs_B.map(c => [c.position, c]));
+
     const formatted = {
       ...hireRequest,
       hubspot_pairing_date: 
@@ -908,25 +911,22 @@ export class HireRequestService {
           const years_of_experience = startDate
           ? new Date().getFullYear() - new Date(startDate).getFullYear()
           : 0;
+          const _pos_B = pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '';
+          const _lang_B = pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name;
+          const _cfg_B = _cfgMap_B.get(_pos_B);
+          const _agreed_B = pc.candidate.hourly_pay_rate?.toNumber() || 0;
+          const _minH_B = _lang_B === 'Bilingual' ? _cfg_B?.hourly_rate_bilingual?.toNumber() ?? null : _cfg_B?.hourly_rate_english?.toNumber() ?? null;
+          const _margin_B = _cfg_B?.margin_per_hour?.toNumber() ?? null;
+          const _billH_B = findBillRateHourly(_agreed_B, _minH_B, _margin_B);
+          const _billM_B = findBillRateMonthly(_billH_B, pc.candidate.employment_type || '');
           return {
             ...pc,
             candidate:{
               ...pc.candidate,
-              salary: findMonthlySalary(
-                pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-                pc.candidate.employment_type || ''
-              ),
-              hourlySalary: findHourlySalary(
-                findMonthlySalary(
-                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                  pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-                  pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-                  pc.candidate.employment_type || ''
-                ),
-                pc.candidate.employment_type || ''
-              ),
+              salary: _billM_B,
+              hourlySalary: _billH_B,
+              bill_rate_hourly: _billH_B,
+              bill_rate_monthly: _billM_B,
               years_of_experience: years_of_experience,
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
@@ -1116,6 +1116,9 @@ export class HireRequestService {
       }
     });
 
+    const _pCfgs_C = await this.positionRateConfigService.findAll();
+    const _cfgMap_C = new Map(_pCfgs_C.map(c => [c.position, c]));
+
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
         ...hr,
@@ -1129,40 +1132,35 @@ export class HireRequestService {
           interview_date: panel.interviews[0]?.scheduled_date || null,
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
-          panelCandidates: panel.panelCandidates.map(pc => ({
-            ...pc,
-            candidate: {
-              ...pc.candidate,
-              salary: findMonthlySalary(
-                pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                pc.candidate.languages.length > 1
-                  ? 'Bilingual'
-                  : pc.candidate.languages[0]?.name,
-                pc.candidate.approved_positions_pairing?.[0] || '',
-                pc.candidate.employment_type || ''
-              ),
-              hourlySalary: findHourlySalary(
-                findMonthlySalary(
-                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                  pc.candidate.languages.length > 1
-                    ? 'Bilingual'
-                    : pc.candidate.languages[0]?.name,
-                  pc.candidate.approved_positions_pairing?.[0] || '',
-                  pc.candidate.employment_type || ''
-                ),
-                pc.candidate.employment_type || ''
-              ),
-              avatar: pc.candidate.avatar_url
-                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
-                : null,
-              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
-                panel_id: pcc.panel.id,
-                title: pcc.panel.hireRequest.title,
-                organization_name: pcc.panel.hireRequest.organization.name,
-                status: pcc.status,
-              })) || [],
-            }
-          }))
+          panelCandidates: panel.panelCandidates.map(pc => {
+            const _pos_C = pc.candidate.approved_positions_pairing?.[0] || '';
+            const _lang_C = pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name;
+            const _cfg_C = _cfgMap_C.get(_pos_C);
+            const _agreed_C = pc.candidate.hourly_pay_rate?.toNumber() || 0;
+            const _minH_C = _lang_C === 'Bilingual' ? _cfg_C?.hourly_rate_bilingual?.toNumber() ?? null : _cfg_C?.hourly_rate_english?.toNumber() ?? null;
+            const _margin_C = _cfg_C?.margin_per_hour?.toNumber() ?? null;
+            const _billH_C = findBillRateHourly(_agreed_C, _minH_C, _margin_C);
+            const _billM_C = findBillRateMonthly(_billH_C, pc.candidate.employment_type || '');
+            return {
+              ...pc,
+              candidate: {
+                ...pc.candidate,
+                salary: _billM_C,
+                hourlySalary: _billH_C,
+                bill_rate_hourly: _billH_C,
+                bill_rate_monthly: _billM_C,
+                avatar: pc.candidate.avatar_url
+                  ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                  : null,
+                panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                  panel_id: pcc.panel.id,
+                  title: pcc.panel.hireRequest.title,
+                  organization_name: pcc.panel.hireRequest.organization.name,
+                  status: pcc.status,
+                })) || [],
+              }
+            };
+          })
         })),
 
         assign_user_id: hr.assign_user_id
@@ -2178,32 +2176,31 @@ export class HireRequestService {
     scoredCandidates.sort((a, b) => b.score - a.score);
 
     //Add salary with automatic calculation
-    const candidatesWithSalary = scoredCandidates.map(c => ({
+    const _pCfgs_D = await this.positionRateConfigService.findAll();
+    const _cfgMap_D = new Map(_pCfgs_D.map(c => [c.position, c]));
+
+    const candidatesWithSalary = scoredCandidates.map(c => {
+      const _pos_D = c.approved_positions_pairing && c.approved_positions_pairing.length > 0 ? c.approved_positions_pairing[0] : '';
+      const _lang_D = c.languages.length > 1 ? 'Bilingual' : c.languages[0]?.name;
+      const _cfg_D = _cfgMap_D.get(_pos_D);
+      const _agreed_D = c.hourly_pay_rate?.toNumber() || 0;
+      const _minH_D = _lang_D === 'Bilingual' ? _cfg_D?.hourly_rate_bilingual?.toNumber() ?? null : _cfg_D?.hourly_rate_english?.toNumber() ?? null;
+      const _margin_D = _cfg_D?.margin_per_hour?.toNumber() ?? null;
+      const _billH_D = findBillRateHourly(_agreed_D, _minH_D, _margin_D);
+      const _billM_D = findBillRateMonthly(_billH_D, c.employment_type || '');
+      return ({
       ...c,
-      salary: findMonthlySalary(
-        c.hourly_pay_rate?.toNumber() || 0,
-        c.languages.length > 1 ? 'Bilingual' : c.languages[0]?.name,
-        c.approved_positions_pairing && c.approved_positions_pairing.length > 0 ? c.approved_positions_pairing[0] : '',
-        c.employment_type || ''
-      ),
-      hourlySalary: findHourlySalary(
-        findMonthlySalary(
-          c.hourly_pay_rate?.toNumber() || 0,
-          c.languages.length > 1
-            ? 'Bilingual'
-            : c.languages[0]?.name,
-          c.approved_positions_pairing?.[0] || '',
-          c.employment_type || ''
-        ),
-        c.employment_type || ''
-      ),
+      salary: _billM_D,
+      hourlySalary: _billH_D,
+      bill_rate_hourly: _billH_D,
+      bill_rate_monthly: _billM_D,
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
       panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
         organization_name: pc.panel.hireRequest.organization.name,
         
       })) : []
-    }))
+    }); })
   
     return candidatesWithSalary;
   }
@@ -2628,36 +2625,36 @@ export class HireRequestService {
     });
 
 
+    const _pCfgs_E = await this.positionRateConfigService.findAll();
+    const _cfgMap_E = new Map(_pCfgs_E.map(c => [c.position, c]));
+
     const result = panels.map(panel => ({
       ...panel,
       interview_date: panel.interviews[0]?.scheduled_date || null,
       interview_link: panel.interviews[0]?.link || null,
       interviews: undefined,
-      panelCandidates: panel.panelCandidates.map(pc => ({
-        ...pc,
-        candidate: {
-          ...pc.candidate,
-          employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-          salary: findMonthlySalary(
-            pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
-            pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-            pc.candidate.employment_type || ''
-          ),
-          hourlySalary: findHourlySalary(
-            findMonthlySalary(
-              pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
-              pc.candidate.languages && pc.candidate.languages.length > 1
-                ? 'Bilingual'
-                : pc.candidate.languages[0]?.name,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-              pc.candidate.employment_type || ''
-            ),
-            pc.candidate.employment_type || ''
-          ),
-          avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-        }
-      }))
+      panelCandidates: panel.panelCandidates.map(pc => {
+        const _pos_E = pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '';
+        const _lang_E = pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name;
+        const _cfg_E = _cfgMap_E.get(_pos_E);
+        const _agreed_E = pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0;
+        const _minH_E = _lang_E === 'Bilingual' ? _cfg_E?.hourly_rate_bilingual?.toNumber() ?? null : _cfg_E?.hourly_rate_english?.toNumber() ?? null;
+        const _margin_E = _cfg_E?.margin_per_hour?.toNumber() ?? null;
+        const _billH_E = findBillRateHourly(_agreed_E, _minH_E, _margin_E);
+        const _billM_E = findBillRateMonthly(_billH_E, pc.candidate.employment_type || '');
+        return {
+          ...pc,
+          candidate: {
+            ...pc.candidate,
+            employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+            salary: _billM_E,
+            hourlySalary: _billH_E,
+            bill_rate_hourly: _billH_E,
+            bill_rate_monthly: _billM_E,
+            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+          }
+        };
+      })
       
     }));
     
@@ -3357,6 +3354,9 @@ export class HireRequestService {
     
     if (!panels || panels.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
 
+    const _pCfgs_F = await this.positionRateConfigService.findAll();
+    const _cfgMap_F = new Map(_pCfgs_F.map(c => [c.position, c]));
+
     const result = panels.map(panel => ({
       ...panel,
       panelCandidates: panel.panelCandidates.map(pc => {
@@ -3364,28 +3364,23 @@ export class HireRequestService {
         const years_of_experience = startDate
           ? new Date().getFullYear() - new Date(startDate).getFullYear()
           : 0;
+        const _pos_F = pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '';
+        const _lang_F = pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name;
+        const _cfg_F = _cfgMap_F.get(_pos_F);
+        const _agreed_F = pc.candidate.hourly_pay_rate?.toNumber() || 0;
+        const _minH_F = _lang_F === 'Bilingual' ? _cfg_F?.hourly_rate_bilingual?.toNumber() ?? null : _cfg_F?.hourly_rate_english?.toNumber() ?? null;
+        const _margin_F = _cfg_F?.margin_per_hour?.toNumber() ?? null;
+        const _billH_F = findBillRateHourly(_agreed_F, _minH_F, _margin_F);
+        const _billM_F = findBillRateMonthly(_billH_F, pc.candidate.employment_type || '');
         return {
           ...pc,
           candidate: {
             ...pc.candidate,
             years_of_experience,
-            salary: findMonthlySalary(
-              pc.candidate.hourly_pay_rate?.toNumber() || 0,
-              pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-              pc.candidate.employment_type || ''
-            ),
-            hourlySalary: findHourlySalary(
-              findMonthlySalary(
-                pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
-                pc.candidate.languages && pc.candidate.languages.length > 1
-                  ? 'Bilingual'
-                  : pc.candidate.languages[0]?.name,
-                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-                pc.candidate.employment_type || ''
-              ),
-              pc.candidate.employment_type || ''
-            ),
+            salary: _billM_F,
+            hourlySalary: _billH_F,
+            bill_rate_hourly: _billH_F,
+            bill_rate_monthly: _billM_F,
             avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
           },
         };
@@ -3530,7 +3525,9 @@ export class HireRequestService {
     const panelCandidates = panel.panelCandidates;
 
     const filteredCandidates = panelCandidates.filter(pc => 
-      pc.candidate.pipeline_status === '1172847191' // show just Endorsed via platform candidates
+      pc.candidate.pipeline_status === '1172847191'|| //endorsed 
+      pc.candidate.pipeline_status === '261075105' || // available candidates - full time
+      pc.candidate.pipeline_status === '1087596819' // Available candidates - Part-time
     );
     const availableCandidates = (
       await Promise.all(
@@ -3560,32 +3557,32 @@ export class HireRequestService {
 
     
 
-    const mappedCandidates = availableCandidates.map(pc => ({
-      ...pc.candidate,
-      panelStatus: pc.status,
-      panelId: panel.id,
-      panelScheduledDate: panel.scheduled_date,
-      isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
-      salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(
-        pc.candidate.hourly_pay_rate.toNumber(),
-        pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-        pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-        pc.candidate.employment_type || ''
-      ) : null,
-      hourlySalary: pc.candidate.hourly_pay_rate ? findHourlySalary(
-        findMonthlySalary(
-          pc.candidate.hourly_pay_rate.toNumber(),
-          pc.candidate.languages && pc.candidate.languages.length > 1
-            ? 'Bilingual'
-            : pc.candidate.languages[0]?.name,
-          pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-          pc.candidate.employment_type || ''
-        ),
-        pc.candidate.employment_type || ''
-      ) : null,
-      avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-      employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-    }));
+    const _pCfgs_G = await this.positionRateConfigService.findAll();
+    const _cfgMap_G = new Map(_pCfgs_G.map(c => [c.position, c]));
+
+    const mappedCandidates = availableCandidates.map(pc => {
+      const _pos_G = pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '';
+      const _lang_G = pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name;
+      const _cfg_G = _cfgMap_G.get(_pos_G);
+      const _agreed_G = pc.candidate.hourly_pay_rate?.toNumber() || 0;
+      const _minH_G = _lang_G === 'Bilingual' ? _cfg_G?.hourly_rate_bilingual?.toNumber() ?? null : _cfg_G?.hourly_rate_english?.toNumber() ?? null;
+      const _margin_G = _cfg_G?.margin_per_hour?.toNumber() ?? null;
+      const _billH_G = findBillRateHourly(_agreed_G, _minH_G, _margin_G);
+      const _billM_G = findBillRateMonthly(_billH_G, pc.candidate.employment_type || '');
+      return {
+        ...pc.candidate,
+        panelStatus: pc.status,
+        panelId: panel.id,
+        panelScheduledDate: panel.scheduled_date,
+        isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
+        salary: _billM_G,
+        hourlySalary: _billH_G,
+        bill_rate_hourly: _billH_G,
+        bill_rate_monthly: _billM_G,
+        avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+        employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+      };
+    });
 
     return mappedCandidates;
   }

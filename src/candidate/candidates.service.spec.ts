@@ -11,6 +11,7 @@ import axios from 'axios';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -95,6 +96,10 @@ const notificationsMock = {
   notifyEndorseCandidates: jest.fn(),
 }
 
+const positionRateConfigMock = {
+  findAll: jest.fn().mockResolvedValue([]),
+}
+
 describe('CandidatesService', () => {
   let service: CandidatesService;
   let prisma: PrismaService;
@@ -117,6 +122,7 @@ describe('CandidatesService', () => {
         { provide: MailService, useValue: MailMock },
         { provide: HireRequestService, useValue: HireRequestMock },
         { provide: NotificationsService, useValue: notificationsMock },
+        { provide: PositionRateConfigService, useValue: positionRateConfigMock },
       ],
     }).compile();
 

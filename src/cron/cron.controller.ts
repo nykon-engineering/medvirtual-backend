@@ -78,4 +78,15 @@ export class CronController {
         }
     }
 
+    @Get('sync-positions-from-hubspot')
+    @ApiProperty({ description: 'Check for new VA positions in HubSpot and create them in PositionRateConfig if missing' })
+    async syncPositionsFromHubspot() {
+        const result = await this.cron.syncPositionsFromHubspot();
+        return {
+            status: 200,
+            message: 'Position sync completed successfully',
+            data: result,
+        };
+    }
+
 }

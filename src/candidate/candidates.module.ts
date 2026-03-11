@@ -9,12 +9,13 @@ import { HubspotModule } from '../hubspot/hubspot.module';
 import { MailModule } from '../mail/mail.module';
 import { HireRequestModule } from '../hire-request/hire-request.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PositionRateConfigModule } from '../position-rate-config/position-rate-config.module';
 
 @Module({
   controllers: [CandidatesController],
   providers: [CandidatesService],
   imports: [forwardRef(() => HubspotModule),
-    PrismaModule, GoogledriveModule, S3Module, OpenaiModule, MailModule, HireRequestModule, NotificationsModule],
+    PrismaModule, GoogledriveModule, S3Module, OpenaiModule, MailModule, HireRequestModule, NotificationsModule, PositionRateConfigModule],
   exports: [CandidatesService],
 })
 export class CandidatesModule {}

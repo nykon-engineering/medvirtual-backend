@@ -102,8 +102,7 @@ export class GoogledriveService {
           },
       });
       throw new BadRequestException(`Error getting valid access token: ${error.message}`);
-    }
-   
+    }   
   }
 
 

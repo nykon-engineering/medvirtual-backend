@@ -5,10 +5,11 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { HandlerOrganization } from './handlers/organization';
 import { HandlerClient } from './handlers/client';
 import { HireRequestModule } from '../hire-request/hire-request.module';
+import { PositionRateConfigModule } from '../position-rate-config/position-rate-config.module';
 
 @Module({
   controllers: [DashboardController],
   providers: [DashboardService, HandlerOrganization, HandlerClient],
-  imports: [PrismaModule, HireRequestModule]
+  imports: [PrismaModule, HireRequestModule, PositionRateConfigModule]
 })
 export class DashboardModule {}

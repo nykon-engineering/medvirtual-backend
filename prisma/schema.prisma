@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -584,6 +584,18 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+
+model PositionRateConfig {
+  id                     String   @id @default(uuid())
+  position               String   @unique
+  floor_price_english    Decimal?
+  hourly_rate_english    Decimal?
+  floor_price_bilingual  Decimal?
+  hourly_rate_bilingual  Decimal?
+  margin_per_hour        Decimal?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
 
 enum Role {
   organization_admin

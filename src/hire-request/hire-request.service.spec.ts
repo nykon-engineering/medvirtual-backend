@@ -11,6 +11,7 @@ import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { OpenaiService } from '../openai/openai.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
@@ -97,6 +98,10 @@ const openAIServiceMock = {
   generateTextSummary: jest.fn(),
 };
 
+const positionRateConfigMock = {
+  findAll: jest.fn().mockResolvedValue([]),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
@@ -111,6 +116,7 @@ describe('HireRequestService', () => {
         { provide: HubspotService, useValue: hubspotServiceMock },
         { provide: NotificationsService, useValue: notificationsServiceMock },
         { provide: OpenaiService, useValue: openAIServiceMock },
+        { provide: PositionRateConfigService, useValue: positionRateConfigMock },
       ],
     }).compile();
 

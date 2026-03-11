@@ -7,8 +7,11 @@ import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import systemReport from '../common/utils/email-templates/system-report';
 import clientUsersDeactivationReport from '../common/utils/email-templates/client-users-deactivation-report';
 import cronJobErrorReport from '../common/utils/email-templates/cron-job-error-report';
+import newPositionsAlert from '../common/utils/email-templates/new-positions-alert';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import { HireRequestService } from '../hire-request/hire-request.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 type Event = {
     objectId?: string;
@@ -21,7 +24,9 @@ export class CronService {
         private readonly prisma: PrismaService,
         private readonly candidate: CandidatesService,
         private readonly objectCreation: HandlerObjectCreation,
-        private readonly mailService: MailService
+        private readonly mailService: MailService,
+        private readonly hireRequestService: HireRequestService,
+        private readonly positionRateConfigService: PositionRateConfigService,
     ){}
 
     
@@ -442,6 +447,47 @@ export class CronService {
             return true;
         } catch (error) {
             console.error('Error syncing staff HubSpot deal stages:', error);
+            return false;
+        }
+    }
+
+    async syncPositionsFromHubspot(): Promise<boolean> {
+        try {
+            console.log('Starting syncPositionsFromHubspot cron job...');
+
+            const hubspotOptions = await this.hireRequestService.getVATypes();
+            const hubspotPositions: string[] = hubspotOptions.map((opt: { label: string }) => opt.label);
+
+            const existingConfigs = await this.positionRateConfigService.findAll();
+            const existingPositions = new Set(existingConfigs.map((c) => c.position));
+
+            const newPositions = hubspotPositions.filter((p) => !existingPositions.has(p));
+
+            if (newPositions.length === 0) {
+                console.log('syncPositionsFromHubspot: no new positions found.');
+                return true;
+            }
+
+            for (const position of newPositions) {
+                await this.prisma.positionRateConfig.create({
+                    data: { position },
+                });
+                console.log(`syncPositionsFromHubspot: created new position "${position}"`);
+            }
+
+            const emailBody = newPositionsAlert(newPositions);
+            await this.mailService.sendMail({
+                from: 'MedVirtual <noreply@medvirtual.ai>',
+                to: 'shayan@regenta.ai',
+                cc: ['paulo@regenta.ai', 'hanieh@medvirtual.ai'],
+                subject: '[Action Required] New VA Positions Found',
+                html: emailBody,
+            });
+
+            console.log(`syncPositionsFromHubspot: alert sent for ${newPositions.length} new position(s).`);
+            return true;
+        } catch (error) {
+            console.error('Error in syncPositionsFromHubspot:', error);
             return false;
         }
     }

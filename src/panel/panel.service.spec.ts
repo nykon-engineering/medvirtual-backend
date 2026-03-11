@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PanelService } from './panel.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 describe('PanelService', () => {
   let service: PanelService;
@@ -33,12 +34,20 @@ describe('PanelService', () => {
       },
     };
 
+    const positionRateConfigMock = {
+      findAll: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PanelService,
         {
           provide: PrismaService,
           useValue: prismaMock,
+        },
+        {
+          provide: PositionRateConfigService,
+          useValue: positionRateConfigMock,
         },
       ],
     }).compile();
