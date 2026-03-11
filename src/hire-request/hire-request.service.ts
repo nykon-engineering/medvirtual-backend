@@ -2608,7 +2608,17 @@ export class HireRequestService {
                   },
                 },
               },
-              
+              //if the hireRequest was created by the client (organization), always show it regardless of readable
+              {
+                hireRequest: {
+                  createdBy: {
+                    role: {
+                      in: ['organization_admin', 'organization_super_admin'],
+                    },
+                  },
+                },
+              },
+
             ],
           },
         ],
