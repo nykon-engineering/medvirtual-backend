@@ -65,6 +65,7 @@ export class HireRequestService {
         scheduled_date: true,
         decided_date: true,
         status: true,
+        readable: true,
         panelCandidates: {
           select: {
             id: true,
