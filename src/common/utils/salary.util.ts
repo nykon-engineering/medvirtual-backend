@@ -7,9 +7,12 @@ const PART_TIME_EMPLOYMENT_TYPE_CODE = '1087596819';
 
 /** Minimal shape needed from a PositionRateConfig record. */
 export interface PositionRateConfigLike {
-  floor_price_english: { toNumber(): number } | number | null;
-  floor_price_bilingual: { toNumber(): number } | number | null;
-  margin_per_hour: { toNumber(): number } | number | null;
+  medVirtual_floor_price_english: { toNumber(): number } | number | null;
+  berryVirtual_floor_price_english: { toNumber(): number } | number | null;
+  medVirtual_floor_price_bilingual: { toNumber(): number } | number | null;
+  berryVirtual_floor_price_bilingual: { toNumber(): number } | number | null;
+  medVirtual_margin_per_hour: { toNumber(): number } | number | null;
+  berryVirtual_margin_per_hour: { toNumber(): number } | number | null;
 }
 
 /** Minimal candidate shape required by computeCandidateRates. */
@@ -18,6 +21,7 @@ export interface CandidateLike {
   approved_positions_pairing: string[] | null;
   languages: { name: string }[];
   employment_type: string | null;
+  business_unit: string | null;
 }
 
 /** Output of computeCandidateRates. */
@@ -38,23 +42,33 @@ function toNum(v: { toNumber(): number } | number | null | undefined): number | 
   return typeof v === 'number' ? v : v.toNumber();
 }
 
+/** Returns the correct floor price field key based on business unit and language tier. */
+function floorPriceKey(
+  isBilingual: boolean,
+  isBerry: boolean,
+): keyof PositionRateConfigLike {
+  if (isBilingual) {
+    return isBerry ? 'berryVirtual_floor_price_bilingual' : 'medVirtual_floor_price_bilingual';
+  }
+  return isBerry ? 'berryVirtual_floor_price_english' : 'medVirtual_floor_price_english';
+}
+
 /**
  * Fallback: returns the config record with the lowest floor price for the given
- * language tier, scanning the entire map.
+ * language tier and business unit, scanning the entire map.
  * Used when a candidate's position is not found in the config table.
  */
 function findMinFloorConfig(
   configMap: Map<string, PositionRateConfigLike>,
   isBilingual: boolean,
+  isBerry: boolean,
 ): PositionRateConfigLike | undefined {
+  const key = floorPriceKey(isBilingual, isBerry);
   let minFloor: number | null = null;
   let minConfig: PositionRateConfigLike | undefined;
 
   for (const cfg of configMap.values()) {
-    const floor = isBilingual
-      ? toNum(cfg.floor_price_bilingual)
-      : toNum(cfg.floor_price_english);
-
+    const floor = toNum(cfg[key] as { toNumber(): number } | number | null);
     if (floor !== null && (minFloor === null || floor < minFloor)) {
       minFloor = floor;
       minConfig = cfg;
@@ -83,13 +97,14 @@ export function computeCandidateRates(
 ): CandidateRates {
   const position = candidate.approved_positions_pairing?.[0] ?? '';
   const isBilingual = (candidate.languages?.length ?? 0) > 1;
-  const config = configMap.get(position) ?? findMinFloorConfig(configMap, isBilingual); // here I get the lowest floor config for the candidate's language tier as fallback if their position is not found in the config map
+  const isBerry = candidate.business_unit?.toLowerCase().includes('berry') ?? false;
+  const config = configMap.get(position) ?? findMinFloorConfig(configMap, isBilingual, isBerry);
 
   const agreed = toNum(candidate.hourly_pay_rate) ?? 0;
-  const minH = isBilingual
-    ? toNum(config?.floor_price_bilingual)
-    : toNum(config?.floor_price_english);
-  const margin = toNum(config?.margin_per_hour) || Number(process.env.CANDIDATE_COST_PER_HOUR);
+  const key = floorPriceKey(isBilingual, isBerry);
+  const minH = toNum(config?.[key] as { toNumber(): number } | number | null);
+  const marginKey = isBerry ? 'berryVirtual_margin_per_hour' : 'medVirtual_margin_per_hour';
+  const margin = toNum(config?.[marginKey] as { toNumber(): number } | number | null) || Number(process.env.CANDIDATE_COST_PER_HOUR);
 
   const billH = findBillRateHourly(agreed, minH, margin); //5, 12.5, 9
   const billM = findBillRateMonthly(billH, candidate.employment_type ?? '');
@@ -150,12 +165,6 @@ export function findBillRateMonthly(
 }
 
 // ─── Legacy functions (still in use, kept for compatibility) ──────────────────
-
-//Used to get min and max salary range for add in filter
-export function findJustMonthlySalary(hourly_pay_rate: number): number {
-  if(!hourly_pay_rate || hourly_pay_rate <= 0 || isNaN(hourly_pay_rate)) return 0;
-  return Number(process.env.CANDIDATE_HOUR_PER_MONTH) * (hourly_pay_rate + Number(process.env.CANDIDATE_COST_PER_HOUR));
-}
 
 export function findHourlyPerRate(salary: number): number {
   return salary / Number(process.env.CANDIDATE_HOUR_PER_MONTH) - Number(process.env.CANDIDATE_COST_PER_HOUR);

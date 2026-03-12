@@ -4,25 +4,30 @@ export class UpdatePositionRateConfigDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  floor_price_english?: number;
+  medVirtual_floor_price_english?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  hourly_rate_english?: number;
+  berryVirtual_floor_price_english?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  floor_price_bilingual?: number;
+  medVirtual_floor_price_bilingual?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  hourly_rate_bilingual?: number;
+  berryVirtual_floor_price_bilingual?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  margin_per_hour?: number;
+  medVirtual_margin_per_hour?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  berryVirtual_margin_per_hour?: number;
 }

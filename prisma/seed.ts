@@ -73,11 +73,12 @@ async function main() {
       update: {},
       create: {
         position,
-        floor_price_english: floorPriceEnglishHourly,
-        floor_price_bilingual: floorPriceBilingualHourly,
-        hourly_rate_english: null,
-        hourly_rate_bilingual: null,
-        margin_per_hour: null,
+        medVirtual_floor_price_english: floorPriceEnglishHourly,
+        berryVirtual_floor_price_english: floorPriceEnglishHourly,
+        medVirtual_floor_price_bilingual: floorPriceBilingualHourly,
+        berryVirtual_floor_price_bilingual: floorPriceBilingualHourly,
+        medVirtual_margin_per_hour: 9,
+        berryVirtual_margin_per_hour: 9,
       },
     });
   }

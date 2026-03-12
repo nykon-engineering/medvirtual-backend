@@ -16,7 +16,7 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { buildConfigMap, computeCandidateRates, findHourlyPerRate, findJustMonthlySalary } from '../common/utils/salary.util';
+import { buildConfigMap, computeCandidateRates, findHourlyPerRate } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -411,6 +411,7 @@ export class CandidatesService {
         }
       },
       approved_positions_pairing: true,
+      business_unit: true,
       selectedInInterviews: {
         select: {
           scheduled_date: true,
@@ -617,6 +618,7 @@ export class CandidatesService {
         }
       },
       approved_positions_pairing: true,
+      business_unit: true,
       experiences: {
         orderBy: { start_date: Prisma.SortOrder.desc },
         select: {
@@ -1020,37 +1022,6 @@ export class CandidatesService {
             },
             distinct: ['skill_name'],
           });
-
-        } else if (field === 'salary_range') {
-          const max = await this.prisma.candidate.aggregate({
-            _max: {
-              hourly_pay_rate: true,
-            },
-            where: {
-              pipeline_status: {
-                in: ['1087596819', '261075105'],
-              },
-            },
-          });
-
-          const min = await this.prisma.candidate.aggregate({
-            _min: {
-              hourly_pay_rate: true,
-            },
-            where: {
-              pipeline_status: {
-                in: ['1087596819', '261075105'],
-              },
-            },
-          });
-          returned = {
-            min: min._min.hourly_pay_rate || 0,
-            salary_min: findJustMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
-            max: max._max.hourly_pay_rate || 0,
-            salary_max: findJustMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
-          };
-
-          result[field] = returned;
 
         } else if (field === 'approved_positions_pairing') {
           returned = await this.prisma.candidate.findMany({
@@ -1573,6 +1544,7 @@ export class CandidatesService {
             }
           },
           approved_positions_pairing: true,
+          business_unit: true,
         },
       }),
       this.prisma.candidate.count({ where: whereClauseForCount }), // Count available candidates only by pipeline_status
@@ -1698,6 +1670,7 @@ export class CandidatesService {
           }
         },
         approved_positions_pairing: true,
+        business_unit: true,
         panelCandidates: {
         select: {
           id: true,

@@ -189,6 +189,7 @@ describe('CandidatesService', () => {
         employment_type: 'Full Time',
         educations: [{ degree: 'BSc', institution: 'University', year: '2020' }],
         approved_positions_pairing: ['Test'],
+        business_unit: 'BerryVirtual',
         experiences: [
           {
             company: 'Company A',
@@ -318,6 +319,7 @@ describe('CandidatesService', () => {
             },
           },
           approved_positions_pairing: true,
+          business_unit: true,
           experiences: {
             orderBy: { start_date: 'desc' },
             select: {

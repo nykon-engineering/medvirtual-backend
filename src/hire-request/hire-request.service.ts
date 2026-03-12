@@ -102,6 +102,7 @@ export class HireRequestService {
                 avatar_url: true,
                 gender: true,
                 approved_positions_pairing: true,
+                business_unit: true,
                 video_link: true,
                 languages:{
                   select:{
@@ -503,6 +504,7 @@ export class HireRequestService {
                       hourly_pay_rate: true,
                       avatar_url: true,
                       approved_positions_pairing: true,
+                      business_unit: true,
                       video_link: true,
                       employment_type: true,
 
@@ -776,6 +778,7 @@ export class HireRequestService {
                     organization_id: true,
                     avatar_url: true,
                     approved_positions_pairing: true,
+                    business_unit: true,
                     video_link: true,
                     languages: {
                       select: {
@@ -1029,6 +1032,7 @@ export class HireRequestService {
                     hourly_pay_rate: true,
                     avatar_url: true,
                     approved_positions_pairing: true,
+                    business_unit: true,
                     video_link: true,
                     employment_type: true,
                     skills: {
@@ -2007,6 +2011,7 @@ export class HireRequestService {
         avatar_url: true,
         gender: true,
         approved_positions_pairing: true,
+        business_unit: true,
 
         //Va score cards fields
         active_listening_and_comprehension_demonstrated: true,
@@ -3451,6 +3456,7 @@ export class HireRequestService {
                 years_of_experience: true,
                 avatar_url: true,
                 approved_positions_pairing: true,
+                business_unit: true,
                 video_link: true,
                 languages: {
                   select: { name: true },

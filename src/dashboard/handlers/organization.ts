@@ -47,6 +47,7 @@ export class HandlerOrganization {
       avatar_url: true,
       gender: true,
       approved_positions_pairing: true,
+      business_unit: true,
       video_link: true,
       languages: {
         select: {
@@ -225,6 +226,7 @@ export class HandlerOrganization {
                 skills:true,
                 languages: true,
                 approved_positions_pairing: true,
+                business_unit: true,
                 avatar_url: true,
               },
             },

@@ -586,15 +586,16 @@ model PasswordResetToken {
 
 
 model PositionRateConfig {
-  id                     String   @id @default(uuid())
-  position               String   @unique
-  floor_price_english    Decimal?
-  hourly_rate_english    Decimal?
-  floor_price_bilingual  Decimal?
-  hourly_rate_bilingual  Decimal?
-  margin_per_hour        Decimal?
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                                  String   @id @default(uuid())
+  position                            String   @unique
+  medVirtual_floor_price_english      Decimal?
+  medVirtual_floor_price_bilingual    Decimal?
+  medVirtual_margin_per_hour          Decimal?
+  berryVirtual_floor_price_english    Decimal?
+  berryVirtual_floor_price_bilingual  Decimal?
+  berryVirtual_margin_per_hour         Decimal?
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
 }
 
 enum Role {

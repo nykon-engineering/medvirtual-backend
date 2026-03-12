@@ -62,6 +62,7 @@ export class PanelService {
                 }
             },
             approved_positions_pairing: true,
+            business_unit: true,
             experiences: {
                 orderBy: { start_date: 'desc' as const },
                 select: {

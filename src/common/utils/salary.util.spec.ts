@@ -2,7 +2,6 @@ import {
   findPayRateMonthly,
   findBillRateHourly,
   findBillRateMonthly,
-  findJustMonthlySalary,
 } from './salary.util';
 
 const FULL_TIME_HOURS = 176;
@@ -79,36 +78,5 @@ describe('salary.util', () => {
     });
   });
 
-  describe('findJustMonthlySalary (legacy)', () => {
-    const originalEnv = process.env;
-
-    beforeEach(() => {
-      process.env = {
-        ...originalEnv,
-        CANDIDATE_HOUR_PER_MONTH: '160',
-        CANDIDATE_COST_PER_HOUR: '2',
-      };
-    });
-
-    afterEach(() => {
-      process.env = originalEnv;
-    });
-
-    it('returns 0 for falsy hourly_pay_rate', () => {
-      expect(findJustMonthlySalary(0)).toBe(0);
-    });
-
-    it('returns 0 for negative hourly_pay_rate', () => {
-      expect(findJustMonthlySalary(-5)).toBe(0);
-    });
-
-    it('returns 0 for NaN', () => {
-      expect(findJustMonthlySalary(NaN)).toBe(0);
-    });
-
-    it('calculates hours * (rate + cost) for valid rate', () => {
-      const expected = 160 * (10 + 2);
-      expect(findJustMonthlySalary(10)).toBe(expected);
-    });
-  });
+  
 });
