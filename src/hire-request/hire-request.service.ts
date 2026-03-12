@@ -2431,6 +2431,7 @@ export class HireRequestService {
       console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
     }
 
+    //Send email to the Sourcing Assignee that the panel is ready (non-blocking)
     try {
       const result = await this.notifications.notifyHireRequestPanelReady(data.hireRequest_id);
       console.log(`[notifications] Hire request Panel Ready notification sent successfully:`, result);
@@ -2531,6 +2532,11 @@ export class HireRequestService {
           {
             hireRequest: {
               org_id: user.organization_id || undefined,
+            },
+          },
+          {
+            hireRequest: {
+              status: { not: HireRequestStatus.deleted },
             },
           },
           {
