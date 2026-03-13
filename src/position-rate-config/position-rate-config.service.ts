@@ -6,15 +6,20 @@ import { UpdatePositionRateConfigDto } from './dto/update-position-rate-config.d
 export class PositionRateConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(page = 1, perPage = 10) {
+  async findAll(page = 1, perPage = 10, search = '') {
     const skip = (page - 1) * perPage;
+    const where = search
+      ? { position: { contains: search, mode: 'insensitive' as const } }
+      : undefined;
+
     const [data, total] = await this.prisma.$transaction([
       this.prisma.positionRateConfig.findMany({
+        where,
         orderBy: { position: 'asc' },
         skip,
         take: perPage,
       }),
-      this.prisma.positionRateConfig.count(),
+      this.prisma.positionRateConfig.count({ where }),
     ]);
 
     return {

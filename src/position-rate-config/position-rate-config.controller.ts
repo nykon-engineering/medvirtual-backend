@@ -15,10 +15,12 @@ export class PositionRateConfigController {
   findAll(
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
+    @Query('search') search?: string,
   ) {
     return this.service.findAll(
       page ? Number(page) : 1,
       perPage ? Number(perPage) : 10,
+      search ?? '',
     );
   }
 
