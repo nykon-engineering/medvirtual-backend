@@ -293,7 +293,7 @@ export class PanelService {
             select: selectCandidates
         });
 
-        const positionConfigs = await this.positionRateConfigService.findAll();
+        const positionConfigs = await this.positionRateConfigService.findAllUnpaginated();
         const configByPosition = buildConfigMap(positionConfigs);
 
         const failedResume = failedResumeParsing.map(candidate => {

@@ -45,7 +45,8 @@ describe('CronService', () => {
     };
 
     positionRateConfigServiceMock = {
-      findAll: jest.fn().mockResolvedValue([]),
+      findAll: jest.fn().mockResolvedValue({ status: 200, data: [], meta: { total: 0, page: 1, perPage: 10, totalPages: 0 } }),
+      findAllUnpaginated: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -72,7 +73,7 @@ describe('CronService', () => {
         { label: 'Admin VA' },
         { label: 'Billing VA' },
       ]);
-      positionRateConfigServiceMock.findAll.mockResolvedValue([
+      positionRateConfigServiceMock.findAllUnpaginated.mockResolvedValue([
         { position: 'Admin VA' },
         { position: 'Billing VA' },
       ]);
@@ -90,7 +91,7 @@ describe('CronService', () => {
         { label: 'Billing VA' },
         { label: 'New Position' },
       ]);
-      positionRateConfigServiceMock.findAll.mockResolvedValue([
+      positionRateConfigServiceMock.findAllUnpaginated.mockResolvedValue([
         { position: 'Admin VA' },
         { position: 'Billing VA' },
       ]);

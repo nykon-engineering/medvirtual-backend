@@ -97,7 +97,8 @@ const notificationsMock = {
 }
 
 const positionRateConfigMock = {
-  findAll: jest.fn().mockResolvedValue([]),
+  findAll: jest.fn().mockResolvedValue({ status: 200, data: [], meta: { total: 0, page: 1, perPage: 10, totalPages: 0 } }),
+  findAllUnpaginated: jest.fn().mockResolvedValue([]),
 }
 
 describe('CandidatesService', () => {

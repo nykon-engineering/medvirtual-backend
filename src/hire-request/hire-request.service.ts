@@ -642,7 +642,7 @@ export class HireRequestService {
     
 
 
-    const _pCfgs_A = await this.positionRateConfigService.findAll();
+    const _pCfgs_A = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_A = buildConfigMap(_pCfgs_A);
 
     const formatted = await Promise.all(
@@ -884,7 +884,7 @@ export class HireRequestService {
     });
 
     //Add salary with automatic calculation
-    const _pCfgs_B = await this.positionRateConfigService.findAll();
+    const _pCfgs_B = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_B = buildConfigMap(_pCfgs_B);
 
     const formatted = {
@@ -1101,7 +1101,7 @@ export class HireRequestService {
       }
     });
 
-    const _pCfgs_C = await this.positionRateConfigService.findAll();
+    const _pCfgs_C = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_C = buildConfigMap(_pCfgs_C);
 
     const formatted = await Promise.all(
@@ -2152,7 +2152,7 @@ export class HireRequestService {
     scoredCandidates.sort((a, b) => b.score - a.score);
 
     //Add salary with automatic calculation
-    const _pCfgs_D = await this.positionRateConfigService.findAll();
+    const _pCfgs_D = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_D = buildConfigMap(_pCfgs_D);
 
     const candidatesWithSalary = scoredCandidates.map(c => {
@@ -2597,7 +2597,7 @@ export class HireRequestService {
     });
 
 
-    const _pCfgs_E = await this.positionRateConfigService.findAll();
+    const _pCfgs_E = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_E = buildConfigMap(_pCfgs_E);
 
     const result = panels.map(panel => ({
@@ -3316,7 +3316,7 @@ export class HireRequestService {
     
     if (!panels || panels.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
 
-    const _pCfgs_F = await this.positionRateConfigService.findAll();
+    const _pCfgs_F = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_F = buildConfigMap(_pCfgs_F);
 
     const result = panels.map(panel => ({
@@ -3510,7 +3510,7 @@ export class HireRequestService {
 
     
 
-    const _pCfgs_G = await this.positionRateConfigService.findAll();
+    const _pCfgs_G = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_G = buildConfigMap(_pCfgs_G);
 
     const mappedCandidates = availableCandidates.map(pc => {

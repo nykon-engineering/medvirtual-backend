@@ -458,7 +458,7 @@ export class CronService {
             const hubspotOptions = await this.hireRequestService.getVATypes();
             const hubspotPositions: string[] = hubspotOptions.map((opt: { label: string }) => opt.label);
 
-            const existingConfigs = await this.positionRateConfigService.findAll();
+            const existingConfigs = await this.positionRateConfigService.findAllUnpaginated();
             const existingPositions = new Set(existingConfigs.map((c) => c.position));
 
             const newPositions = hubspotPositions.filter((p) => !existingPositions.has(p));

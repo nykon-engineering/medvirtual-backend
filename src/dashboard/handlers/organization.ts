@@ -254,7 +254,7 @@ export class HandlerOrganization {
     });
 
     //change candidate employment_type and calculate salary
-    const _pCfgsA = await this.positionRateConfigService.findAll();
+    const _pCfgsA = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMapA = buildConfigMap(_pCfgsA);
     const awaitingDecisionSanitized = awaitingDecision.map((item) => ({
       ...item,
@@ -329,7 +329,7 @@ export class HandlerOrganization {
 
     result.interviews = interviewSanitized;
 
-    const _pCfgsB = await this.positionRateConfigService.findAll();
+    const _pCfgsB = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMapB = buildConfigMap(_pCfgsB);
     const otherTalentsSalary = otherTalents.map((talent) => {
       const rates = computeCandidateRates(talent, _cfgMapB);

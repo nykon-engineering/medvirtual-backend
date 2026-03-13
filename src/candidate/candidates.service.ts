@@ -500,7 +500,7 @@ export class CandidatesService {
         interviewRequestTickets.map(ticket => ticket.candidate_id)
       );
 
-      const _pConfigs1 = await this.positionRateConfigService.findAll();
+      const _pConfigs1 = await this.positionRateConfigService.findAllUnpaginated();
       const _configMap1 = buildConfigMap(_pConfigs1);
 
       const candidatesWithScheduledInterview = candidates.map(candidate => {
@@ -1561,7 +1561,7 @@ export class CandidatesService {
 
     // Construct full avatar URL for each candidate and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
-    const _pConfigs2 = await this.positionRateConfigService.findAll();
+    const _pConfigs2 = await this.positionRateConfigService.findAllUnpaginated();
     const _configMap2 = buildConfigMap(_pConfigs2);
     const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => {
       const rates = computeCandidateRates(candidate, _configMap2);
@@ -1703,7 +1703,7 @@ export class CandidatesService {
     // Apply the same transformation as in findOne and other places
     const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
 
-    const _pConfigs3 = await this.positionRateConfigService.findAll();
+    const _pConfigs3 = await this.positionRateConfigService.findAllUnpaginated();
     const _configMap3 = buildConfigMap(_pConfigs3);
     const rates3 = computeCandidateRates(candidate, _configMap3);
 

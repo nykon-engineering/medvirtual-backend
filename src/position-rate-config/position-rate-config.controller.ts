@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { PositionRateConfigService } from './position-rate-config.service';
 import { UpdatePositionRateConfigDto } from './dto/update-position-rate-config.dto';
 import { AuthGuard } from '../auth/auth.guard';
@@ -12,8 +12,14 @@ export class PositionRateConfigController {
   constructor(private readonly service: PositionRateConfigService) {}
 
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.service.findAll(
+      page ? Number(page) : 1,
+      perPage ? Number(perPage) : 10,
+    );
   }
 
   @Put(':position')
