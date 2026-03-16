@@ -30,6 +30,7 @@ const userfake = {
   hubspot_id: '1',
   hubspot_contact_id: '1',
   status_before_deactivation: null,
+  activatedAt: null,
 }
 
 describe('TicketService', () => {
