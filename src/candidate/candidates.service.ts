@@ -1156,7 +1156,12 @@ export class CandidatesService {
             if (!vaTypeProperty) {
               return [];
             }
-            const returnedTools = vaTypeProperty.options.map((option) => option.value);
+            const returnedTools = vaTypeProperty.options
+              .filter((option) => !option.hidden && option.value?.trim())
+              .map((option) => ({
+                label: option.label?.trim(),
+                value: option.value?.trim(),
+              }));
             result[field] = returnedTools || [];
           } catch (error) {
             console.error("Failed to find types:", error.response?.data || error.message);
