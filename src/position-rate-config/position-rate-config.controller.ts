@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Body, UseGuards, Query } from '@nestjs/common';
 import { PositionRateConfigService } from './position-rate-config.service';
 import { UpdatePositionRateConfigDto } from './dto/update-position-rate-config.dto';
 import { AuthGuard } from '../auth/auth.guard';
