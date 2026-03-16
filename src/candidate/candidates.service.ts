@@ -16,7 +16,8 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { findHourlyPerRate, findHourlySalary, findJustMonthlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { buildConfigMap, computeCandidateRates, findHourlyPerRate } from '../common/utils/salary.util';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
@@ -72,7 +73,8 @@ export class CandidatesService {
     private readonly mailService: MailService,
 
     private readonly hireRequest: HireRequestService,
-    private readonly notifications: NotificationsService
+    private readonly notifications: NotificationsService,
+    private readonly positionRateConfigService: PositionRateConfigService,
   ) { }
 
   async findAll(
@@ -92,6 +94,7 @@ export class CandidatesService {
     search?: string,
     all?: string,
     scorecard_fields?: string,
+    tools?: string,
   ): Promise<any> {
 
     // Check if all parameter is set to true
@@ -190,6 +193,17 @@ export class CandidatesService {
           }
         }))
       };
+    }
+
+    const toolsArray = tools
+      ? tools.split(',').map(t => t.trim()).filter(Boolean)
+      : [];
+    if (toolsArray.length) {
+      combinedFilters.push({
+        OR: toolsArray.map(tool => ({
+          tools: { contains: tool, mode: 'insensitive' as const }
+        }))
+      });
     }
 
 
@@ -409,6 +423,7 @@ export class CandidatesService {
         }
       },
       approved_positions_pairing: true,
+      business_unit: true,
       selectedInInterviews: {
         select: {
           scheduled_date: true,
@@ -497,26 +512,18 @@ export class CandidatesService {
         interviewRequestTickets.map(ticket => ticket.candidate_id)
       );
 
-      const candidatesWithScheduledInterview = candidates.map(candidate => ({
-        ...candidate,
+      const _pConfigs1 = await this.positionRateConfigService.findAllUnpaginated();
+      const _configMap1 = buildConfigMap(_pConfigs1);
 
+      const candidatesWithScheduledInterview = candidates.map(candidate => {
+        const rates = computeCandidateRates(candidate, _configMap1);
+        return ({
+        ...candidate,
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
         selectedInInterviews: undefined,
-        salary: findMonthlySalary(
-          candidate.hourly_pay_rate?.toNumber() || 0,
-          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-          candidate.employment_type || ''),
-        hourlySalary: findHourlySalary(
-          findMonthlySalary(
-          candidate.hourly_pay_rate?.toNumber() || 0,
-          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-          candidate.employment_type || ''),
-          candidate.employment_type || ''
-        ),
+        ...rates,
         avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
         panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
           title: pc.panel.hireRequest.title,
@@ -524,7 +531,8 @@ export class CandidatesService {
           status: 'test',
 
         })) : []
-      }));
+      });
+      });
 
       return {
         data: candidatesWithScheduledInterview,
@@ -622,6 +630,7 @@ export class CandidatesService {
         }
       },
       approved_positions_pairing: true,
+      business_unit: true,
       experiences: {
         orderBy: { start_date: Prisma.SortOrder.desc },
         select: {
@@ -1026,37 +1035,6 @@ export class CandidatesService {
             distinct: ['skill_name'],
           });
 
-        } else if (field === 'salary_range') {
-          const max = await this.prisma.candidate.aggregate({
-            _max: {
-              hourly_pay_rate: true,
-            },
-            where: {
-              pipeline_status: {
-                in: ['1087596819', '261075105'],
-              },
-            },
-          });
-
-          const min = await this.prisma.candidate.aggregate({
-            _min: {
-              hourly_pay_rate: true,
-            },
-            where: {
-              pipeline_status: {
-                in: ['1087596819', '261075105'],
-              },
-            },
-          });
-          returned = {
-            min: min._min.hourly_pay_rate || 0,
-            salary_min: findJustMonthlySalary(Number(min._min.hourly_pay_rate) || 0),
-            max: max._max.hourly_pay_rate || 0,
-            salary_max: findJustMonthlySalary(Number(max._max.hourly_pay_rate) || 0),
-          };
-
-          result[field] = returned;
-
         } else if (field === 'approved_positions_pairing') {
           returned = await this.prisma.candidate.findMany({
             where: {
@@ -1156,6 +1134,35 @@ export class CandidatesService {
             const returnedShiftBlocks = vaTypeProperty.options.map((option) => option.value);
             result[field] = returnedShiftBlocks || [];
             //return vaTypeProperty.options || [];
+          } catch (error) {
+            console.error("Failed to find types:", error.response?.data || error.message);
+            throw new Error("Failed to find VA types");
+          }
+        }else if (field === 'tools') {
+         
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            });
+
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === "tools"
+            );
+
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedTools = vaTypeProperty.options
+              .filter((option) => !option.hidden && option.value?.trim())
+              .map((option) => ({
+                label: option.label?.trim(),
+                value: option.value?.trim(),
+              }));
+            result[field] = returnedTools || [];
           } catch (error) {
             console.error("Failed to find types:", error.response?.data || error.message);
             throw new Error("Failed to find VA types");
@@ -1578,6 +1585,7 @@ export class CandidatesService {
             }
           },
           approved_positions_pairing: true,
+          business_unit: true,
         },
       }),
       this.prisma.candidate.count({ where: whereClauseForCount }), // Count available candidates only by pipeline_status
@@ -1594,26 +1602,17 @@ export class CandidatesService {
 
     // Construct full avatar URL for each candidate and calculate salary
     const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
-    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => ({
-      ...candidate,
-      avatar_url: candidate.avatar_url
-        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
-        : null,
-      salary: findMonthlySalary(
-        candidate.hourly_pay_rate?.toNumber() || 0,
-        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-        candidate.employment_type || ''),
-      hourlySalary: findHourlySalary(
-          findMonthlySalary(
-          candidate.hourly_pay_rate?.toNumber() || 0,
-          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-          candidate.employment_type || ''),
-          candidate.employment_type || ''
-        ),
-      employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-    }));
+    const _pConfigs2 = await this.positionRateConfigService.findAllUnpaginated();
+    const _configMap2 = buildConfigMap(_pConfigs2);
+    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => {
+      const rates = computeCandidateRates(candidate, _configMap2);
+      return {
+        ...candidate,
+        avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
+        employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+        ...rates,
+      };
+    });
 
     return {
       candidates: candidatesWithFullAvatarUrl,
@@ -1712,6 +1711,7 @@ export class CandidatesService {
           }
         },
         approved_positions_pairing: true,
+        business_unit: true,
         panelCandidates: {
         select: {
           id: true,
@@ -1744,25 +1744,15 @@ export class CandidatesService {
     // Apply the same transformation as in findOne and other places
     const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
 
+    const _pConfigs3 = await this.positionRateConfigService.findAllUnpaginated();
+    const _configMap3 = buildConfigMap(_pConfigs3);
+    const rates3 = computeCandidateRates(candidate, _configMap3);
+
     const candidateWithFullAvatarUrl = {
       ...candidate,
-      avatar_url: candidate.avatar_url
-        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
-        : null,
-      salary: findMonthlySalary(
-        candidate.hourly_pay_rate?.toNumber() || 0,
-        candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-        candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-        candidate.employment_type || ''),
-      hourlySalary: findHourlySalary(
-          findMonthlySalary(
-          candidate.hourly_pay_rate?.toNumber() || 0,
-          candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-          candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-          candidate.employment_type || ''),
-          candidate.employment_type || ''
-        ),
+      avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
       employment_type: transformedEmploymentType,
+      ...rates3,
     };
 
     return candidateWithFullAvatarUrl;

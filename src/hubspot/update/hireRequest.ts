@@ -171,8 +171,6 @@ export class HireRequestUpdateService {
             delete hubspotProperties.company_url;
             delete hubspotProperties.hs_ticket_priority;
             delete hubspotProperties.cancel_reason;
-
-            console.log("Updating Hubspot Ticket with properties:", hubspotProperties);
             
             
             const response = await axios.patch(

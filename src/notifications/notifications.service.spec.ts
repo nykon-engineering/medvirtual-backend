@@ -45,8 +45,65 @@ describe('NotificationsService', () => {
     // Set up environment variables for tests
     process.env.FRONTEND_URL = 'https://test.example.com';
     process.env.RESEND_API_KEY = 'test-api-key';
+    // Ensure non-production by default so [DEV] prefix is applied
+    delete process.env.ENVIRONMENT;
 
     jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.ENVIRONMENT;
+  });
+
+  describe('sendMailWithPrefix', () => {
+    const baseOptions = {
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: ['user@example.com'],
+      subject: 'Test Subject',
+      html: '<p>Test</p>',
+    };
+
+    beforeEach(() => {
+      mockMailService.sendMail.mockResolvedValue(true);
+    });
+
+    it('should add [DEV] prefix to from in non-production environment', async () => {
+      // ENVIRONMENT is deleted in global beforeEach → non-prod
+      await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ from: '[DEV] MedVirtual <noreply@medvirtual.ai>' }),
+      );
+    });
+
+    it('should NOT add prefix when ENVIRONMENT=PROD', async () => {
+      process.env.ENVIRONMENT = 'PROD';
+
+      await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ from: 'MedVirtual <noreply@medvirtual.ai>' }),
+      );
+    });
+
+    it('should preserve all other email properties unchanged', async () => {
+      await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith({
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
+        to: ['user@example.com'],
+        subject: 'Test Subject',
+        html: '<p>Test</p>',
+      });
+    });
+
+    it('should propagate the return value from mail.sendMail', async () => {
+      mockMailService.sendMail.mockResolvedValue(false);
+
+      const result = await (service as any).sendMailWithPrefix(baseOptions);
+
+      expect(result).toBe(false);
+    });
   });
 
   describe('buildEmail', () => {
@@ -61,74 +118,6 @@ describe('NotificationsService', () => {
       expect(result).toContain(htmlInner);
       expect(result).toContain('</body>');
       expect(result).toContain('</html>');
-    });
-  });
-
-  describe('getFromEmail', () => {
-    it('should return MedVirtual when recipient is system_admin', async () => {
-      mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'admin@example.com', role: 'system_admin' },
-      ]);
-
-      const result = await (service as any).getFromEmail('Berry Virtual', ['admin@example.com']);
-
-      expect(result).toBe('MedVirtual <noreply@medvirtual.ai>');
-      expect(mockPrismaService.uSER.findMany).toHaveBeenCalledWith({
-        where: { email: { in: ['admin@example.com'] } },
-        select: { email: true, role: true, organization_id: true },
-      });
-    });
-
-    it('should return MedVirtual when recipient is system_super_admin', async () => {
-      mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'superadmin@example.com', role: 'system_super_admin' },
-      ]);
-
-      const result = await (service as any).getFromEmail('Berry Virtual', ['superadmin@example.com']);
-
-      expect(result).toBe('MedVirtual <noreply@medvirtual.ai>');
-    });
-
-    it('should return MedVirtual when any recipient is system admin', async () => {
-      mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'admin@example.com', role: 'system_admin' },
-        { email: 'user@example.com', role: 'organization_admin' },
-      ]);
-
-      const result = await (service as any).getFromEmail('Berry Virtual', [
-        'admin@example.com',
-        'user@example.com',
-      ]);
-
-      expect(result).toBe('MedVirtual <noreply@medvirtual.ai>');
-    });
-
-    it('should return Berry Virtual when no system admins and company is Berry Virtual', async () => {
-      mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'user@example.com', role: 'organization_admin' },
-      ]);
-
-      const result = await (service as any).getFromEmail('Berry Virtual', ['user@example.com']);
-
-      expect(result).toBe('Berry Virtual <noreply@medvirtual.ai>');
-    });
-
-    it('should return MedVirtual when no system admins and company is MedVirtual', async () => {
-      mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'user@example.com', role: 'organization_admin' },
-      ]);
-
-      const result = await (service as any).getFromEmail('MedVirtual', ['user@example.com']);
-
-      expect(result).toBe('MedVirtual <noreply@medvirtual.ai>');
-    });
-
-    it('should handle empty recipients array', async () => {
-      mockPrismaService.uSER.findMany.mockResolvedValue([]);
-
-      const result = await (service as any).getFromEmail('Berry Virtual', []);
-
-      expect(result).toBe('Berry Virtual <noreply@medvirtual.ai>');
     });
   });
 
@@ -280,7 +269,7 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
         subject: 'Hire Request edited: Senior Developer',
         html: expect.stringContaining('Hire Request EDITED'),
@@ -295,7 +284,7 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
         subject: 'Hire Request canceled: Senior Developer',
         html: expect.stringContaining('Hire Request CANCELED'),
@@ -351,7 +340,7 @@ describe('NotificationsService', () => {
         select: expect.any(Object),
       });
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: ['assignee@example.com'],
         subject: 'Hire Request Assigned: Senior Developer',
         html: expect.stringContaining('Hire Request'),
@@ -399,7 +388,7 @@ describe('NotificationsService', () => {
     });
   });
 
-  describe('notifyHireRequestPlacementCompleted - getFromEmail integration', () => {
+  describe('notifyHireRequestPlacementCompleted - from email by business unit', () => {
     const mockHireRequest = {
       id: 'hr1',
       title: 'Senior Developer',
@@ -451,12 +440,10 @@ describe('NotificationsService', () => {
       ],
     };
 
-    it('should use MedVirtual when recipient is system_admin', async () => {
+    it('should use Berry Virtual when organization is Berry Virtual', async () => {
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
       mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'assignee@example.com', role: 'system_admin' },
-        { email: 'sourcing@example.com', role: 'organization_admin' },
-        { email: 'creator@example.com', role: 'organization_admin' },
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
       ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
@@ -464,30 +451,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: expect.arrayContaining([
-            'assignee@example.com',
-            'sourcing@example.com',
-            'creator@example.com',
-          ]),
-        })
-      );
-    });
-
-    it('should use Berry Virtual when no system admins in recipients', async () => {
-      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
-      mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'assignee@example.com', role: 'organization_admin' },
-        { email: 'sourcing@example.com', role: 'organization_admin' },
-        { email: 'creator@example.com', role: 'organization_admin' },
-      ]);
-      mockMailService.sendMail.mockResolvedValue(true);
-
-      await service.notifyHireRequestPlacementCompleted('hr1');
-
-      expect(mockMailService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: 'Berry Virtual <noreply@medvirtual.ai>',
+          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -510,13 +474,13 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
   });
 
-  describe('notifyHireRequestSelectWinner - getFromEmail integration', () => {
+  describe('notifyHireRequestSelectWinner - from email by business unit', () => {
     const mockHireRequest = {
       id: 'hr1',
       title: 'Senior Developer',
@@ -561,63 +525,24 @@ describe('NotificationsService', () => {
       ],
     };
 
-    it('should use MedVirtual when recipient is system_admin (even if organization is Berry Virtual)', async () => {
+    it('should use Berry Virtual when organization is Berry Virtual', async () => {
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
-      // Mock for getUserEmailTheme - user lookup (optional, not used for companyName when org is Berry Virtual)
-      mockPrismaService.uSER.findUnique.mockResolvedValue({
-        id: 'admin1',
-        organization_id: 'org1',
-        role: 'system_admin',
-      });
-      // Mock for getUserEmailTheme - organizations lookup (optional)
-      mockPrismaService.organization.findMany.mockResolvedValue([]);
-      // Mock for getFromEmail - recipient roles lookup (this determines the fromEmail)
       mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'admin@example.com', role: 'system_admin' },
-        { email: 'owner@example.com', role: 'organization_admin' },
+        { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
+        { id: 'owner1', email: 'owner@example.com', first_name: 'Owner', last_name: 'User', role: 'organization_admin' },
       ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyHireRequestSelectWinner('hr1');
 
-      // Even though organization is Berry Virtual, system admins always get MedVirtual
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
 
-    it('should use Berry Virtual when no system admins and organization is Berry Virtual', async () => {
-      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
-      // Mock for getUserEmailTheme - user lookup (optional, not used for companyName when org is Berry Virtual)
-      mockPrismaService.uSER.findUnique.mockResolvedValue({
-        id: 'admin1',
-        organization_id: 'org1',
-        role: 'organization_admin',
-      });
-      // Mock for getUserEmailTheme - organizations lookup (optional)
-      mockPrismaService.organization.findMany.mockResolvedValue([
-        { business_unit: 'Berry Virtual', status: 'active' },
-      ]);
-      // Mock for getFromEmail - recipient roles lookup
-      mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'admin@example.com', role: 'organization_admin' },
-        { email: 'owner@example.com', role: 'organization_admin' },
-      ]);
-      mockMailService.sendMail.mockResolvedValue(true);
-
-      await service.notifyHireRequestSelectWinner('hr1');
-
-      // Organization is Berry Virtual and no system admins, so use Berry Virtual
-      expect(mockMailService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: 'Berry Virtual <noreply@medvirtual.ai>',
-        })
-      );
-    });
-
-    it('should use MedVirtual when organization is MedVirtual and no system admins', async () => {
+    it('should use MedVirtual when organization is MedVirtual', async () => {
       const medVirtualHireRequest = {
         ...mockHireRequest,
         organization: {
@@ -626,19 +551,8 @@ describe('NotificationsService', () => {
         },
       };
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(medVirtualHireRequest);
-      // Mock for getUserEmailTheme - user lookup
-      mockPrismaService.uSER.findUnique.mockResolvedValue({
-        id: 'admin1',
-        organization_id: 'org1',
-        role: 'organization_admin',
-      });
-      // Mock for getUserEmailTheme - organizations lookup
-      mockPrismaService.organization.findMany.mockResolvedValue([
-        { business_unit: 'MedVirtual', status: 'active' },
-      ]);
-      // Mock for getFromEmail - recipient roles lookup
       mockPrismaService.uSER.findMany.mockResolvedValue([
-        { email: 'admin@example.com', role: 'organization_admin' },
+        { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
       ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
@@ -646,13 +560,13 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
   });
 
-  describe('notifyHireRequestAwaitingDecision - getFromEmail integration', () => {
+  describe('notifyHireRequestAwaitingDecision - from email by business unit', () => {
     const mockHireRequest = {
       id: 'hr1',
       title: 'Senior Developer',
@@ -671,71 +585,24 @@ describe('NotificationsService', () => {
       },
     };
 
-    it('should use MedVirtual when recipient is system_admin (even if organization is Berry Virtual)', async () => {
-      const organizationAdmins = [
-        { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'system_admin' },
-      ];
-      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
-      // First call: finding organization admins
-      mockPrismaService.uSER.findMany
-        .mockResolvedValueOnce(organizationAdmins);
-      // Mock for getUserEmailTheme - user lookup (optional)
-      mockPrismaService.uSER.findUnique.mockResolvedValue({
-        id: 'admin1',
-        organization_id: 'org1',
-        role: 'system_admin',
-      });
-      // Mock for getUserEmailTheme - organizations lookup (optional)
-      mockPrismaService.organization.findMany.mockResolvedValue([]);
-      // Second call: getFromEmail - recipient roles lookup (this determines the fromEmail)
-      mockPrismaService.uSER.findMany
-        .mockResolvedValueOnce([{ email: 'admin@example.com', role: 'system_admin' }]);
-      mockMailService.sendMail.mockResolvedValue(true);
-
-      await service.notifyHireRequestAwaitingDecision('hr1');
-
-      // Even though organization is Berry Virtual, system admins always get MedVirtual
-      expect(mockMailService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
-        })
-      );
-    });
-
-    it('should use Berry Virtual when no system admins and organization is Berry Virtual', async () => {
+    it('should use Berry Virtual when organization is Berry Virtual', async () => {
       const organizationAdmins = [
         { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
       ];
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
-      // First call: finding organization admins
-      mockPrismaService.uSER.findMany
-        .mockResolvedValueOnce(organizationAdmins);
-      // Mock for getUserEmailTheme - user lookup (optional)
-      mockPrismaService.uSER.findUnique.mockResolvedValue({
-        id: 'admin1',
-        organization_id: 'org1',
-        role: 'organization_admin',
-      });
-      // Mock for getUserEmailTheme - organizations lookup (optional)
-      mockPrismaService.organization.findMany.mockResolvedValue([
-        { business_unit: 'Berry Virtual', status: 'active' },
-      ]);
-      // Second call: getFromEmail - recipient roles lookup
-      mockPrismaService.uSER.findMany
-        .mockResolvedValueOnce([{ email: 'admin@example.com', role: 'organization_admin' }]);
+      mockPrismaService.uSER.findMany.mockResolvedValue(organizationAdmins);
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyHireRequestAwaitingDecision('hr1');
 
-      // Organization is Berry Virtual and no system admins, so use Berry Virtual
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Berry Virtual <noreply@medvirtual.ai>',
+          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
 
-    it('should use MedVirtual when organization is MedVirtual and no system admins', async () => {
+    it('should use MedVirtual when organization is MedVirtual', async () => {
       const medVirtualHireRequest = {
         ...mockHireRequest,
         organization: {
@@ -747,29 +614,14 @@ describe('NotificationsService', () => {
         { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
       ];
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(medVirtualHireRequest);
-      // First call: finding organization admins
-      mockPrismaService.uSER.findMany
-        .mockResolvedValueOnce(organizationAdmins);
-      // Mock for getUserEmailTheme - user lookup
-      mockPrismaService.uSER.findUnique.mockResolvedValue({
-        id: 'admin1',
-        organization_id: 'org1',
-        role: 'organization_admin',
-      });
-      // Mock for getUserEmailTheme - organizations lookup
-      mockPrismaService.organization.findMany.mockResolvedValue([
-        { business_unit: 'MedVirtual', status: 'active' },
-      ]);
-      // Second call: getFromEmail - recipient roles lookup
-      mockPrismaService.uSER.findMany
-        .mockResolvedValueOnce([{ email: 'admin@example.com', role: 'organization_admin' }]);
+      mockPrismaService.uSER.findMany.mockResolvedValue(organizationAdmins);
       mockMailService.sendMail.mockResolvedValue(true);
 
       await service.notifyHireRequestAwaitingDecision('hr1');
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -803,7 +655,7 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledTimes(2); // Once for creator, once for assignee
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
+          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
           to: expect.arrayContaining([expect.any(String)]),
           subject: expect.stringMatching(/Ticket Created|Bug Report/),
           html: expect.stringContaining('Bug Report'),
@@ -834,7 +686,7 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: expect.arrayContaining([expect.any(String)]),
         subject: expect.stringContaining('Bug Report'),
         html: expect.stringContaining('The ticket was <strong>assigned</strong>'),
@@ -850,7 +702,7 @@ describe('NotificationsService', () => {
 
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
         to: expect.arrayContaining([expect.any(String)]),
         subject: expect.stringContaining('Bug Report'),
         html: expect.stringContaining('The ticket was <strong>closed</strong>'),

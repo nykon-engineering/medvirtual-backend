@@ -14,13 +14,15 @@ import { staffStatusDictionary } from '../common/dictionaries/staff-status-dicti
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 
 @Injectable()
 export class StaffService {
     constructor(
       private readonly prisma: PrismaService,
-      private readonly objectCreation : HandlerObjectCreation
+      private readonly objectCreation : HandlerObjectCreation,
+      private readonly organizationCreation: HandlerOrganizationCreation,
   ) {}
 
   private async findOne(id: string) {
@@ -278,6 +280,144 @@ export class StaffService {
     return await this.findOne(data.staff_id);
   }
 
+  async searchStaff(query: {
+    search?: string;
+    status?: string;
+    organization_id?: string;
+    limit?: number;
+  }): Promise<any> {
+    const { search, status, organization_id, limit } = query;
+
+    const where: any = {};
+
+    where.hubspot_dealstage = {
+        in: activePipelines.map(([key, _value]) => String(key))
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (organization_id) {
+      where.organization_id = organization_id;
+    }
+
+    if (search) {
+      where.OR = [
+        { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
+        { hubspot_client_name: { contains: search, mode: 'insensitive' } },
+        { hubspot_company_name: { contains: search, mode: 'insensitive' } },
+        { candidate: { first_name: { contains: search, mode: 'insensitive' } } },
+        { candidate: { last_name: { contains: search, mode: 'insensitive' } } },
+        { candidate: { email: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const queryOptions: any = {
+      where,
+      select: {
+        id: true,
+        hirerequest_id: true,
+        status: true,
+        salary: true,
+        start_date: true,
+        terminated_date: true,
+        organization_id: true,
+        created_at: true,
+        updated_at: true,
+        hubspot_id: true,
+        hubspot_close_date: true,
+        hubspot_deal_name: true,
+        hubspot_dealstage: true,
+        hubspot_dealtype: true,
+        hubspot_deployment_type: true,
+        hubspot_description: true,
+        hubspot_hs_acv: true,
+        hubspot_pipeline: true,
+        hubspot_business_unit: true,
+        hubspot_candidate_id: true,
+        hubspot_client_name: true,
+        hubspot_company_name: true,
+        hubspot_organization_id: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        candidate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            name: true,
+            email: true,
+            specialization: true,
+            employment_type: true,
+            country: true,
+            about_me: true,
+            avatar_url: true,
+            gender: true,
+            languages: {
+              select: {
+                name: true,
+              },
+            },
+            skills: {
+              select: {
+                skill_name: true,
+              },
+            },
+            createdAt: true,
+          },
+        },
+        hireRequest: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            availability: true,
+            contract_length: true,
+            expected_start_date: true,
+            salary_range_from: true,
+            salary_range_to: true,
+            specialization: true,
+            location: true,
+          },
+        },
+        bonus: {
+          select: {
+            id: true,
+            amount: true,
+            description: true,
+            created_at: true,
+            created_by: true,
+          },
+          orderBy: { created_at: 'asc' },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    };
+
+    if (limit) {
+      queryOptions.take = Number(limit);
+    }
+
+    const staff: any[] = await this.prisma.staff.findMany(queryOptions);
+
+    return staff.map((s) => ({
+      ...s,
+      candidate: s.candidate
+        ? {
+            ...s.candidate,
+            avatar: s.candidate.avatar_url ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}` : null,
+          }
+        : null,
+    }));
+  }
+
   async getStaffForTickets(user: USER): Promise<object> {
     const where: any = {
       hireRequest: {},
@@ -332,38 +472,30 @@ export class StaffService {
       candidate: {},
     };
 
+    const andConditions: any[] = [];
+
     if (user.role.includes('organization')) {
-      //where.hireRequest.org_id = user.organization_id;
-      where.OR = [
-        {
-          hireRequest: {
-            org_id: user.organization_id,
-          },
-        },
-        {
-          organization_id: user.organization_id,
-        },
-      ];
+      andConditions.push({
+        OR: [
+          { hireRequest: { org_id: user.organization_id } },
+          { organization_id: user.organization_id },
+        ],
+      });
     }
-    
+
     if (search) {
-      where.OR = [
-        {
-          hireRequest: {
-            title: { contains: search, mode: 'insensitive' },
-          },
-        },
-        {
-          candidate: {
-            first_name: { contains: search, mode: 'insensitive' },
-          },
-        },
-        {
-          candidate: {
-            last_name: { contains: search, mode: 'insensitive' },
-          },
-        },
-      ];
+      andConditions.push({
+        OR: [
+          { hireRequest: { title: { contains: search, mode: 'insensitive' } } },
+          { candidate: { first_name: { contains: search, mode: 'insensitive' } } },
+          { candidate: { last_name: { contains: search, mode: 'insensitive' } } },
+          { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     if (start_date_from || start_date_to) {
@@ -961,6 +1093,68 @@ export class StaffService {
   }
 
 
+  async syncOrganizationIds(): Promise<any> {
+    const staffWithoutOrg = await this.prisma.staff.findMany({
+      where: {
+        hubspot_organization_id: { not: null },
+        organization_id: null,
+      },
+      select: {
+        id: true,
+        hubspot_organization_id: true,
+      },
+    });
+
+    if (staffWithoutOrg.length === 0) {
+      return { updated: 0, skipped: 0, errors: [], message: 'No staff records to sync' };
+    }
+
+    let updated = 0;
+    let skipped = 0;
+    const errors: { staffId: string; hubspotOrgId: string; reason: string }[] = [];
+
+    for (const staff of staffWithoutOrg) {
+      const hubspotOrgId = staff.hubspot_organization_id as string;
+
+      // Try to find existing org first
+      let organization = await this.prisma.organization.findUnique({
+        where: { hubspot_id: hubspotOrgId },
+        select: { id: true },
+      });
+
+      // If not found, try to create it from HubSpot
+      if (!organization) {
+        try {
+          await this.organizationCreation.execute({ objectId: hubspotOrgId });
+          organization = await this.prisma.organization.findUnique({
+            where: { hubspot_id: hubspotOrgId },
+            select: { id: true },
+          });
+        } catch (err) {
+          errors.push({ staffId: staff.id, hubspotOrgId, reason: err.message });
+          continue;
+        }
+      }
+
+      if (organization) {
+        await this.prisma.staff.update({
+          where: { id: staff.id },
+          data: { organization_id: organization.id },
+        });
+        updated++;
+      } else {
+        skipped++;
+      }
+    }
+
+    return {
+      updated,
+      skipped,
+      errors,
+      message: `Synced ${updated} staff records. ${skipped} skipped. ${errors.length} error(s).`,
+    };
+  }
+
   async moveStaffBackToActive(staffId: string): Promise<any> {
     if (!staffId) {
       throw new BadRequestException('Staff ID is required');
@@ -989,222 +1183,6 @@ export class StaffService {
 
     return this.findOne(staffId);
   }
-
-
-
-
-  /* //We removed that method to simplify the code, but kept it here for reference
-  async updateStaff(
-    staffId: string,
-    updateData: any,
-    user: USER,
-    ): Promise<any> {
-    try {
-      // Verify staff exists
-      const existingStaff = await this.prisma.staff.findUnique({
-        where: { id: staffId },
-        include: {
-          candidate: true,
-        },
-      });
-
-      if (!existingStaff) {
-        throw new NotFoundException('Staff member not found');
-      }
-
-      // Extract staff-specific fields and candidate fields
-      const {
-        status,
-        salary,
-        start_date,
-        first_name,
-        last_name,
-        email,
-        about_me,
-        specialization,
-        employment_type,
-        country,
-        years_of_experience,
-        hourly_pay_rate,
-        gender,
-        medical_tools,
-        tools,
-        skills,
-        languages,
-      } = updateData;
-
-      // Update staff record
-      const staffUpdateData: any = {};
-      if (status !== undefined) {
-        staffUpdateData.status = staffStatusDictionary[status] || status;
-      }
-      if (salary !== undefined) {
-        staffUpdateData.salary = salary;
-      }
-      if (start_date !== undefined) {
-        staffUpdateData.start_date = start_date;
-      }
-
-      // Update candidate record
-      const candidateUpdateData: any = {};
-      if (first_name !== undefined) candidateUpdateData.first_name = first_name;
-      if (last_name !== undefined) candidateUpdateData.last_name = last_name;
-      if (email !== undefined) candidateUpdateData.email = email;
-      if (about_me !== undefined) candidateUpdateData.about_me = about_me;
-      if (specialization !== undefined)
-        candidateUpdateData.specialization = specialization;
-      if (employment_type !== undefined)
-        candidateUpdateData.employment_type = employment_type;
-      if (country !== undefined) candidateUpdateData.country = country;
-      if (years_of_experience !== undefined)
-        candidateUpdateData.years_of_experience = years_of_experience;
-      if (hourly_pay_rate !== undefined)
-        candidateUpdateData.hourly_pay_rate = hourly_pay_rate;
-      if (gender !== undefined) candidateUpdateData.gender = gender;
-      if (medical_tools !== undefined)
-        candidateUpdateData.medical_tools = medical_tools;
-      if (tools !== undefined) candidateUpdateData.tools = tools;
-
-      // Use transaction to update both staff and candidate records
-      const result = await this.prisma.$transaction(async (tx) => {
-        // Update staff record
-        const updatedStaff = await tx.staff.update({
-          where: { id: staffId },
-          data: staffUpdateData,
-        });
-
-        if (!existingStaff.candidate_id) {
-          throw new NotFoundException('Staff member not found during update');
-        }
-        // Update candidate record
-        const updatedCandidate = await tx.candidate.update({
-          where: { id: existingStaff.candidate_id },
-          data: candidateUpdateData,
-        });
-
-        // Handle skills update
-        if (skills !== undefined) {
-          // Delete existing skills
-          await tx.candidateSkill.deleteMany({
-            where: { candidate_id: existingStaff.candidate_id },
-          });
-
-          // Create new skills
-          if (skills.length > 0) {
-            await tx.candidateSkill.createMany({
-              data: skills.map((skill: any) => ({
-                candidate_id: existingStaff.candidate_id,
-                skill_name: skill.skill_name,
-                proficiency_level: skill.proficiency_level || 'intermediate',
-                skill_type: skill.skill_type || 'technical',
-              })),
-            });
-          }
-        }
-
-        // Handle languages update
-        if (languages !== undefined) {
-          // Delete existing languages
-          await tx.candidateLanguage.deleteMany({
-            where: { candidate_id: existingStaff.candidate_id },
-          });
-
-          // Create new languages
-          if (languages.length > 0) {
-            await tx.candidateLanguage.createMany({
-              data: languages.map((language: any) => ({
-                candidate_id: existingStaff.candidate_id,
-                name: language.name,
-              })),
-            });
-          }
-        }
-
-        // Return updated staff with all relations
-        return await tx.staff.findUnique({
-          where: { id: staffId },
-          select: {
-            id: true,
-            hirerequest_id: true,
-            status: true,
-            salary: true,
-            start_date: true,
-            created_at: true,
-            updated_at: true,
-            candidate: {
-              select: {
-                id: true,
-                first_name: true,
-                last_name: true,
-                email: true,
-                specialization: true,
-                employment_type: true,
-                country: true,
-                about_me: true,
-                years_of_experience: true,
-                hourly_pay_rate: true,
-                gender: true,
-                medical_tools: true,
-                tools: true,
-                languages: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-                skills: {
-                  select: {
-                    id: true,
-                    skill_name: true,
-                    proficiency_level: true,
-                    skill_type: true,
-                  },
-                },
-                createdAt: true,
-              },
-            },
-            hireRequest: {
-              select: {
-                id: true,
-                title: true,
-                description: true,
-                status: true,
-                priority: true,
-                availability: true,
-                contract_length: true,
-                expected_start_date: true,
-                salary_range_from: true,
-                salary_range_to: true,
-                specialization: true,
-                location: true,
-              },
-            },
-            bonus: {
-              select: {
-                id: true,
-                amount: true,
-                description: true,
-                created_at: true,
-                created_by: true,
-              },
-            },
-          },
-        });
-      });
-
-      return {
-        status: 200,
-        message: 'Staff updated successfully',
-        data: result,
-      };
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new BadRequestException('Failed to update staff member');
-    }
-  }
-    */
 
   
 }

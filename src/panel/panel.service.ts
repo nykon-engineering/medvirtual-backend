@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HireRequestStatus, OrganizationStatus, PanelCandidateStatus, PanelStatus } from '@prisma/client';
-import { findHourlySalary, findMonthlySalary } from '../common/utils/salary.util';
+import { buildConfigMap, computeCandidateRates } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 
@@ -10,7 +11,8 @@ import { activePipelines } from '../common/constant/activeDealPipelines';
 export class PanelService {
 
     constructor(
-        private readonly prisma: PrismaService
+        private readonly prisma: PrismaService,
+        private readonly positionRateConfigService: PositionRateConfigService,
     ){}
 
     async getPanelData(dateFrom?: string, dateTo?: string): Promise<any> {
@@ -60,6 +62,7 @@ export class PanelService {
                 }
             },
             approved_positions_pairing: true,
+            business_unit: true,
             experiences: {
                 orderBy: { start_date: 'desc' as const },
                 select: {
@@ -127,7 +130,21 @@ export class PanelService {
         });
         result.invitedClientUsers = invitedClientUsers;
 
-        // 3. Average Ticket Aging (Hire Request Created → Placement Completed)
+        // 3. Number of Verified Client users (subset of active users)
+
+        const verifiedClientUsers = await this.prisma.uSER.count({
+            where: {
+                role: {
+                    in: ['organization_admin', 'organization_super_admin']
+                },
+                status: 'active',
+                verified: true,
+                ...(hasDateFilter ? { activatedAt: dateFilterCreated } : {})
+            }
+        });
+        result.verifiedClientUsers = verifiedClientUsers;
+
+        // 4. Average Ticket Aging (Hire Request Created → Placement Completed)
 
         const decidedDateFilter: any = {};
         if (dateFrom) decidedDateFilter.gte = new Date(dateFrom);
@@ -181,7 +198,7 @@ export class PanelService {
             result.averageTicketAging = 0;
         }
 
-        // 4. Number of Hire Requests submitted by Client users
+        // 5. Number of Hire Requests submitted by Client users
         const hrSubmittedByClient = await this.prisma.hireRequest.count({
             where: {
                 createdBy: {
@@ -290,24 +307,15 @@ export class PanelService {
             select: selectCandidates
         });
 
-        const failedResume = failedResumeParsing.map(candidate => ({
+        const positionConfigs = await this.positionRateConfigService.findAllUnpaginated();
+        const configByPosition = buildConfigMap(positionConfigs);
+
+        const failedResume = failedResumeParsing.map(candidate => {
+            const rates = computeCandidateRates(candidate, configByPosition);
+            return ({
             ...candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-            salary: findMonthlySalary(
-                candidate.hourly_pay_rate?.toNumber() || 0,
-                candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-                candidate.employment_type || ''
-            ),
-            hourlySalary: candidate.hourly_pay_rate ? findHourlySalary(
-                findMonthlySalary(
-                    candidate.hourly_pay_rate?.toNumber() || 0,
-                    candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                    candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-                    candidate.employment_type || ''
-                ),
-                candidate.employment_type || ''
-            ) : 0,
+            ...rates,
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
               title: pc.panel.hireRequest.title,
@@ -315,7 +323,8 @@ export class PanelService {
               status: 'test',
 
             })) : []
-          }));
+          });
+        });
         result.failedResumeParsing = failedResume;
 
         const withoutHeadshot = await this.prisma.candidate.findMany({
@@ -333,32 +342,20 @@ export class PanelService {
             select: selectCandidates
         });
 
-        const CandwithoutHeadshot = withoutHeadshot.map(candidate => ({
-            ...candidate,
-            employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-            salary: findMonthlySalary(
-                candidate.hourly_pay_rate?.toNumber() || 0,
-                candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-                candidate.employment_type || ''
-            ),
-            hourlySalary: candidate.hourly_pay_rate ? findHourlySalary(
-                findMonthlySalary(
-                    candidate.hourly_pay_rate?.toNumber() || 0,
-                    candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                    candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-                    candidate.employment_type || ''
-                ),
-                candidate.employment_type || ''
-            ) : 0,
-            avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
-            panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
-              title: pc.panel.hireRequest.title,
-              organization_name: pc.panel.hireRequest.organization.name,
-              status: 'test',
-
-            })) : []
-          }));
+        const CandwithoutHeadshot = withoutHeadshot.map(candidate => {
+            const rates = computeCandidateRates(candidate, configByPosition);
+            return {
+              ...candidate,
+              employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+              ...rates,
+              avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
+              panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
+                title: pc.panel.hireRequest.title,
+                organization_name: pc.panel.hireRequest.organization.name,
+                status: 'test',
+              })) : []
+            };
+          });
         result.withoutHeadshot = CandwithoutHeadshot;
 
 
@@ -494,36 +491,24 @@ export class PanelService {
             select: selectCandidates
         });
 
-        const processed = candidatesWithInterviews.map(candidate => ({
-            ...candidate,
-            employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-            salary: findMonthlySalary(
-                candidate.hourly_pay_rate?.toNumber() || 0,
-                candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-                candidate.employment_type || ''
-            ),
-            hourlySalary: candidate.hourly_pay_rate ? findHourlySalary(
-                findMonthlySalary(
-                    candidate.hourly_pay_rate?.toNumber() || 0,
-                    candidate.languages && candidate.languages.length > 1 ? 'Bilingual' : candidate.languages[0]?.name,
-                    candidate.approved_positions_pairing && candidate.approved_positions_pairing.length > 0 ? candidate.approved_positions_pairing[0] : '',
-                    candidate.employment_type || ''
-                ),
-                candidate.employment_type || ''
-            ) : 0,
-            avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
-            panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
-              title: pc.panel.hireRequest.title,
-              organization_name: pc.panel.hireRequest.organization.name,
-              status: 'test',
-            })) : [],
-            interviewCount: candidate.panelCandidates.reduce((total, pc) => {
+        const processed = candidatesWithInterviews.map(candidate => {
+            const rates = computeCandidateRates(candidate, configByPosition);
+            return {
+              ...candidate,
+              employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+              ...rates,
+              avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
+              panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
+                title: pc.panel.hireRequest.title,
+                organization_name: pc.panel.hireRequest.organization.name,
+                status: 'test',
+              })) : [],
+              interviewCount: candidate.panelCandidates.reduce((total, pc) => {
                 const count = pc.panel.interviews.length;
                 return total + count;
               }, 0)
-
-          }));
+            };
+          });
 
         result.moreThan5Interviews = processed.filter(c => c.interviewCount > 5);
 

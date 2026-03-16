@@ -11,6 +11,7 @@ import { panelReadyDTO } from './dto/panelReady-hire-request.dto';
 import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { OpenaiService } from '../openai/openai.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
@@ -97,6 +98,11 @@ const openAIServiceMock = {
   generateTextSummary: jest.fn(),
 };
 
+const positionRateConfigMock = {
+  findAll: jest.fn().mockResolvedValue({ status: 200, data: [], meta: { total: 0, page: 1, perPage: 10, totalPages: 0 } }),
+  findAllUnpaginated: jest.fn().mockResolvedValue([]),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
@@ -111,6 +117,7 @@ describe('HireRequestService', () => {
         { provide: HubspotService, useValue: hubspotServiceMock },
         { provide: NotificationsService, useValue: notificationsServiceMock },
         { provide: OpenaiService, useValue: openAIServiceMock },
+        { provide: PositionRateConfigService, useValue: positionRateConfigMock },
       ],
     }).compile();
 
@@ -134,10 +141,12 @@ describe('HireRequestService', () => {
       verified: false,
       createdAt: new Date(),
       updatedAt: new Date(),
+      activatedAt: new Date(),
       createdByMethod: 'self_signup',
       createdByUserId: null,
       hubspot_id: null,
       hubspot_contact_id: null,
+      status_before_deactivation: null,
     } ;
   });
 

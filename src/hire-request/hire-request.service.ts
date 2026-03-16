@@ -24,10 +24,11 @@ import { awaitingDecisionDTO } from './dto/awaiting-decision.dto';
 import { changeWinnerDTO } from './dto/change-winner.dto';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import {
+  buildConfigMap,
+  computeCandidateRates,
   findHourlyPerRate,
-  findHourlySalary,
-  findMonthlySalary,
 } from '../common/utils/salary.util';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
@@ -42,6 +43,7 @@ export class HireRequestService {
     private readonly hubspot: HubspotService,
     private readonly notifications: NotificationsService,
     private readonly openai: OpenaiService,
+    private readonly positionRateConfigService: PositionRateConfigService,
   ) {}
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split("T");
@@ -63,6 +65,7 @@ export class HireRequestService {
         scheduled_date: true,
         decided_date: true,
         status: true,
+        readable: true,
         panelCandidates: {
           select: {
             id: true,
@@ -99,6 +102,7 @@ export class HireRequestService {
                 avatar_url: true,
                 gender: true,
                 approved_positions_pairing: true,
+                business_unit: true,
                 video_link: true,
                 languages:{
                   select:{
@@ -500,6 +504,7 @@ export class HireRequestService {
                       hourly_pay_rate: true,
                       avatar_url: true,
                       approved_positions_pairing: true,
+                      business_unit: true,
                       video_link: true,
                       employment_type: true,
 
@@ -637,6 +642,9 @@ export class HireRequestService {
     
 
 
+    const _pCfgs_A = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMap_A = buildConfigMap(_pCfgs_A);
+
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
         ...hr,
@@ -650,41 +658,26 @@ export class HireRequestService {
           interview_date: panel.interviews[0]?.scheduled_date || null,
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
-          panelCandidates: panel.panelCandidates.map(pc => ({
-            ...pc,
-            candidate: {
-              ...pc.candidate,
-              employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-              salary: findMonthlySalary(
-                pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                pc.candidate.languages.length > 1
-                  ? 'Bilingual'
-                  : pc.candidate.languages[0]?.name,
-                pc.candidate.approved_positions_pairing?.[0] || '',
-                pc.candidate.employment_type || ''
-              ),
-              hourlySalary: findHourlySalary(
-                findMonthlySalary(
-                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                  pc.candidate.languages.length > 1
-                    ? 'Bilingual'
-                    : pc.candidate.languages[0]?.name,
-                  pc.candidate.approved_positions_pairing?.[0] || '',
-                  pc.candidate.employment_type || ''
-                ),
-                pc.candidate.employment_type || ''
-              ),
-              avatar: pc.candidate.avatar_url
-                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
-                : null,
-              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
-                panel_id: pcc.panel.id,
-                title: pcc.panel.hireRequest.title,
-                organization_name: pcc.panel.hireRequest.organization.name,
-                status: pcc.status,
-              })) || [],
-            }
-          }))
+          panelCandidates: panel.panelCandidates.map(pc => {
+            const rates_A = computeCandidateRates(pc.candidate, _cfgMap_A);
+            return {
+              ...pc,
+              candidate: {
+                ...pc.candidate,
+                employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+                ...rates_A,
+                avatar: pc.candidate.avatar_url
+                  ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                  : null,
+                panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                  panel_id: pcc.panel.id,
+                  title: pcc.panel.hireRequest.title,
+                  organization_name: pcc.panel.hireRequest.organization.name,
+                  status: pcc.status,
+                })) || [],
+              }
+            };
+          })
         })),
 
         assign_user_id: hr.assign_user_id
@@ -785,6 +778,7 @@ export class HireRequestService {
                     organization_id: true,
                     avatar_url: true,
                     approved_positions_pairing: true,
+                    business_unit: true,
                     video_link: true,
                     languages: {
                       select: {
@@ -890,13 +884,16 @@ export class HireRequestService {
     });
 
     //Add salary with automatic calculation
+    const _pCfgs_B = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMap_B = buildConfigMap(_pCfgs_B);
+
     const formatted = {
       ...hireRequest,
-      hubspot_pairing_date: 
-      source === 'hubspot' 
-        ? hireRequest.hubspot_pairing_date : 
-        (hireRequest.hubspot_pairing_date 
-          ? timestampToUSDate(hireRequest.hubspot_pairing_date) 
+      hubspot_pairing_date:
+      source === 'hubspot'
+        ? hireRequest.hubspot_pairing_date :
+        (hireRequest.hubspot_pairing_date
+          ? timestampToUSDate(hireRequest.hubspot_pairing_date)
           : null),
       panels: (hireRequest.panels ?? []).map(panel => ({
         ...panel,
@@ -908,25 +905,12 @@ export class HireRequestService {
           const years_of_experience = startDate
           ? new Date().getFullYear() - new Date(startDate).getFullYear()
           : 0;
+          const rates_B = computeCandidateRates(pc.candidate, _cfgMap_B);
           return {
             ...pc,
             candidate:{
               ...pc.candidate,
-              salary: findMonthlySalary(
-                pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-                pc.candidate.employment_type || ''
-              ),
-              hourlySalary: findHourlySalary(
-                findMonthlySalary(
-                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                  pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-                  pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-                  pc.candidate.employment_type || ''
-                ),
-                pc.candidate.employment_type || ''
-              ),
+              ...rates_B,
               years_of_experience: years_of_experience,
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
@@ -1048,6 +1032,7 @@ export class HireRequestService {
                     hourly_pay_rate: true,
                     avatar_url: true,
                     approved_positions_pairing: true,
+                    business_unit: true,
                     video_link: true,
                     employment_type: true,
                     skills: {
@@ -1116,6 +1101,9 @@ export class HireRequestService {
       }
     });
 
+    const _pCfgs_C = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMap_C = buildConfigMap(_pCfgs_C);
+
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
         ...hr,
@@ -1129,40 +1117,25 @@ export class HireRequestService {
           interview_date: panel.interviews[0]?.scheduled_date || null,
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
-          panelCandidates: panel.panelCandidates.map(pc => ({
-            ...pc,
-            candidate: {
-              ...pc.candidate,
-              salary: findMonthlySalary(
-                pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                pc.candidate.languages.length > 1
-                  ? 'Bilingual'
-                  : pc.candidate.languages[0]?.name,
-                pc.candidate.approved_positions_pairing?.[0] || '',
-                pc.candidate.employment_type || ''
-              ),
-              hourlySalary: findHourlySalary(
-                findMonthlySalary(
-                  pc.candidate.hourly_pay_rate?.toNumber() || 0,
-                  pc.candidate.languages.length > 1
-                    ? 'Bilingual'
-                    : pc.candidate.languages[0]?.name,
-                  pc.candidate.approved_positions_pairing?.[0] || '',
-                  pc.candidate.employment_type || ''
-                ),
-                pc.candidate.employment_type || ''
-              ),
-              avatar: pc.candidate.avatar_url
-                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
-                : null,
-              panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
-                panel_id: pcc.panel.id,
-                title: pcc.panel.hireRequest.title,
-                organization_name: pcc.panel.hireRequest.organization.name,
-                status: pcc.status,
-              })) || [],
-            }
-          }))
+          panelCandidates: panel.panelCandidates.map(pc => {
+            const rates_C = computeCandidateRates(pc.candidate, _cfgMap_C);
+            return {
+              ...pc,
+              candidate: {
+                ...pc.candidate,
+                ...rates_C,
+                avatar: pc.candidate.avatar_url
+                  ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                  : null,
+                panelCandidates: pc.candidate.panelCandidates?.map(pcc => ({
+                  panel_id: pcc.panel.id,
+                  title: pcc.panel.hireRequest.title,
+                  organization_name: pcc.panel.hireRequest.organization.name,
+                  status: pcc.status,
+                })) || [],
+              }
+            };
+          })
         })),
 
         assign_user_id: hr.assign_user_id
@@ -1304,7 +1277,8 @@ export class HireRequestService {
       throw new NotFoundException('User not found or not part of an organization');
     }
 
-    if (data.status !== 'cancelled' && data.status !== 'sourcing' && data.status !== 'new' ){ //allow user cancell or star sourcing HireRequest even if all candidates are blocked
+    //allow user cancell or star sourcing HireRequest even if all candidates are blocked
+    if (data.status !== 'cancelled' && data.status !== 'sourcing' && data.status !== 'new' ){ 
       const verifyCandidates = await this.verifyUnavailableCandidates(id, user);
       if (verifyCandidates) {
         throw new BadRequestException(`Cannot move forward. All candidates are no longer available`);
@@ -2037,6 +2011,7 @@ export class HireRequestService {
         avatar_url: true,
         gender: true,
         approved_positions_pairing: true,
+        business_unit: true,
 
         //Va score cards fields
         active_listening_and_comprehension_demonstrated: true,
@@ -2177,32 +2152,21 @@ export class HireRequestService {
     scoredCandidates.sort((a, b) => b.score - a.score);
 
     //Add salary with automatic calculation
-    const candidatesWithSalary = scoredCandidates.map(c => ({
+    const _pCfgs_D = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMap_D = buildConfigMap(_pCfgs_D);
+
+    const candidatesWithSalary = scoredCandidates.map(c => {
+      const rates_D = computeCandidateRates(c, _cfgMap_D);
+      return ({
       ...c,
-      salary: findMonthlySalary(
-        c.hourly_pay_rate?.toNumber() || 0,
-        c.languages.length > 1 ? 'Bilingual' : c.languages[0]?.name,
-        c.approved_positions_pairing && c.approved_positions_pairing.length > 0 ? c.approved_positions_pairing[0] : '',
-        c.employment_type || ''
-      ),
-      hourlySalary: findHourlySalary(
-        findMonthlySalary(
-          c.hourly_pay_rate?.toNumber() || 0,
-          c.languages.length > 1
-            ? 'Bilingual'
-            : c.languages[0]?.name,
-          c.approved_positions_pairing?.[0] || '',
-          c.employment_type || ''
-        ),
-        c.employment_type || ''
-      ),
+      ...rates_D,
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
       panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
         organization_name: pc.panel.hireRequest.organization.name,
         
       })) : []
-    }))
+    }); })
   
     return candidatesWithSalary;
   }
@@ -2473,11 +2437,22 @@ export class HireRequestService {
       console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
     }
 
+    //Send email to the Sourcing Assignee that the panel is ready (non-blocking)
     try {
       const result = await this.notifications.notifyHireRequestPanelReady(data.hireRequest_id);
       console.log(`[notifications] Hire request Panel Ready notification sent successfully:`, result);
     } catch (err) {
       console.error('[notifications] hire request Panel Ready failed', err?.message || err);
+    }
+
+    //Send email to the client if the panel is marked as readable by the system or organization admin (non-blocking)
+    if (data.readable) {
+      try {
+        const result = await this.notifications.notifyClientPanelReady(data.hireRequest_id);
+        console.log(`[notifications] Client Panel Ready notification sent successfully:`, result);
+      } catch (err) {
+        console.error('[notifications] client panel ready email failed', err?.message || err);
+      }
     }
 
     return this.findOne(data.hireRequest_id, user);
@@ -2566,6 +2541,11 @@ export class HireRequestService {
             },
           },
           {
+            hireRequest: {
+              status: { not: HireRequestStatus.deleted },
+            },
+          },
+          {
             OR: [
               //if is in awaiting_decision or placement_completed status, it should be retrieved 
               {
@@ -2597,7 +2577,17 @@ export class HireRequestService {
                   },
                 },
               },
-              
+              //if the hireRequest was created by the client (organization), always show it regardless of readable
+              {
+                hireRequest: {
+                  createdBy: {
+                    role: {
+                      in: ['organization_admin', 'organization_super_admin'],
+                    },
+                  },
+                },
+              },
+
             ],
           },
         ],
@@ -2607,36 +2597,26 @@ export class HireRequestService {
     });
 
 
+    const _pCfgs_E = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMap_E = buildConfigMap(_pCfgs_E);
+
     const result = panels.map(panel => ({
       ...panel,
       interview_date: panel.interviews[0]?.scheduled_date || null,
       interview_link: panel.interviews[0]?.link || null,
       interviews: undefined,
-      panelCandidates: panel.panelCandidates.map(pc => ({
-        ...pc,
-        candidate: {
-          ...pc.candidate,
-          employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-          salary: findMonthlySalary(
-            pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
-            pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-            pc.candidate.employment_type || ''
-          ),
-          hourlySalary: findHourlySalary(
-            findMonthlySalary(
-              pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
-              pc.candidate.languages && pc.candidate.languages.length > 1
-                ? 'Bilingual'
-                : pc.candidate.languages[0]?.name,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-              pc.candidate.employment_type || ''
-            ),
-            pc.candidate.employment_type || ''
-          ),
-          avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-        }
-      }))
+      panelCandidates: panel.panelCandidates.map(pc => {
+        const rates_E = computeCandidateRates(pc.candidate, _cfgMap_E);
+        return {
+          ...pc,
+          candidate: {
+            ...pc.candidate,
+            employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+            ...rates_E,
+            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+          }
+        };
+      })
       
     }));
     
@@ -3255,7 +3235,9 @@ export class HireRequestService {
         loserExists.map(async loser =>{
           const c = loser.candidate;
 
-          const canUpdate = c.panelCandidates.every(pc => ['selected', 'returned_to_pool'].includes(pc.status));
+          // Only return to pool if the candidate is NOT in another active panel.
+          // If they exist in another panel with any status other than 'returned_to_pool' or 'selected', keep their current pipeline_status.
+          const canUpdate = c.panelCandidates.every(pc => ['returned_to_pool', 'selected'].includes(pc.status));
           if (!canUpdate) return;
 
           const  pipeline_treated = c.pipeline_status_origin || pipelineStatusLosers;
@@ -3334,6 +3316,9 @@ export class HireRequestService {
     
     if (!panels || panels.length === 0) throw new NotFoundException(`Panels not found for this current organization`);
 
+    const _pCfgs_F = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMap_F = buildConfigMap(_pCfgs_F);
+
     const result = panels.map(panel => ({
       ...panel,
       panelCandidates: panel.panelCandidates.map(pc => {
@@ -3341,29 +3326,14 @@ export class HireRequestService {
         const years_of_experience = startDate
           ? new Date().getFullYear() - new Date(startDate).getFullYear()
           : 0;
+        const rates_F = computeCandidateRates(pc.candidate, _cfgMap_F);
         return {
           ...pc,
           candidate: {
             ...pc.candidate,
             years_of_experience,
-            salary: findMonthlySalary(
-              pc.candidate.hourly_pay_rate?.toNumber() || 0,
-              pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-              pc.candidate.employment_type || ''
-            ),
-            hourlySalary: findHourlySalary(
-              findMonthlySalary(
-                pc.candidate.hourly_pay_rate ? pc.candidate.hourly_pay_rate.toNumber() : 0,
-                pc.candidate.languages && pc.candidate.languages.length > 1
-                  ? 'Bilingual'
-                  : pc.candidate.languages[0]?.name,
-                pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-                pc.candidate.employment_type || ''
-              ),
-              pc.candidate.employment_type || ''
-            ),
-            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
+            ...rates_F,
+            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
           },
         };
       }),
@@ -3486,6 +3456,7 @@ export class HireRequestService {
                 years_of_experience: true,
                 avatar_url: true,
                 approved_positions_pairing: true,
+                business_unit: true,
                 video_link: true,
                 languages: {
                   select: { name: true },
@@ -3507,7 +3478,9 @@ export class HireRequestService {
     const panelCandidates = panel.panelCandidates;
 
     const filteredCandidates = panelCandidates.filter(pc => 
-      pc.candidate.pipeline_status === '1172847191' // show just Endorsed via platform candidates
+      pc.candidate.pipeline_status === '1172847191'|| //endorsed 
+      pc.candidate.pipeline_status === '261075105' || // available candidates - full time
+      pc.candidate.pipeline_status === '1087596819' // Available candidates - Part-time
     );
     const availableCandidates = (
       await Promise.all(
@@ -3537,32 +3510,22 @@ export class HireRequestService {
 
     
 
-    const mappedCandidates = availableCandidates.map(pc => ({
-      ...pc.candidate,
-      panelStatus: pc.status,
-      panelId: panel.id,
-      panelScheduledDate: panel.scheduled_date,
-      isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
-      salary: pc.candidate.hourly_pay_rate ? findMonthlySalary(
-        pc.candidate.hourly_pay_rate.toNumber(),
-        pc.candidate.languages && pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name,
-        pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-        pc.candidate.employment_type || ''
-      ) : null,
-      hourlySalary: pc.candidate.hourly_pay_rate ? findHourlySalary(
-        findMonthlySalary(
-          pc.candidate.hourly_pay_rate.toNumber(),
-          pc.candidate.languages && pc.candidate.languages.length > 1
-            ? 'Bilingual'
-            : pc.candidate.languages[0]?.name,
-          pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-          pc.candidate.employment_type || ''
-        ),
-        pc.candidate.employment_type || ''
-      ) : null,
-      avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-      employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-    }));
+    const _pCfgs_G = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMap_G = buildConfigMap(_pCfgs_G);
+
+    const mappedCandidates = availableCandidates.map(pc => {
+      const rates_G = computeCandidateRates(pc.candidate, _cfgMap_G);
+      return {
+        ...pc.candidate,
+        panelStatus: pc.status,
+        panelId: panel.id,
+        panelScheduledDate: panel.scheduled_date,
+        isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
+        ...rates_G,
+        avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+        employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+      };
+    });
 
     return mappedCandidates;
   }

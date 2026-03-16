@@ -160,6 +160,19 @@ export class UserController {
     return this.userService.searchUsers(query);
   }
 
+  @Get('search/organization-users')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({ summary: 'Search organization admin and super admin users' })
+  @ApiResponse({ status: 200, description: 'Users found successfully.' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search term for name, email, or job title' })
+  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by user status' })
+  @ApiQuery({ name: 'organization_id', required: false, type: String, description: 'Filter by organization ID' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of results to return' })
+  async searchOrganizationUsers(@Query() query: SearchUsersDto) {
+    return this.userService.searchOrganizationUsers(query);
+  }
+
   @Get(':id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin')

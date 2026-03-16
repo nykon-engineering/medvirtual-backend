@@ -3,7 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, USER } from '@prisma/client';
+import { OrganizationStatus, Prisma, USER } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
@@ -26,6 +26,11 @@ export class UserService {
     private readonly mailService: MailService,
     private readonly hubspotService: HubspotService,
   ) {}
+
+  private buildFromWithPrefix(from: string): string {
+    const isProduction = process.env.ENVIRONMENT === 'PROD';
+    return isProduction ? from : `[DEV] ${from}`;
+  }
 
   async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
     const { password, ...rest } = userData;
@@ -533,7 +538,7 @@ export class UserService {
       }
 
       // Additional safety check: Prevent deletion of kind admins
-      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin') {
+      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin' && user.status !== 'invited') {
         throw new BadRequestException(
           'Cannot delete Admin users for security reasons',
         );
@@ -652,6 +657,67 @@ export class UserService {
     } catch (error) {
       throw new BadRequestException(`Failed to update user status: ${error}`);
     }
+  }
+
+  async searchOrganizationUsers(query: Omit<SearchUsersDto, 'role'>): Promise<any[]> {
+    const { search, status, organization_id, limit } = query;
+
+    const whereClause: Prisma.USERWhereInput = {
+      role: { in: ['organization_admin', 'organization_super_admin'] },
+    };
+
+    if (search) {
+      whereClause.OR = [
+        { first_name: { contains: search, mode: 'insensitive' } },
+        { last_name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { job_title: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (organization_id) {
+      whereClause.organization_id = organization_id;
+    }
+
+    const queryOptions: Prisma.USERFindManyArgs = {
+      where: whereClause,
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        job_title: true,
+        role: true,
+        status: true,
+        avatar: true,
+        phone: true,
+        verified: true,
+        createdAt: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    };
+
+    if (limit) {
+      queryOptions.take = limit;
+    }
+
+    const users = await this.prisma.uSER.findMany(queryOptions);
+
+    return users.map((user) => ({
+      ...user,
+      full_name: `${user.first_name} ${user.last_name}`.trim(),
+    }));
   }
 
   async searchUsers(query: SearchUsersDto): Promise<any[]> {
@@ -935,12 +1001,12 @@ export class UserService {
         : baseInviteLink;
       const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
+        from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
         to: inviteData.email,
         subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
         html: emailBody,
         headers: {
-          'X-Mailer': 'MedVirtual Platform',
+          'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
           'X-Priority': '3',
           'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
           'X-Entity-Ref-ID': `invite-${newUser.id}`,

@@ -25,9 +25,11 @@ model USER {
   password                     String              @db.VarChar(255)
   authentication_method        String
   status                       String
+  status_before_deactivation   String?
   verified                     Boolean             @default(false)
   createdAt                    DateTime            @default(now())
   updatedAt                    DateTime            @updatedAt
+  activatedAt                  DateTime?
   is_organization_owner        Boolean             @default(false)
   createdByMethod              String              @default("self_signup")
   createdByUserId              String?
@@ -583,6 +585,19 @@ model PasswordResetToken {
   @@index([userId])
 }
 
+
+model PositionRateConfig {
+  id                                  String   @id @default(uuid())
+  position                            String   @unique
+  medVirtual_floor_price_english      Decimal?
+  medVirtual_floor_price_bilingual    Decimal?
+  medVirtual_margin_per_hour          Decimal?
+  berryVirtual_floor_price_english    Decimal?
+  berryVirtual_floor_price_bilingual  Decimal?
+  berryVirtual_margin_per_hour         Decimal?
+  createdAt                           DateTime @default(now())
+  updatedAt                           DateTime @updatedAt
+}
 
 enum Role {
   organization_admin

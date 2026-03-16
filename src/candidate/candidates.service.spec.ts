@@ -11,6 +11,7 @@ import axios from 'axios';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -95,6 +96,11 @@ const notificationsMock = {
   notifyEndorseCandidates: jest.fn(),
 }
 
+const positionRateConfigMock = {
+  findAll: jest.fn().mockResolvedValue({ status: 200, data: [], meta: { total: 0, page: 1, perPage: 10, totalPages: 0 } }),
+  findAllUnpaginated: jest.fn().mockResolvedValue([]),
+}
+
 describe('CandidatesService', () => {
   let service: CandidatesService;
   let prisma: PrismaService;
@@ -117,6 +123,7 @@ describe('CandidatesService', () => {
         { provide: MailService, useValue: MailMock },
         { provide: HireRequestService, useValue: HireRequestMock },
         { provide: NotificationsService, useValue: notificationsMock },
+        { provide: PositionRateConfigService, useValue: positionRateConfigMock },
       ],
     }).compile();
 
@@ -183,6 +190,7 @@ describe('CandidatesService', () => {
         employment_type: 'Full Time',
         educations: [{ degree: 'BSc', institution: 'University', year: '2020' }],
         approved_positions_pairing: ['Test'],
+        business_unit: 'BerryVirtual',
         experiences: [
           {
             company: 'Company A',
@@ -312,6 +320,7 @@ describe('CandidatesService', () => {
             },
           },
           approved_positions_pairing: true,
+          business_unit: true,
           experiences: {
             orderBy: { start_date: 'desc' },
             select: {

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PanelService } from './panel.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 describe('PanelService', () => {
   let service: PanelService;
@@ -33,12 +34,21 @@ describe('PanelService', () => {
       },
     };
 
+    const positionRateConfigMock = {
+      findAll: jest.fn().mockResolvedValue({ status: 200, data: [], meta: { total: 0, page: 1, perPage: 10, totalPages: 0 } }),
+      findAllUnpaginated: jest.fn().mockResolvedValue([]),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PanelService,
         {
           provide: PrismaService,
           useValue: prismaMock,
+        },
+        {
+          provide: PositionRateConfigService,
+          useValue: positionRateConfigMock,
         },
       ],
     }).compile();
@@ -55,10 +65,13 @@ describe('PanelService', () => {
     // ---- Mocking return values for the sequence of calls in getPanelData ----
 
     // 1. activeClientUsers (uSER.count)
-    (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(50); 
-    
+    (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(50);
+
     // 2. invitedClientUsers (uSER.count)
     (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(45);
+
+    // 3. verifiedClientUsers (uSER.count)
+    (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(15);
 
     // 3. completedHireRequests (hireRequest.findMany for Average Ticket Aging)
     const mockHireRequest1 = {

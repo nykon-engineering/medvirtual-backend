@@ -28,10 +28,12 @@ const userfake = {
   workos_id: '',
   authentication_method: 'OwnSign',
   status: 'active',
+  status_before_deactivation: null,
   is_organization_owner: false,
   verified: false,
   createdAt: new Date(),
   updatedAt: new Date(),
+  activatedAt: new Date(),
   createdByMethod: 'self_signup',
   createdByUserId: null,
   hubspot_id: null,
@@ -51,6 +53,7 @@ describe('OrganizationService', () => {
       delete: jest.fn(),
     },
     $transaction: jest.fn(),
+    $executeRaw: jest.fn(),
     uSER: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -148,7 +151,7 @@ describe('OrganizationService', () => {
 
       mockPrismaService.organization.findMany.mockResolvedValue(organizations);
 
-      const result = await service.getAll('active', userfake);
+      const result = await service.getAll(userfake, 'active');
       expect(result).toEqual(organizations);
       expect(prisma.organization.findMany).toHaveBeenCalled();
     });
@@ -156,7 +159,7 @@ describe('OrganizationService', () => {
     it('should throw NotFoundException if an error occurs', async () => {
       mockPrismaService.organization.findMany.mockRejectedValue(new Error());
 
-      await expect(service.getAll('active', userfake)).rejects.toThrow(NotFoundException);
+      await expect(service.getAll(userfake, 'active')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -241,6 +244,50 @@ describe('OrganizationService', () => {
       mockPrismaService.organization.update.mockRejectedValue(new Error('fail'));
 
       await expect(service.update('1', { name: '', phone: '', email: '' })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should save status_before_deactivation and set users to inactive when status is inactive', async () => {
+      const updated = {
+        id: '1',
+        name: 'Org 1',
+        status: OrganizationStatus.inactive,
+        organization_role: OrganizationRole.prospect,
+      };
+
+      mockPrismaService.organization.update.mockResolvedValue(updated);
+      mockPrismaService.$executeRaw.mockResolvedValue(undefined);
+
+      mockPrismaService.$transaction.mockImplementation(async (cb) => cb(mockPrismaService));
+
+      await service.update('1', { status: 'inactive' });
+
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
+      const rawStrings: ReadonlyArray<string> = mockPrismaService.$executeRaw.mock.calls[0][0];
+      const rawSql = Array.from(rawStrings).join('');
+      expect(rawSql).toContain('status_before_deactivation');
+      expect(rawSql).toContain('inactive');
+    });
+
+    it('should restore status from status_before_deactivation when status is active', async () => {
+      const updated = {
+        id: '1',
+        name: 'Org 1',
+        status: OrganizationStatus.active,
+        organization_role: OrganizationRole.prospect,
+      };
+
+      mockPrismaService.organization.update.mockResolvedValue(updated);
+      mockPrismaService.$executeRaw.mockResolvedValue(undefined);
+
+      mockPrismaService.$transaction.mockImplementation(async (cb) => cb(mockPrismaService));
+
+      await service.update('1', { status: 'active' });
+
+      expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
+      const rawStrings: ReadonlyArray<string> = mockPrismaService.$executeRaw.mock.calls[0][0];
+      const rawSql = Array.from(rawStrings).join('');
+      expect(rawSql).toContain('COALESCE');
+      expect(rawSql).toContain('status_before_deactivation');
     });
   });
 

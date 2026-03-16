@@ -268,14 +268,14 @@ export class OrganizationService {
     }
   }
 
-  async getAll(status: string, user: USER): Promise<Organization[]> {
+  async getAll(user: USER, status?: string): Promise<Organization[]> {
     
     try {
       
       const whereClause: any = {
-        status: status
-        ? { equals: status as OrganizationStatus }
-        : undefined
+        ...(status 
+           ? { status: { equals: status as OrganizationStatus } }
+           : {status: { in: [OrganizationStatus.active, OrganizationStatus.inactive] } }), //keep only active and inactive by default, hide deleted, but allow filter by status if needed
       };
 
       // For system_super_admin: return all organizations
@@ -910,20 +910,39 @@ export class OrganizationService {
         console.log('Status not updated, invalid value:', data.status);
       }
 
-      const res = await this.prisma.organization.update({
-        where: { id },
-        data: 
-        {
-          status: updateData.status as OrganizationStatus,
-          admin_id: updateData.admin_id,
-        },
-        include: {
-          owner: true,
-          admin: true,
-          users: true,
-        },
+      const res = await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.organization.update({
+          where: { id },
+          data: {
+            status: updateData.status as OrganizationStatus,
+            admin_id: updateData.admin_id,
+          },
+          include: {
+            owner: true,
+            admin: true,
+            users: true,
+          },
+        });
+
+        if (updateData.status === OrganizationStatus.inactive) {
+          await tx.$executeRaw`
+            UPDATE "USER"
+            SET "status_before_deactivation" = "status", "status" = 'inactive'
+            WHERE "organization_id" = ${id}
+          `;
+        }
+
+        if (updateData.status === OrganizationStatus.active) {
+          await tx.$executeRaw`
+            UPDATE "USER"
+            SET "status" = COALESCE("status_before_deactivation", 'active'),
+                "status_before_deactivation" = NULL
+            WHERE "organization_id" = ${id}
+          `;
+        }
+
+        return updated;
       });
-      //console.log('Update result:', res);
 
       //updateOrganizationInHubspot
       await this.hubspot.updateOrganizationInHubspot(res);

@@ -54,11 +54,11 @@ export class HandlerOrganizationCreation {
 
             const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
 
-            console.log('Mapped organization data:', organizationData);
+            //console.log('Mapped organization data:', organizationData);
 
             const hubspotOwnerId = (organizationData as any).hubspot_owner_id;
             if (hubspotOwnerId) {
-                console.log('HubSpot Owner ID found:', hubspotOwnerId);
+                //console.log('HubSpot Owner ID found:', hubspotOwnerId);
                 //check if the owner exists in the system
                 owner = await this.prisma.uSER.findUnique({
                     where: {

@@ -34,6 +34,7 @@ export class CandidatesController {
   @ApiQuery({ name: 'languages', required: false, type: Number, description: 'Filter candidates by languages spoken', example: "English, Spanish" })
   @ApiQuery({ name: 'all', required: false, type: Boolean, description: 'If true, returns all candidates without pagination' })
   @ApiQuery({ name: 'scorecard_fields', required: false, type: String, description: 'Comma-separated list of VA score card fields to filter by (candidates must have a value for each field)', example: 'speaks_clearly_and_professionally,stable_internet_connection__min__20_mbps_' })
+  @ApiQuery({ name: 'tools', required: false, type: String, description: 'Comma-separated list of tools to filter by (OR logic)', example: 'Zoom,Google Workspace' })
   @ApiResponse({ status: 200, description: 'Candidates retrieved successfully' })
   @ApiResponse({ status: 400, description: 'Failed to fetch candidates' })
   @UseGuards(AuthGuard)
@@ -54,6 +55,7 @@ export class CandidatesController {
     @Query('search') search: string,
     @Query('all') all: string,
     @Query('scorecard_fields') scorecard_fields: string,
+    @Query('tools') tools: string,
   ) {
     const result = await this.candidatesService.findAll(
       user,
@@ -72,6 +74,7 @@ export class CandidatesController {
       search,
       all,
       scorecard_fields,
+      tools,
     );
     return result
   }

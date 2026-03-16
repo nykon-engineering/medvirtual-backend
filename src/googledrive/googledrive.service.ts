@@ -88,7 +88,7 @@ export class GoogledriveService {
       const mailSent = await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: 'paulo@regenta.ai',
-      cc: 'shayan@regenta.ai',
+      cc: 'paulo@regenta.ai',
       subject: 'Google Token Expired',
       html: emailBody,
       });
@@ -102,8 +102,7 @@ export class GoogledriveService {
           },
       });
       throw new BadRequestException(`Error getting valid access token: ${error.message}`);
-    }
-   
+    }   
   }
 
 

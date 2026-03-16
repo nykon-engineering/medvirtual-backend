@@ -3,15 +3,19 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { findMonthlySalary } from '../../common/utils/salary.util';
+import { buildConfigMap, computeCandidateRates } from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
 import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
 import { changeLabelAvailability } from '../../common/utils/hubspot.util';
-import { findHourlySalary } from '../../common/utils/salary.util';
+import { PositionRateConfigService } from '../../position-rate-config/position-rate-config.service';
 
 @Injectable()
 export class HandlerOrganization {
-  constructor(private readonly prisma: PrismaService, private readonly hireRequestService: HireRequestService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hireRequestService: HireRequestService,
+    private readonly positionRateConfigService: PositionRateConfigService,
+  ) {}
 
   async execute(user, page: number = 1, perPage: number = 10): Promise<object> {
     const result: any = {};
@@ -43,6 +47,7 @@ export class HandlerOrganization {
       avatar_url: true,
       gender: true,
       approved_positions_pairing: true,
+      business_unit: true,
       video_link: true,
       languages: {
         select: {
@@ -221,6 +226,7 @@ export class HandlerOrganization {
                 skills:true,
                 languages: true,
                 approved_positions_pairing: true,
+                business_unit: true,
                 avatar_url: true,
               },
             },
@@ -248,29 +254,22 @@ export class HandlerOrganization {
     });
 
     //change candidate employment_type and calculate salary
+    const _pCfgsA = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMapA = buildConfigMap(_pCfgsA);
     const awaitingDecisionSanitized = awaitingDecision.map((item) => ({
       ...item,
-      panelCandidates: item.panelCandidates.map((pc) => ({
-        ...pc,
-        candidate: {
-          ...pc.candidate,
-          employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-          salary: findMonthlySalary(Number(pc.candidate?.hourly_pay_rate),
-            pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-            pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-            pc.candidate.employment_type || ''
-          ),
-          hourlySalary: pc.candidate?.hourly_pay_rate ? findHourlySalary(
-            findMonthlySalary(Number(pc.candidate?.hourly_pay_rate),
-              pc.candidate.languages.length > 1 ? 'Bilingual' : pc.candidate.languages[0]?.name ,
-              pc.candidate.approved_positions_pairing && pc.candidate.approved_positions_pairing.length > 0 ? pc.candidate.approved_positions_pairing[0] : '',
-              pc.candidate.employment_type || ''
-            ),
-            pc.candidate.employment_type || ''
-          ) : 0,
-          avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
-        }
-      }))
+      panelCandidates: item.panelCandidates.map((pc) => {
+        const rates = computeCandidateRates(pc.candidate, _cfgMapA);
+        return {
+          ...pc,
+          candidate: {
+            ...pc.candidate,
+            employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+            ...rates,
+            avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+          }
+        };
+      })
     }));
 
     result.awaitingDecision = awaitingDecisionSanitized;
@@ -330,24 +329,17 @@ export class HandlerOrganization {
 
     result.interviews = interviewSanitized;
 
-    const otherTalentsSalary = otherTalents.map((talent) => ({
-      ...talent,
-      employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
-      salary: findMonthlySalary(Number(talent?.hourly_pay_rate),
-        talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
-        talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : '',
-        talent.employment_type || ''
-      ),
-      hourlySalary: talent?.hourly_pay_rate ? findHourlySalary(
-        findMonthlySalary(Number(talent?.hourly_pay_rate),
-          talent.languages.length > 1 ? 'Bilingual' : talent.languages[0]?.name ,
-          talent.approved_positions_pairing && talent.approved_positions_pairing.length > 0 ? talent.approved_positions_pairing[0] : '',
-          talent.employment_type || ''
-        ),
-        talent.employment_type || ''
-      ) : 0,
-      avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` :  null,
-    }))
+    const _pCfgsB = await this.positionRateConfigService.findAllUnpaginated();
+    const _cfgMapB = buildConfigMap(_pCfgsB);
+    const otherTalentsSalary = otherTalents.map((talent) => {
+      const rates = computeCandidateRates(talent, _cfgMapB);
+      return {
+        ...talent,
+        employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
+        ...rates,
+        avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` : null,
+      };
+    })
     result.otherTalents = otherTalentsSalary;
 
     return result;

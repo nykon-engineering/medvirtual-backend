@@ -5,22 +5,28 @@ import { CandidatesService } from '../candidate/candidates.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import { MailService } from '../mail/mail.service';
+import { HireRequestService } from '../hire-request/hire-request.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 describe('CronService', () => {
   let service: CronService;
-  let prismaServiceMock: { candidate: { findMany: jest.Mock } };
+  let prismaServiceMock: any;
   let candidatesServiceMock: { processData: jest.Mock };
   let handlerObjectCreationMock: { execute: jest.Mock };
   let mailServiceMock: { sendMail: jest.Mock };
-  
+  let hireRequestServiceMock: Record<string, jest.Mock>;
+  let positionRateConfigServiceMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     prismaServiceMock = {
       candidate: {
         findMany: jest.fn(),
       },
+      positionRateConfig: {
+        create: jest.fn(),
+      },
     };
-  
+
     candidatesServiceMock = {
       processData: jest.fn(),
     };
@@ -32,7 +38,16 @@ describe('CronService', () => {
     mailServiceMock = {
       sendMail: jest.fn(),
     };
-    
+
+    hireRequestServiceMock = {
+      findAll: jest.fn(),
+      getVATypes: jest.fn(),
+    };
+
+    positionRateConfigServiceMock = {
+      findAll: jest.fn().mockResolvedValue({ status: 200, data: [], meta: { total: 0, page: 1, perPage: 10, totalPages: 0 } }),
+      findAllUnpaginated: jest.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [CronService,
@@ -40,6 +55,8 @@ describe('CronService', () => {
         {provide: CandidatesService, useValue: candidatesServiceMock},
         {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
         { provide: MailService, useValue: mailServiceMock },
+        { provide: HireRequestService, useValue: hireRequestServiceMock },
+        { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
       ],
     }).compile();
 
@@ -48,6 +65,59 @@ describe('CronService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('syncPositionsFromHubspot', () => {
+    it('returns true and does nothing when no new positions found', async () => {
+      hireRequestServiceMock.getVATypes.mockResolvedValue([
+        { label: 'Admin VA' },
+        { label: 'Billing VA' },
+      ]);
+      positionRateConfigServiceMock.findAllUnpaginated.mockResolvedValue([
+        { position: 'Admin VA' },
+        { position: 'Billing VA' },
+      ]);
+
+      const result = await service.syncPositionsFromHubspot();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.positionRateConfig.create).not.toHaveBeenCalled();
+      expect(mailServiceMock.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('creates new positions and sends alert email when new positions exist', async () => {
+      hireRequestServiceMock.getVATypes.mockResolvedValue([
+        { label: 'Admin VA' },
+        { label: 'Billing VA' },
+        { label: 'New Position' },
+      ]);
+      positionRateConfigServiceMock.findAllUnpaginated.mockResolvedValue([
+        { position: 'Admin VA' },
+        { position: 'Billing VA' },
+      ]);
+      prismaServiceMock.positionRateConfig.create.mockResolvedValue({});
+      mailServiceMock.sendMail.mockResolvedValue({});
+
+      const result = await service.syncPositionsFromHubspot();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.positionRateConfig.create).toHaveBeenCalledWith({
+        data: { position: 'New Position' },
+      });
+      expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: '[Action Required] New VA Positions Found',
+        }),
+      );
+    });
+
+    it('returns false when an error occurs', async () => {
+      hireRequestServiceMock.getVATypes.mockRejectedValue(new Error('HubSpot API error'));
+
+      const result = await service.syncPositionsFromHubspot();
+
+      expect(result).toBe(false);
+    });
   });
 
   /*

@@ -24,6 +24,7 @@ import { TalentPoolLeadsModule } from './talent-pool-leads/talent-pool-leads.mod
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { SqsModule } from './sqs/sqs.module';
+import { PositionRateConfigModule } from './position-rate-config/position-rate-config.module';
 
 @Module({
   imports: [
@@ -53,7 +54,8 @@ import { SqsModule } from './sqs/sqs.module';
     EmailTestModule,
     PanelModule,
     TalentPoolLeadsModule,
-    SqsModule
+    SqsModule,
+    PositionRateConfigModule,
   ],
   controllers: [AppController],
   providers: [

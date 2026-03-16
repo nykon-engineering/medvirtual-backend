@@ -9,9 +9,9 @@ provider:
   runtime: nodejs16.x
   region: us-east-1
   stage: dev
-  memorySize: 1024          
+  memorySize: 1024
   timeout: 600
-
+  
 layers:
   poppler:
     path: layers/poppler
