@@ -33,6 +33,7 @@ const userfake = {
   verified: false,
   createdAt: new Date(),
   updatedAt: new Date(),
+  activatedAt: new Date(),
   createdByMethod: 'self_signup',
   createdByUserId: null,
   hubspot_id: null,

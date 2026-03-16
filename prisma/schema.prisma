@@ -29,6 +29,7 @@ model USER {
   verified                     Boolean             @default(false)
   createdAt                    DateTime            @default(now())
   updatedAt                    DateTime            @updatedAt
+  activatedAt                  DateTime?
   is_organization_owner        Boolean             @default(false)
   createdByMethod              String              @default("self_signup")
   createdByUserId              String?

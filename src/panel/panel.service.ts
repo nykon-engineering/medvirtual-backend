@@ -130,7 +130,21 @@ export class PanelService {
         });
         result.invitedClientUsers = invitedClientUsers;
 
-        // 3. Average Ticket Aging (Hire Request Created → Placement Completed)
+        // 3. Number of Verified Client users (subset of active users)
+
+        const verifiedClientUsers = await this.prisma.uSER.count({
+            where: {
+                role: {
+                    in: ['organization_admin', 'organization_super_admin']
+                },
+                status: 'active',
+                verified: true,
+                ...(hasDateFilter ? { activatedAt: dateFilterCreated } : {})
+            }
+        });
+        result.verifiedClientUsers = verifiedClientUsers;
+
+        // 4. Average Ticket Aging (Hire Request Created → Placement Completed)
 
         const decidedDateFilter: any = {};
         if (dateFrom) decidedDateFilter.gte = new Date(dateFrom);
@@ -184,7 +198,7 @@ export class PanelService {
             result.averageTicketAging = 0;
         }
 
-        // 4. Number of Hire Requests submitted by Client users
+        // 5. Number of Hire Requests submitted by Client users
         const hrSubmittedByClient = await this.prisma.hireRequest.count({
             where: {
                 createdBy: {

@@ -661,10 +661,12 @@ export class AuthService {
       last_name?: string;
       job_title?: string;
       status?: string;
+      activatedAt?: Date;
     } = {
       password: passwordCript,
       verified: true, // Set verified to true after signup
       status: 'active',
+      activatedAt: new Date(), // Set activatedAt to current date
     };
 
     // Only update fields that are provided

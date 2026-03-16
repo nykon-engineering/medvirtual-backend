@@ -65,10 +65,13 @@ describe('PanelService', () => {
     // ---- Mocking return values for the sequence of calls in getPanelData ----
 
     // 1. activeClientUsers (uSER.count)
-    (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(50); 
-    
+    (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(50);
+
     // 2. invitedClientUsers (uSER.count)
     (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(45);
+
+    // 3. verifiedClientUsers (uSER.count)
+    (prisma.uSER.count as jest.Mock).mockResolvedValueOnce(15);
 
     // 3. completedHireRequests (hireRequest.findMany for Average Ticket Aging)
     const mockHireRequest1 = {
