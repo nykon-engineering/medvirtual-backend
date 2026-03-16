@@ -94,6 +94,7 @@ export class CandidatesService {
     search?: string,
     all?: string,
     scorecard_fields?: string,
+    tools?: string,
   ): Promise<any> {
 
     // Check if all parameter is set to true
@@ -192,6 +193,17 @@ export class CandidatesService {
           }
         }))
       };
+    }
+
+    const toolsArray = tools
+      ? tools.split(',').map(t => t.trim()).filter(Boolean)
+      : [];
+    if (toolsArray.length) {
+      combinedFilters.push({
+        OR: toolsArray.map(tool => ({
+          tools: { contains: tool, mode: 'insensitive' as const }
+        }))
+      });
     }
 
 
@@ -1122,6 +1134,30 @@ export class CandidatesService {
             const returnedShiftBlocks = vaTypeProperty.options.map((option) => option.value);
             result[field] = returnedShiftBlocks || [];
             //return vaTypeProperty.options || [];
+          } catch (error) {
+            console.error("Failed to find types:", error.response?.data || error.message);
+            throw new Error("Failed to find VA types");
+          }
+        }else if (field === 'tools') {
+         
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            });
+
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === "tools"
+            );
+
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedTools = vaTypeProperty.options.map((option) => option.value);
+            result[field] = returnedTools || [];
           } catch (error) {
             console.error("Failed to find types:", error.response?.data || error.message);
             throw new Error("Failed to find VA types");
