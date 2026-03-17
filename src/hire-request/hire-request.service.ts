@@ -3455,15 +3455,19 @@ export class HireRequestService {
                 hourly_pay_rate: true,
                 years_of_experience: true,
                 avatar_url: true,
-                approved_positions_pairing: true,
-                business_unit: true,
-                video_link: true,
                 languages: {
-                  select: { name: true },
+                  select: {
+                    name: true,
+                  },
                 },
                 skills: {
-                  select: { skill_name: true },
+                  select: {
+                    skill_name: true,
+                  },  
+
                 },
+                approved_positions_pairing: true, 
+                business_unit: true,
               },
             },
           },
@@ -3475,13 +3479,28 @@ export class HireRequestService {
       throw new NotFoundException('Panel for this hire request not found');
     }
 
+    let unavailableCandidates: Record<string, any>[] = []
+
     const panelCandidates = panel.panelCandidates;
 
+    const availablePipelineStatuses = [
+      '1172847191', //endorsed 
+      '261075105', // available candidates - full time
+      '1087596819' // Available candidates - Part-time
+    ];
+
     const filteredCandidates = panelCandidates.filter(pc => 
-      pc.candidate.pipeline_status === '1172847191'|| //endorsed 
-      pc.candidate.pipeline_status === '261075105' || // available candidates - full time
-      pc.candidate.pipeline_status === '1087596819' // Available candidates - Part-time
+      availablePipelineStatuses.includes(pc.candidate.pipeline_status)
     );
+
+    unavailableCandidates = panelCandidates.filter(pc => 
+      !availablePipelineStatuses.includes(pc.candidate.pipeline_status)
+    ).map(pc => ({
+      ...pc.candidate,
+      reason: 'Candidate is no longer available in Hubspot'
+    }));
+
+    
     const availableCandidates = (
       await Promise.all(
         filteredCandidates.map(async (pc) => {
@@ -3494,12 +3513,16 @@ export class HireRequestService {
               }, //Dont allow get candidates already selected in other panels
             },
           });
+
+          existInOtherPanel && unavailableCandidates.push({
+            ...pc.candidate,
+            reason: 'Candidate is already selected in another panel'
+          });
     
           return existInOtherPanel ? null : pc;
         })
       )
     ).filter((pc) => pc !== null);
-
 
     const selectedCandidate = panelCandidates.find(pc => pc.status === 'selected_by_client');
 
@@ -3507,8 +3530,6 @@ export class HireRequestService {
         availableCandidates[0].candidate.id === selectedCandidate.candidate_id) {
       return [];
     }
-
-    
 
     const _pCfgs_G = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_G = buildConfigMap(_pCfgs_G);
@@ -3527,7 +3548,16 @@ export class HireRequestService {
       };
     });
 
-    return mappedCandidates;
+    //Here I dont need to delivery a mappedObject because it'll be only showed on frontend
+    const mappedUnavailableCandidates = unavailableCandidates.map(c => ({
+      ...c,
+      panelId: panel.id,
+      panelScheduledDate: panel.scheduled_date,
+    }));
+
+    return { 
+      availableCandidates: mappedCandidates,
+      unavailableCandidates: mappedUnavailableCandidates };
   }
 
   async getVATypes () : Promise<any> {
