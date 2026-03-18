@@ -32,8 +32,7 @@ import { PositionRateConfigService } from '../position-rate-config/position-rate
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
-import { dateToTimestamp, formatTimestampToUSShort, timestampToUSDate } from '../common/utils/formatDate';
-import { create } from 'domain';
+import { dateToTimestamp, timestampToUSDate } from '../common/utils/formatDate';
 
 @Injectable()
 export class HireRequestService {
@@ -1207,22 +1206,39 @@ export class HireRequestService {
           const d = new Date(ts);
           const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 
-          const panel = await this.prisma.candidatePanel.findFirst({
-            where: { hire_request_id: id },
-            select: { id: true },
-          });
+          // Convert time to 24h format if it contains AM/PM (e.g. '03:10 AM' → '03:10:00')
+          const timeMatch = pairingTimeStr.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+          let time24h: string | null = null;
+          if (timeMatch) {
+            let hours = parseInt(timeMatch[1], 10);
+            const minutes = timeMatch[2];
+            const meridiem = timeMatch[3]?.toUpperCase();
+            if (meridiem === 'AM') {
+              hours = hours === 12 ? 0 : hours;
+            } else if (meridiem === 'PM') {
+              hours = hours === 12 ? 12 : hours + 12;
+            }
+            time24h = `${String(hours).padStart(2, '0')}:${minutes}:00`;
+          }
 
-          if (panel) {
-            const interviewCount = await this.prisma.interview.count({
-              where: { panel_id: panel.id, status: 'scheduled' },
+          if (time24h) {
+            const panel = await this.prisma.candidatePanel.findFirst({
+              where: { hire_request_id: id },
+              select: { id: true },
             });
 
-            if (interviewCount > 0) {
-              const scheduledDate = new Date(`${dateStr}T${pairingTimeStr}`);
-              await this.prisma.interview.updateMany({
+            if (panel) {
+              const interviewCount = await this.prisma.interview.count({
                 where: { panel_id: panel.id, status: 'scheduled' },
-                data: { scheduled_date: scheduledDate },
               });
+
+              if (interviewCount > 0) {
+                const scheduledDate = new Date(`${dateStr}T${time24h}Z`);
+                await this.prisma.interview.updateMany({
+                  where: { panel_id: panel.id, status: 'scheduled' },
+                  data: { scheduled_date: scheduledDate },
+                });
+              }
             }
           }
         }
@@ -2831,20 +2847,27 @@ export class HireRequestService {
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
+    // Here, I'm using the date_time because I'll use the dateToTimestamp later
+    // and this function should receive a date in the format YYYY-MM-DD 
+    const derivedDate = String(data.date_time).split('T')[0] || null;
+
     // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
     const updateHireRequest = await this.prisma.hireRequest.update({
       where: {
         id: hireRequest.id,
       },
       data: {
-        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_date: dateToTimestamp(derivedDate) || null,
         hubspot_pairing_time: data.time || null,
       },
     });
     if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
-    
-    
-    const updatedDate = new Date(`${data.date_time}`);
+
+    // Treat date_time as UTC to avoid server timezone shift
+    const dateTimeStr = String(data.date_time);
+    const updatedDate = new Date(
+      /Z$|[+-]\d{2}:\d{2}$/.test(dateTimeStr) ? dateTimeStr : `${dateTimeStr}Z`
+    );
 
     const interviewScheduled = await this.prisma.interview.create({
       data: {
@@ -2929,6 +2952,9 @@ export class HireRequestService {
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
+    // Here, I'm using the date_time because I'll use the dateToTimestamp later
+    // and this function should receive a date in the format YYYY-MM-DD 
+    const derivedDateEdit = String(data.date_time).split('T')[0] || null;
 
     // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
     const updateHireRequest = await this.prisma.hireRequest.update({
@@ -2936,14 +2962,17 @@ export class HireRequestService {
         id: hireRequest.id,
       },
       data: {
-        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_date: dateToTimestamp(derivedDateEdit) || null,
         hubspot_pairing_time: data.time || null,
       },
     });
     if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
 
-    const updatedDate = new Date(`${data.date_time}`);
-    //console.log('updatedDate', updatedDate);
+    // Treat date_time as UTC to avoid server timezone shift
+    const dateTimeStrEdit = String(data.date_time);
+    const updatedDate = new Date(
+      /Z$|[+-]\d{2}:\d{2}$/.test(dateTimeStrEdit) ? dateTimeStrEdit : `${dateTimeStrEdit}Z`
+    );
     const editInterview = await this.prisma.interview.updateMany({
       where: {
         panel_id: panel.id,
