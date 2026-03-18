@@ -1196,6 +1196,41 @@ export class HireRequestService {
 
     result = requestUpdated;
 
+    // Sync interview scheduled_date when pairing date/time is edited
+    if (hireRequestData.hubspot_pairing_date !== undefined || hireRequestData.hubspot_pairing_time !== undefined) {
+      try {
+        const pairingDateTs = requestUpdated.hubspot_pairing_date; // stored as timestamp string
+        const pairingTimeStr = requestUpdated.hubspot_pairing_time;
+
+        if (pairingDateTs && pairingTimeStr) {
+          const ts = Number(pairingDateTs);
+          const d = new Date(ts);
+          const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+          const panel = await this.prisma.candidatePanel.findFirst({
+            where: { hire_request_id: id },
+            select: { id: true },
+          });
+
+          if (panel) {
+            const interviewCount = await this.prisma.interview.count({
+              where: { panel_id: panel.id, status: 'scheduled' },
+            });
+
+            if (interviewCount > 0) {
+              const scheduledDate = new Date(`${dateStr}T${pairingTimeStr}`);
+              await this.prisma.interview.updateMany({
+                where: { panel_id: panel.id, status: 'scheduled' },
+                data: { scheduled_date: scheduledDate },
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[HireRequest] Failed to sync interview scheduled_date on update:', err?.message || err);
+      }
+    }
+
     //console.log('Hire Request updated in database with data:', data.description);
     const descriptionChanged = currentHireRequest && data.description !== currentHireRequest.description;
     //console.log('Description changed:', descriptionChanged);
