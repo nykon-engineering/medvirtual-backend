@@ -59,6 +59,12 @@ export class HireRequestService {
     );
   }
 
+  private readonly availablePipelineStatuses = [
+    '1172847191', // endorsed
+    '261075105',  // available full-time
+    '1087596819', // available part-time
+  ];
+
   private selectPanels = {
         id: true,
         scheduled_date: true,
@@ -2651,24 +2657,47 @@ export class HireRequestService {
     const _pCfgs_E = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_E = buildConfigMap(_pCfgs_E);
 
+    const crossPanelSelected = await this.prisma.panelCandidate.findMany({
+      where: { status: { in: ['selected_by_client', 'blocked'] } },
+      select: { candidate_id: true, panel_id: true },
+    });
+
+    const candidateSelectedInPanels = new Map<string, Set<string>>();
+    for (const pc of crossPanelSelected) {
+      if (!candidateSelectedInPanels.has(pc.candidate_id)) {
+        candidateSelectedInPanels.set(pc.candidate_id, new Set());
+      }
+      candidateSelectedInPanels.get(pc.candidate_id)!.add(pc.panel_id);
+    }
+
     const result = panels.map(panel => ({
       ...panel,
       interview_date: panel.interviews[0]?.scheduled_date || null,
       interview_link: panel.interviews[0]?.link || null,
       interviews: undefined,
-      panelCandidates: panel.panelCandidates.map(pc => {
-        const rates_E = computeCandidateRates(pc.candidate, _cfgMap_E);
-        return {
-          ...pc,
-          candidate: {
-            ...pc.candidate,
-            employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-            ...rates_E,
-            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+      panelCandidates: panel.panelCandidates
+        .filter(pc => {
+          if (!this.availablePipelineStatuses.includes(pc.candidate.pipeline_status)) return false;
+          const panelSet = candidateSelectedInPanels.get(pc.candidate.id);
+          if (panelSet) {
+            const onlyInCurrentPanel = panelSet.size === 1 && panelSet.has(panel.id);
+            if (!onlyInCurrentPanel) return false;
           }
-        };
-      })
-      
+          return true;
+        })
+        .map(pc => {
+          const rates_E = computeCandidateRates(pc.candidate, _cfgMap_E);
+          return {
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+              ...rates_E,
+              avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+            }
+          };
+        })
+
     }));
     
     return result;
@@ -3547,18 +3576,12 @@ export class HireRequestService {
 
     const panelCandidates = panel.panelCandidates;
 
-    const availablePipelineStatuses = [
-      '1172847191', //endorsed 
-      '261075105', // available candidates - full time
-      '1087596819' // Available candidates - Part-time
-    ];
-
     const filteredCandidates = panelCandidates.filter(pc => 
-      availablePipelineStatuses.includes(pc.candidate.pipeline_status)
+      this.availablePipelineStatuses.includes(pc.candidate.pipeline_status)
     );
 
     unavailableCandidates = panelCandidates.filter(pc => 
-      !availablePipelineStatuses.includes(pc.candidate.pipeline_status)
+      !this.availablePipelineStatuses.includes(pc.candidate.pipeline_status)
     ).map(pc => ({
       ...pc.candidate,
       reason: 'Candidate is no longer available in Hubspot'
