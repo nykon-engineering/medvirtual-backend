@@ -54,6 +54,22 @@ model USER {
   talentPoolLeads              TalentPoolLead[]
   PasswordResetTokens          PasswordResetToken[]
 
+  // --- Med Alliance relations ---
+  // One-to-one affiliate profile storing commission settings and payout preferences
+  affiliateProfile             AffiliateProfile?
+  // Organizations this user referred into the Med Alliance program
+  referredOrganizations        Organization[]             @relation("OrganizationReferredBy")
+  // Payout requests submitted by this user as an affiliate
+  payoutRequestsAsAffiliate    AffiliatePayoutRequest[]   @relation("AffiliatePayoutRequests")
+  // Payout requests approved or rejected by this admin user
+  payoutApprovals              AffiliatePayoutRequest[]   @relation("PayoutApprovedBy")
+  // Commission records where this admin user made the eligibility decision
+  commissionAdminDecisions     AffiliateCommission[]      @relation("CommissionAdminDecision")
+  // Commissions linked to this user as the affiliate owner
+  affiliateCommissions         AffiliateCommission[]      @relation("AffiliateCommissions")
+  // Audit log entries where this user was the acting subject
+  medAllianceAuditActorLogs    MedAllianceAuditLog[]      @relation("MedAllianceAuditActor")
+
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
   @@index([organization_id], map: "idx_users_organization_id")
@@ -126,6 +142,11 @@ model Organization {
   business_unit           String?
   source                  String?
   type                    String?
+
+  // --- Med Alliance: referred company tracking ---
+  // User ID of the affiliate who referred this organization into the Med Alliance program
+  referred_by_affiliate_id     String?
+
   hire_requests           HireRequest[]
   admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
   owner                   USER?                   @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
@@ -134,6 +155,14 @@ model Organization {
   tickets                 Ticket[]
   users                   USER[]
 
+  // --- Med Alliance relations ---
+  // The affiliate user who referred this organization; null for organizations not coming from Med Alliance
+  referredByAffiliate          USER?                   @relation("OrganizationReferredBy", fields: [referred_by_affiliate_id], references: [id])
+  // Commission records generated from invoices tied to this organization
+  affiliateCommissions         AffiliateCommission[]
+  // HubSpot invoice snapshots pulled during sync for this organization
+  hubspotInvoiceSnapshots      HubspotInvoiceSnapshot[]
+
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
   @@index([name], map: "idx_organizations_name")
@@ -141,6 +170,10 @@ model Organization {
   @@index([owner_id], map: "idx_organizations_owner_id")
   @@index([organization_role], map: "idx_organizations_role")
   @@index([industry], map: "idx_organizations_industry")
+  // Lookup organizations referred by a specific affiliate
+  @@index([referred_by_affiliate_id], map: "idx_organizations_referred_by")
+  // Scoped listing: affiliate's referred orgs filtered by status
+  @@index([referred_by_affiliate_id, status], map: "idx_organizations_affiliate_status")
 }
 
 model Candidate {
@@ -599,6 +632,230 @@ model PositionRateConfig {
   updatedAt                           DateTime @updatedAt
 }
 
+// =============================================================================
+// MED ALLIANCE — new models
+// Referral and commission tracking program for affiliate (Growth Partner) users.
+// Affiliates refer organizations; HubSpot invoices are synced; commissions are
+// detected, reviewed by admin, and paid out on request.
+// =============================================================================
+
+// AffiliateProfile
+// Stores Med Alliance-specific settings for a user acting as a Growth Partner.
+// One-to-one with USER. Created by admin when onboarding a new affiliate.
+model AffiliateProfile {
+  id                          String          @id @default(uuid())
+  // The USER this profile belongs to (Growth Partner)
+  user_id                     String          @unique
+  // HubSpot contact ID for this affiliate, used during sync jobs
+  hubspot_id                  String?         @unique
+  // Default commission percentage applied when detecting new commissions (e.g. 10.00 = 10%)
+  commission_percent_default  Decimal         @db.Decimal(5, 2)
+  status                      AffiliateStatus @default(active)
+  // Preferred payout method selected by the affiliate
+  payout_preference_method    PayoutMethod?
+  // Payment reference detail (e.g. account number, PayPal email, Zelle phone)
+  payout_preference_reference String?
+  // Free-form notes about the payout preference (e.g. routing instructions)
+  payout_preference_notes     String?
+  // Admin user who created this profile
+  created_by                  String?
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+
+  user           USER                   @relation(fields: [user_id], references: [id])
+  commissions    AffiliateCommission[]
+  payoutRequests AffiliatePayoutRequest[]
+
+  @@index([status], map: "idx_affiliate_profiles_status")
+  @@index([user_id], map: "idx_affiliate_profiles_user_id")
+}
+
+// HubspotInvoiceSnapshot
+// Immutable snapshot of a HubSpot invoice pulled during the sync job.
+// Used as the source of truth for commission detection. Never mutated after
+// commission creation; raw_payload enables replay if parsing logic changes.
+model HubspotInvoiceSnapshot {
+  id             String    @id @default(uuid())
+  // HubSpot native invoice ID — unique across all syncs
+  hubspot_id     String    @unique
+  // The organization this invoice belongs to in our system
+  organization_id String
+  // Raw status string as returned by HubSpot (e.g. "paid", "outstanding")
+  invoice_status String
+  // Payment status if available; not required for V1 eligibility logic
+  payment_status String?
+  // Total invoice amount with 2-decimal precision
+  invoice_amount Decimal   @db.Decimal(14, 2)
+  // ISO 4217 currency code (defaults to USD)
+  currency       String    @default("USD") @db.VarChar(3)
+  // Timestamp when HubSpot confirmed payment; drives commission detection
+  paid_at        DateTime?
+  // SHA-256 hash of the HubSpot payload — used to detect changes and skip re-processing
+  sync_hash      String?
+  // Full raw JSON payload from HubSpot for debugging and future replay
+  raw_payload    Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization            @relation(fields: [organization_id], references: [id])
+  commissions  AffiliateCommission[]
+
+  @@index([organization_id], map: "idx_hubspot_invoice_snapshots_org_id")
+  @@index([invoice_status], map: "idx_hubspot_invoice_snapshots_invoice_status")
+  // Queried by sync job to find recently paid invoices
+  @@index([paid_at], map: "idx_hubspot_invoice_snapshots_paid_at")
+  // Queried by sync job for change detection
+  @@index([sync_hash], map: "idx_hubspot_invoice_snapshots_sync_hash")
+}
+
+// AffiliateCommission
+// Represents a single commission event detected from a paid HubSpot invoice.
+// Lifecycle: detected → pending_admin_confirmation → eligible → requested → paid.
+// The idempotency_key prevents duplicate records on sync retries.
+model AffiliateCommission {
+  id                          String           @id @default(uuid())
+  // The affiliate (USER) who owns this commission — kept for direct user lookups
+  affiliate_id                String
+  // FK to the affiliate's Med Alliance profile — drives the AffiliateProfile.commissions[] back-relation
+  affiliate_profile_id        String
+  // The organization whose invoice generated this commission
+  organization_id             String
+  // The HubSpot invoice snapshot that triggered this commission
+  hubspot_invoice_snapshot_id String
+  // Commission percentage at the time of detection (snapshot of AffiliateProfile.commission_percent_default)
+  commission_percent_snapshot Decimal          @db.Decimal(5, 2)
+  // Invoice amount at time of detection — immutable after creation
+  base_amount_snapshot        Decimal          @db.Decimal(14, 2)
+  // Computed as: ROUND(base_amount_snapshot * commission_percent_snapshot / 100, 2) with half-up rounding
+  commission_amount           Decimal          @db.Decimal(14, 2)
+  status                      CommissionStatus @default(detected)
+  // Unique key to prevent duplicate commission on sync retry:
+  // composed as SHA-256(affiliate_id + hubspot_invoice_id + paid_at + base_amount + commission_percent)
+  idempotency_key             String           @unique
+  // Admin user who made the eligibility decision (approved or rejected)
+  admin_decision_by           String?
+  // Free-form reason text provided by admin when confirming or rejecting
+  admin_decision_reason       String?
+  // Timestamp of the admin eligibility decision
+  admin_decision_at           DateTime?
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
+
+  affiliate              USER                              @relation("AffiliateCommissions", fields: [affiliate_id], references: [id])
+  // Back-relation to AffiliateProfile — enables AffiliateProfile.commissions[]
+  affiliateProfile       AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
+  organization           Organization                      @relation(fields: [organization_id], references: [id])
+  hubspotInvoiceSnapshot HubspotInvoiceSnapshot            @relation(fields: [hubspot_invoice_snapshot_id], references: [id])
+  adminDecisionBy        USER?                             @relation("CommissionAdminDecision", fields: [admin_decision_by], references: [id])
+  // Junction records linking this commission to payout requests
+  payoutRequestCommissions AffiliatePayoutRequestCommission[]
+
+  // Scoped listing: all commissions for a given affiliate filtered by status
+  @@index([affiliate_id, status], map: "idx_affiliate_commissions_affiliate_status")
+  // Scoped listing: all commissions for a given organization filtered by status
+  @@index([organization_id, status], map: "idx_affiliate_commissions_org_status")
+  @@index([status], map: "idx_affiliate_commissions_status")
+  @@index([hubspot_invoice_snapshot_id], map: "idx_affiliate_commissions_invoice_snapshot")
+}
+
+// AffiliatePayoutRequest
+// A payout request submitted by an affiliate for one or more eligible commissions.
+// Lifecycle: requested → approved → paid  (or rejected at any admin step).
+// The set of commissions included is stored in AffiliatePayoutRequestCommission.
+model AffiliatePayoutRequest {
+  id               String              @id @default(uuid())
+  // The affiliate (USER) who submitted this request — kept for direct user lookups
+  affiliate_id     String
+  // FK to the affiliate's Med Alliance profile — drives the AffiliateProfile.payoutRequests[] back-relation
+  affiliate_profile_id String
+  status           PayoutRequestStatus @default(requested)
+  // Sum of commission_amount for all commissions included at request time
+  requested_amount Decimal             @db.Decimal(14, 2)
+  // Amount approved by admin; may differ from requested_amount in edge cases
+  approved_amount  Decimal?            @db.Decimal(14, 2)
+  // Snapshot of the affiliate's payout method at request time
+  payment_method   PayoutMethod?
+  // External payment reference (e.g. wire confirmation number, transaction ID)
+  payment_reference String?
+  // Admin user who approved or rejected this request
+  approved_by      String?
+  approved_at      DateTime?
+  // Timestamp when payment was confirmed as sent
+  paid_at          DateTime?
+  // Free-form reason provided when rejecting the request
+  rejection_reason String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  affiliate        USER                              @relation("AffiliatePayoutRequests", fields: [affiliate_id], references: [id])
+  // Back-relation to AffiliateProfile — enables AffiliateProfile.payoutRequests[]
+  affiliateProfile AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
+  approvedBy       USER?                             @relation("PayoutApprovedBy", fields: [approved_by], references: [id])
+  // Junction records linking this request to its selected commissions
+  commissions      AffiliatePayoutRequestCommission[]
+
+  // Scoped listing: affiliate's payout requests filtered by status
+  @@index([affiliate_id, status], map: "idx_affiliate_payout_requests_affiliate_status")
+  @@index([status], map: "idx_affiliate_payout_requests_status")
+  // Finance queries: find requests paid in a given period
+  @@index([paid_at], map: "idx_affiliate_payout_requests_paid_at")
+}
+
+// AffiliatePayoutRequestCommission
+// Junction table linking a payout request to the specific commissions it covers.
+// Replaces a simple String[] array to enforce referential integrity and allow JOINs.
+// Cascade delete: removing a payout request also removes its junction records.
+model AffiliatePayoutRequestCommission {
+  id                String   @id @default(uuid())
+  payout_request_id String
+  commission_id     String
+  createdAt         DateTime @default(now())
+
+  payoutRequest AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
+  commission    AffiliateCommission    @relation(fields: [commission_id], references: [id])
+
+  // A commission can only be linked once per payout request
+  @@unique([payout_request_id, commission_id], name: "idx_payout_commission_unique")
+  @@index([payout_request_id], map: "idx_prc_payout_request_id")
+  @@index([commission_id], map: "idx_prc_commission_id")
+}
+
+// MedAllianceAuditLog
+// Append-only audit trail for all Med Alliance state transitions and decisions.
+// Never soft-delete or mutate records. entity_type + entity_id act as a polymorphic
+// reference since Prisma does not support native polymorphic FKs.
+// Required for: admin review queue (MA-006), timeline display, compliance traceability.
+model MedAllianceAuditLog {
+  id            String                 @id @default(uuid())
+  // User who triggered this event; null when triggered by automated sync job
+  actor_user_id String?
+  // The type of entity this log entry refers to (polymorphic discriminator)
+  entity_type   MedAllianceEntityType
+  // The ID of the referred entity (Organization.id, AffiliateCommission.id, or AffiliatePayoutRequest.id)
+  entity_id     String
+  // Short event code describing what happened (e.g. "status_changed", "admin_decision", "sync_error")
+  event         String
+  // Previous status value before this transition (null for creation events)
+  old_status    String?
+  // New status value after this transition
+  new_status    String?
+  // Free-form reason text (required for admin decisions and blocks)
+  reason        String?
+  // Who or what triggered this event
+  source        MedAllianceAuditSource @default(user)
+  // Additional structured context (e.g. sync job ID, duplicate match data)
+  metadata      Json?
+  createdAt     DateTime               @default(now())
+
+  // Actor user relation — null when source is "sync"
+  actorUser USER? @relation("MedAllianceAuditActor", fields: [actor_user_id], references: [id])
+
+  // Composite index for timeline queries: "all events for entity X ordered by time"
+  @@index([entity_type, entity_id, createdAt], map: "idx_med_alliance_audit_entity_timeline")
+  @@index([actor_user_id], map: "idx_med_alliance_audit_actor")
+  @@index([source], map: "idx_med_alliance_audit_source")
+}
+
 enum Role {
   organization_admin
   organization_super_admin
@@ -712,4 +969,47 @@ enum Priority_new {
   MEDIUM
   HIGH
   URGENT
+}
+
+// ============== here I started with MED ALLIANCE enums ==========================
+enum AffiliateStatus {
+  active
+  inactive
+}
+
+enum PayoutMethod {
+  ach
+  wire
+  paypal
+  zelle
+  other
+}
+
+enum CommissionStatus {
+  detected
+  pending_admin_confirmation
+  eligible
+  requested
+  paid
+  void
+  rejected
+}
+
+enum PayoutRequestStatus {
+  requested
+  approved
+  rejected
+  paid
+}
+
+enum MedAllianceAuditSource {
+  user
+  sync
+  admin_action
+}
+
+enum MedAllianceEntityType {
+  referred_company
+  commission
+  payout_request
 }
