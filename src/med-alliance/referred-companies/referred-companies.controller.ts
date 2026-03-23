@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ReferredCompaniesService } from './referred-companies.service';
+import { EligibilityCheckService } from './eligibility-check.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
@@ -21,7 +22,10 @@ import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
 export class ReferredCompaniesController {
-  constructor(private readonly service: ReferredCompaniesService) {}
+  constructor(
+    private readonly service: ReferredCompaniesService,
+    private readonly eligibilityCheck: EligibilityCheckService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Affiliate routes
@@ -80,5 +84,16 @@ export class ReferredCompaniesController {
   async findOneAdmin(@Param('id') id: string) {
     const data = await this.service.findOneForAdmin(id);
     return { status: 200, message: 'Referred company retrieved successfully', data };
+  }
+
+  // POST /med-alliance/admin/referred-companies/:id/eligibility-check
+  // Re-runs the MA-004 active-client check for an existing referral.
+  // Useful after admin updates hubspot_id or when a matched org's status changes.
+  @Post('admin/referred-companies/:id/eligibility-check')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async recheck(@Param('id') id: string, @CurrentUser() user: USER) {
+    const data = await this.eligibilityCheck.runAndPersist(id, user.id, 'admin_action');
+    return { status: 200, message: 'Eligibility check completed', data };
   }
 }

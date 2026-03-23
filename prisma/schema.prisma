@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("LOCAL_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -143,9 +143,13 @@ model Organization {
   source                  String?
   type                    String?
 
-  // --- Med Alliance: referred company tracking ---
   // User ID of the affiliate who referred this organization into the Med Alliance program
   referred_by_affiliate_id     String?
+
+  // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL)
+  med_alliance_referral_status MedAllianceReferralStatus?
+  // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
+  med_alliance_block_reason    String?
 
   hire_requests           HireRequest[]
   admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
@@ -155,7 +159,6 @@ model Organization {
   tickets                 Ticket[]
   users                   USER[]
 
-  // --- Med Alliance relations ---
   // The affiliate user who referred this organization; null for organizations not coming from Med Alliance
   referredByAffiliate          USER?                   @relation("OrganizationReferredBy", fields: [referred_by_affiliate_id], references: [id])
   // Commission records generated from invoices tied to this organization
@@ -1012,4 +1015,12 @@ enum MedAllianceEntityType {
   referred_company
   commission
   payout_request
+}
+
+// Eligibility status within the Med Alliance affiliate program.
+// Only populated on Organization records that have referred_by_affiliate_id set.
+// Does NOT affect OrganizationStatus — these are independent concerns.
+enum MedAllianceReferralStatus {
+  eligible
+  not_eligible_active_client
 }

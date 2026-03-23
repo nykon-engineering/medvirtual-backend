@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReferredCompaniesService } from './referred-companies.service';
+import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 
@@ -19,6 +20,10 @@ const mockPrisma = {
 
 const mockAffiliatesService = {
   requireActiveProfile: jest.fn(),
+};
+
+const mockEligibilityCheckService = {
+  runAndPersist: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -59,6 +64,7 @@ describe('ReferredCompaniesService', () => {
         ReferredCompaniesService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AffiliatesService, useValue: mockAffiliatesService },
+        { provide: EligibilityCheckService, useValue: mockEligibilityCheckService },
       ],
     }).compile();
 
@@ -69,6 +75,8 @@ describe('ReferredCompaniesService', () => {
 
   // -------------------------------------------------------------------------
   // create
+  // Note: after creating the org, service calls eligibilityCheck.runAndPersist()
+  // then re-fetches via prisma.organization.findUnique to return the updated record.
   // -------------------------------------------------------------------------
   describe('create', () => {
     const createDto = {
@@ -77,6 +85,12 @@ describe('ReferredCompaniesService', () => {
       website_url: 'https://acme.com',
       location: 'New York',
       industry: 'Healthcare',
+    };
+
+    const mockOrgWithEligibility = {
+      ...mockOrg,
+      med_alliance_referral_status: 'eligible',
+      med_alliance_block_reason: null,
     };
 
     it('should throw ForbiddenException when affiliate profile is inactive or missing', async () => {
@@ -88,15 +102,18 @@ describe('ReferredCompaniesService', () => {
         ForbiddenException,
       );
       expect(mockPrisma.organization.create).not.toHaveBeenCalled();
+      expect(mockEligibilityCheckService.runAndPersist).not.toHaveBeenCalled();
     });
 
-    it('should create the organization and set referred_by_affiliate_id', async () => {
+    it('should create org, run eligibility check, and return updated record', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockPrisma.organization.create.mockResolvedValue(mockOrg);
+      mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.findUnique.mockResolvedValue(mockOrgWithEligibility);
 
       const result = await service.create(createDto, mockCurrentUser);
 
-      expect(result).toEqual(mockOrg);
+      // org created with correct fields
       expect(mockPrisma.organization.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -106,15 +123,46 @@ describe('ReferredCompaniesService', () => {
           }),
         }),
       );
+      // eligibility check ran with correct args
+      expect(mockEligibilityCheckService.runAndPersist).toHaveBeenCalledWith(
+        mockOrg.id,
+        mockCurrentUser.id,
+        'user',
+      );
+      // final result includes eligibility fields
+      expect(result).toEqual(mockOrgWithEligibility);
+    });
+
+    it('should return org with not_eligible_active_client when check blocks the referral', async () => {
+      const blockedOrg = {
+        ...mockOrg,
+        med_alliance_referral_status: 'not_eligible_active_client',
+        med_alliance_block_reason: 'active_client_block: organization_active_by_email',
+      };
+
+      mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
+      mockPrisma.organization.create.mockResolvedValue(mockOrg);
+      mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.findUnique.mockResolvedValue(blockedOrg);
+
+      const result = await service.create(createDto, mockCurrentUser);
+
+      expect(result!.med_alliance_referral_status).toBe('not_eligible_active_client');
+      expect(result!.med_alliance_block_reason).toBe(
+        'active_client_block: organization_active_by_email',
+      );
     });
 
     it('should create organization with only required fields when optionals are omitted', async () => {
+      const orgNoEmail = { ...mockOrgWithEligibility, email: null };
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockPrisma.organization.create.mockResolvedValue({ ...mockOrg, email: null });
+      mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.findUnique.mockResolvedValue(orgNoEmail);
 
       const result = await service.create({ name: 'MinOrg' }, mockCurrentUser);
 
-      expect(result.email).toBeNull();
+      expect(result!.email).toBeNull();
     });
   });
 

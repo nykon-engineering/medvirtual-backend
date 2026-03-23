@@ -204,7 +204,7 @@ export class CommissionsService {
   async decide(id: string, dto: DecideCommissionDto, adminUser: USER) {
     const commission = await this.prisma.affiliateCommission.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, organization_id: true },
     });
     if (!commission) throw new NotFoundException('Commission not found');
 
@@ -212,6 +212,20 @@ export class CommissionsService {
       throw new BadRequestException(
         `Commission in status "${commission.status}" cannot be decided. Only ${DECIDABLE_STATUSES.join(', ')} are allowed.`,
       );
+    }
+
+    // MA-004 guard: block approval if the referred organization was matched as an active client.
+    // An admin can still reject, but cannot approve a commission from an ineligible referral.
+    if (dto.decision === 'eligible' && commission.organization_id) {
+      const org = await this.prisma.organization.findUnique({
+        where: { id: commission.organization_id },
+        select: { med_alliance_referral_status: true },
+      });
+      if (org?.med_alliance_referral_status === 'not_eligible_active_client') {
+        throw new BadRequestException(
+          'Cannot approve commission: referred organization is blocked as an active MedVirtual client.',
+        );
+      }
     }
 
     const newStatus = dto.decision === 'eligible' ? 'eligible' : 'rejected';

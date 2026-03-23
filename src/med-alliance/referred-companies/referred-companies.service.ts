@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { AffiliatesService } from '../affiliates/affiliates.service';
+import { EligibilityCheckService } from './eligibility-check.service';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 
@@ -24,6 +25,8 @@ const ORG_SELECT = {
   status: true,
   hubspot_id: true,
   referred_by_affiliate_id: true,
+  med_alliance_referral_status: true,
+  med_alliance_block_reason: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -33,6 +36,7 @@ export class ReferredCompaniesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly affiliatesService: AffiliatesService,
+    private readonly eligibilityCheck: EligibilityCheckService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -59,7 +63,15 @@ export class ReferredCompaniesService {
       select: ORG_SELECT,
     });
 
-    return org;
+    // Run MA-004 eligibility check: block if this company is already an active client.
+    // runAndPersist updates med_alliance_referral_status and writes the audit log.
+    await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
+
+    // Return the org with the updated eligibility status.
+    return this.prisma.organization.findUnique({
+      where: { id: org.id },
+      select: { ...ORG_SELECT, med_alliance_referral_status: true, med_alliance_block_reason: true },
+    });
   }
 
   // ---------------------------------------------------------------------------
