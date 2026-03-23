@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import axios from 'axios';
 import { InvoiceIngestionService } from './invoice-ingestion.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ReviewCasesService } from '../review-cases/review-cases.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -16,6 +17,8 @@ const mockPrisma = {
     update: jest.fn(),
   },
 };
+
+const mockReviewCases = { openOrSkip: jest.fn() };
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -46,6 +49,7 @@ describe('InvoiceIngestionService', () => {
       providers: [
         InvoiceIngestionService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: ReviewCasesService, useValue: mockReviewCases },
       ],
     }).compile();
 

@@ -4,6 +4,7 @@ import { HubspotMatchingService } from './hubspot-matching.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
+import { ReviewCasesService } from '../review-cases/review-cases.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -20,6 +21,7 @@ const mockPrisma = {
 
 const mockMailService = { sendMail: jest.fn() };
 const mockEligibilityCheck = { runAndPersist: jest.fn() };
+const mockReviewCases = { openOrSkip: jest.fn() };
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -49,6 +51,7 @@ describe('HubspotMatchingService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MailService, useValue: mockMailService },
         { provide: EligibilityCheckService, useValue: mockEligibilityCheck },
+        { provide: ReviewCasesService, useValue: mockReviewCases },
       ],
     }).compile();
 

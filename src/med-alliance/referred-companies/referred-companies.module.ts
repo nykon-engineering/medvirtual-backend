@@ -5,9 +5,10 @@ import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AffiliatesModule } from '../affiliates/affiliates.module';
 import { SyncModule } from '../sync/sync.module';
+import { ReviewCasesModule } from '../review-cases/review-cases.module';
 
 @Module({
-  imports: [PrismaModule, AffiliatesModule, SyncModule],
+  imports: [PrismaModule, AffiliatesModule, SyncModule, ReviewCasesModule],
   controllers: [ReferredCompaniesController],
   providers: [ReferredCompaniesService, EligibilityCheckService],
 })

@@ -5,6 +5,7 @@ import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
+import { ReviewCasesService } from '../review-cases/review-cases.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -13,6 +14,7 @@ const mockPrisma = {
   organization: {
     create: jest.fn(),
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
     count: jest.fn(),
   },
@@ -29,6 +31,10 @@ const mockEligibilityCheckService = {
 
 const mockReferralSyncService = {
   run: jest.fn(),
+};
+
+const mockReviewCasesService = {
+  openOrSkip: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +77,7 @@ describe('ReferredCompaniesService', () => {
         { provide: AffiliatesService, useValue: mockAffiliatesService },
         { provide: EligibilityCheckService, useValue: mockEligibilityCheckService },
         { provide: ReferralSyncService, useValue: mockReferralSyncService },
+        { provide: ReviewCasesService, useValue: mockReviewCasesService },
       ],
     }).compile();
 
@@ -115,6 +122,7 @@ describe('ReferredCompaniesService', () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockPrisma.organization.create.mockResolvedValue(mockOrg);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(mockOrgWithEligibility);
 
       const result = await service.create(createDto, mockCurrentUser);
@@ -149,6 +157,7 @@ describe('ReferredCompaniesService', () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockPrisma.organization.create.mockResolvedValue(mockOrg);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(blockedOrg);
 
       const result = await service.create(createDto, mockCurrentUser);
@@ -164,6 +173,7 @@ describe('ReferredCompaniesService', () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockPrisma.organization.create.mockResolvedValue({ ...mockOrg, email: null });
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(orgNoEmail);
 
       const result = await service.create({ name: 'MinOrg' }, mockCurrentUser);

@@ -6,9 +6,10 @@ import { InvoiceIngestionService } from './invoice-ingestion.service';
 import { CommissionDetectionService } from './commission-detection.service';
 import { ReferralSyncService } from './referral-sync.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
+import { ReviewCasesModule } from '../review-cases/review-cases.module';
 
 @Module({
-  imports: [PrismaModule, MailModule],
+  imports: [PrismaModule, MailModule, ReviewCasesModule],
   providers: [
     HubspotMatchingService,
     InvoiceIngestionService,

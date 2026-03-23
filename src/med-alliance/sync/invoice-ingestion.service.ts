@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
 import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ReviewCasesService } from '../review-cases/review-cases.service';
 
 export interface InvoiceRecord {
   hubspot_id: string;
@@ -29,7 +30,10 @@ export class InvoiceIngestionService {
     'hs_lastmodifieddate',
   ].join(',');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reviewCases: ReviewCasesService,
+  ) {}
 
   /**
    * Phase B Step 1: fetch all invoices associated with the HubSpot company,
@@ -154,7 +158,17 @@ export class InvoiceIngestionService {
 
     const existing = await this.prisma.hubspotInvoiceSnapshot.findUnique({
       where: { hubspot_id: invoice.hubspot_id },
-      select: { id: true, sync_hash: true },
+      select: {
+        id: true,
+        sync_hash: true,
+        invoice_amount: true,
+        // Check if a commission has already been detected for this snapshot
+        commissions: {
+          where: { status: { notIn: ['void', 'rejected'] } },
+          select: { id: true, status: true },
+          take: 1,
+        },
+      },
     });
 
     if (!existing) {
@@ -190,6 +204,22 @@ export class InvoiceIngestionService {
         raw_payload: invoice.raw_payload,
       },
     });
+
+    // MA-006: if a live commission was already detected for this snapshot, flag for admin review
+    const linkedCommission = existing.commissions?.[0];
+    if (linkedCommission) {
+      await this.reviewCases.openOrSkip(
+        organizationId,
+        'reconciliation_invoice_changed',
+        {
+          snapshot_id: existing.id,
+          commission_id: linkedCommission.id,
+          hubspot_invoice_id: invoice.hubspot_id,
+          old_amount: existing.invoice_amount?.toString(),
+          new_amount: invoice.invoice_amount,
+        },
+      );
+    }
 
     return 'updated';
   }

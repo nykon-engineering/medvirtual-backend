@@ -8,6 +8,7 @@ import { USER } from '@prisma/client';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
+import { ReviewCasesService } from '../review-cases/review-cases.service';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 
@@ -39,6 +40,7 @@ export class ReferredCompaniesService {
     private readonly affiliatesService: AffiliatesService,
     private readonly eligibilityCheck: EligibilityCheckService,
     private readonly referralSync: ReferralSyncService,
+    private readonly reviewCases: ReviewCasesService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -68,11 +70,14 @@ export class ReferredCompaniesService {
     // MA-004: block if this company is already an active client.
     await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
 
+    // MA-006: soft duplicate check — warn if another referred org with the same name or email exists.
+    const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto);
+
     // MA-005: run HubSpot matching + invoice ingestion + commission detection synchronously.
     await this.referralSync.run(org.id);
 
     // Return the org with all updated fields after the sync pipeline.
-    return this.prisma.organization.findUnique({
+    const result = await this.prisma.organization.findUnique({
       where: { id: org.id },
       select: {
         ...ORG_SELECT,
@@ -83,6 +88,43 @@ export class ReferredCompaniesService {
         hubspot_synced_at: true,
       },
     });
+
+    return softDuplicateWarning ? { ...result, warning: softDuplicateWarning } : result;
+  }
+
+  /**
+   * Checks if another referred organization with the same name or email already exists.
+   * If a duplicate is found, opens a MA-006 review case and returns a warning message.
+   * The referral is NOT blocked — this is advisory only.
+   */
+  private async checkSoftDuplicate(
+    orgId: string,
+    dto: CreateReferredCompanyDto,
+  ): Promise<string | null> {
+    const orConditions: any[] = [
+      { name: { equals: dto.name, mode: 'insensitive' } },
+    ];
+    if (dto.email) {
+      orConditions.push({ email: { equals: dto.email, mode: 'insensitive' } });
+    }
+
+    const duplicate = await this.prisma.organization.findFirst({
+      where: {
+        id: { not: orgId },
+        referred_by_affiliate_id: { not: null },
+        OR: orConditions,
+      },
+      select: { id: true, name: true },
+    });
+
+    if (!duplicate) return null;
+
+    await this.reviewCases.openOrSkip(orgId, 'soft_duplicate_referral', {
+      matched_organization_id: duplicate.id,
+      matched_organization_name: duplicate.name,
+    });
+
+    return `This referral appears to be a duplicate of an existing referred company ("${duplicate.name}"). An admin review case has been opened.`;
   }
 
   // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
+import { ReviewCasesService } from '../review-cases/review-cases.service';
 
 export type MatchOutcome =
   | 'already_matched'   // hubspot_id was already set — Phase A skipped
@@ -26,6 +27,7 @@ export class HubspotMatchingService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly eligibilityCheck: EligibilityCheckService,
+    private readonly reviewCases: ReviewCasesService,
   ) {}
 
   /**
@@ -188,6 +190,11 @@ export class HubspotMatchingService {
           'Multiple HubSpot company records matched. Manual review required.',
         hubspot_synced_at: null,
       },
+    });
+
+    // MA-006: open an admin review case so it appears in the review queue
+    await this.reviewCases.openOrSkip(organizationId, 'multiple_hubspot_matches', {
+      company_name: org.name,
     });
 
     const affiliateName = org.referredByAffiliate

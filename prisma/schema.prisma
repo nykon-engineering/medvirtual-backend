@@ -69,6 +69,8 @@ model USER {
   affiliateCommissions         AffiliateCommission[]      @relation("AffiliateCommissions")
   // Audit log entries where this user was the acting subject
   medAllianceAuditActorLogs    MedAllianceAuditLog[]      @relation("MedAllianceAuditActor")
+  // MA-006 review cases resolved by this admin user
+  resolvedReviewCases          MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -173,6 +175,8 @@ model Organization {
   affiliateCommissions         AffiliateCommission[]
   // HubSpot invoice snapshots pulled during sync for this organization
   hubspotInvoiceSnapshots      HubspotInvoiceSnapshot[]
+  // MA-006 admin review cases opened for this referred organization
+  adminReviewCases             MedAllianceAdminReviewCase[]
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -867,6 +871,35 @@ model MedAllianceAuditLog {
   @@index([source], map: "idx_med_alliance_audit_source")
 }
 
+// MA-006 — Admin review queue for referrals that require manual intervention
+model MedAllianceAdminReviewCase {
+  id              String                @id @default(uuid())
+  organization_id String
+  reason_code     AdminReviewReasonCode
+  status          AdminReviewStatus     @default(open)
+
+  // Contextual payload stored at case-creation time (snapshot of trigger data)
+  metadata        Json?
+
+  // Resolution fields — populated when admin closes the case
+  resolved_by_id  String?
+  resolved_at     DateTime?
+  resolution      String?               // free-form note by the admin
+
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  // Relations
+  organization    Organization          @relation(fields: [organization_id], references: [id])
+  resolvedBy      USER?                 @relation("ReviewCaseResolvedBy", fields: [resolved_by_id], references: [id])
+
+  // Deduplication: at most one open case per (org + reason)
+  @@unique([organization_id, reason_code, status], name: "uq_open_review_case")
+  @@index([organization_id], map: "idx_review_cases_org")
+  @@index([status], map: "idx_review_cases_status")
+  @@index([reason_code], map: "idx_review_cases_reason_code")
+}
+
 enum Role {
   organization_admin
   organization_super_admin
@@ -1032,4 +1065,17 @@ enum MedAllianceReferralStatus {
   eligible
   not_eligible_active_client
   needs_admin_review // HubSpot returned multiple company matches — requires admin review before pipeline continues
+}
+
+// MA-006 — Reason why a review case was opened
+enum AdminReviewReasonCode {
+  multiple_hubspot_matches        // HubSpot returned 2+ company matches — admin must pick the correct one
+  reconciliation_invoice_changed  // A paid invoice was updated in HubSpot after commission was already detected
+  soft_duplicate_referral         // A referred org appears to match an existing referred org (name/email similarity)
+}
+
+// MA-006 — Lifecycle status of an admin review case
+enum AdminReviewStatus {
+  open
+  resolved
 }
