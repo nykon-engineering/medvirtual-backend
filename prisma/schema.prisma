@@ -151,6 +151,14 @@ model Organization {
   // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
   med_alliance_block_reason    String?
 
+  // HubSpot sync state — only relevant for referred organizations
+  // 'pending' | 'synced' | 'no_match' | 'multiple_matches' | 'error'
+  hubspot_sync_status          String?
+  // Last sync error message, cleared on successful sync
+  hubspot_sync_error           String?
+  // Timestamp of the last successful HubSpot sync
+  hubspot_synced_at            DateTime?
+
   hire_requests           HireRequest[]
   admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
   owner                   USER?                   @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
@@ -1023,4 +1031,5 @@ enum MedAllianceEntityType {
 enum MedAllianceReferralStatus {
   eligible
   not_eligible_active_client
+  needs_admin_review // HubSpot returned multiple company matches — requires admin review before pipeline continues
 }

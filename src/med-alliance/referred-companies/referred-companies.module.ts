@@ -4,9 +4,10 @@ import { ReferredCompaniesService } from './referred-companies.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AffiliatesModule } from '../affiliates/affiliates.module';
+import { SyncModule } from '../sync/sync.module';
 
 @Module({
-  imports: [PrismaModule, AffiliatesModule],
+  imports: [PrismaModule, AffiliatesModule, SyncModule],
   controllers: [ReferredCompaniesController],
   providers: [ReferredCompaniesService, EligibilityCheckService],
 })

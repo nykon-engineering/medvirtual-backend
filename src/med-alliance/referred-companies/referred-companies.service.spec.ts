@@ -4,6 +4,7 @@ import { ReferredCompaniesService } from './referred-companies.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
+import { ReferralSyncService } from '../sync/referral-sync.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -24,6 +25,10 @@ const mockAffiliatesService = {
 
 const mockEligibilityCheckService = {
   runAndPersist: jest.fn(),
+};
+
+const mockReferralSyncService = {
+  run: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -65,6 +70,7 @@ describe('ReferredCompaniesService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AffiliatesService, useValue: mockAffiliatesService },
         { provide: EligibilityCheckService, useValue: mockEligibilityCheckService },
+        { provide: ReferralSyncService, useValue: mockReferralSyncService },
       ],
     }).compile();
 

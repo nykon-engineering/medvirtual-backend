@@ -4,6 +4,7 @@ import { ReferredCompaniesModule } from './referred-companies/referred-companies
 import { InvoicesModule } from './invoices/invoices.module';
 import { CommissionsModule } from './commissions/commissions.module';
 import { PayoutRequestsModule } from './payout-requests/payout-requests.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { PayoutRequestsModule } from './payout-requests/payout-requests.module';
     InvoicesModule,
     CommissionsModule,
     PayoutRequestsModule,
+    SyncModule,
   ],
 })
 export class MedAllianceModule {}

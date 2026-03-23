@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ReferredCompaniesService } from './referred-companies.service';
 import { EligibilityCheckService } from './eligibility-check.service';
+import { ReferralSyncService } from '../sync/referral-sync.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
@@ -25,6 +26,7 @@ export class ReferredCompaniesController {
   constructor(
     private readonly service: ReferredCompaniesService,
     private readonly eligibilityCheck: EligibilityCheckService,
+    private readonly referralSync: ReferralSyncService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -88,12 +90,22 @@ export class ReferredCompaniesController {
 
   // POST /med-alliance/admin/referred-companies/:id/eligibility-check
   // Re-runs the MA-004 active-client check for an existing referral.
-  // Useful after admin updates hubspot_id or when a matched org's status changes.
   @Post('admin/referred-companies/:id/eligibility-check')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   async recheck(@Param('id') id: string, @CurrentUser() user: USER) {
     const data = await this.eligibilityCheck.runAndPersist(id, user.id, 'admin_action');
     return { status: 200, message: 'Eligibility check completed', data };
+  }
+
+  // POST /med-alliance/admin/referred-companies/:id/sync
+  // Re-runs the full MA-005 sync pipeline (Phase A + B) for an existing referral.
+  // If hubspot_id is already set, Phase A is skipped and only invoices are re-ingested.
+  @Post('admin/referred-companies/:id/sync')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async sync(@Param('id') id: string) {
+    const data = await this.referralSync.run(id);
+    return { status: 200, message: 'Sync completed', data };
   }
 }

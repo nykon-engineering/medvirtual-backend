@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
+import { ReferralSyncService } from '../sync/referral-sync.service';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 
@@ -37,6 +38,7 @@ export class ReferredCompaniesService {
     private readonly prisma: PrismaService,
     private readonly affiliatesService: AffiliatesService,
     private readonly eligibilityCheck: EligibilityCheckService,
+    private readonly referralSync: ReferralSyncService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -63,14 +65,23 @@ export class ReferredCompaniesService {
       select: ORG_SELECT,
     });
 
-    // Run MA-004 eligibility check: block if this company is already an active client.
-    // runAndPersist updates med_alliance_referral_status and writes the audit log.
+    // MA-004: block if this company is already an active client.
     await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
 
-    // Return the org with the updated eligibility status.
+    // MA-005: run HubSpot matching + invoice ingestion + commission detection synchronously.
+    await this.referralSync.run(org.id);
+
+    // Return the org with all updated fields after the sync pipeline.
     return this.prisma.organization.findUnique({
       where: { id: org.id },
-      select: { ...ORG_SELECT, med_alliance_referral_status: true, med_alliance_block_reason: true },
+      select: {
+        ...ORG_SELECT,
+        med_alliance_referral_status: true,
+        med_alliance_block_reason: true,
+        hubspot_sync_status: true,
+        hubspot_sync_error: true,
+        hubspot_synced_at: true,
+      },
     });
   }
 
