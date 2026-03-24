@@ -15,7 +15,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ADMIN_ROLES, AFFILIATE_ROLES } from '../constants';
+import { ADMIN_ROLES } from '../constants';
 import { CreatePayoutRequestDto } from './dto/create-payout-request.dto';
 import {
   DecidePayoutRequestDto,
@@ -35,7 +35,7 @@ export class PayoutRequestsController {
   // POST /med-alliance/payout-requests — Submit a new payout request.
   @Post('payout-requests')
   @HttpCode(201)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ADMIN_ROLES)
   async create(
     @Body() dto: CreatePayoutRequestDto,
     @CurrentUser() user: USER,
@@ -47,7 +47,7 @@ export class PayoutRequestsController {
   // GET /med-alliance/payout-requests — List own payout requests.
   @Get('payout-requests')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ADMIN_ROLES)
   async findAll(
     @Query() query: ListPayoutRequestsDto,
     @CurrentUser() user: USER,
@@ -59,7 +59,7 @@ export class PayoutRequestsController {
   // GET /med-alliance/payout-requests/:id — Get one (scoped to affiliate).
   @Get('payout-requests/:id')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ADMIN_ROLES)
   async findOne(@Param('id') id: string, @CurrentUser() user: USER) {
     const data = await this.payoutRequestsService.findOneForAffiliate(id, user);
     return { status: 200, message: 'Payout request retrieved successfully', data };

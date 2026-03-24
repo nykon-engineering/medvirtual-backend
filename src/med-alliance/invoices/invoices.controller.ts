@@ -12,7 +12,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ADMIN_ROLES, AFFILIATE_ROLES } from '../constants';
+import { ADMIN_ROLES } from '../constants';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 
 @Controller('med-alliance')
@@ -29,7 +29,7 @@ export class InvoicesController {
   // current affiliate. Each item includes the computed is_candidate_input flag.
   @Get('referred-companies/:id/invoices')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ADMIN_ROLES)
   async getForAffiliate(
     @Param('id') organizationId: string,
     @Query() query: ListInvoicesDto,

@@ -181,7 +181,14 @@ export class ReferredCompaniesService {
   // Admin: list all referred companies (no affiliate scoping).
   // ---------------------------------------------------------------------------
   async findAllForAdmin(dto: ListReferredCompaniesDto) {
-    const { page = 1, limit = 20, search, status, sortBy = 'createdAt', sortOrder = 'desc' } = dto;
+    const { 
+      page = 1,
+      limit = 20, 
+      search,
+      status,
+      sortBy = 'createdAt', 
+      sortOrder = 'desc' 
+    } = dto;
     const skip = (page - 1) * limit;
 
     // Admin sees only orgs that were referred (non-null referred_by_affiliate_id).

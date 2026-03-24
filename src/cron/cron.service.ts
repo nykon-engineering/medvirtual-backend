@@ -479,7 +479,7 @@ export class CronService {
             await this.mailService.sendMail({
                 from: 'MedVirtual <noreply@medvirtual.ai>',
                 to: 'shayan@regenta.ai',
-                cc: ['paulo@regenta.ai', 'hanieh@medvirtual.ai'],
+                cc: ['paulo@regenta.ai'],
                 subject: '[Action Required] New VA Positions Found',
                 html: emailBody,
             });

@@ -15,7 +15,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ADMIN_ROLES, AFFILIATE_ROLES } from '../constants';
+import { ADMIN_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
   UpdateAffiliatePayoutPreferencesDto,
@@ -81,7 +81,7 @@ export class AffiliatesController {
   // GET /med-alliance/affiliates/me — Get own profile.
   @Get('affiliates/me')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ORGANIZATION_ROLES)
   async findOwn(@CurrentUser() user: USER) {
     const data = await this.affiliatesService.findOwn(user);
     return { status: 200, message: 'Affiliate profile retrieved successfully', data };
@@ -90,7 +90,7 @@ export class AffiliatesController {
   // PATCH /med-alliance/affiliates/me — Update own payout preferences only.
   @Patch('affiliates/me')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ORGANIZATION_ROLES)
   async updateOwn(
     @CurrentUser() user: USER,
     @Body() dto: UpdateAffiliatePayoutPreferencesDto,

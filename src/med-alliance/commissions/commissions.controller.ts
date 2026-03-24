@@ -14,7 +14,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ADMIN_ROLES, AFFILIATE_ROLES } from '../constants';
+import { ADMIN_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
 import { DecideCommissionDto, VoidCommissionDto } from './dto/decide-commission.dto';
 
@@ -30,7 +30,7 @@ export class CommissionsController {
   // GET /med-alliance/commissions — List own commissions.
   @Get('commissions')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ORGANIZATION_ROLES)
   async findAll(@Query() query: ListCommissionsDto, @CurrentUser() user: USER) {
     const result = await this.commissionsService.findAllForAffiliate(query, user);
     return { status: 200, message: 'Commissions retrieved successfully', ...result };
@@ -39,7 +39,7 @@ export class CommissionsController {
   // GET /med-alliance/commissions/:id — Get one commission (scoped).
   @Get('commissions/:id')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...ORGANIZATION_ROLES)
   async findOne(@Param('id') id: string, @CurrentUser() user: USER) {
     const data = await this.commissionsService.findOneForAffiliate(id, user);
     return { status: 200, message: 'Commission retrieved successfully', data };
