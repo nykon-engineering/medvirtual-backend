@@ -32,6 +32,7 @@ import { PositionRateConfigService } from '../position-rate-config/position-rate
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
+import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
 import { dateToTimestamp, timestampToUSDate } from '../common/utils/formatDate';
 
 @Injectable()
@@ -917,6 +918,7 @@ export class HireRequestService {
               ...pc.candidate,
               ...rates_B,
               years_of_experience: years_of_experience,
+              approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
               .map(pcc => ({
@@ -1129,6 +1131,7 @@ export class HireRequestService {
               candidate: {
                 ...pc.candidate,
                 ...rates_C,
+                approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
                 avatar: pc.candidate.avatar_url
                   ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
                   : null,
@@ -2217,6 +2220,7 @@ export class HireRequestService {
       return ({
       ...c,
       ...rates_D,
+      approved_positions_pairing: c.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
       panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
@@ -3630,6 +3634,7 @@ export class HireRequestService {
         panelScheduledDate: panel.scheduled_date,
         isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
         ...rates_G,
+        approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
         avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
       };

@@ -628,7 +628,7 @@ model PasswordResetToken {
   usedAt    DateTime?
   createdAt DateTime @default(now())
 
-  user      USER @relation(fields: [userId], references: [id])
+  user      USER @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }

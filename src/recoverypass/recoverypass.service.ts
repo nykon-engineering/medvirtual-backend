@@ -35,6 +35,10 @@ export class RecoverypassService {
       throw new NotFoundException('User not found! Please check the email provided.');
     }
 
+    if (user.status === 'invited'){
+      throw new BadRequestException('User account is not active. Please accept the invitation before resetting password.');
+    }
+
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = await bcrypt.hash(rawToken, 10);
 
@@ -71,10 +75,12 @@ export class RecoverypassService {
       `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`,
       emailTheme || undefined
     );
+    const isProduction = process.env.ENVIRONMENT === 'PROD';
+
     const mailSent = await this.mail.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: user.email,
-      subject: 'Reset Your MedVirtual Password - Action Required',
+      subject: `${!isProduction ? '[DEV] ' : ''}Reset Your MedVirtual Password - Action Required`,
       html: emailBody,
       headers: {
         'X-Mailer': 'MedVirtual Platform',
