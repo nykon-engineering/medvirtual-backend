@@ -78,9 +78,9 @@ export class RecoverypassService {
     const isProduction = process.env.ENVIRONMENT === 'PROD';
 
     const mailSent = await this.mail.sendMail({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
+      from: `${!isProduction ? '[DEV] ' : ''}MedVirtual <noreply@medvirtual.ai>`,
       to: user.email,
-      subject: `${!isProduction ? '[DEV] ' : ''}Reset Your MedVirtual Password - Action Required`,
+      subject: `Reset Your MedVirtual Password - Action Required`,
       html: emailBody,
       headers: {
         'X-Mailer': 'MedVirtual Platform',
