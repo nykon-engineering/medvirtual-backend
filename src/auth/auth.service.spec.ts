@@ -249,6 +249,7 @@ describe('AuthService - signIn', () => {
       first_name: 'Test',
       last_name: 'User',
       role: 'admin',
+      affiliate_profile_id: null,
     };
     userMock.findByEmail.mockResolvedValue(userObj);
     prismaMock.organization.findUnique.mockResolvedValue({ // Change from findMany to findUnique
@@ -275,6 +276,7 @@ describe('AuthService - signIn', () => {
         role: 'admin',
         clientId: 'org1',
         business_unit: 'Berry Virtual',
+        affiliate_profile_id: null,
       },
     });
     expect(prisma.session.updateMany).toHaveBeenCalledWith({

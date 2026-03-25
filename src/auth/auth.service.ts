@@ -165,6 +165,7 @@ export class AuthService {
         role: user.role,
         clientId: user.organization_id,
         business_unit: business_unit,
+        affiliate_profile_id: user.affiliateProfile?.id ?? null,
       },
     };
   }

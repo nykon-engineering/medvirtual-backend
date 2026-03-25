@@ -470,7 +470,11 @@ export class CronService {
 
             for (const position of newPositions) {
                 await this.prisma.positionRateConfig.create({
-                    data: { position },
+                    data: {
+                        position,
+                        medVirtual_margin_per_hour: 9,
+                        berryVirtual_margin_per_hour: 9,
+                    },
                 });
                 console.log(`syncPositionsFromHubspot: created new position "${position}"`);
             }
