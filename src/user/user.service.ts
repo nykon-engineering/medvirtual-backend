@@ -1062,4 +1062,5 @@ export class UserService {
       throw new BadRequestException('Failed to invite user to organization');
     }
   }
+
 }

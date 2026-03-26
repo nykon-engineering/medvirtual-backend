@@ -1,5 +1,3 @@
-import { PhoneField } from "@hubspot/api-client/lib/codegen/marketing/forms";
-
 export const contactToDbDictionary : Record<string, string | string[]> = {
 
     hs_object_id: 'hubspot_id',

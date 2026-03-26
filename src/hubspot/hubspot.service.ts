@@ -42,6 +42,8 @@ import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
+import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
+import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 
 
 
@@ -87,6 +89,9 @@ export class HubspotService {
       private readonly ownerDeletion: HandlerOwnerDeletion,
       private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
 
+      private readonly affiliateCreation: HandlerAffiliateCreation,
+      private readonly affiliatePropertyChange: HandlerAffiliatePropertyChange,
+
 
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
@@ -131,25 +136,40 @@ export class HubspotService {
         }else{
             orderedData = data;
         }
-    
-        //console.log('Ordered Data:', orderedData);
 
         for (const event of orderedData){
             switch (event.subscriptionType) {
+
+                /*
+                2-5922196 => This is the objectTypeId for our custom object "Virtual Assistant"
+                2-54072002 => This is the objectTypeId for our custom object "Growth Partner"
+                */
                
                 case 'object.creation':
                 case 'object.restore':
-                    await this.objectCreation.execute(event);
+                    if (event.objectTypeId ==="2-5922196") {
+                        await this.objectCreation.execute(event);
+                    }else if (event.objectTypeId === "2-54072002") {
+                        await this.affiliateCreation.execute(event);
+                    }
                     break;
                 case 'object.propertyChange':
-                    await this.objectPropertyChange.execute(event);
+                    if (event.objectTypeId ==="2-5922196") {
+                        await this.objectPropertyChange.execute(event);
+                    }else if (event.objectTypeId === "2-54072002") {
+                        await this.affiliatePropertyChange.execute(event);
+                    }
                     break;
 
                 case 'object.deletion':
-                    await this.objectDeletion.execute(event);
+                    if (event.objectTypeId ==="2-5922196") {
+                        await this.objectDeletion.execute(event);
+                    }
                     break;
                 case 'object.merge':
-                    await this.objectMerge.execute(event);
+                    if (event.objectTypeId ==="2-5922196") {
+                        await this.objectMerge.execute(event);
+                    }
                     break;
                 
                 case 'owners.creation':
