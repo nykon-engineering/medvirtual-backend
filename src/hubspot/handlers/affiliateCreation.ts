@@ -25,7 +25,7 @@ export class HandlerAffiliateCreation {
     async execute(event){
 
         try{
-            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_GROWTH_PARTNER_CUSTOM_OBJECT}/${event.objectId}?properties=growth_partner_name,growth_partner_email_address`, 
+            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_GROWTH_PARTNER_CUSTOM_OBJECT}/${event.objectId}?properties=growth_partner_name,growth_partner_email_address,hs_pipeline_stage`, 
                 {
                     headers: {
                         Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -39,6 +39,10 @@ export class HandlerAffiliateCreation {
 
             const rawProperties = getObject.data.properties;
             const affiliateData: Record<string, any> = {};
+
+            if (rawProperties.hs_pipeline_stage !== '1329693870') { // 1329693870 is the Alliance Partner Pipeline
+                return true; // Not qualified, let's skip creation
+            }
 
             const existingAffiliate = await this.prisma.affiliateProfile.findUnique({
                 where: {

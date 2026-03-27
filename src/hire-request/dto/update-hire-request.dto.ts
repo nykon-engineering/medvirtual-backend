@@ -148,5 +148,10 @@ export class UpdateHireRequestDto {
     @IsOptional()
     hubspot_pairing_request_type: string
 
+    @ApiProperty({ type: String, description: 'Requested Role', required: false })
+    @IsString()
+    @IsOptional()
+    request_role: string
+
 }
 
