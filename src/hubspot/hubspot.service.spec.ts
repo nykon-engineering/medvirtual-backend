@@ -25,6 +25,10 @@ import { HandlerTicketCreation } from './handlers/ticketCreation';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
+
+import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
+import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
+
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
@@ -158,6 +162,14 @@ const HandlerTicketPropertyChangeMock = {
   execute: jest.fn(),
 };
 
+const HandlerAffiliateCreationMock = {
+  execute: jest.fn(),
+};
+
+const HandlerAffiliatePropertyChangeMock = {
+  execute: jest.fn(),
+};
+
 const hireRequestCreationServiceMock = {
   execute: jest.fn(),
 };
@@ -241,7 +253,9 @@ describe('HubspotService => GetCandidates', () => {
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
         {provide: ContactCreationService, useValue: contactCreationServiceMock},
         {provide: ContactUpdateService, useValue: updateContactServiceMock},
-        {provide: ContactDeleteService, useValue: deleteContactServiceMock}
+        {provide: ContactDeleteService, useValue: deleteContactServiceMock},
+        {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
+        {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock}
       ],
     }).compile();
 
@@ -314,7 +328,9 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
         {provide: ContactCreationService, useValue: contactCreationServiceMock},
         {provide: ContactUpdateService, useValue: updateContactServiceMock},
-        {provide: ContactDeleteService, useValue: deleteContactServiceMock}
+        {provide: ContactDeleteService, useValue: deleteContactServiceMock},
+        {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
+        {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock}
       ]
     }).compile();
 

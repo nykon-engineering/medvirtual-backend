@@ -29,8 +29,14 @@ import { HireRequestUpdateService } from './update/hireRequest';
 import { HandlerTicketCreation } from './handlers/ticketCreation';
 import { HandlerTicketRestore } from './handlers/ticketRestore';
 import { HandlerTicketDeletion } from './handlers/ticketDeletion';
-import { HireRequestModule } from '../hire-request/hire-request.module';
 import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
+
+import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
+import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
+
+
+import { HireRequestModule } from '../hire-request/hire-request.module';
+
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
@@ -38,6 +44,8 @@ import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { MailModule } from '../mail/mail.module';
+
 
 
 
@@ -66,6 +74,8 @@ import { ContactDeleteService } from './delete/contact';
     HandlerTicketRestore,
     HandlerTicketDeletion,
     HandlerTicketPropertyChange,
+    HandlerAffiliateCreation,
+    HandlerAffiliatePropertyChange,
     HireRequestCreationService,
     HireRequestUpdateService,
     OrganizationCreationService,
@@ -77,6 +87,7 @@ import { ContactDeleteService } from './delete/contact';
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 
+    MailModule,
     forwardRef(() => CandidatesModule), 
     forwardRef(() => OrganizationModule), 
     forwardRef(() => HireRequestModule) ],

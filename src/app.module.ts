@@ -25,6 +25,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { SqsModule } from './sqs/sqs.module';
 import { PositionRateConfigModule } from './position-rate-config/position-rate-config.module';
+import { MedAllianceModule } from './med-alliance/med-alliance.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { PositionRateConfigModule } from './position-rate-config/position-rate-c
     TalentPoolLeadsModule,
     SqsModule,
     PositionRateConfigModule,
+    MedAllianceModule,
   ],
   controllers: [AppController],
   providers: [

@@ -7,6 +7,7 @@ import { buildConfigMap, computeCandidateRates } from '../../common/utils/salary
 import { HireRequestService } from '../../hire-request/hire-request.service';
 import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
 import { changeLabelAvailability } from '../../common/utils/hubspot.util';
+import { getApprovedPositionLabel } from '../../common/dictionaries/approved-positions-pairing-dictionary';
 import { PositionRateConfigService } from '../../position-rate-config/position-rate-config.service';
 
 @Injectable()
@@ -248,6 +249,25 @@ export class HandlerOrganization {
             specialization: true,
             location: true,
             hubspot_role_type: true,
+            hubspot_language: true,
+            hubspot_numberVA: true,
+            request_role: true,
+            hubspot_tasks: true,
+            hubspot_company_name: true,
+            hubspot_ticket_id: true,
+            hubspot_tools_familiarization: true,
+            hubspot_va_shift_hours: true,
+            hubspot_n2_monitors_required: true,
+            hubspot_special_sourcing_needed: true,
+            hubspot_special_requirements: true,
+            hubspot_additional_training_requested: true,
+            hubspot_pairing_date: true,
+            hubspot_pairing_time: true,
+            hubspot_pairing_request_type: true,
+            hubspot_contract_amount: true,
+            hubspot_training_request_notes: true,
+            hubspot_camera_on_during_shift: true,
+            skills: true,
           },
         },
       },
@@ -265,6 +285,7 @@ export class HandlerOrganization {
           candidate: {
             ...pc.candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+            approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
             ...rates,
             avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
           }
@@ -336,6 +357,7 @@ export class HandlerOrganization {
       return {
         ...talent,
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
+        approved_positions_pairing: talent.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
         ...rates,
         avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` : null,
       };

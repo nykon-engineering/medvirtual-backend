@@ -16,7 +16,7 @@ async function bootstrapServer(): Promise<any> {
   const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
   
   await app.enableCors({
-    origin: ['https://app.medvirtual.ai','https://staging.medvirtual.ai','http://localhost:3001','http://localhost:3000'], 
+    origin: ['https://app.medvirtual.ai','https://staging.medvirtual.ai','http://localhost:3001','http://localhost:3000', 'https://med-alliance.d2odvfjc5yqdaj.amplifyapp.com'], 
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', 
     credentials: true
   });

@@ -358,7 +358,7 @@ export class NotificationsService {
       ? new Date(interviewDate).toLocaleString()
       : 'Not specified';
 
-    const bodyLine = interviewLink !== '#' ? `<p><strong>Interview Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>` : '';
+    const bodyLine = interviewLink !== '#' ? `<p><strong>Pairing Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>` : '';
     const bodyLink = interviewLink !== '#' ? `<div style="text-align: left; margin: 30px 0;">
           <a href="${interviewLink}" class="cta-button">
             Join meeting
@@ -387,7 +387,7 @@ export class NotificationsService {
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Company:</strong> ${hr.organization.name}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
-         <p><strong>Interview Date:</strong> ${interviewDateFormatted}</p>
+         <p><strong>Pairing Date:</strong> ${interviewDateFormatted}</p>
          ${bodyLine}
        </div>
        

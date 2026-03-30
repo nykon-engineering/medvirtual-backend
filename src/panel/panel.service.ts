@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HireRequestStatus, OrganizationStatus, PanelCandidateStatus, PanelStatus } from '@prisma/client';
 import { buildConfigMap, computeCandidateRates } from '../common/utils/salary.util';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
+import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
@@ -315,6 +316,7 @@ export class PanelService {
             return ({
             ...candidate,
             employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+            approved_positions_pairing: candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
             ...rates,
             avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` :  null,
             panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
@@ -347,6 +349,7 @@ export class PanelService {
             return {
               ...candidate,
               employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+              approved_positions_pairing: candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
               ...rates,
               avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
               panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
@@ -496,6 +499,7 @@ export class PanelService {
             return {
               ...candidate,
               employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+              approved_positions_pairing: candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
               ...rates,
               avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
               panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({

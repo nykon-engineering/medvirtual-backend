@@ -91,7 +91,7 @@ export class AuthService {
     // System admins don't need to belong to an organization
     if (
       !user.organization_id &&
-      !['system_super_admin', 'system_admin'].includes(user.role)
+      !['system_super_admin', 'system_admin', 'affiliate'].includes(user.role)
     ) {
       throw new UnauthorizedException(
         'User does not belong to any organization. Please contact support.',
@@ -165,6 +165,7 @@ export class AuthService {
         role: user.role,
         clientId: user.organization_id,
         business_unit: business_unit,
+        affiliate_profile_id: user.affiliateProfile?.id ?? null,
       },
     };
   }

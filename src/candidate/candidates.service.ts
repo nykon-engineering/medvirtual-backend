@@ -21,6 +21,7 @@ import { PositionRateConfigService } from '../position-rate-config/position-rate
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
+import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
 
 
 
@@ -519,6 +520,8 @@ export class CandidatesService {
         const rates = computeCandidateRates(candidate, _configMap1);
         return ({
         ...candidate,
+        approved_positions_pairing: candidate.approved_positions_pairing &&
+          candidate.approved_positions_pairing.map((position) => getApprovedPositionLabel(position)) || [],
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
         scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
         hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
@@ -684,6 +687,8 @@ export class CandidatesService {
 
     const formattedCandidate = {
       ...candidate, // mantém os outros campos do candidato
+      approved_positions_pairing: candidate.approved_positions_pairing &&
+        candidate.approved_positions_pairing.map((position) => getApprovedPositionLabel(position)) || [],
       panelCandidates: candidate.panelCandidates && candidate.panelCandidates.length > 0
         ? candidate.panelCandidates.map(pc => ({
           title: pc.panel?.hireRequest?.title || '',
@@ -1036,6 +1041,8 @@ export class CandidatesService {
           });
 
         } else if (field === 'approved_positions_pairing') {
+          
+          /* it was moved to get the options from hubspot instead of the database, because we want to have all the options available even if they are not used by any candidate yet, and also to avoid having to filter the options that have "do not use" in the name, because they are already filtered in hubspot and we don't want to have them in our options list. But I'm leaving this here just in case we want to revert this decision in the future.
           returned = await this.prisma.candidate.findMany({
             where: {
               OR: [
@@ -1060,6 +1067,7 @@ export class CandidatesService {
             (pos) => !pos.toLowerCase().includes('do not use')
           );
           returned = filteredPositions.sort();
+          */
         } else {
 
           returned = await this.prisma.candidate.findMany({
@@ -1167,7 +1175,35 @@ export class CandidatesService {
             console.error("Failed to find types:", error.response?.data || error.message);
             throw new Error("Failed to find VA types");
           }
+        }else if (field === 'approved_positions_pairing') {
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            });
 
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === "va_role_s"
+            );
+
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedPositions = vaTypeProperty.options
+              .filter((option) => !option.hidden && option.value?.trim())
+              .filter((option) => !option.value.toLowerCase().includes('do not use'))
+              .map((option) => ({
+                label: option.label?.trim(),
+                value: option.value?.trim(),
+              }));
+            result[field] = returnedPositions || [];
+          } catch (error) {
+            console.error("Failed to find types:", error.response?.data || error.message);
+            throw new Error("Failed to find VA types");
+          }
         } else {
           result[field] = returned;
         }
@@ -1610,6 +1646,7 @@ export class CandidatesService {
         ...candidate,
         avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
+        approved_positions_pairing: candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
         ...rates,
       };
     });
@@ -1752,6 +1789,7 @@ export class CandidatesService {
       ...candidate,
       avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
       employment_type: transformedEmploymentType,
+      approved_positions_pairing: candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
       ...rates3,
     };
 

@@ -50,9 +50,12 @@ export class UserService {
     return newUser;
   }
 
-  async findByEmail(email: string): Promise<USER | null> {
+  async findByEmail(
+    email: string,
+  ): Promise<(USER & { affiliateProfile: { id: string } | null }) | null> {
     return this.prisma.uSER.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
+      include: { affiliateProfile: { select: { id: true } } },
     });
   }
 
@@ -1059,4 +1062,5 @@ export class UserService {
       throw new BadRequestException('Failed to invite user to organization');
     }
   }
+
 }

@@ -32,8 +32,8 @@ import { PositionRateConfigService } from '../position-rate-config/position-rate
 import { changeLabelAvailability, mapHRTicketToDb } from '../common/utils/hubspot.util';
 import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
-import { dateToTimestamp, formatTimestampToUSShort, timestampToUSDate } from '../common/utils/formatDate';
-import { create } from 'domain';
+import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
+import { dateToTimestamp, timestampToUSDate } from '../common/utils/formatDate';
 
 @Injectable()
 export class HireRequestService {
@@ -59,6 +59,12 @@ export class HireRequestService {
       second || 0,
     );
   }
+
+  private readonly availablePipelineStatuses = [
+    '1172847191', // endorsed
+    '261075105',  // available full-time
+    '1087596819', // available part-time
+  ];
 
   private selectPanels = {
         id: true,
@@ -912,6 +918,7 @@ export class HireRequestService {
               ...pc.candidate,
               ...rates_B,
               years_of_experience: years_of_experience,
+              approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
               avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` :  null,
               panelCandidates: pc.candidate.panelCandidates ? pc.candidate.panelCandidates
               .map(pcc => ({
@@ -1124,6 +1131,7 @@ export class HireRequestService {
               candidate: {
                 ...pc.candidate,
                 ...rates_C,
+                approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
                 avatar: pc.candidate.avatar_url
                   ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
                   : null,
@@ -1195,6 +1203,58 @@ export class HireRequestService {
     if (!requestUpdated) throw new BadRequestException(`Hire request not updated`);
 
     result = requestUpdated;
+
+    // Sync interview scheduled_date when pairing date/time is edited
+    if (hireRequestData.hubspot_pairing_date !== undefined || hireRequestData.hubspot_pairing_time !== undefined) {
+      try {
+        const pairingDateTs = requestUpdated.hubspot_pairing_date; // stored as timestamp string
+        const pairingTimeStr = requestUpdated.hubspot_pairing_time;
+
+        if (pairingDateTs && pairingTimeStr) {
+          const ts = Number(pairingDateTs);
+          const d = new Date(ts);
+          const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+          // Convert time to 24h format if it contains AM/PM (e.g. '03:10 AM' → '03:10:00')
+          const timeMatch = pairingTimeStr.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+          let time24h: string | null = null;
+          if (timeMatch) {
+            let hours = parseInt(timeMatch[1], 10);
+            const minutes = timeMatch[2];
+            const meridiem = timeMatch[3]?.toUpperCase();
+            if (meridiem === 'AM') {
+              hours = hours === 12 ? 0 : hours;
+            } else if (meridiem === 'PM') {
+              hours = hours === 12 ? 12 : hours + 12;
+            }
+            time24h = `${String(hours).padStart(2, '0')}:${minutes}:00`;
+          }
+
+          if (time24h) {
+            const panel = await this.prisma.candidatePanel.findFirst({
+              where: { hire_request_id: id },
+              select: { id: true },
+            });
+
+            if (panel) {
+              const interviewCount = await this.prisma.interview.count({
+                where: { panel_id: panel.id, status: 'scheduled' },
+              });
+
+              if (interviewCount > 0) {
+                const scheduledDate = new Date(`${dateStr}T${time24h}Z`);
+                await this.prisma.interview.updateMany({
+                  where: { panel_id: panel.id, status: 'scheduled' },
+                  data: { scheduled_date: scheduledDate },
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[HireRequest] Failed to sync interview scheduled_date on update:', err?.message || err);
+      }
+    }
 
     //console.log('Hire Request updated in database with data:', data.description);
     const descriptionChanged = currentHireRequest && data.description !== currentHireRequest.description;
@@ -2160,6 +2220,7 @@ export class HireRequestService {
       return ({
       ...c,
       ...rates_D,
+      approved_positions_pairing: c.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
       panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
@@ -2600,24 +2661,47 @@ export class HireRequestService {
     const _pCfgs_E = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_E = buildConfigMap(_pCfgs_E);
 
+    const crossPanelSelected = await this.prisma.panelCandidate.findMany({
+      where: { status: { in: ['selected_by_client', 'blocked'] } },
+      select: { candidate_id: true, panel_id: true },
+    });
+
+    const candidateSelectedInPanels = new Map<string, Set<string>>();
+    for (const pc of crossPanelSelected) {
+      if (!candidateSelectedInPanels.has(pc.candidate_id)) {
+        candidateSelectedInPanels.set(pc.candidate_id, new Set());
+      }
+      candidateSelectedInPanels.get(pc.candidate_id)!.add(pc.panel_id);
+    }
+
     const result = panels.map(panel => ({
       ...panel,
       interview_date: panel.interviews[0]?.scheduled_date || null,
       interview_link: panel.interviews[0]?.link || null,
       interviews: undefined,
-      panelCandidates: panel.panelCandidates.map(pc => {
-        const rates_E = computeCandidateRates(pc.candidate, _cfgMap_E);
-        return {
-          ...pc,
-          candidate: {
-            ...pc.candidate,
-            employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-            ...rates_E,
-            avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+      panelCandidates: panel.panelCandidates
+        .filter(pc => {
+          if (!this.availablePipelineStatuses.includes(pc.candidate.pipeline_status)) return false;
+          const panelSet = candidateSelectedInPanels.get(pc.candidate.id);
+          if (panelSet) {
+            const onlyInCurrentPanel = panelSet.size === 1 && panelSet.has(panel.id);
+            if (!onlyInCurrentPanel) return false;
           }
-        };
-      })
-      
+          return true;
+        })
+        .map(pc => {
+          const rates_E = computeCandidateRates(pc.candidate, _cfgMap_E);
+          return {
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
+              ...rates_E,
+              avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+            }
+          };
+        })
+
     }));
     
     return result;
@@ -2796,20 +2880,27 @@ export class HireRequestService {
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
+    // Here, I'm using the date_time because I'll use the dateToTimestamp later
+    // and this function should receive a date in the format YYYY-MM-DD 
+    const derivedDate = String(data.date_time).split('T')[0] || null;
+
     // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
     const updateHireRequest = await this.prisma.hireRequest.update({
       where: {
         id: hireRequest.id,
       },
       data: {
-        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_date: dateToTimestamp(derivedDate) || null,
         hubspot_pairing_time: data.time || null,
       },
     });
     if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
-    
-    
-    const updatedDate = new Date(`${data.date_time}`);
+
+    // Treat date_time as UTC to avoid server timezone shift
+    const dateTimeStr = String(data.date_time);
+    const updatedDate = new Date(
+      /Z$|[+-]\d{2}:\d{2}$/.test(dateTimeStr) ? dateTimeStr : `${dateTimeStr}Z`
+    );
 
     const interviewScheduled = await this.prisma.interview.create({
       data: {
@@ -2894,6 +2985,9 @@ export class HireRequestService {
     }});
     if (!panel) throw new NotFoundException(`Panel for this hire request not found`);
 
+    // Here, I'm using the date_time because I'll use the dateToTimestamp later
+    // and this function should receive a date in the format YYYY-MM-DD 
+    const derivedDateEdit = String(data.date_time).split('T')[0] || null;
 
     // Update fields hubspot_pairing_date and hubspot_pairing_time in hire request
     const updateHireRequest = await this.prisma.hireRequest.update({
@@ -2901,14 +2995,17 @@ export class HireRequestService {
         id: hireRequest.id,
       },
       data: {
-        hubspot_pairing_date: data.date || null,
+        hubspot_pairing_date: dateToTimestamp(derivedDateEdit) || null,
         hubspot_pairing_time: data.time || null,
       },
     });
     if (!updateHireRequest) throw new BadRequestException(`Hire request pairing date and time not updated`);
 
-    const updatedDate = new Date(`${data.date_time}`);
-    //console.log('updatedDate', updatedDate);
+    // Treat date_time as UTC to avoid server timezone shift
+    const dateTimeStrEdit = String(data.date_time);
+    const updatedDate = new Date(
+      /Z$|[+-]\d{2}:\d{2}$/.test(dateTimeStrEdit) ? dateTimeStrEdit : `${dateTimeStrEdit}Z`
+    );
     const editInterview = await this.prisma.interview.updateMany({
       where: {
         panel_id: panel.id,
@@ -3455,15 +3552,19 @@ export class HireRequestService {
                 hourly_pay_rate: true,
                 years_of_experience: true,
                 avatar_url: true,
-                approved_positions_pairing: true,
-                business_unit: true,
-                video_link: true,
                 languages: {
-                  select: { name: true },
+                  select: {
+                    name: true,
+                  },
                 },
                 skills: {
-                  select: { skill_name: true },
+                  select: {
+                    skill_name: true,
+                  },  
+
                 },
+                approved_positions_pairing: true, 
+                business_unit: true,
               },
             },
           },
@@ -3475,13 +3576,22 @@ export class HireRequestService {
       throw new NotFoundException('Panel for this hire request not found');
     }
 
+    let unavailableCandidates: Record<string, any>[] = []
+
     const panelCandidates = panel.panelCandidates;
 
     const filteredCandidates = panelCandidates.filter(pc => 
-      pc.candidate.pipeline_status === '1172847191'|| //endorsed 
-      pc.candidate.pipeline_status === '261075105' || // available candidates - full time
-      pc.candidate.pipeline_status === '1087596819' // Available candidates - Part-time
+      this.availablePipelineStatuses.includes(pc.candidate.pipeline_status)
     );
+
+    unavailableCandidates = panelCandidates.filter(pc => 
+      !this.availablePipelineStatuses.includes(pc.candidate.pipeline_status)
+    ).map(pc => ({
+      ...pc.candidate,
+      reason: 'Candidate is no longer available in Hubspot'
+    }));
+
+    
     const availableCandidates = (
       await Promise.all(
         filteredCandidates.map(async (pc) => {
@@ -3494,12 +3604,16 @@ export class HireRequestService {
               }, //Dont allow get candidates already selected in other panels
             },
           });
+
+          existInOtherPanel && unavailableCandidates.push({
+            ...pc.candidate,
+            reason: 'Candidate is already selected in another panel'
+          });
     
           return existInOtherPanel ? null : pc;
         })
       )
     ).filter((pc) => pc !== null);
-
 
     const selectedCandidate = panelCandidates.find(pc => pc.status === 'selected_by_client');
 
@@ -3507,8 +3621,6 @@ export class HireRequestService {
         availableCandidates[0].candidate.id === selectedCandidate.candidate_id) {
       return [];
     }
-
-    
 
     const _pCfgs_G = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_G = buildConfigMap(_pCfgs_G);
@@ -3522,12 +3634,22 @@ export class HireRequestService {
         panelScheduledDate: panel.scheduled_date,
         isCurrentSelection: selectedCandidate ? pc.candidate.id === selectedCandidate.candidate_id : false,
         ...rates_G,
+        approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
         avatar: pc.candidate.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
         employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
       };
     });
 
-    return mappedCandidates;
+    //Here I dont need to delivery a mappedObject because it'll be only showed on frontend
+    const mappedUnavailableCandidates = unavailableCandidates.map(c => ({
+      ...c,
+      panelId: panel.id,
+      panelScheduledDate: panel.scheduled_date,
+    }));
+
+    return { 
+      availableCandidates: mappedCandidates,
+      unavailableCandidates: mappedUnavailableCandidates };
   }
 
   async getVATypes () : Promise<any> {

@@ -1,3 +1,5 @@
+import { getApprovedPositionLabel } from '../dictionaries/approved-positions-pairing-dictionary';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FULL_TIME_HOURS_PER_MONTH = 176;
 const PART_TIME_HOURS_PER_MONTH = 88;
@@ -95,23 +97,39 @@ export function computeCandidateRates(
   candidate: CandidateLike,
   configMap: Map<string, PositionRateConfigLike>,
 ): CandidateRates {
-  const position = candidate.approved_positions_pairing?.[0] ?? '';
+  const positions = candidate.approved_positions_pairing ?? [];
   const isBilingual = (candidate.languages?.length ?? 0) > 1;
   const isBerry = candidate.business_unit?.toLowerCase().includes('berry') ?? false;
-  const config = configMap.get(position) ?? findMinFloorConfig(configMap, isBilingual, isBerry);
-
   const agreed = toNum(candidate.hourly_pay_rate) ?? 0;
   const key = floorPriceKey(isBilingual, isBerry);
-  const minH = toNum(config?.[key] as { toNumber(): number } | number | null);
   const marginKey = isBerry ? 'berryVirtual_margin_per_hour' : 'medVirtual_margin_per_hour';
-  const margin = toNum(config?.[marginKey] as { toNumber(): number } | number | null) || Number(process.env.CANDIDATE_COST_PER_HOUR);
 
-  const billH = findBillRateHourly(agreed, minH, margin); //5, 12.5, 9
-  const billM = findBillRateMonthly(billH, candidate.employment_type ?? '');
+  let bestBillH = 0;
+
+  if (positions.length > 0) {
+    for (const rawPosition of positions) {
+      const label = getApprovedPositionLabel(rawPosition);
+      const config = configMap.get(label) ?? findMinFloorConfig(configMap, isBilingual, isBerry);
+      const minH = toNum(config?.[key] as { toNumber(): number } | number | null);
+      const margin = toNum(config?.[marginKey] as { toNumber(): number } | number | null) || Number(process.env.CANDIDATE_COST_PER_HOUR);
+      const billH = findBillRateHourly(agreed, minH, margin);
+      if (billH > bestBillH) {
+        bestBillH = billH;
+      }
+    }
+  } else {
+    // No positions — use fallback config
+    const config = findMinFloorConfig(configMap, isBilingual, isBerry);
+    const minH = toNum(config?.[key] as { toNumber(): number } | number | null);
+    const margin = toNum(config?.[marginKey] as { toNumber(): number } | number | null) || Number(process.env.CANDIDATE_COST_PER_HOUR);
+    bestBillH = findBillRateHourly(agreed, minH, margin);
+  }
+
+  const billM = findBillRateMonthly(bestBillH, candidate.employment_type ?? '');
   const SalaryM = findPayRateMonthly(agreed, candidate.employment_type ?? '');
 
   return {
-    bill_rate_hourly: billH,
+    bill_rate_hourly: bestBillH,
     bill_rate_monthly: billM,
     salary: SalaryM,
     hourlySalary: agreed,

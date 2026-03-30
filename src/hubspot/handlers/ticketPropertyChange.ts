@@ -211,6 +211,51 @@ export class HandlerTicketPropertyChange {
             }
         })
 
+        // Sync interview scheduled_date when pairing date or time changes from Hubspot
+        if (fieldUpdated === 'hubspot_pairing_date' || fieldUpdated === 'hubspot_pairing_time') {
+            try {
+                const updatedHr = await this.prisma.hireRequest.findUnique({
+                    where: { id: hr.id },
+                    select: { hubspot_pairing_date: true, hubspot_pairing_time: true },
+                });
+
+                const pairingDateTs = updatedHr?.hubspot_pairing_date;
+                const pairingTimeStr = updatedHr?.hubspot_pairing_time;
+
+                if (pairingDateTs && pairingTimeStr) {
+                    const ts = Number(pairingDateTs);
+                    const d = isNaN(ts) ? null : new Date(ts);
+
+                    const dateStr = d && !isNaN(d.getTime())
+                        ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+                        : pairingDateTs; // fallback para raw string 'YYYY-MM-DD'
+
+                    const panel = await this.prisma.candidatePanel.findFirst({
+                        where: { hire_request_id: hr.id },
+                        select: { id: true },
+                    });
+
+                    if (panel) {
+                        const interviewCount = await this.prisma.interview.count({
+                            where: { panel_id: panel.id, status: 'scheduled' },
+                        });
+
+                        if (interviewCount > 0) {
+                            const scheduledDate = new Date(`${dateStr}T${pairingTimeStr}`);
+                            if (!isNaN(scheduledDate.getTime())) {
+                                await this.prisma.interview.updateMany({
+                                    where: { panel_id: panel.id, status: 'scheduled' },
+                                    data: { scheduled_date: scheduledDate },
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[ticketPropertyChange] Failed to sync interview scheduled_date:', err?.message || err);
+            }
+        }
+
         if (TITLE_AFFECTING_DB_FIELDS.has(fieldUpdated)) {
             await this.syncTitle(hr.id, String(event.objectId));
         }

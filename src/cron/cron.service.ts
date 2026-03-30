@@ -470,7 +470,11 @@ export class CronService {
 
             for (const position of newPositions) {
                 await this.prisma.positionRateConfig.create({
-                    data: { position },
+                    data: {
+                        position,
+                        medVirtual_margin_per_hour: 9,
+                        berryVirtual_margin_per_hour: 9,
+                    },
                 });
                 console.log(`syncPositionsFromHubspot: created new position "${position}"`);
             }
@@ -479,7 +483,7 @@ export class CronService {
             await this.mailService.sendMail({
                 from: 'MedVirtual <noreply@medvirtual.ai>',
                 to: 'shayan@regenta.ai',
-                cc: ['paulo@regenta.ai', 'hanieh@medvirtual.ai'],
+                cc: ['paulo@regenta.ai'],
                 subject: '[Action Required] New VA Positions Found',
                 html: emailBody,
             });

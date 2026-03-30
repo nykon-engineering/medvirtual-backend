@@ -102,7 +102,10 @@ describe('CronService', () => {
 
       expect(result).toBe(true);
       expect(prismaServiceMock.positionRateConfig.create).toHaveBeenCalledWith({
-        data: { position: 'New Position' },
+        data: { position: 'New Position',
+                medVirtual_margin_per_hour: 9,
+                berryVirtual_margin_per_hour: 9,
+         },
       });
       expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
