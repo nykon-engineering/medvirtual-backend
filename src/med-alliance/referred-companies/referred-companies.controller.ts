@@ -36,7 +36,8 @@ export class ReferredCompaniesController {
   // POST /med-alliance/referred-companies — Submit a new company referral.
   @Post('referred-companies')
   @HttpCode(201)
-  @Roles(...AFFILIATE_ROLES)
+  // Any user can submit a referral, because the button on frontend only appears for the correct ones
+  //@Roles(...AFFILIATE_ROLES, ...ADMIN_ROLES)
   async create(
     @Body() dto: CreateReferredCompanyDto,
     @CurrentUser() user: USER,

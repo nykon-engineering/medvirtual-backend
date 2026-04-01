@@ -6,6 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
+import { OrganizationService } from '../../organization/organization.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -36,6 +37,10 @@ const mockReferralSyncService = {
 const mockReviewCasesService = {
   openOrSkip: jest.fn(),
 };
+
+const mockOrganizationService = {
+  create: jest.fn(),
+}
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -78,6 +83,7 @@ describe('ReferredCompaniesService', () => {
         { provide: EligibilityCheckService, useValue: mockEligibilityCheckService },
         { provide: ReferralSyncService, useValue: mockReferralSyncService },
         { provide: ReviewCasesService, useValue: mockReviewCasesService },
+        { provide: OrganizationService, useValue: mockOrganizationService},
       ],
     }).compile();
 
@@ -114,28 +120,24 @@ describe('ReferredCompaniesService', () => {
       await expect(service.create(createDto, mockCurrentUser)).rejects.toThrow(
         ForbiddenException,
       );
-      expect(mockPrisma.organization.create).not.toHaveBeenCalled();
+      expect(mockOrganizationService.create).not.toHaveBeenCalled();
       expect(mockEligibilityCheckService.runAndPersist).not.toHaveBeenCalled();
     });
 
     it('should create org, run eligibility check, and return updated record', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
-      mockPrisma.organization.create.mockResolvedValue(mockOrg);
+      mockOrganizationService.create.mockResolvedValue(mockOrg);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
       mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(mockOrgWithEligibility);
 
       const result = await service.create(createDto, mockCurrentUser);
 
-      // org created with correct fields
-      expect(mockPrisma.organization.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            name: 'Acme Corp',
-            referred_by_affiliate_id: 'user-1',
-            organization_role: 'prospect',
-          }),
-        }),
+      // org created via OrganizationService with correct args
+      expect(mockOrganizationService.create).toHaveBeenCalledWith(
+        createDto,
+        mockCurrentUser,
+        mockCurrentUser.id,
       );
       // eligibility check ran with correct args
       expect(mockEligibilityCheckService.runAndPersist).toHaveBeenCalledWith(
@@ -155,7 +157,7 @@ describe('ReferredCompaniesService', () => {
       };
 
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
-      mockPrisma.organization.create.mockResolvedValue(mockOrg);
+      mockOrganizationService.create.mockResolvedValue(mockOrg);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
       mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(blockedOrg);
@@ -171,7 +173,7 @@ describe('ReferredCompaniesService', () => {
     it('should create organization with only required fields when optionals are omitted', async () => {
       const orgNoEmail = { ...mockOrgWithEligibility, email: null };
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
-      mockPrisma.organization.create.mockResolvedValue({ ...mockOrg, email: null });
+      mockOrganizationService.create.mockResolvedValue({ ...mockOrg, email: null });
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
       mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(orgNoEmail);

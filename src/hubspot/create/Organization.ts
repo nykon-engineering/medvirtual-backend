@@ -35,16 +35,17 @@ export class OrganizationCreationService {
     async getAfiliateId(affiliateId: string): Promise<string | null> {
       if (!affiliateId) return null;
       const affiliate = await this.prisma.affiliateProfile.findUnique({
-        where: { id: affiliateId },
+        where: { user_id: affiliateId },
         select: {
           hubspot_id: true,
         },
       });
-
+      console.log('Affiliate HubSpot ID:', affiliate ? affiliate.hubspot_id : 'Not found');
       return affiliate && affiliate.hubspot_id ? affiliate.hubspot_id : null; 
     }
 
     async execute(data: any): Promise<any> {
+      console.log('Creating organization in Hubspot with data:', data);
        try {
 
           const response = await axios.post(

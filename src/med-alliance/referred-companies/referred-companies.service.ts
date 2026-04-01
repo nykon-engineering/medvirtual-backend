@@ -9,7 +9,7 @@ import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
-import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
+import { CreateOrganizationDto } from '../../organization/dto/createOrganization.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { OrganizationService } from '../../organization/organization.service';
 
@@ -48,29 +48,13 @@ export class ReferredCompaniesService {
   // ---------------------------------------------------------------------------
   // Affiliate: submit a new company referral.
   // ---------------------------------------------------------------------------
-  async create(dto: CreateReferredCompanyDto, currentUser: USER) {
+  async create(dto: CreateOrganizationDto, currentUser: USER) {
     // Require an active affiliate profile before accepting the referral.
     await this.affiliatesService.requireActiveProfile(currentUser.id);
 
+
     //call the create origanization function to maintain the system reusable 
-
-
-    const org = await this.prisma.organization.create({
-      data: {
-        name: dto.name,
-        email: dto.email ?? null,
-        website_url: dto.website_url ?? null,
-        phone: dto.phone ?? null,
-        location: dto.location ?? null,
-        industry: dto.industry ?? null,
-        description: dto.description ?? null,
-        // Mark as referred by this affiliate.
-        referred_by_affiliate_id: currentUser.id,
-        // New referrals start as prospects.
-        organization_role: 'prospect',
-      },
-      select: ORG_SELECT,
-    });
+    const org =  await this.organizationService.create(dto, currentUser, currentUser.id);
 
     // MA-004: block if this company is already an active client.
     await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
@@ -104,7 +88,7 @@ export class ReferredCompaniesService {
    */
   private async checkSoftDuplicate(
     orgId: string,
-    dto: CreateReferredCompanyDto,
+    dto: CreateOrganizationDto,
   ): Promise<string | null> {
     const orConditions: any[] = [
       { name: { equals: dto.name, mode: 'insensitive' } },
