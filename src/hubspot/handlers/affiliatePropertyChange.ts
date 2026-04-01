@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerAffiliateCreation } from "./affiliateCreation";
+import { affiliateToDbDictionary } from "../../common/dictionaries/affiliate-dictionary";
 
 @Injectable()
 
@@ -22,9 +23,20 @@ export class HandlerAffiliatePropertyChange {
 
         if(!existingAffiliate) return await this.affiliateCreation.execute(event); 
 
-        // the AffiliateProfile table is a simple table without personal datas;
-        // Thats why we can not update this table
-        // and doesnt make sense update the user table
+        const fieldExists = Object.keys(affiliateToDbDictionary).includes(event.propertyName);
+        if(!fieldExists) return;
+
+        const fieldUpdated = affiliateToDbDictionary[event.propertyName];
+        
+        await this.prisma.affiliateProfile.update({
+            where: {
+                id: existingAffiliate.id
+            },
+            data: {
+                [fieldUpdated]: event.propertyValue
+            }
+        })
+        
         return true;
         
 
