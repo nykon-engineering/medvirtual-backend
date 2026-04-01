@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
 
-import { mapHubspotToDb } from "../../common/utils/hubspot.util";
 import { candidadeToDbDictionary } from "../../common/dictionaries/candidate-dictionary";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CandidatesService } from "../../candidate/candidates.service";
@@ -39,7 +38,6 @@ export class HandlerObjectCreation {
                 if (value === undefined) continue;
 
                 if (Array.isArray(dbField)) {
-                    // Se dbField é array, espalhar valor para todos os campos
                     dbField.forEach(field => {
                     candidateData[field] = value;
                     });
