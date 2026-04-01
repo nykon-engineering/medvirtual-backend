@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { USER } from '@prisma/client';
+import { OrganizationStatus, USER } from '@prisma/client';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
@@ -13,26 +13,6 @@ import { CreateOrganizationDto } from '../../organization/dto/createOrganization
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { OrganizationService } from '../../organization/organization.service';
 
-// Select shape returned for Organization in Med Alliance context.
-// Excludes internal fields not relevant to the affiliate portal.
-const ORG_SELECT = {
-  id: true,
-  name: true,
-  email: true,
-  phone: true,
-  website_url: true,
-  location: true,
-  industry: true,
-  description: true,
-  organization_role: true,
-  status: true,
-  hubspot_id: true,
-  referred_by_affiliate_id: true,
-  med_alliance_referral_status: true,
-  med_alliance_block_reason: true,
-  createdAt: true,
-  updatedAt: true,
-};
 
 @Injectable()
 export class ReferredCompaniesService {
@@ -68,13 +48,13 @@ export class ReferredCompaniesService {
     // Return the org with all updated fields after the sync pipeline.
     const result = await this.prisma.organization.findUnique({
       where: { id: org.id },
-      select: {
-        ...ORG_SELECT,
-        med_alliance_referral_status: true,
-        med_alliance_block_reason: true,
-        hubspot_sync_status: true,
-        hubspot_sync_error: true,
-        hubspot_synced_at: true,
+      include: {
+        owner: true,
+        admin: true,
+        users: true,
+        referredByAffiliate: {
+          select: { id: true, first_name: true, last_name: true, email: true },
+        },
       },
     });
 
@@ -122,11 +102,11 @@ export class ReferredCompaniesService {
   async findAllForAffiliate(dto: ListReferredCompaniesDto, currentUser: USER) {
     const { page = 1, limit = 20, search, status, sortBy = 'createdAt', sortOrder = 'desc' } = dto;
     const skip = (page - 1) * limit;
-
+    
     const where: any = {
       referred_by_affiliate_id: currentUser.id,
     };
-    if (status) where.status = status;
+    where.status = status ?? { not: OrganizationStatus.deleted };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -140,7 +120,11 @@ export class ReferredCompaniesService {
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        select: ORG_SELECT,
+        include: {
+          owner: true,
+          admin: true,
+          users: true,
+        },
       }),
       this.prisma.organization.count({ where }),
     ]);
@@ -154,7 +138,11 @@ export class ReferredCompaniesService {
   async findOneForAffiliate(id: string, currentUser: USER) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
-      select: { ...ORG_SELECT, referred_by_affiliate_id: true },
+      include: {
+        owner: true,
+        admin: true,
+        users: true,
+      },
     });
     if (!org) throw new NotFoundException('Referred company not found');
 
@@ -184,7 +172,7 @@ export class ReferredCompaniesService {
     const where: any = {
       referred_by_affiliate_id: { not: null },
     };
-    if (status) where.status = status;
+    where.status = status ?? { not: OrganizationStatus.deleted };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -198,9 +186,10 @@ export class ReferredCompaniesService {
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        select: {
-          ...ORG_SELECT,
-          // Admin also sees who referred the company.
+        include: {
+          owner: true,
+          admin: true,
+          users: true,
           referredByAffiliate: {
             select: { id: true, first_name: true, last_name: true, email: true },
           },
@@ -218,8 +207,10 @@ export class ReferredCompaniesService {
   async findOneForAdmin(id: string) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
-      select: {
-        ...ORG_SELECT,
+      include: {
+        owner: true,
+        admin: true,
+        users: true,
         referredByAffiliate: {
           select: { id: true, first_name: true, last_name: true, email: true },
         },

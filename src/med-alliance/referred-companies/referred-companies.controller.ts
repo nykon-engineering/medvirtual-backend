@@ -16,7 +16,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ADMIN_ROLES, AFFILIATE_ROLES } from '../constants';
+import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 
@@ -49,7 +49,7 @@ export class ReferredCompaniesController {
   // GET /med-alliance/referred-companies — List own referred companies.
   @Get('referred-companies')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
   async findAll(
     @Query() query: ListReferredCompaniesDto,
     @CurrentUser() user: USER,
