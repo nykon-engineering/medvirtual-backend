@@ -124,6 +124,7 @@ export class ReferredCompaniesService {
           owner: true,
           admin: true,
           users: true,
+          staff: true,
         },
       }),
       this.prisma.organization.count({ where }),
