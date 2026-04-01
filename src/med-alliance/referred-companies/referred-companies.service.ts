@@ -11,6 +11,7 @@ import { ReferralSyncService } from '../sync/referral-sync.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
+import { OrganizationService } from '../../organization/organization.service';
 
 // Select shape returned for Organization in Med Alliance context.
 // Excludes internal fields not relevant to the affiliate portal.
@@ -41,6 +42,7 @@ export class ReferredCompaniesService {
     private readonly eligibilityCheck: EligibilityCheckService,
     private readonly referralSync: ReferralSyncService,
     private readonly reviewCases: ReviewCasesService,
+    private readonly organizationService: OrganizationService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -49,6 +51,9 @@ export class ReferredCompaniesService {
   async create(dto: CreateReferredCompanyDto, currentUser: USER) {
     // Require an active affiliate profile before accepting the referral.
     await this.affiliatesService.requireActiveProfile(currentUser.id);
+
+    //call the create origanization function to maintain the system reusable 
+
 
     const org = await this.prisma.organization.create({
       data: {

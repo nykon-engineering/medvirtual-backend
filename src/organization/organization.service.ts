@@ -677,7 +677,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto, user?: USER): Promise<Organization> {
+  async create(data: CreateOrganizationDto, user?: USER, referred_by_affiliate_id?: string): Promise<Organization> {
     try {
       // // Check if the organization already exists
       // const existingOrganization = await this.prisma.organization.findUnique({
@@ -807,6 +807,7 @@ export class OrganizationService {
           admin_id: adminId,
           hubspot_id: data.hubspot_id || undefined,
           source: user ? 'MedVirtual app' : 'Hubspot',
+          referred_by_affiliate_id: referred_by_affiliate_id || undefined,
         },
       });
 
