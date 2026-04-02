@@ -117,12 +117,40 @@ export class AffiliatesService {
   }
 
   // ---------------------------------------------------------------------------
-  // Admin: get one profile by its ID.
+  // Admin: get one profile by its ID — enriched with referred orgs & commissions.
   // ---------------------------------------------------------------------------
   async findOne(id: string) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id },
-      include: { user: { select: USER_SELECT } },
+      include: {
+        user: {
+          select: {
+            ...USER_SELECT,
+            referredOrganizations: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                status: true,
+                med_alliance_referral_status: true,
+                createdAt: true,
+              },
+              orderBy: { createdAt: 'desc' as const },
+            },
+          },
+        },
+        commissions: {
+          select: {
+            id: true,
+            status: true,
+            commission_amount: true,
+            createdAt: true,
+            organization: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' as const },
+          take: 10,
+        },
+      },
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
     return profile;
