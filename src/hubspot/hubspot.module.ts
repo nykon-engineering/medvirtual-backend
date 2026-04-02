@@ -34,6 +34,12 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 
+import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
+import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
+import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
+
+import { HandlerComissionCreation } from './handlers/comissionCreation';
+
 
 import { HireRequestModule } from '../hire-request/hire-request.module';
 
@@ -83,7 +89,11 @@ import { MailModule } from '../mail/mail.module';
     OrganizationUpdateService,
     ContactCreationService,
     ContactUpdateService,
-    ContactDeleteService
+    ContactDeleteService,
+    HandlerInvoiceCreation,
+    HandlerInvoicePropertyChange,
+    HandlerInvoiceAssociationChange,
+    HandlerComissionCreation,
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 

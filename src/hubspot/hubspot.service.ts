@@ -45,6 +45,10 @@ import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 
+import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
+import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
+import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
+
 
 
 
@@ -91,6 +95,10 @@ export class HubspotService {
 
       private readonly affiliateCreation: HandlerAffiliateCreation,
       private readonly affiliatePropertyChange: HandlerAffiliatePropertyChange,
+
+      private readonly invoiceCreation: HandlerInvoiceCreation,
+      private readonly invoicePropertyChange: HandlerInvoicePropertyChange,
+      private readonly invoiceAssociationChange: HandlerInvoiceAssociationChange,
 
 
       @Inject(forwardRef (() => CandidatesService))
@@ -147,17 +155,22 @@ export class HubspotService {
                
                 case 'object.creation':
                 case 'object.restore':
-                    if (event.objectTypeId ==="2-5922196") {
+                    if (event.objectTypeId ==="2-5922196") { // Virtual Assistant
                         await this.objectCreation.execute(event);
-                    }else if (event.objectTypeId === "2-54072002") {
+                    }else if (event.objectTypeId === "2-54072002") { // Growth Partner
                         await this.affiliateCreation.execute(event);
+                    }else if (event.objectTypeId === "0-53") { // Invoice
+                        await this.invoiceCreation.execute(event);
                     }
+
                     break;
                 case 'object.propertyChange':
                     if (event.objectTypeId ==="2-5922196") {
                         await this.objectPropertyChange.execute(event);
                     }else if (event.objectTypeId === "2-54072002") {
                         await this.affiliatePropertyChange.execute(event);
+                    }else if (event.objectTypeId === "0-53") { // Invoice
+                        await this.invoicePropertyChange.execute(event);
                     }
                     break;
 
@@ -169,6 +182,12 @@ export class HubspotService {
                 case 'object.merge':
                     if (event.objectTypeId ==="2-5922196") {
                         await this.objectMerge.execute(event);
+                    }
+                    break;
+
+                case 'object.associationChange':
+                    if (event.associationTypeId ==="179" || event.associationTypeId === "180") { //INVOICE_TO_COMPANY or COMPANY_TO_INVOICE
+                        await this.invoiceAssociationChange.execute(event);
                     }
                     break;
                 
