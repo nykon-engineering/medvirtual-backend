@@ -53,6 +53,16 @@ export class AffiliatesController {
     return { status: 200, message: 'Affiliate profiles retrieved successfully', ...result };
   }
 
+  // GET /med-alliance/admin/affiliates/by-user/:userId — Get affiliate profile by user ID.
+  // Must be declared BEFORE the /:id route so NestJS does not treat "by-user" as an id.
+  @Get('admin/affiliates/by-user/:userId')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async findByUserId(@Param('userId') userId: string) {
+    const data = await this.affiliatesService.findByUserId(userId);
+    return { status: 'success', data };
+  }
+
   // GET /med-alliance/admin/affiliates/:id — Get one affiliate profile.
   @Get('admin/affiliates/:id')
   @HttpCode(200)

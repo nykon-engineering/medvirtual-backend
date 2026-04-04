@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AffiliatesService } from './affiliates.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../../mail/mail.service';
 
 // ---------------------------------------------------------------------------
 // Prisma mock — only the tables touched by AffiliatesService
@@ -65,6 +66,7 @@ describe('AffiliatesService', () => {
       providers: [
         AffiliatesService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: MailService, useValue: { sendMail: jest.fn() } },
       ],
     }).compile();
 

@@ -12,6 +12,9 @@ import {
   UpdateAffiliateProfileDto,
 } from './dto/update-affiliate-profile.dto';
 import { ListAffiliatesDto } from './dto/list-affiliates.dto';
+import { MailService } from '../../mail/mail.service';
+import { MedAllianceInvitation } from '../../common/utils/email-templates/med-alliance-invitation';
+import { getUserEmailTheme } from '../../common/utils/email-templates/theme-helper';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
 const USER_SELECT = {
@@ -26,7 +29,10 @@ const USER_SELECT = {
 
 @Injectable()
 export class AffiliatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailService: MailService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Shared helper: ensure a user has an active AffiliateProfile.
@@ -79,7 +85,42 @@ export class AffiliatesService {
       include: { user: { select: USER_SELECT } },
     });
 
+    // Send invitation email to the new affiliate.
+    try {
+      const theme = await getUserEmailTheme(this.prisma, dto.user_id);
+      await this.mailService.sendMail({
+        from: process.env.MAIL_FROM || 'noreply@medvirtual.com',
+        to: user.email,
+        subject: "You've been invited to join the Med Alliance Program",
+        html: MedAllianceInvitation(user.first_name, theme ?? undefined),
+      });
+    } catch (emailError) {
+      // Do not fail the whole request if the email could not be delivered.
+      console.error('Failed to send Med Alliance invitation email:', emailError);
+    }
+
     return profile;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: get affiliate profile by user ID (returns null if not found).
+  // ---------------------------------------------------------------------------
+  async findByUserId(userId: string) {
+    return this.prisma.affiliateProfile.findUnique({
+      where: { user_id: userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+    });
   }
 
   // ---------------------------------------------------------------------------

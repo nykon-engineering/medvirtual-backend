@@ -915,6 +915,16 @@ export class UserService {
           organization_name: true,
           createdAt: true,
           updatedAt: true,
+          affiliateProfile: {
+            select: {
+              id: true,
+              hubspot_id: true,
+              full_name: true,
+              status: true,
+              commission_percent_default: true,
+              createdAt: true,
+            },
+          },
         },
       });
 

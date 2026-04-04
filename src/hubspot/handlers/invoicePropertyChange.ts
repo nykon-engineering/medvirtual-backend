@@ -57,6 +57,7 @@ export class HandlerInvoicePropertyChange {
         // option from hubspot(hs_invoice_status): draft | open | paid | vaided
         if(event.propertyName === 'hs_invoice_status' && event.propertyValue === 'paid'){  
             await this.comissionCreation.execute(event);
+            
             console.log(`Invoice with Hubspot ID ${event.objectId} has been paid. We can create a comission for the affiliate linked to this invoice, if there is one.`);
         }
 
