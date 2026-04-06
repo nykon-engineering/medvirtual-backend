@@ -15,7 +15,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ADMIN_ROLES } from '../constants';
+import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreatePayoutRequestDto } from './dto/create-payout-request.dto';
 import {
   DecidePayoutRequestDto,
@@ -47,7 +47,7 @@ export class PayoutRequestsController {
   // GET /med-alliance/payout-requests — List own payout requests.
   @Get('payout-requests')
   @HttpCode(200)
-  @Roles(...ADMIN_ROLES)
+  @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
   async findAll(
     @Query() query: ListPayoutRequestsDto,
     @CurrentUser() user: USER,

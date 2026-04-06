@@ -16,6 +16,7 @@ import { ReviewCasesModule } from './review-cases/review-cases.module';
     PayoutRequestsModule,
     SyncModule,
     ReviewCasesModule,
+    
   ],
 })
 export class MedAllianceModule {}
