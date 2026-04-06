@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { HandlerOrganization } from './handlers/organization';
 import { HandlerClient } from './handlers/client';
+import { HandlerAffiliate } from './handlers/affiliate';
 import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,6 +19,10 @@ describe('DashboardService', () => {
     execute: jest.fn(),
   };
 
+  const mockHandlerAffiliate = {
+    execute: jest.fn(),
+  };
+
   const prismaMock = {
     interview: {
       update: jest.fn(),
@@ -30,7 +35,8 @@ describe('DashboardService', () => {
         DashboardService,
         { provide: HandlerOrganization, useValue: mockHandlerOrganization },
         { provide: HandlerClient, useValue: mockHandlerClient },
-        { provide: PrismaService  , useValue: prismaMock },
+        { provide: HandlerAffiliate, useValue: mockHandlerAffiliate },
+        { provide: PrismaService, useValue: prismaMock },
       ],
     }).compile();
 
