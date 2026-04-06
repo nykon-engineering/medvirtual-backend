@@ -46,6 +46,8 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
+import { AffiliateCreationService } from './create/affiliate';
+
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
@@ -88,12 +90,14 @@ import { MailModule } from '../mail/mail.module';
     OwnerCreationService,
     OrganizationUpdateService,
     ContactCreationService,
+    AffiliateCreationService,
     ContactUpdateService,
     ContactDeleteService,
     HandlerInvoiceCreation,
     HandlerInvoicePropertyChange,
     HandlerInvoiceAssociationChange,
     HandlerComissionCreation,
+    
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 
@@ -101,13 +105,13 @@ import { MailModule } from '../mail/mail.module';
     forwardRef(() => CandidatesModule), 
     forwardRef(() => OrganizationModule), 
     forwardRef(() => HireRequestModule) ],
-  exports: [HubspotService, 
-    HandlerOrganizationCreation, 
-    HandlerObjectCreation, 
-    HandlerDealCreation, 
+  exports: [HubspotService,
+    HandlerOrganizationCreation,
+    HandlerObjectCreation,
+    HandlerDealCreation,
     HireRequestCreationService,
     HireRequestUpdateService,
-  
+    AffiliateCreationService,
   ],
 })
 export class HubspotModule {}

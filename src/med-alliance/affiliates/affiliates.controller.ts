@@ -88,6 +88,15 @@ export class AffiliatesController {
   // Affiliate routes
   // ---------------------------------------------------------------------------
 
+  // POST /med-alliance/affiliates/join — Self-enrollment for organization admins.
+  @Post('affiliates/join')
+  @HttpCode(200)
+  @Roles(...ORGANIZATION_ROLES)
+  async joinProgram(@CurrentUser() currentUser: USER) {
+    const data = await this.affiliatesService.joinProgram(currentUser);
+    return { status: 'success', message: 'Successfully joined the Med Alliance Program', data };
+  }
+
   // GET /med-alliance/affiliates/me — Get own profile.
   @Get('affiliates/me')
   @HttpCode(200)

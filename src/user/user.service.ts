@@ -707,6 +707,16 @@ export class UserService {
             status: true,
           },
         },
+        affiliateProfile: {
+          select: {
+            id: true,
+            hubspot_id: true,
+            full_name: true,
+            status: true,
+            commission_percent_default: true,
+            createdAt: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     };

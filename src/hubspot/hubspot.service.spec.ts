@@ -38,6 +38,8 @@ import { HandlerComissionCreation } from './handlers/comissionCreation';
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
+import { AffiliateCreationService } from './create/affiliate';
+
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
@@ -200,6 +202,10 @@ const contactCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const affiliateCreationServiceMock = {
+  execute: jest.fn(),
+};
+
 const updateContactServiceMock = {
   execute: jest.fn(),
 };
@@ -281,7 +287,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
         {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
         {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
-        {provide: HandlerComissionCreation, useValue: HandlerComissionCreationMock}
+        {provide: HandlerComissionCreation, useValue: HandlerComissionCreationMock},
+        {provide: AffiliateCreationService, useValue: affiliateCreationServiceMock},
       ],
     }).compile();
 
@@ -360,7 +367,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
         {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
         {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
-        {provide: HandlerComissionCreation, useValue: HandlerComissionCreationMock}
+        {provide: HandlerComissionCreation, useValue: HandlerComissionCreationMock},
+        {provide: AffiliateCreationService, useValue: affiliateCreationServiceMock},
       ]
     }).compile();
 
