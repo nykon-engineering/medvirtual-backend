@@ -96,7 +96,7 @@ export class AffiliatesService {
     try {
       const theme = await getUserEmailTheme(this.prisma, dto.user_id);
       await this.mailService.sendMail({
-        from: process.env.MAIL_FROM || 'noreply@medvirtual.com',
+        from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
         to: user.email,
         subject: "You've been invited to join the Med Alliance Program",
         html: MedAllianceInvitation(user.first_name, theme ?? undefined),
@@ -274,7 +274,7 @@ export class AffiliatesService {
     try {
       const theme = await getUserEmailTheme(this.prisma, currentUser.id);
       await this.mailService.sendMail({
-        from: process.env.MAIL_FROM || 'noreply@medvirtual.com',
+        from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
         to: currentUser.email,
         subject: 'Welcome to the Med Alliance Program',
         html: MedAllianceInvitation(currentUser.first_name, theme ?? undefined),
