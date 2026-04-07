@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -35,7 +37,6 @@ export class AffiliatesService {
     private readonly mailService: MailService,
     private readonly affiliateCreationService: AffiliateCreationService,
   ) {}
-
   
   // Shared helper: ensure a user has an active AffiliateProfile.
   // Used by other services (commissions, payout-requests).
@@ -89,7 +90,9 @@ export class AffiliatesService {
       await this.affiliateCreationService.execute(newAffiliateData);
       console.log('[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:', profile.id);
     }catch(error){
+      await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
       console.error('Failed to create Growth Partner in Hubspot:', error);
+      throw new BadRequestException(error.message || 'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.');
     }
 
     // Send invitation email to the new affiliate.
@@ -240,51 +243,52 @@ export class AffiliatesService {
 
   // Self-enrollment: organization admin joins the Med Alliance Program.
   async joinProgram(currentUser: USER) {
-    if (!['organization_admin', 'organization_super_admin'].includes(currentUser.role)) {
-      throw new ForbiddenException('Only organization admins can join the Med Alliance Program');
-    }
+      if (!['organization_admin', 'organization_super_admin'].includes(currentUser.role)) {
+        throw new ForbiddenException('Only organization admins can join the Med Alliance Program');
+      }
 
-    const existing = await this.prisma.affiliateProfile.findUnique({
-      where: { user_id: currentUser.id },
-    });
-    if (existing) {
-      throw new ConflictException('You already have an affiliate profile');
-    }
-
-    const profile = await this.prisma.affiliateProfile.create({
-      data: {
-        full_name: `${currentUser.first_name} ${currentUser.last_name}`,
-        user_id: currentUser.id,
-        commission_percent_default: 7,
-        status: 'active',
-        created_by: currentUser.id,
-      },
-    });
-
-    const newAffiliateData = await this.findOne(profile.id);
-
-    // => Create Growth Partner in Hubspot
-    try{
-      await this.affiliateCreationService.execute(newAffiliateData);
-      console.log('[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:', profile.id);
-    }catch(error){
-      console.error('Failed to create Growth Partner in Hubspot:', error);
-    }
-
-
-    try {
-      const theme = await getUserEmailTheme(this.prisma, currentUser.id);
-      await this.mailService.sendMail({
-        from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
-        to: currentUser.email,
-        subject: 'Welcome to the Med Alliance Program',
-        html: MedAllianceInvitation(currentUser.first_name, theme ?? undefined),
+      const existing = await this.prisma.affiliateProfile.findUnique({
+        where: { user_id: currentUser.id },
       });
-    } catch (emailError) {
-      console.error('Failed to send Med Alliance invitation email:', emailError);
-    }
+      if (existing) {
+        throw new ConflictException('You already have an affiliate profile');
+      }
 
-    return newAffiliateData;
+      const profile = await this.prisma.affiliateProfile.create({
+        data: {
+          full_name: `${currentUser.first_name} ${currentUser.last_name}`,
+          user_id: currentUser.id,
+          commission_percent_default: 7,
+          status: 'active',
+          created_by: currentUser.id,
+        },
+      });
+
+      const newAffiliateData = await this.findOne(profile.id);
+
+      // => Create Growth Partner in Hubspot
+      try{
+        await this.affiliateCreationService.execute(newAffiliateData);
+        console.log('[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:', profile.id);
+      }catch(error){
+        await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
+        throw new BadRequestException(error.message || 'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.');
+      }
+
+
+      try {
+        const theme = await getUserEmailTheme(this.prisma, currentUser.id);
+        await this.mailService.sendMail({
+          from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
+          to: currentUser.email,
+          subject: 'Welcome to the Med Alliance Program',
+          html: MedAllianceInvitation(currentUser.first_name, theme ?? undefined),
+        });
+      } catch (emailError) {
+        console.error('Failed to send Med Alliance invitation email:', emailError);
+      }
+
+      return  newAffiliateData;
   }
 
   // Affiliate: update only payout preferences on own profile.

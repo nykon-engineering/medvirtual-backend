@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -20,15 +20,15 @@ export class AffiliateCreationService {
                 growth_partner_email_address: data.user.email,
                 hs_pipeline: '883841953',
                 hs_pipeline_stage: '1329693870',
-                business_unit: data.user.organization.business_unit,
-                growth_partner_company_name: data.user.organization.name,
+                business_unit: data.user.organization?.business_unit,
+                growth_partner_company_name: data.user.organization?.name,
                 alliance_commission: 7,
                 attribution_information: 'Alliance Partner',
                 earning_status: 'Active',
               },
-              associations: data.user.organization.hubspot_id ? [
+              associations: data.user.organization?.hubspot_id ? [
                 {
-                  to: { id: data.user.organization.hubspot_id }, 
+                  to: { id: Number(data.user.organization.hubspot_id) }, 
                   types: [
                     {
                       associationCategory: "USER_DEFINED",
@@ -55,8 +55,10 @@ export class AffiliateCreationService {
         } catch (error) {
           if (error.response) {
             console.error("Error to created Affiliate:", error.response.data);
+            throw new BadRequestException('Failed to create Growth Partner in Hubspot. Your affiliate profile has not been created. Please try again later.');
           } else {
             console.error("Connection error:", error.message);
+            throw new BadRequestException('Failed to create Growth Partner in Hubspot. Your affiliate profile has not been created. Please try again later.');
           }
         }
         

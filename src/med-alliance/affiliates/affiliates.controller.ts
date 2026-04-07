@@ -41,7 +41,7 @@ export class AffiliatesController {
     @CurrentUser() admin: USER,
   ) {
     const data = await this.affiliatesService.create(dto, admin);
-    return { status: 201, message: 'Affiliate profile created successfully', data };
+    return data;
   }
 
   // GET /med-alliance/admin/affiliates — List all affiliate profiles.
@@ -90,11 +90,11 @@ export class AffiliatesController {
 
   // POST /med-alliance/affiliates/join — Self-enrollment for organization admins.
   @Post('affiliates/join')
-  @HttpCode(200)
+  @HttpCode(201)
   @Roles(...ORGANIZATION_ROLES)
   async joinProgram(@CurrentUser() currentUser: USER) {
     const data = await this.affiliatesService.joinProgram(currentUser);
-    return { status: 'success', message: 'Successfully joined the Med Alliance Program', data };
+    return data;
   }
 
   // GET /med-alliance/affiliates/me — Get own profile.
