@@ -700,6 +700,7 @@ export class UserService {
         phone: true,
         verified: true,
         createdAt: true,
+        updatedAt: true,
         organization: {
           select: {
             id: true,
@@ -799,6 +800,7 @@ export class UserService {
         phone: true,
         verified: true,
         createdAt: true,
+        updatedAt: true,
       },
       orderBy: {
         createdAt: 'desc',
