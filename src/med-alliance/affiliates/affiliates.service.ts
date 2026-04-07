@@ -253,8 +253,9 @@ export class AffiliatesService {
 
     const profile = await this.prisma.affiliateProfile.create({
       data: {
+        full_name: `${currentUser.first_name} ${currentUser.last_name}`,
         user_id: currentUser.id,
-        commission_percent_default: 0,
+        commission_percent_default: 7,
         status: 'active',
         created_by: currentUser.id,
       },
