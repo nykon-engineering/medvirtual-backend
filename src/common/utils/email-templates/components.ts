@@ -9,8 +9,9 @@ export function getEmailHeader(theme?: EmailTheme) {
   
   return `
     <div style="background:${primaryColor};padding:40px 20px;text-align:center;">
-        <img src="${logo}" alt="${companyName} Logo" style="max-width: 200px; height: auto;" />
+        <img src="https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" style="max-width: 200px; height: auto;" />
     </div>
+    
   `;
 }
 

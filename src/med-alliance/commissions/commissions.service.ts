@@ -36,6 +36,7 @@ const COMMISSION_SELECT = {
     select: {
       id: true,
       hubspot_id: true,
+      invoice_status: true,
       invoice_amount: true,
       currency: true,
       paid_at: true,

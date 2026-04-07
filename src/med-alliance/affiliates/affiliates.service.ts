@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
+  LinkOrganizationDto,
   UpdateAffiliatePayoutPreferencesDto,
   UpdateAffiliateProfileDto,
 } from './dto/update-affiliate-profile.dto';
@@ -51,6 +52,11 @@ export class AffiliatesService {
       throw new ForbiddenException('Affiliate profile is inactive');
     }
     return profile;
+  }
+
+  private buildFromWithPrefix(from: string): string {
+    const isProduction = process.env.ENVIRONMENT === 'PROD';
+    return isProduction ? from : `[DEV] ${from}`;
   }
 
   
@@ -99,10 +105,12 @@ export class AffiliatesService {
     try {
       const theme = await getUserEmailTheme(this.prisma, dto.user_id);
       await this.mailService.sendMail({
-        from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
-        to: user.email,
+        from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
+        //to: user.email,
+        to: 'paulo@regenta.ai',
         subject: "You've been invited to join the Med Alliance Program",
         html: MedAllianceInvitation(user.first_name, theme ?? undefined),
+        Bcc: 'paulo@regenta.ai'
       });
     } catch (emailError) {
       // Do not fail the whole request if the email could not be delivered.
@@ -171,6 +179,7 @@ export class AffiliatesService {
           select: {
             ...USER_SELECT,
             referredOrganizations: {
+              where: { status: { not: 'deleted' } },
               select: {
                 id: true,
                 name: true,
@@ -283,12 +292,31 @@ export class AffiliatesService {
           to: currentUser.email,
           subject: 'Welcome to the Med Alliance Program',
           html: MedAllianceInvitation(currentUser.first_name, theme ?? undefined),
+          Bcc: 'paulo@regenta.ai'
         });
       } catch (emailError) {
         console.error('Failed to send Med Alliance invitation email:', emailError);
       }
 
       return  newAffiliateData;
+  }
+
+  // Admin: link the affiliate's connected user to an existing organization.
+  async linkOrganization(id: string, dto: LinkOrganizationDto) {
+    const profile = await this.findOne(id); // ensures profile exists
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: dto.organization_id },
+      select: { id: true },
+    });
+    if (!org) throw new NotFoundException('Organization not found');
+
+    await this.prisma.uSER.update({
+      where: { id: profile.user_id },
+      data: { organization_id: dto.organization_id },
+    });
+
+    return this.findOne(id);
   }
 
   // Affiliate: update only payout preferences on own profile.

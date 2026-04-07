@@ -18,6 +18,7 @@ import { USER } from '@prisma/client';
 import { ADMIN_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
+  LinkOrganizationDto,
   UpdateAffiliatePayoutPreferencesDto,
   UpdateAffiliateProfileDto,
 } from './dto/update-affiliate-profile.dto';
@@ -82,6 +83,18 @@ export class AffiliatesController {
   ) {
     const data = await this.affiliatesService.update(id, dto);
     return { status: 200, message: 'Affiliate profile updated successfully', data };
+  }
+
+  // PATCH /med-alliance/admin/affiliates/:id/link-organization — Link user to an org.
+  @Patch('admin/affiliates/:id/link-organization')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async linkOrganization(
+    @Param('id') id: string,
+    @Body() dto: LinkOrganizationDto,
+  ) {
+    const data = await this.affiliatesService.linkOrganization(id, dto);
+    return { status: 200, message: 'Organization linked successfully', data };
   }
 
   // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { getEmailFooter, getEmailHeader } from './components';
+import { getEmailFooter } from './components';
 import { EmailTheme } from './theme';
 
 export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): string {
@@ -38,6 +38,14 @@ export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): st
     }
     .content {
       padding: 40px 30px;
+    }
+      .logo {
+      text-align: left;
+      margin-bottom: 30px;
+    }
+    .logo img {
+      max-width: 200px;
+      height: auto;
     }
     .greeting {
       color: #333333;
@@ -93,8 +101,12 @@ export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): st
 <body>
   <div class="email-wrapper">
     <div class="container">
-      ${getEmailHeader(theme)}
+
       <div class="content">
+        <div class="logo">
+          <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+        </div>
+
         <div class="greeting">Hello, ${firstName}!</div>
 
         <div class="main-message">

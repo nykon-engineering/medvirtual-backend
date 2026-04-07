@@ -38,6 +38,12 @@ export class UpdateAffiliateProfileDto {
   payout_preference_notes?: string;
 }
 
+// Used by admin to link a user to an existing organization.
+export class LinkOrganizationDto {
+  @IsString()
+  organization_id: string;
+}
+
 // Used by affiliate (/me route) — only payout preferences allowed.
 export class UpdateAffiliatePayoutPreferencesDto {
   @IsOptional()

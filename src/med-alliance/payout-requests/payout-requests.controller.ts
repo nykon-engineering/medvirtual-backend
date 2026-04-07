@@ -35,7 +35,7 @@ export class PayoutRequestsController {
   // POST /med-alliance/payout-requests — Submit a new payout request.
   @Post('payout-requests')
   @HttpCode(201)
-  @Roles(...ADMIN_ROLES)
+  @Roles(...ORGANIZATION_ROLES)
   async create(
     @Body() dto: CreatePayoutRequestDto,
     @CurrentUser() user: USER,
