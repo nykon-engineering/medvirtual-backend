@@ -1,12 +1,14 @@
 import {
   IsEnum,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
   Min,
 } from 'class-validator';
 import { PayoutMethod } from './create-affiliate-profile.dto';
+import { Prisma } from '@prisma/client';
 
 export enum AffiliateStatus {
   ACTIVE = 'active',
@@ -36,12 +38,23 @@ export class UpdateAffiliateProfileDto {
   @IsOptional()
   @IsString()
   payout_preference_notes?: string;
+
+  @IsOptional()
+  @IsObject()
+  payout_details?: Prisma.InputJsonValue;
 }
 
 // Used by admin to link a user to an existing organization.
 export class LinkOrganizationDto {
   @IsString()
   organization_id: string;
+}
+
+// Used by affiliate self-enrollment — optional payout details at join time.
+export class JoinProgramDto {
+  @IsOptional()
+  @IsObject()
+  payout_details?: Prisma.InputJsonValue;
 }
 
 // Used by affiliate (/me route) — only payout preferences allowed.
@@ -57,4 +70,8 @@ export class UpdateAffiliatePayoutPreferencesDto {
   @IsOptional()
   @IsString()
   payout_preference_notes?: string;
+
+  @IsOptional()
+  @IsObject()
+  payout_details?: Prisma.InputJsonValue;
 }

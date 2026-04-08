@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
+  JoinProgramDto,
   LinkOrganizationDto,
   UpdateAffiliatePayoutPreferencesDto,
   UpdateAffiliateProfileDto,
@@ -85,6 +86,7 @@ export class AffiliatesService {
         payout_preference_method: dto.payout_preference_method ?? null,
         payout_preference_reference: dto.payout_preference_reference ?? null,
         payout_preference_notes: dto.payout_preference_notes ?? null,
+        payout_details: dto.payout_details ?? undefined,
         created_by: adminUser.id,
       },
     });
@@ -234,6 +236,9 @@ export class AffiliatesService {
         ...(dto.payout_preference_notes !== undefined && {
           payout_preference_notes: dto.payout_preference_notes,
         }),
+        ...(dto.payout_details !== undefined && {
+          payout_details: dto.payout_details ?? undefined,
+        }),
       },
       include: { user: { select: USER_SELECT } },
     });
@@ -249,7 +254,7 @@ export class AffiliatesService {
   }
 
   // Self-enrollment: organization admin joins the Med Alliance Program.
-  async joinProgram(currentUser: USER) {
+  async joinProgram(currentUser: USER, dto: JoinProgramDto = {}) {
       if (!['organization_admin', 'organization_super_admin'].includes(currentUser.role)) {
         throw new ForbiddenException('Only organization admins can join the Med Alliance Program');
       }
@@ -268,6 +273,7 @@ export class AffiliatesService {
           commission_percent_default: 7,
           status: 'active',
           created_by: currentUser.id,
+          payout_details: dto.payout_details ?? undefined,
         },
       });
 
@@ -331,6 +337,9 @@ export class AffiliatesService {
         }),
         ...(dto.payout_preference_notes !== undefined && {
           payout_preference_notes: dto.payout_preference_notes,
+        }),
+        ...(dto.payout_details !== undefined && {
+          payout_details: dto.payout_details ?? null,
         }),
       },
       include: { user: { select: USER_SELECT } },

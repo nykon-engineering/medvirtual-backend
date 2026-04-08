@@ -18,6 +18,7 @@ import { USER } from '@prisma/client';
 import { ADMIN_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
+  JoinProgramDto,
   LinkOrganizationDto,
   UpdateAffiliatePayoutPreferencesDto,
   UpdateAffiliateProfileDto,
@@ -105,8 +106,8 @@ export class AffiliatesController {
   @Post('affiliates/join')
   @HttpCode(201)
   @Roles(...ORGANIZATION_ROLES)
-  async joinProgram(@CurrentUser() currentUser: USER) {
-    const data = await this.affiliatesService.joinProgram(currentUser);
+  async joinProgram(@CurrentUser() currentUser: USER, @Body() dto: JoinProgramDto) {
+    const data = await this.affiliatesService.joinProgram(currentUser, dto);
     return data;
   }
 
