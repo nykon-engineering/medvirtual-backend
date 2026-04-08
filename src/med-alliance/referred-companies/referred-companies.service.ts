@@ -126,11 +126,25 @@ export class ReferredCompaniesService {
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        include: {
-          owner: true,
-          admin: true,
-          users: true,
-          staff: true,
+        // Scoped DTO for affiliate — only referral-safe fields are returned.
+        // See docs/specs/referred-company-data-access-policy.md for the full allowlist.
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          status: true,
+          industry: true,
+          location: true,
+          address: true,
+          city: true,
+          state: true,
+          description: true,
+          website_url: true,
+          createdAt: true,
+          contact_first_name: true,
+          contact_last_name: true,
+          med_alliance_referral_status: true,
         },
       }),
       this.prisma.organization.count({ where }),
@@ -143,20 +157,40 @@ export class ReferredCompaniesService {
   // Affiliate: get one referred company — scoped to the requesting affiliate.
   // ---------------------------------------------------------------------------
   async findOneForAffiliate(id: string, currentUser: USER) {
-    const org = await this.prisma.organization.findUnique({
+    // First check existence and ownership with minimal query.
+    const check = await this.prisma.organization.findUnique({
       where: { id },
-      include: {
-        owner: true,
-        admin: true,
-        users: true,
-      },
+      select: { id: true, referred_by_affiliate_id: true },
     });
-    if (!org) throw new NotFoundException('Referred company not found');
+    if (!check) throw new NotFoundException('Referred company not found');
 
     // Prevent data leak: affiliate can only see their own referrals.
-    if (org.referred_by_affiliate_id !== currentUser.id) {
+    if (check.referred_by_affiliate_id !== currentUser.id) {
       throw new ForbiddenException('You do not have access to this referred company');
     }
+
+    // Return scoped DTO — only referral-safe fields.
+    const org = await this.prisma.organization.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        industry: true,
+        location: true,
+        address: true,
+        city: true,
+        state: true,
+        description: true,
+        website_url: true,
+        createdAt: true,
+        contact_first_name: true,
+        contact_last_name: true,
+        med_alliance_referral_status: true,
+      },
+    });
 
     return org;
   }

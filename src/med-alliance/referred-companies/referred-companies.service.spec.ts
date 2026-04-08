@@ -245,14 +245,68 @@ describe('ReferredCompaniesService', () => {
 
       expect(result.pagination).toEqual({ page: 3, limit: 5, total: 0 });
     });
+
+    it('should NOT return sensitive fields (hubspot_id, owner, admin, users, staff) for affiliate list', async () => {
+      const scopedListOrg = {
+        id: mockOrg.id,
+        name: mockOrg.name,
+        email: mockOrg.email,
+        phone: mockOrg.phone,
+        status: mockOrg.status,
+        industry: mockOrg.industry,
+        location: mockOrg.location,
+        address: undefined,
+        city: undefined,
+        state: undefined,
+        description: mockOrg.description,
+        website_url: mockOrg.website_url,
+        createdAt: mockOrg.createdAt,
+        contact_first_name: undefined,
+        contact_last_name: undefined,
+        med_alliance_referral_status: undefined,
+      };
+      mockPrisma.$transaction.mockResolvedValue([[scopedListOrg], 1]);
+
+      const result = await service.findAllForAffiliate({}, mockCurrentUser);
+
+      const org = result.data[0];
+      expect(org).not.toHaveProperty('hubspot_id');
+      expect(org).not.toHaveProperty('owner');
+      expect(org).not.toHaveProperty('admin');
+      expect(org).not.toHaveProperty('users');
+      expect(org).not.toHaveProperty('staff');
+      expect(org).not.toHaveProperty('hubspot_sync_status');
+      expect(org).not.toHaveProperty('hubspot_sync_error');
+    });
   });
 
   // -------------------------------------------------------------------------
   // findOneForAffiliate
   // -------------------------------------------------------------------------
   describe('findOneForAffiliate', () => {
+    // Scoped fixture — only the fields returned by the select allowlist
+    const scopedOrg = {
+      id: mockOrg.id,
+      name: mockOrg.name,
+      email: mockOrg.email,
+      phone: mockOrg.phone,
+      status: mockOrg.status,
+      industry: mockOrg.industry,
+      location: mockOrg.location,
+      address: undefined,
+      city: undefined,
+      state: undefined,
+      description: mockOrg.description,
+      website_url: mockOrg.website_url,
+      createdAt: mockOrg.createdAt,
+      contact_first_name: undefined,
+      contact_last_name: undefined,
+      med_alliance_referral_status: undefined,
+    };
+
     it('should throw NotFoundException when organization does not exist', async () => {
-      mockPrisma.organization.findUnique.mockResolvedValue(null);
+      // First call (ownership check) returns null
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(null);
 
       await expect(
         service.findOneForAffiliate('org-99', mockCurrentUser),
@@ -260,8 +314,9 @@ describe('ReferredCompaniesService', () => {
     });
 
     it('should throw ForbiddenException when org was referred by a different affiliate', async () => {
-      mockPrisma.organization.findUnique.mockResolvedValue({
-        ...mockOrg,
+      // First call returns ownership check with different affiliate
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
         referred_by_affiliate_id: 'other-user',
       });
 
@@ -272,12 +327,36 @@ describe('ReferredCompaniesService', () => {
       );
     });
 
-    it('should return the organization when it belongs to the current affiliate', async () => {
-      mockPrisma.organization.findUnique.mockResolvedValue(mockOrg);
+    it('should return the scoped organization when it belongs to the current affiliate', async () => {
+      // First call: ownership check
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
+        referred_by_affiliate_id: 'user-1',
+      });
+      // Second call: scoped select
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(scopedOrg);
 
       const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
 
-      expect(result).toEqual(mockOrg);
+      expect(result).toEqual(scopedOrg);
+    });
+
+    it('should NOT return hubspot_id, owner, admin, users, or staff for affiliate', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
+        referred_by_affiliate_id: 'user-1',
+      });
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(scopedOrg);
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect(result).not.toHaveProperty('hubspot_id');
+      expect(result).not.toHaveProperty('owner');
+      expect(result).not.toHaveProperty('admin');
+      expect(result).not.toHaveProperty('users');
+      expect(result).not.toHaveProperty('staff');
+      expect(result).not.toHaveProperty('hubspot_sync_status');
+      expect(result).not.toHaveProperty('hubspot_sync_error');
     });
   });
 
@@ -334,6 +413,25 @@ describe('ReferredCompaniesService', () => {
 
       expect(result).toHaveProperty('referredByAffiliate');
       expect((result as any).referredByAffiliate.id).toBe('user-1');
+    });
+
+    it('should return full payload including owner, admin, users for admin (no regression)', async () => {
+      const fullOrg = {
+        ...mockOrg,
+        owner: { id: 'owner-1', email: 'owner@acme.com' },
+        admin: { id: 'admin-1', email: 'admin@acme.com' },
+        users: [{ id: 'u1', email: 'u1@acme.com' }],
+        referredByAffiliate: { id: 'user-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+      };
+      mockPrisma.organization.findUnique.mockResolvedValue(fullOrg);
+
+      const result = await service.findOneForAdmin('org-1');
+
+      // Admin SHOULD see all internal fields
+      expect(result).toHaveProperty('owner');
+      expect(result).toHaveProperty('admin');
+      expect(result).toHaveProperty('users');
+      expect(result).toHaveProperty('referredByAffiliate');
     });
   });
 });
