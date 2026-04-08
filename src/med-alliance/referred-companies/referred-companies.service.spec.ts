@@ -7,6 +7,7 @@ import { AffiliatesService } from '../affiliates/affiliates.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
 import { OrganizationService } from '../../organization/organization.service';
+import { HubspotService } from '../../hubspot/hubspot.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -40,7 +41,12 @@ const mockReviewCasesService = {
 
 const mockOrganizationService = {
   create: jest.fn(),
+  getById: jest.fn(),
 }
+
+const mockHubspotService = {
+  createOrganizationInHubspot: jest.fn(),
+};
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -84,6 +90,7 @@ describe('ReferredCompaniesService', () => {
         { provide: ReferralSyncService, useValue: mockReferralSyncService },
         { provide: ReviewCasesService, useValue: mockReviewCasesService },
         { provide: OrganizationService, useValue: mockOrganizationService},
+        { provide: HubspotService, useValue: mockHubspotService },
       ],
     }).compile();
 
@@ -102,6 +109,8 @@ describe('ReferredCompaniesService', () => {
       name: 'Acme Corp',
       email: 'contact@acme.com',
       website_url: 'https://acme.com',
+      contact_first_name: 'John',
+      contact_last_name: 'Doe',
       location: 'New York',
       industry: 'Healthcare',
     };
@@ -127,6 +136,7 @@ describe('ReferredCompaniesService', () => {
     it('should create org, run eligibility check, and return updated record', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockOrganizationService.create.mockResolvedValue(mockOrg);
+      mockOrganizationService.getById.mockResolvedValue(mockOrgWithEligibility);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
       mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(mockOrgWithEligibility);
@@ -158,6 +168,7 @@ describe('ReferredCompaniesService', () => {
 
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockOrganizationService.create.mockResolvedValue(mockOrg);
+      mockOrganizationService.getById.mockResolvedValue(blockedOrg);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
       mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(blockedOrg);
@@ -174,11 +185,21 @@ describe('ReferredCompaniesService', () => {
       const orgNoEmail = { ...mockOrgWithEligibility, email: null };
       mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
       mockOrganizationService.create.mockResolvedValue({ ...mockOrg, email: null });
+      mockOrganizationService.getById.mockResolvedValue(orgNoEmail);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
       mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(orgNoEmail);
 
-      const result = await service.create({ name: 'MinOrg' }, mockCurrentUser);
+      const result = await service.create(
+        {
+          name: 'MinOrg',
+          email: 'minorg@example.com',
+          website_url: 'https://minorg.com',
+          contact_first_name: 'John',
+          contact_last_name: 'Doe',
+        },
+        mockCurrentUser,
+      );
 
       expect(result!.email).toBeNull();
     });

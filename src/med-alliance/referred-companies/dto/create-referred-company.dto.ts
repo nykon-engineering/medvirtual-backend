@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
 } from 'class-validator';
 
 export class CreateReferredCompanyDto {
@@ -10,13 +11,21 @@ export class CreateReferredCompanyDto {
   @IsNotEmpty()
   name: string;
 
-  @IsOptional()
   @IsEmail()
-  email?: string;
+  @IsNotEmpty()
+  email: string;
 
-  @IsOptional()
+  @IsUrl()
+  @IsNotEmpty()
+  website_url: string;
+
   @IsString()
-  website_url?: string;
+  @IsNotEmpty()
+  contact_first_name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  contact_last_name: string;
 
   @IsOptional()
   @IsString()

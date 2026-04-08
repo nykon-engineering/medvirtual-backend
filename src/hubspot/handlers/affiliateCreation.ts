@@ -131,10 +131,10 @@ export class HandlerAffiliateCreation {
                     throw new BadRequestException('Failed to store invite code');
                 }
             }
-
             
             const createdAffiliate = await this.prisma.affiliateProfile.create({
                 data: {
+                    full_name: rawProperties.growth_partner_name,
                     hubspot_id: rawProperties.hs_object_id,
                     commission_percent_default: 7.0,
                     status: AffiliateStatus.active,

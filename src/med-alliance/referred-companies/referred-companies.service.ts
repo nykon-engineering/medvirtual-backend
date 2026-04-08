@@ -10,8 +10,10 @@ import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
 import { CreateOrganizationDto } from '../../organization/dto/createOrganization.dto';
+import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { OrganizationService } from '../../organization/organization.service';
+import { HubspotService } from '../../hubspot/hubspot.service';
 
 
 @Injectable()
@@ -23,12 +25,11 @@ export class ReferredCompaniesService {
     private readonly referralSync: ReferralSyncService,
     private readonly reviewCases: ReviewCasesService,
     private readonly organizationService: OrganizationService,
+    private readonly hubspot: HubspotService,
   ) {}
 
-  // ---------------------------------------------------------------------------
-  // Affiliate: submit a new company referral.
-  // ---------------------------------------------------------------------------
-  async create(dto: CreateOrganizationDto, currentUser: USER) {
+
+  async create(dto: CreateReferredCompanyDto | CreateOrganizationDto, currentUser: USER) {
     // Require an active affiliate profile before accepting the referral.
     await this.affiliatesService.requireActiveProfile(currentUser.id);
 
@@ -40,7 +41,7 @@ export class ReferredCompaniesService {
     await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
 
     // MA-006: soft duplicate check — warn if another referred org with the same name or email exists.
-    const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto);
+    const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto as CreateReferredCompanyDto);
 
     // MA-005: run HubSpot matching + invoice ingestion + commission detection synchronously.
     await this.referralSync.run(org.id);
@@ -57,6 +58,11 @@ export class ReferredCompaniesService {
         },
       },
     });
+    const newOrganization = await this.organizationService.getById(org.id);
+
+    if (currentUser){ 
+      await this.hubspot.createOrganizationInHubspot(newOrganization);
+    }
 
     return softDuplicateWarning ? { ...result, warning: softDuplicateWarning } : result;
   }
@@ -68,7 +74,7 @@ export class ReferredCompaniesService {
    */
   private async checkSoftDuplicate(
     orgId: string,
-    dto: CreateOrganizationDto,
+    dto: CreateReferredCompanyDto,
   ): Promise<string | null> {
     const orConditions: any[] = [
       { name: { equals: dto.name, mode: 'insensitive' } },
