@@ -1627,6 +1627,7 @@ export class CandidatesService {
       this.prisma.candidate.count({ where: whereClauseForCount }), // Count available candidates only by pipeline_status
     ]);
 
+
     // Shuffle array to get random candidates
     const shuffled = candidates.sort(() => 0.5 - Math.random());
 

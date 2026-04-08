@@ -23,7 +23,6 @@ export class HandlerAffiliateCreation {
 
 
     async execute(event){
-
         try{
             const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_GROWTH_PARTNER_CUSTOM_OBJECT}/${event.objectId}?properties=growth_partner_name,growth_partner_email_address,hs_pipeline_stage`, 
                 {
@@ -36,7 +35,7 @@ export class HandlerAffiliateCreation {
             if (!getObject) {
                 throw new BadRequestException('No object data found');
             }
-
+            console.log('Fetched object data from HubSpot:', getObject.data);
             const rawProperties = getObject.data.properties;
             const affiliateData: Record<string, any> = {};
 
@@ -132,7 +131,7 @@ export class HandlerAffiliateCreation {
                 }
             }
             
-            const createdAffiliate = await this.prisma.affiliateProfile.create({
+            await this.prisma.affiliateProfile.create({
                 data: {
                     full_name: rawProperties.growth_partner_name,
                     hubspot_id: rawProperties.hs_object_id,
@@ -144,13 +143,10 @@ export class HandlerAffiliateCreation {
                 },
             });
 
-
-            
-
-            
             return true;
 
         }catch (error) {
+            console.error('Error processing HubSpot affiliate creation event:', error);
             throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
         }
 

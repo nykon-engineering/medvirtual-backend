@@ -56,9 +56,12 @@ describe('TalentPoolLeadsService', () => {
 
   describe('create', () => {
     const createDto: CreateTalentPoolLeadDto = {
-      name: 'John Doe',
+      first_name: 'John',
+      last_name: 'Doe',
       email: 'john@healthcare.com',
       organization: 'Healthcare Organization',
+      website_url: 'https://www.healthcare.com',
+      language_preference: 'yes',
       main_need: '3 bilingual VAs',
       additional_details: 'Monthly volume details',
       source: 'talent-pool-page',
@@ -68,8 +71,12 @@ describe('TalentPoolLeadsService', () => {
       const mockCreatedLead = {
         id: 'lead-1',
         name: 'John Doe',
+        first_name: 'John',
+        last_name: 'Doe',
         email: 'john@healthcare.com',
         organization: 'Healthcare Organization',
+        website_url: 'https://www.healthcare.com',
+        language_preference: 'yes',
         status: 'new',
         created_at: new Date('2024-01-15T10:30:00Z'),
       };
@@ -132,9 +139,12 @@ describe('TalentPoolLeadsService', () => {
 
     it('should sanitize input to prevent XSS', async () => {
       const maliciousDto: CreateTalentPoolLeadDto = {
-        name: '<script>alert("xss")</script>John',
+        first_name: '<script>alert("xss")</script>John',
+        last_name: 'Doe',
         email: 'john@healthcare.com',
         organization: 'Healthcare Org',
+        website_url: 'https://www.healthcare.com',
+        language_preference: 'yes',
         source: 'talent-pool-page',
       };
 
@@ -151,9 +161,13 @@ describe('TalentPoolLeadsService', () => {
       });
       mockPrisma.talentPoolLead.create.mockResolvedValue({
         id: 'lead-1',
-        name: '&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;John',
+        name: '&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;John Doe',
+        first_name: '&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;John',
+        last_name: 'Doe',
         email: 'john@healthcare.com',
         organization: 'Healthcare Org',
+        website_url: 'https:&#x2F;&#x2F;www.healthcare.com',
+        language_preference: 'yes',
         status: 'new',
         created_at: new Date(),
       });
@@ -163,13 +177,18 @@ describe('TalentPoolLeadsService', () => {
 
       expect(mockPrisma.talentPoolLead.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
+          first_name: expect.stringContaining('&lt;script&gt;'),
           name: expect.stringContaining('&lt;script&gt;'),
         }),
         select: expect.objectContaining({
           id: true,
           name: true,
+          first_name: true,
+          last_name: true,
           email: true,
           organization: true,
+          website_url: true,
+          language_preference: true,
           status: true,
           created_at: true,
         }),
@@ -197,7 +216,11 @@ describe('TalentPoolLeadsService', () => {
         id: 'lead-1',
         email: 'john@healthcare.com',
         name: 'John Doe',
+        first_name: 'John',
+        last_name: 'Doe',
         organization: 'Healthcare Organization',
+        website_url: 'https://www.healthcare.com',
+        language_preference: 'yes',
         status: 'new',
         created_at: new Date(),
       });
@@ -218,8 +241,12 @@ describe('TalentPoolLeadsService', () => {
         select: expect.objectContaining({
           id: true,
           name: true,
+          first_name: true,
+          last_name: true,
           email: true,
           organization: true,
+          website_url: true,
+          language_preference: true,
           status: true,
           created_at: true,
         }),
@@ -233,8 +260,12 @@ describe('TalentPoolLeadsService', () => {
         {
           id: 'lead-1',
           name: 'John Doe',
+          first_name: 'John',
+          last_name: 'Doe',
           email: 'john@example.com',
           organization: 'Org 1',
+          website_url: 'https://www.org1.com',
+          language_preference: 'yes',
           main_need: 'Need 1',
           additional_details: 'Details 1',
           source: 'talent-pool-page',
@@ -249,8 +280,12 @@ describe('TalentPoolLeadsService', () => {
         {
           id: 'lead-2',
           name: 'Jane Smith',
+          first_name: 'Jane',
+          last_name: 'Smith',
           email: 'jane@example.com',
           organization: 'Org 2',
+          website_url: 'https://www.org2.com',
+          language_preference: 'no',
           main_need: 'Need 2',
           additional_details: 'Details 2',
           source: 'berry-talent-pool-page',
@@ -350,6 +385,8 @@ describe('TalentPoolLeadsService', () => {
         where: {
           OR: [
             { name: { contains: 'John', mode: 'insensitive' } },
+            { first_name: { contains: 'John', mode: 'insensitive' } },
+            { last_name: { contains: 'John', mode: 'insensitive' } },
             { email: { contains: 'John', mode: 'insensitive' } },
             { organization: { contains: 'John', mode: 'insensitive' } },
           ],

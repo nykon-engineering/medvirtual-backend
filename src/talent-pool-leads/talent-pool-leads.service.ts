@@ -67,8 +67,11 @@ export class TalentPoolLeadsService {
     }
 
     // Sanitize inputs (basic sanitization - remove potential XSS)
-    const sanitizedName = this.sanitizeInput(createDto.name);
+    const sanitizedFirstName = this.sanitizeInput(createDto.first_name);
+    const sanitizedLastName = this.sanitizeInput(createDto.last_name);
+    const sanitizedName = `${sanitizedFirstName} ${sanitizedLastName}`;
     const sanitizedOrganization = this.sanitizeInput(createDto.organization);
+    const sanitizedWebsiteUrl = this.sanitizeInput(createDto.website_url);
     const sanitizedMainNeed = createDto.main_need
       ? this.sanitizeInput(createDto.main_need)
       : null;
@@ -80,8 +83,12 @@ export class TalentPoolLeadsService {
     const lead = await this.prisma.talentPoolLead.create({
       data: {
         name: sanitizedName,
+        first_name: sanitizedFirstName,
+        last_name: sanitizedLastName,
         email: createDto.email.toLowerCase().trim(),
         organization: sanitizedOrganization,
+        website_url: sanitizedWebsiteUrl,
+        language_preference: createDto.language_preference,
         main_need: sanitizedMainNeed,
         additional_details: sanitizedAdditionalDetails,
         source: createDto.source,
@@ -91,8 +98,12 @@ export class TalentPoolLeadsService {
       select: {
         id: true,
         name: true,
+        first_name: true,
+        last_name: true,
         email: true,
         organization: true,
+        website_url: true,
+        language_preference: true,
         status: true,
         created_at: true,
       },
@@ -138,9 +149,11 @@ export class TalentPoolLeadsService {
 
       // Build ticket description with client information
       const ticketDescription = `Talent Pool Lead Information:
-- Contact Name: ${sanitizedName}
+- Contact Name: ${sanitizedFirstName} ${sanitizedLastName}
 - Email: ${createDto.email.toLowerCase().trim()}
 - Organization: ${sanitizedOrganization}
+- Website: ${sanitizedWebsiteUrl}
+- Language Preference (Bilingual EN/ES): ${createDto.language_preference}
 ${sanitizedMainNeed ? `- Main Need: ${sanitizedMainNeed}` : ''}
 ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetails}` : ''}
 - Source: ${createDto.source}`;
@@ -210,6 +223,8 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
     if (query.search) {
       where.OR = [
         { name: { contains: query.search, mode: 'insensitive' } },
+        { first_name: { contains: query.search, mode: 'insensitive' } },
+        { last_name: { contains: query.search, mode: 'insensitive' } },
         { email: { contains: query.search, mode: 'insensitive' } },
         { organization: { contains: query.search, mode: 'insensitive' } },
       ];
@@ -242,8 +257,12 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
     const formattedLeads = leads.map((lead) => ({
       id: lead.id,
       name: lead.name,
+      first_name: lead.first_name,
+      last_name: lead.last_name,
       email: lead.email,
       organization: lead.organization,
+      website_url: lead.website_url,
+      language_preference: lead.language_preference,
       main_need: lead.main_need,
       additional_details: lead.additional_details,
       source: lead.source,

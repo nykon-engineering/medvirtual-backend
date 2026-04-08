@@ -604,6 +604,10 @@ model TicketNotes {
 model TalentPoolLead {
   id                  String    @id @default(uuid())
   name                String    @db.VarChar(255)
+  first_name           String?   @db.VarChar(255)
+  last_name            String?   @db.VarChar(255)
+  website_url          String?   @db.VarChar(500)
+  language_preference  String?   @db.VarChar(50)
   email               String    @db.VarChar(255)
   organization        String    @db.VarChar(255)
   main_need           String?
