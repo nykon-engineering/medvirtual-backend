@@ -106,11 +106,9 @@ export class AffiliatesService {
       const theme = await getUserEmailTheme(this.prisma, dto.user_id);
       await this.mailService.sendMail({
         from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
-        //to: user.email,
-        to: 'paulo@regenta.ai',
+        to: user.email,
         subject: "You've been invited to join the Med Alliance Program",
         html: MedAllianceInvitation(user.first_name, theme ?? undefined),
-        Bcc: 'paulo@regenta.ai'
       });
     } catch (emailError) {
       // Do not fail the whole request if the email could not be delivered.
@@ -292,7 +290,6 @@ export class AffiliatesService {
           to: currentUser.email,
           subject: 'Welcome to the Med Alliance Program',
           html: MedAllianceInvitation(currentUser.first_name, theme ?? undefined),
-          Bcc: 'paulo@regenta.ai'
         });
       } catch (emailError) {
         console.error('Failed to send Med Alliance invitation email:', emailError);
