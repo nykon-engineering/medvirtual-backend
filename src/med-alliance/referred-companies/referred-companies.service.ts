@@ -14,6 +14,7 @@ import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { OrganizationService } from '../../organization/organization.service';
 import { HubspotService } from '../../hubspot/hubspot.service';
+import { first } from 'rxjs';
 
 
 @Injectable()
@@ -47,24 +48,59 @@ export class ReferredCompaniesService {
     await this.referralSync.run(org.id);
 
     // Return the org with all updated fields after the sync pipeline.
-    const result = await this.prisma.organization.findUnique({
+    const newOrganization = await this.prisma.organization.findUnique({
       where: { id: org.id },
       include: {
         owner: true,
         admin: true,
         users: true,
         referredByAffiliate: {
-          select: { id: true, first_name: true, last_name: true, email: true },
+          select: { 
+            email: true,
+            affiliateProfile:{
+              select: {
+                id: true,
+                full_name: true,
+                hubspot_id: true,
+                commission_percent_default: true,
+                payout_preference_method: true,
+              }
+            },
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+              }
+            
+            },
+          },
         },
-      },
+      }
     });
-    const newOrganization = await this.organizationService.getById(org.id);
+
+    if (!newOrganization) throw new NotFoundException('Organization not found after creation');
+
 
     if (currentUser){ 
-      await this.hubspot.createOrganizationInHubspot(newOrganization);
+      try{
+        // Here we need to work with flow asked by Hanieh
+        // 1. Create an organization - this is done on organization service
+        // 2. Create a contact with organization data and referral information from Affiliates
+        // 3. Associate the contact with the organization in HubSpot
+        // 4. Associate the contact with the affiliate in HubSpot
+       
+        await this.hubspot.createContactFromReferredCompanyInHubspot(newOrganization);   
+
+      }catch(error){
+        console.error('[hubspot] Error creating organization in HubSpot:', error);
+      }
+      
+
     }
 
-    return softDuplicateWarning ? { ...result, warning: softDuplicateWarning } : result;
+    return softDuplicateWarning ? { ...newOrganization, warning: softDuplicateWarning } : newOrganization;
   }
 
   /**

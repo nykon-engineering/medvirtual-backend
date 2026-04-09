@@ -53,6 +53,7 @@ import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
 import { MailModule } from '../mail/mail.module';
+import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 
 
 
@@ -90,6 +91,7 @@ import { MailModule } from '../mail/mail.module';
     OwnerCreationService,
     OrganizationUpdateService,
     ContactCreationService,
+    ContactFromCompanyCreationService,
     AffiliateCreationService,
     ContactUpdateService,
     ContactDeleteService,

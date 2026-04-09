@@ -39,6 +39,7 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
+import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
@@ -48,6 +49,7 @@ import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChan
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
 import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
+
 
 
 
@@ -86,6 +88,7 @@ export class HubspotService {
       private readonly organizationCreationService: OrganizationCreationService,
 
       private readonly contactCreationService: ContactCreationService,
+      private readonly contactCreationFromCompanyService: ContactFromCompanyCreationService,
       private readonly contactUpdateService: ContactUpdateService,
       private readonly contactDeleteService: ContactDeleteService,
 
@@ -351,6 +354,10 @@ export class HubspotService {
 
     async createContactInHubspot(data: any): Promise<any> {
         return await this.contactCreationService.execute(data);
+    }
+
+    async createContactFromReferredCompanyInHubspot(data: any): Promise<any> {
+        return await this.contactCreationFromCompanyService.execute(data);
     }
 
     async updateContactInHubspot(data: any): Promise<any> {

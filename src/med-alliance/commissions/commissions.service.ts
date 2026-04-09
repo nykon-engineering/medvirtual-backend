@@ -44,6 +44,27 @@ const COMMISSION_SELECT = {
   },
 };
 
+// Payout linkage — included in admin responses to trace which payout request
+// paid a given commission.
+const PAYOUT_LINKAGE_SELECT = {
+  payoutRequestCommissions: {
+    select: {
+      payoutRequest: {
+        select: {
+          id: true,
+          status: true,
+          requested_amount: true,
+          approved_amount: true,
+          payment_method: true,
+          payment_reference: true,
+          paid_at: true,
+          createdAt: true,
+        },
+      },
+    },
+  },
+};
+
 @Injectable()
 export class CommissionsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -157,6 +178,7 @@ export class CommissionsService {
 
     const adminSelect = {
       ...COMMISSION_SELECT,
+      ...PAYOUT_LINKAGE_SELECT,
       affiliate: {
         select: { id: true, first_name: true, last_name: true, email: true },
       },
@@ -187,6 +209,7 @@ export class CommissionsService {
       where: { id },
       select: {
         ...COMMISSION_SELECT,
+          ...PAYOUT_LINKAGE_SELECT,
         affiliate: {
           select: { id: true, first_name: true, last_name: true, email: true },
         },

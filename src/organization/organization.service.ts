@@ -733,16 +733,16 @@ export class OrganizationService {
           'Invalid owner_type. Must be "existing" or "new"',
         );
       }
-
+      
       // Assign a random admin if not specified
       let adminId: string | undefined = data.admin_id;
       if (!adminId) {
-        if (user){
+        if (user && !referred_by_affiliate_id){
           adminId= user.id; // Added on 2025-11-18 by Paulo to get the logged in user as default admin
         }else{
           const availableAdmins = await this.prisma.uSER.findMany({
             where: {
-              email: 'hanieh@medvirtual.ai', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
+              email: 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
               role: 'system_super_admin',
               status: 'active',
             },
@@ -756,7 +756,7 @@ export class OrganizationService {
             adminId = availableAdmins[randomIndex].id;
           }
         }
-        
+        console.log('Assigned adminId:', adminId);
       }
       let specialtiesArray: string[] = [];
       let servicesArray: string[] = [];
@@ -850,7 +850,7 @@ export class OrganizationService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Failed to create organization', error);
+      throw new BadRequestException('Failed to create organization:', error);
     }
   }
 
