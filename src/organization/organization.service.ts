@@ -742,7 +742,7 @@ export class OrganizationService {
         }else{
           const availableAdmins = await this.prisma.uSER.findMany({
             where: {
-              email: 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
+              email: process.env.ENVIRONMENT === 'DEV' ? 'pauli@regenta.ai' : 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
               role: 'system_super_admin',
               status: 'active',
             },
