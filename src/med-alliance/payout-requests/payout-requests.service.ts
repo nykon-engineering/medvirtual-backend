@@ -76,7 +76,7 @@ const ADMIN_SELECT = {
   affiliateProfile: {
     select: {
       id: true,
-      banking_complete: true,
+      payout_details: true,
       payout_preference_method: true,
     },
   },
