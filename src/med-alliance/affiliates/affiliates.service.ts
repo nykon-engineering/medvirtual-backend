@@ -430,6 +430,57 @@ export class AffiliatesService {
       return  newAffiliateData;
   }
 
+  // Admin: search for platform users that don't have an affiliate profile yet.
+  async searchEligibleUsers(email: string) {
+    if (!email || email.length < 3) return [];
+    return this.prisma.uSER.findMany({
+      where: {
+        email: { contains: email, mode: 'insensitive' },
+        affiliateProfile: null,
+      },
+      select: { id: true, first_name: true, last_name: true, email: true, role: true },
+      take: 10,
+    });
+  }
+
+  // Admin: get enriched affiliate detail — adds financial aggregates + payout history.
+  // Keeps findOne() lightweight for internal use (create / joinProgram).
+  async findOneEnriched(id: string) {
+    const profile = await this.findOne(id);
+    const userId = profile.user_id;
+
+    const [pendingAgg, lifetimeAgg, payoutHistory, commsByOrg] = await Promise.all([
+      this.prisma.affiliatePayoutRequest.aggregate({
+        _sum: { requested_amount: true },
+        where: { affiliate_id: userId, status: { in: ['requested', 'under_review'] } },
+      }),
+      this.prisma.affiliateCommission.aggregate({
+        _sum: { commission_amount: true },
+        where: { affiliate_id: userId, status: { notIn: ['void', 'rejected'] } },
+      }),
+      this.prisma.affiliatePayoutRequest.findMany({
+        where: { affiliate_id: userId, status: 'paid' },
+        orderBy: { paid_at: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          paid_amount: true,
+          paid_at: true,
+          payment_method: true,
+          transaction_reference: true,
+          requested_amount: true,
+        },
+      }),
+      this.prisma.affiliateCommission.groupBy({
+        by: ['organization_id'],
+        where: { affiliate_id: userId, status: { notIn: ['void', 'rejected'] } },
+        _sum: { commission_amount: true },
+      }),
+    ]);
+
+    return { profile, pendingAgg, lifetimeAgg, payoutHistory, commsByOrg };
+  }
+
   // Admin: link the affiliate's connected user to an existing organization.
   async linkOrganization(id: string, dto: LinkOrganizationDto) {
     const profile = await this.findOne(id); // ensures profile exists
