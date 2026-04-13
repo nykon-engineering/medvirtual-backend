@@ -15,7 +15,7 @@ import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
-import { ADMIN_ROLES, ORGANIZATION_ROLES } from '../constants';
+import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
   JoinProgramDto,
@@ -52,7 +52,43 @@ export class AffiliatesController {
   @Roles(...ADMIN_ROLES)
   async findAll(@Query() query: ListAffiliatesDto) {
     const result = await this.affiliatesService.findAll(query);
-    return { status: 200, message: 'Affiliate profiles retrieved successfully', ...result };
+    const data = result.data.map((profile) => {
+      const user = profile.user as any;
+      return {
+        id: profile.id,
+        user_id: profile.user_id,
+        full_name: profile.full_name || `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim(),
+        email: user?.email ?? '',
+        status: profile.status,
+        commission_percent_default: Number(profile.commission_percent_default),
+        payout_preference_method: profile.payout_preference_method,
+        payout_preference_reference: profile.payout_preference_reference,
+        payout_preference_notes: profile.payout_preference_notes,
+        payout_details: profile.payout_details,
+        banking_complete: !!(profile.payout_preference_method && profile.payout_preference_reference),
+        linked_company: user?.organization?.name ?? null,
+        linked_company_id: user?.organization?.id ?? null,
+        referred_companies_count: user?._count?.referredOrganizations ?? 0,
+        pending_payout_amount: 0,
+        lifetime_commissions: 0,
+        hubspot_id: profile.hubspot_id ?? null,
+        created_at: profile.createdAt.toISOString(),
+        hubspot_pipeline: profile.hubspot_pipeline ?? null,
+        hubspot_pipeline_stage: profile.hubspot_pipeline_stage ?? null,
+        business_unit: profile.business_unit ?? null,
+      };
+    });
+    return { status: 200, message: 'Affiliate profiles retrieved successfully', data, pagination: result.pagination };
+  }
+
+  // GET /med-alliance/admin/stats — Aggregated KPI stats for the admin dashboard.
+  // Must be declared before /:id routes.
+  @Get('admin/stats')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async getAdminStats() {
+    const data = await this.affiliatesService.getAdminDashboardStats();
+    return { status: 200, message: 'Admin dashboard stats retrieved successfully', data };
   }
 
   // GET /med-alliance/admin/affiliates/by-user/:userId — Get affiliate profile by user ID.
@@ -118,6 +154,15 @@ export class AffiliatesController {
   async findOwn(@CurrentUser() user: USER) {
     const data = await this.affiliatesService.findOwn(user);
     return { status: 200, message: 'Affiliate profile retrieved successfully', data };
+  }
+
+  // GET /med-alliance/affiliates/me/stats — Earnings & recent commissions for affiliate dashboard.
+  @Get('affiliates/me/stats')
+  @HttpCode(200)
+  @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
+  async getMyStats(@CurrentUser() user: USER) {
+    const data = await this.affiliatesService.getMyStats(user);
+    return { status: 200, message: 'Affiliate stats retrieved successfully', data };
   }
 
   // PATCH /med-alliance/affiliates/me — Update own payout preferences only.

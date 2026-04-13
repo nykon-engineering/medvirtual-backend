@@ -163,12 +163,138 @@ export class AffiliatesService {
         skip,
         take: limit,
         orderBy: { createdAt: sortOrder },
-        include: { user: { select: USER_SELECT } },
+        include: {
+          user: {
+            select: {
+              ...USER_SELECT,
+              organization: { select: { id: true, name: true } },
+              _count: { select: { referredOrganizations: true } },
+            },
+          },
+        },
       }),
       this.prisma.affiliateProfile.count({ where }),
     ]);
 
     return { data, pagination: { page, limit, total } };
+  }
+
+  async getAdminDashboardStats() {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      openPayouts,
+      underReviewAgg,
+      activeAffiliates,
+      newReferrals,
+      payoutGroups,
+      requestedGroups,
+    ] = await Promise.all([
+      this.prisma.affiliatePayoutRequest.count({ where: { status: 'requested' } }),
+      this.prisma.affiliatePayoutRequest.aggregate({
+        _sum: { requested_amount: true },
+        where: { status: 'under_review' },
+      }),
+      this.prisma.affiliateProfile.count({ where: { status: 'active' } }),
+      this.prisma.organization.count({
+        where: {
+          referred_by_affiliate_id: { not: null },
+          createdAt: { gte: thirtyDaysAgo },
+        },
+      }),
+      this.prisma.affiliatePayoutRequest.groupBy({
+        by: ['status'],
+        _count: { id: true },
+        where: { status: { in: ['requested', 'under_review', 'paid', 'rejected'] } },
+      }),
+      // Fetch all affiliate groups with 'requested' payouts — filter for >1 in JS
+      this.prisma.affiliatePayoutRequest.groupBy({
+        by: ['affiliate_id'],
+        _count: { id: true },
+        where: { status: 'requested' },
+      }),
+    ]);
+
+    const payoutSummaryMap: Record<string, number> = {};
+    for (const row of payoutGroups) {
+      payoutSummaryMap[row.status] = row._count.id;
+    }
+
+    const duplicateRiskFlags = requestedGroups.filter((r) => r._count.id > 1).length;
+
+    return {
+      open_payout_requests: openPayouts,
+      under_review_amount: Number(underReviewAgg._sum.requested_amount ?? 0),
+      active_affiliates: activeAffiliates,
+      new_referred_companies_30d: newReferrals,
+      duplicate_risk_flags: duplicateRiskFlags,
+      payout_summary: {
+        submitted: payoutSummaryMap['requested'] ?? 0,
+        under_review: payoutSummaryMap['under_review'] ?? 0,
+        paid: payoutSummaryMap['paid'] ?? 0,
+        rejected: payoutSummaryMap['rejected'] ?? 0,
+      },
+    };
+  }
+
+  async getMyStats(currentUser: USER) {
+    await this.requireActiveProfile(currentUser.id);
+
+    const [totalAgg, eligibleAgg, requestedAgg, lastPayout, recentCommissions] =
+      await Promise.all([
+        this.prisma.affiliateCommission.aggregate({
+          _sum: { commission_amount: true },
+          where: {
+            affiliate_id: currentUser.id,
+            status: { notIn: ['void', 'rejected'] },
+          },
+        }),
+        this.prisma.affiliateCommission.aggregate({
+          _sum: { commission_amount: true },
+          where: { affiliate_id: currentUser.id, status: 'eligible' },
+        }),
+        this.prisma.affiliatePayoutRequest.aggregate({
+          _sum: { requested_amount: true },
+          where: {
+            affiliate_id: currentUser.id,
+            status: { in: ['requested', 'under_review'] },
+          },
+        }),
+        this.prisma.affiliatePayoutRequest.findFirst({
+          where: { affiliate_id: currentUser.id, status: 'paid' },
+          orderBy: { paid_at: 'desc' },
+          select: { paid_amount: true, paid_at: true },
+        }),
+        this.prisma.affiliateCommission.findMany({
+          where: { affiliate_id: currentUser.id },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          include: { organization: { select: { id: true, name: true } } },
+        }),
+      ]);
+
+    return {
+      total_earnings: Number(totalAgg._sum.commission_amount ?? 0),
+      eligible_amount: Number(eligibleAgg._sum.commission_amount ?? 0),
+      requested_amount: Number(requestedAgg._sum.requested_amount ?? 0),
+      last_payout: lastPayout
+        ? {
+            paid_at: lastPayout.paid_at?.toISOString() ?? null,
+            amount: Number(lastPayout.paid_amount ?? 0),
+          }
+        : null,
+      recent_commissions: recentCommissions.map((c) => ({
+        id: c.id,
+        organization_id: c.organization_id,
+        organization_name: c.organization?.name ?? '',
+        invoice_id: c.hubspot_invoice_snapshot_id,
+        base_amount: Number(c.base_amount_snapshot),
+        commission_percentage: Number(c.commission_percent_snapshot),
+        commission_amount: Number(c.commission_amount),
+        status: c.status,
+        created_at: c.createdAt.toISOString(),
+      })),
+    };
   }
 
   async findOne(id: string) {
