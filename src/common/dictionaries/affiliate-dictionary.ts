@@ -4,6 +4,7 @@ export const affiliateToDbDictionary : Record<string, string> = {
     hs_pipeline: 'hubspot_pipeline',
     hs_pipeline_stage: 'hubspot_pipeline_stage',
     business_unit: 'business_unit',
+    earning_status: 'status',
 }
 
 export const dbToAffiliateDictionary : Record<string, string> = Object.fromEntries(

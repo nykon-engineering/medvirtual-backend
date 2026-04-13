@@ -36,6 +36,31 @@ export class HandlerAffiliatePropertyChange {
                 [fieldUpdated]: event.propertyValue
             }
         })
+
+        if(event.propertyName === 'earning_status') {
+            const user = await this.prisma.uSER.findFirst({
+                where: {
+                    affiliateProfile: {
+                        hubspot_id: String(event.objectId)
+                    }
+                },
+                select: {
+                    id: true,
+                    role: true,
+                }
+            })
+
+            if (user?.role === 'affiliate') {
+                await this.prisma.uSER.update({
+                    where: {
+                        id: user.id
+                    },
+                    data: {
+                        status: event.propertyValue === 'active' ? 'active' : 'inactive'
+                    }
+                })
+            }
+        }
         
         return true;
         
