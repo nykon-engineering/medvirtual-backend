@@ -27,6 +27,11 @@ export class HandlerAffiliatePropertyChange {
         if(!fieldExists) return;
 
         const fieldUpdated = affiliateToDbDictionary[event.propertyName];
+
+        if (event.propertyName === 'earning_status'){
+            //if status = active, set to active, else set to inactive
+            event.propertyValue = event.propertyValue === 'active' ? 'active' : 'inactive';
+        }
         
         await this.prisma.affiliateProfile.update({
             where: {
