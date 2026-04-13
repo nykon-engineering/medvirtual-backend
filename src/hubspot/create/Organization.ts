@@ -64,7 +64,7 @@ export class OrganizationCreationService {
                 phone: data.phone || '',
                 referral_email: data.email || '',
                 type: data.type || '',
-                business_unit: data.business_unit === 'Med Virtual' ? 'MedVirtual' : 'Berry Virtual',
+                business_unit: data.business_unit === 'Med Virtual' ? 'MedVirtual' : data.business_unit || '',
                 hubspot_owner_id: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
               },
               associations: data.referred_by_affiliate_id ? [
