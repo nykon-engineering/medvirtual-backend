@@ -30,7 +30,7 @@ export class HandlerAffiliatePropertyChange {
 
         if (event.propertyName === 'earning_status'){
             //if status = active, set to active, else set to inactive
-            event.propertyValue = event.propertyValue === 'active' ? 'active' : 'inactive';
+            event.propertyValue = event.propertyValue === 'Active' ? 'active' : 'inactive';
         }
         
         await this.prisma.affiliateProfile.update({
@@ -61,7 +61,7 @@ export class HandlerAffiliatePropertyChange {
                         id: user.id
                     },
                     data: {
-                        status: event.propertyValue === 'active' ? 'active' : 'inactive'
+                        status: event.propertyValue === 'Active' ? 'active' : 'inactive'
                     }
                 })
             }
