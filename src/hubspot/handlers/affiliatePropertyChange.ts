@@ -54,14 +54,13 @@ export class HandlerAffiliatePropertyChange {
                     role: true,
                 }
             })
-
             if (user?.role === 'affiliate') {
                 await this.prisma.uSER.update({
                     where: {
                         id: user.id
                     },
                     data: {
-                        status: event.propertyValue === 'Active' ? 'active' : 'inactive'
+                        status: event.propertyValue
                     }
                 })
             }
