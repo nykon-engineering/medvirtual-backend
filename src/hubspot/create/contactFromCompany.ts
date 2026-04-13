@@ -35,7 +35,7 @@ export class ContactFromCompanyCreationService {
                 account_type: data.business_unit 
                   ? data.business_unit === 'Med Virtual' 
                     ? 'Med Virtual'
-                    : data.business_unit
+                    : 'Berry Virtual'
                   : "Med Virtual", //business_unit
                 firstname: data.contact_first_name,
                 lastname: data.contact_last_name,
@@ -43,7 +43,7 @@ export class ContactFromCompanyCreationService {
                 phone: data.phone || '',
                 website: data.website_url || '',
                 jobtitle: data.job_title || '',
-                business_unit: data.business_unit == 'Med Virtual' ? 'MedVirtual' : data.business_unit || '',
+                business_unit: data.business_unit == 'Med Virtual' ? 'MedVirtual' : 'Berry Virtual',
                 company: data.name || '',
                 hubspot_owner_id: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
                 demo_owner: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
