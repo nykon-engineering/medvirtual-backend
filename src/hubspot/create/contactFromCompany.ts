@@ -27,6 +27,7 @@ export class ContactFromCompanyCreationService {
 
     async execute(data: any): Promise<any> {
       // In this case we will use majority datas from organizations to create the contact
+      //console.log(data)
         try {
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/contacts",
