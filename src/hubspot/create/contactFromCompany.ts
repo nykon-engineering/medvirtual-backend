@@ -60,7 +60,7 @@ export class ContactFromCompanyCreationService {
                 referral_partner: data.referredByAffiliate.affiliateProfile ? data.referredByAffiliate.affiliateProfile.full_name : undefined, //Name of the client who referred this deal.
                 referral_partners_email: data.referredByAffiliate ? data.referredByAffiliate.email : undefined, //Email of the client who referred this deal.
                 referral_source: 'Referral - Partner',
-                referrals_industry: data.business_unit === 'Med Virtual' ? 'Medical' : 'Non-medical',
+                referrals_industry: data.business_unit === 'Med Virtual' ? 'Medical' : 'Non-Medical',
                 referred_to: data.referToUser?.id ? await this.getOwnerId(data.referToUser.id) : '',
               },
               // 2 Associations: 
