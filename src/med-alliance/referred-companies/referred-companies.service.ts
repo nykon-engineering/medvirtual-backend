@@ -14,7 +14,7 @@ import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { OrganizationService } from '../../organization/organization.service';
 import { HubspotService } from '../../hubspot/hubspot.service';
-import { first } from 'rxjs';
+import axios from 'axios';
 
 
 @Injectable()
@@ -55,7 +55,7 @@ export class ReferredCompaniesService {
         admin: true,
         users: true,
         referredByAffiliate: {
-          select: { 
+          select: {
             email: true,
             affiliateProfile:{
               select: {
@@ -73,8 +73,16 @@ export class ReferredCompaniesService {
                 email: true,
                 phone: true,
               }
-            
+
             },
+          },
+        },
+        referToUser: {
+          select: {
+            id: true,
+            hubspot_id: true,
+            first_name: true,
+            last_name: true,
           },
         },
       }
@@ -156,7 +164,7 @@ export class ReferredCompaniesService {
       ];
     }
 
-    const [data, total] = await this.prisma.$transaction([
+    const [rawData, total] = await this.prisma.$transaction([
       this.prisma.organization.findMany({
         where,
         skip,
@@ -171,6 +179,7 @@ export class ReferredCompaniesService {
           phone: true,
           status: true,
           industry: true,
+          business_unit: true,
           location: true,
           address: true,
           city: true,
@@ -181,10 +190,37 @@ export class ReferredCompaniesService {
           contact_first_name: true,
           contact_last_name: true,
           med_alliance_referral_status: true,
+          referToUser: {
+            select: { id: true, first_name: true, last_name: true },
+          },
+          affiliateCommissions: {
+            where: { affiliate_id: currentUser.id },
+            select: { commission_amount: true, status: true },
+          },
         },
       }),
       this.prisma.organization.count({ where }),
     ]);
+
+    // Compute commission aggregate per org and strip the raw affiliateCommissions array.
+    const data = rawData.map((org) => {
+      const comms = org.affiliateCommissions ?? [];
+      const my_commissions = comms
+        .filter((c) => ['eligible', 'requested', 'paid'].includes(c.status))
+        .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
+
+      let commission_status: 'none' | 'pending' | 'eligible' | 'paid' = 'none';
+      if (comms.some((c) => c.status === 'paid')) {
+        commission_status = 'paid';
+      } else if (comms.some((c) => c.status === 'eligible' || c.status === 'requested')) {
+        commission_status = 'eligible';
+      } else if (comms.some((c) => c.status === 'detected' || c.status === 'pending_admin_confirmation')) {
+        commission_status = 'pending';
+      }
+
+      const { affiliateCommissions: _, ...rest } = org;
+      return { ...rest, my_commissions, commission_status };
+    });
 
     return { data, pagination: { page, limit, total } };
   }
@@ -235,13 +271,14 @@ export class ReferredCompaniesService {
   // Admin: list all referred companies (no affiliate scoping).
   // ---------------------------------------------------------------------------
   async findAllForAdmin(dto: ListReferredCompaniesDto) {
-    const { 
+    const {
       page = 1,
-      limit = 20, 
+      limit = 20,
       search,
       status,
-      sortBy = 'createdAt', 
-      sortOrder = 'desc' 
+      affiliate_id,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
     } = dto;
     const skip = (page - 1) * limit;
 
@@ -256,44 +293,206 @@ export class ReferredCompaniesService {
         { email: { contains: search, mode: 'insensitive' } },
       ];
     }
+    if (affiliate_id) where.referred_by_affiliate_id = affiliate_id;
 
-    const [data, total] = await this.prisma.$transaction([
+    const [rawData, total] = await this.prisma.$transaction([
       this.prisma.organization.findMany({
         where,
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        include: {
-          owner: true,
-          admin: true,
-          users: true,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          business_unit: true,
+          location: true,
+          industry: true,
+          website_url: true,
+          contact_first_name: true,
+          contact_last_name: true,
+          med_alliance_referral_status: true,
+          hubspot_sync_status: true,
+          createdAt: true,
           referredByAffiliate: {
             select: { id: true, first_name: true, last_name: true, email: true },
+          },
+          referToUser: {
+            select: { id: true, first_name: true, last_name: true },
+          },
+          affiliateCommissions: {
+            select: { commission_amount: true, status: true },
+          },
+          _count: {
+            select: {
+              adminReviewCases: { where: { status: 'open' } },
+            },
           },
         },
       }),
       this.prisma.organization.count({ where }),
     ]);
 
+    // Aggregate commission totals and strip the raw array before returning.
+    const data = rawData.map((org) => {
+      const comms = org.affiliateCommissions ?? [];
+      const total_paid = comms
+        .filter((c) => c.status === 'paid')
+        .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
+      const total_pending = comms
+        .filter((c) => ['eligible', 'requested'].includes(c.status))
+        .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
+      const has_open_review = (org._count?.adminReviewCases ?? 0) > 0;
+
+      const { affiliateCommissions: _, _count: __, ...rest } = org;
+      return { ...rest, total_paid, total_pending, has_open_review };
+    });
+
     return { data, pagination: { page, limit, total } };
   }
 
   // ---------------------------------------------------------------------------
-  // Admin: get one referred company — no scoping.
+  // Admin: get one referred company — enriched with all Sheet data.
   // ---------------------------------------------------------------------------
   async findOneForAdmin(id: string) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
-      include: {
-        owner: true,
-        admin: true,
-        users: true,
+      select: {
+        // Identity
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        business_unit: true,
+        industry: true,
+        location: true,
+        address: true,
+        city: true,
+        state: true,
+        website_url: true,
+        description: true,
+        contact_first_name: true,
+        contact_last_name: true,
+        // MA status
+        med_alliance_referral_status: true,
+        med_alliance_block_reason: true,
+        hubspot_id: true,
+        hubspot_sync_status: true,
+        hubspot_sync_error: true,
+        hubspot_synced_at: true,
+        createdAt: true,
+        // Who referred
         referredByAffiliate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            affiliateProfile: {
+              select: {
+                full_name: true,
+                commission_percent_default: true,
+                payout_preference_method: true,
+                status: true,
+              },
+            },
+          },
+        },
+        // Assigned internal staff member
+        referToUser: {
           select: { id: true, first_name: true, last_name: true, email: true },
+        },
+        // Platform users (staff members) linked to this org
+        users: {
+          select: { id: true, first_name: true, last_name: true, email: true, role: true },
+          orderBy: { first_name: 'asc' },
+        },
+        // Commission records for this org (all affiliates)
+        affiliateCommissions: {
+          select: {
+            id: true,
+            commission_amount: true,
+            status: true,
+            createdAt: true,
+            hubspotInvoiceSnapshot: {
+              select: { hubspot_id: true, invoice_amount: true, invoice_status: true, paid_at: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        // Raw HubSpot invoice snapshots
+        hubspotInvoiceSnapshots: {
+          select: {
+            id: true,
+            hubspot_id: true,
+            invoice_amount: true,
+            invoice_status: true,
+            currency: true,
+            paid_at: true,
+          },
+          orderBy: { paid_at: 'desc' },
+        },
+        // Admin review cases
+        adminReviewCases: {
+          select: {
+            id: true,
+            reason_code: true,
+            status: true,
+            metadata: true,
+            resolution: true,
+            createdAt: true,
+            resolvedBy: { select: { first_name: true, last_name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
+
     if (!org) throw new NotFoundException('Referred company not found');
     return org;
+  }
+
+  // Get available referral options for the "referred_to" field when creating a referral (i.e. list of active users to whom the referral can be assigned).
+  async getReferredToOptions(): Promise<any>{
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/contacts";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "referred_to"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      //console.log("VA Type Property:", vaTypeProperty);
+
+      const availableOwners = await this.prisma.uSER.findMany({
+        where: {
+          hubspot_id: {
+            in: vaTypeProperty.options.map((option) => option.value),
+          },
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          hubspot_id: true,
+        },
+      });
+
+      return availableOwners || [];
+    } catch (error) {
+      console.error("Failed to find Referred To options:", error.response?.data || error.message);
+      throw new Error("Failed to find Referred To options");
+    }
   }
 }

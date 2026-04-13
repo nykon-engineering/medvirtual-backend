@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateReferredCompanyDto {
@@ -41,5 +42,13 @@ export class CreateReferredCompanyDto {
 
   @IsOptional()
   @IsString()
+  business_unit?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsUUID()
+  refer_to_user_id?: string;
 }

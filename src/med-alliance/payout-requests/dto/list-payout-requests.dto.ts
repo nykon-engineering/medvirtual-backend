@@ -3,7 +3,10 @@ import {
   IsDateString,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
+  IsPositive,
+  IsString,
   IsUUID,
   Max,
   Min,
@@ -11,6 +14,7 @@ import {
 
 export enum PayoutRequestStatus {
   REQUESTED = 'requested',
+  UNDER_REVIEW = 'under_review',
   APPROVED = 'approved',
   REJECTED = 'rejected',
   PAID = 'paid',
@@ -27,7 +31,7 @@ export class ListPayoutRequestsDto {
   @Transform(({ value }) => parseInt(value))
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(200)
   limit?: number = 20;
 
   @IsOptional()
@@ -38,6 +42,29 @@ export class ListPayoutRequestsDto {
   @IsOptional()
   @IsUUID()
   affiliate_id?: string;
+
+  // B6: full-text search on affiliate name / email
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  // B6: risk flag filter
+  @IsOptional()
+  @IsEnum(['duplicate', 'missing_banking', 'aging'])
+  risk_flag?: 'duplicate' | 'missing_banking' | 'aging';
+
+  // B6: requested_amount range
+  @IsOptional()
+  @Transform(({ value }) => parseFloat(value))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  amount_min?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => parseFloat(value))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  amount_max?: number;
 
   @IsOptional()
   @IsDateString()

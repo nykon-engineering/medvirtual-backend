@@ -808,6 +808,11 @@ export class OrganizationService {
           hubspot_id: data.hubspot_id || undefined,
           source: user ? 'MedVirtual app' : 'Hubspot',
           referred_by_affiliate_id: referred_by_affiliate_id || undefined,
+          ...((d: any) => ({
+            contact_first_name: d.contact_first_name || undefined,
+            contact_last_name: d.contact_last_name || undefined,
+            refer_to_user_id: d.refer_to_user_id || undefined,
+          }))(data),
         },
       });
 

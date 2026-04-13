@@ -18,6 +18,7 @@ import { USER } from '@prisma/client';
 import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreatePayoutRequestDto } from './dto/create-payout-request.dto';
 import {
+  AddPayoutNoteDto,
   DecidePayoutRequestDto,
   MarkPayoutPaidDto,
 } from './dto/decide-payout-request.dto';
@@ -69,6 +70,16 @@ export class PayoutRequestsController {
   // Admin routes
   // ---------------------------------------------------------------------------
 
+  // B7: GET /med-alliance/admin/payout-requests/counts — Status counters for kanban.
+  // NOTE: must be declared BEFORE /:id to avoid route conflict.
+  @Get('admin/payout-requests/counts')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async getStatusCounts() {
+    const data = await this.payoutRequestsService.getStatusCounts();
+    return { status: 200, message: 'Status counts retrieved successfully', data };
+  }
+
   // GET /med-alliance/admin/payout-requests — List all payout requests.
   @Get('admin/payout-requests')
   @HttpCode(200)
@@ -87,7 +98,21 @@ export class PayoutRequestsController {
     return { status: 200, message: 'Payout request retrieved successfully', data };
   }
 
+  // B1: PATCH /med-alliance/admin/payout-requests/:id/start-review
+  // Transition: requested → under_review
+  @Patch('admin/payout-requests/:id/start-review')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async startReview(
+    @Param('id') id: string,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.payoutRequestsService.startReview(id, admin);
+    return { status: 200, message: 'Payout request moved to under review', data };
+  }
+
   // PATCH /med-alliance/admin/payout-requests/:id/decide — Approve or reject.
+  // Allowed from: requested | under_review
   @Patch('admin/payout-requests/:id/decide')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
@@ -100,7 +125,8 @@ export class PayoutRequestsController {
     return { status: 200, message: 'Payout request decision recorded successfully', data };
   }
 
-  // PATCH /med-alliance/admin/payout-requests/:id/paid — Mark as paid.
+  // B2: PATCH /med-alliance/admin/payout-requests/:id/paid — Mark as paid.
+  // Allowed from: under_review | approved
   @Patch('admin/payout-requests/:id/paid')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
@@ -111,6 +137,28 @@ export class PayoutRequestsController {
   ) {
     const data = await this.payoutRequestsService.markPaid(id, dto, admin);
     return { status: 200, message: 'Payout request marked as paid', data };
+  }
+
+  // B3: POST /med-alliance/admin/payout-requests/:id/notes — Add a note.
+  @Post('admin/payout-requests/:id/notes')
+  @HttpCode(201)
+  @Roles(...ADMIN_ROLES)
+  async addNote(
+    @Param('id') id: string,
+    @Body() dto: AddPayoutNoteDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.payoutRequestsService.addNote(id, dto, admin);
+    return { status: 201, message: 'Note added successfully', data };
+  }
+
+  // B3: GET /med-alliance/admin/payout-requests/:id/notes — List notes.
+  @Get('admin/payout-requests/:id/notes')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async getNotes(@Param('id') id: string) {
+    const data = await this.payoutRequestsService.getNotes(id);
+    return { status: 200, message: 'Notes retrieved successfully', data };
   }
 
   // GET /med-alliance/admin/payout-requests/:id/audit — Full audit timeline.

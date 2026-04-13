@@ -33,8 +33,8 @@ export class ContactFromCompanyCreationService {
             {
               properties: {
                 account_type: data.business_unit 
-                  ? data.business_unit === 'MedVirtual' 
-                    ? 'Med `Virtual'
+                  ? data.business_unit === 'Med Virtual' 
+                    ? 'Med Virtual'
                     : data.business_unit
                   : "Med Virtual", //business_unit
                 firstname: data.contact_first_name,
@@ -43,7 +43,7 @@ export class ContactFromCompanyCreationService {
                 phone: data.phone || '',
                 website: data.website_url || '',
                 jobtitle: data.job_title || '',
-                business_unit: data.business_unit || '',
+                business_unit: data.business_unit == 'Med Virtual' ? 'MedVirtual' : data.business_unit || '',
                 company: data.name || '',
                 hubspot_owner_id: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
                 demo_owner: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
@@ -59,8 +59,8 @@ export class ContactFromCompanyCreationService {
                 referral_partner: data.referredByAffiliate.affiliateProfile ? data.referredByAffiliate.affiliateProfile.full_name : undefined, //Name of the client who referred this deal.
                 referral_partners_email: data.referredByAffiliate ? data.referredByAffiliate.email : undefined, //Email of the client who referred this deal.
                 referral_source: 'Referral - Partner',
-                referrals_industry: '', // options on hubspot: 'Non-medical', 'Medical'
-                referred_to: '',
+                referrals_industry: data.business_unit === 'Med Virtual' ? 'Medical' : 'Non-medical',
+                referred_to: data.referToUser?.id ? await this.getOwnerId(data.referToUser.id) : '',
               },
               // 2 Associations: 
               // contact → organization (if the org already exists in HubSpot)

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class ListReferredCompaniesDto {
   @IsOptional()
@@ -24,6 +24,11 @@ export class ListReferredCompaniesDto {
   @IsOptional()
   @IsEnum(['active', 'inactive', 'deleted'])
   status?: string;
+
+  // Admin only: filter by the affiliate who submitted the referral
+  @IsOptional()
+  @IsUUID()
+  affiliate_id?: string;
 
   @IsOptional()
   @IsEnum(['createdAt', 'name'])

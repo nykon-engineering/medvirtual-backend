@@ -19,6 +19,7 @@ import { USER } from '@prisma/client';
 import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
+import { ApiOperation } from '@nestjs/swagger';
 
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
@@ -109,4 +110,20 @@ export class ReferredCompaniesController {
     const data = await this.referralSync.run(id);
     return { status: 200, message: 'Sync completed', data };
   }
+
+  @Get('referred_to/options')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ description: 'Get available options/owners for referred_to' })
+
+  async getReferredToOptionsController() {
+    const result = await this.service.getReferredToOptions();
+    return {
+      status: 200,
+      message: 'Referred to options retrieved successfully',
+      data: result,
+    }
+  };
+
 }
+
+

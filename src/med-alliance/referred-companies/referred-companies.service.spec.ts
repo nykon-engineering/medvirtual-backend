@@ -75,6 +75,8 @@ const mockOrg = {
   referred_by_affiliate_id: 'user-1',
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-01'),
+  commission_status: 'none',
+  my_commissions: 0,
 };
 
 describe('ReferredCompaniesService', () => {
