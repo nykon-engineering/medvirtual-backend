@@ -44,7 +44,7 @@ export class ContactFromCompanyCreationService {
                 phone: data.phone || '',
                 website: data.website_url || '',
                 jobtitle: data.job_title || '',
-                business_unit: data.business_unit == 'Med Virtual' ? 'MedVirtual' : 'Berry Virtual',
+                business_unit: data.business_unit === 'Med Virtual' ? 'MedVirtual' : 'Berry Virtual',
                 company: data.name || '',
                 hubspot_owner_id: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
                 demo_owner: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
