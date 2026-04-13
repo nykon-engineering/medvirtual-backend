@@ -301,6 +301,9 @@ export class PayoutRequestsService {
       page = 1,
       limit = 20,
       status,
+      payment_method,
+      amount_min,
+      amount_max,
       created_from,
       created_to,
       sortBy = 'createdAt',
@@ -310,6 +313,12 @@ export class PayoutRequestsService {
 
     const where: any = { affiliate_id: currentUser.id };
     if (status) where.status = status;
+    if (payment_method) where.payment_method = payment_method;
+    if (amount_min !== undefined || amount_max !== undefined) {
+      where.requested_amount = {};
+      if (amount_min !== undefined) where.requested_amount.gte = amount_min;
+      if (amount_max !== undefined) where.requested_amount.lte = amount_max;
+    }
     if (created_from || created_to) {
       where.createdAt = {};
       if (created_from) where.createdAt.gte = new Date(created_from);

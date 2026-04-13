@@ -11,6 +11,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { PayoutMethod } from '../../affiliates/dto/create-affiliate-profile.dto';
 
 export enum PayoutRequestStatus {
   REQUESTED = 'requested',
@@ -52,6 +53,10 @@ export class ListPayoutRequestsDto {
   @IsOptional()
   @IsEnum(['duplicate', 'missing_banking', 'aging'])
   risk_flag?: 'duplicate' | 'missing_banking' | 'aging';
+
+  @IsOptional()
+  @IsEnum(PayoutMethod)
+  payment_method?: PayoutMethod;
 
   // B6: requested_amount range
   @IsOptional()
