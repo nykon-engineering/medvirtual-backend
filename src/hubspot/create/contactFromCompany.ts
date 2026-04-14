@@ -40,7 +40,7 @@ export class ContactFromCompanyCreationService {
                   : "Med Virtual", //business_unit
                 firstname: data.contact_first_name,
                 lastname: data.contact_last_name,
-                email: data.email,
+                email: data.email ?? data.contact_email, //email
                 phone: data.phone || '',
                 website: data.website_url || '',
                 jobtitle: data.job_title || '',
