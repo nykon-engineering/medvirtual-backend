@@ -78,7 +78,7 @@ export class AffiliatesController {
         payout_preference_reference: profile.payout_preference_reference,
         payout_preference_notes: profile.payout_preference_notes,
         payout_details: profile.payout_details,
-        banking_complete: !!(profile.payout_preference_method && profile.payout_preference_reference),
+        banking_complete: !!(profile.payout_preference_method),
         linked_company: user?.organization?.name ?? null,
         linked_company_id: user?.organization?.id ?? null,
         referred_companies_count: user?._count?.referredOrganizations ?? 0,
