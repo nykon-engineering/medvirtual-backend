@@ -3,7 +3,6 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -20,6 +19,10 @@ import { MailService } from '../../mail/mail.service';
 import { MedAllianceInvitation } from '../../common/utils/email-templates/med-alliance-invitation';
 import { getUserEmailTheme } from '../../common/utils/email-templates/theme-helper';
 import { AffiliateCreationService } from '../../hubspot/create/affiliate';
+import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
+
+import * as jwt from 'jsonwebtoken';
+import InviteSignup from '../../common/utils/email-templates/invite-signup';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
 const USER_SELECT = {
@@ -117,6 +120,108 @@ export class AffiliatesService {
       console.error('Failed to send Med Alliance invitation email:', emailError);
     }
 
+  
+    return newAffiliateData;
+  }
+
+
+  async createUserandAffiliate(dto: CreateUserAndAffiliateProfileDto, adminUser: USER) {
+    //1. Create user
+      const user = await this.prisma.uSER.create({
+          data: {
+              email: dto.email,
+              first_name: dto.first_name,
+              last_name: dto.last_name,
+              phone: '',
+              avatar: '',
+              organization_name: '',
+              role: dto.role,
+              job_title: '',
+              workos_id: '',
+              password: '',
+              authentication_method: 'OwnSign',
+              status: 'invited'
+          }
+      });
+
+      // Generate invitation token
+      const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: '48h',
+      });
+
+      // Get user email theme
+      const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+      
+      // Send signup link via email
+      const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+      const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
+      ? `${baseInviteLink}&company=berry` 
+      : baseInviteLink;
+      const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
+      const mailSent = await this.mailService.sendMail({
+      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+      to: dto.email,
+      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
+      html: emailBody,
+      headers: {
+          'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
+          'X-Priority': '3',
+          'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
+          'X-Entity-Ref-ID': `invite-${user.id}`,
+      },
+      });
+
+      if (!mailSent) {
+          throw new BadRequestException('Failed to send invitation email');
+      }
+
+      // Store the verification code in the database with an expiration time
+      const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours - same time as JWT
+      const storeCode = await this.prisma.emailInvitation.create({
+      data: {
+          userId: user.id,
+          email_from: dto.email,
+          code: code,
+          expiresAt: codeExpiresAt,
+      },
+      });
+      if (!storeCode) {
+          throw new BadRequestException('Failed to store invite code');
+      }
+    // End Create user
+
+    // Prevent duplicate profile — give a clear message before hitting DB constraint.
+    const existing = await this.prisma.affiliateProfile.findUnique({
+      where: { user_id: user.id },
+    });
+    if (existing) {
+      throw new ConflictException('This user already has an affiliate profile');
+    }
+
+    const profile = await this.prisma.affiliateProfile.create({
+      data: {
+        user_id: user.id,
+        hubspot_id: null,
+        commission_percent_default: 7,
+        payout_preference_method: null,
+        payout_preference_reference: null,
+        payout_preference_notes: null,
+        payout_details: undefined,
+        created_by: adminUser.id,
+      },
+    });
+
+    const newAffiliateData = await this.findOne(profile.id);
+
+    // => Create Growth Partner in Hubspot
+    try{
+      await this.affiliateCreationService.execute(newAffiliateData);
+      console.log('[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:', profile.id);
+    }catch(error){
+      await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
+      console.error('Failed to create Growth Partner in Hubspot:', error);
+      throw new BadRequestException(error.message || 'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.');
+    }
   
     return newAffiliateData;
   }

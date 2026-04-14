@@ -24,6 +24,7 @@ import {
   UpdateAffiliateProfileDto,
 } from './dto/update-affiliate-profile.dto';
 import { ListAffiliatesDto } from './dto/list-affiliates.dto';
+import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
 
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
@@ -43,6 +44,18 @@ export class AffiliatesController {
     @CurrentUser() admin: USER,
   ) {
     const data = await this.affiliatesService.create(dto, admin);
+    return data;
+  }
+
+  // POST /med-alliance/admin/user-and-affiliates — Create both a user and an affiliate profile in one step (for manual enrollments when the user doesn't exist yet).
+  @Post('admin/user-and-affiliates')
+  @HttpCode(201)
+  @Roles(...ADMIN_ROLES)
+  async createUserAndAffiliate(
+    @Body() dto: CreateUserAndAffiliateProfileDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.affiliatesService.createUserandAffiliate(dto, admin);
     return data;
   }
 

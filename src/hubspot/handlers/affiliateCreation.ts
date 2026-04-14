@@ -150,6 +150,5 @@ export class HandlerAffiliateCreation {
             throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
         }
 
-
     }
 }
