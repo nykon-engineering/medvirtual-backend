@@ -208,6 +208,7 @@ export class AffiliatesService {
         payout_preference_notes: null,
         payout_details: undefined,
         created_by: adminUser.id,
+        status: 'invited',
       },
     });
 

@@ -709,6 +709,13 @@ export class AuthService {
       where: { id: decodedToken.id },
     });
 
+    await this.prisma.affiliateProfile.update({
+      where: { user_id: decodedToken.id },
+      data: {
+        status: 'active',
+      },
+    })
+
     if (!updatePass) {
       throw new BadRequestException('Error in set user password');
     }

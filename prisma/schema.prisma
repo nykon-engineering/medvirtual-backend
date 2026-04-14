@@ -1019,6 +1019,7 @@ enum Priority_new {
 enum AffiliateStatus {
   active
   inactive
+  invited
 }
 
 enum PayoutMethod {
