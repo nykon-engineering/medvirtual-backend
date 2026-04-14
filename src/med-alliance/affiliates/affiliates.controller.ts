@@ -229,7 +229,7 @@ export class AffiliatesController {
   // GET /med-alliance/affiliates/me — Get own profile.
   @Get('affiliates/me')
   @HttpCode(200)
-  @Roles(...ORGANIZATION_ROLES)
+  @Roles(...ORGANIZATION_ROLES, ...AFFILIATE_ROLES)
   async findOwn(@CurrentUser() user: USER) {
     const data = await this.affiliatesService.findOwn(user);
     return { status: 200, message: 'Affiliate profile retrieved successfully', data };
@@ -247,7 +247,7 @@ export class AffiliatesController {
   // PATCH /med-alliance/affiliates/me — Update own payout preferences only.
   @Patch('affiliates/me')
   @HttpCode(200)
-  @Roles(...ORGANIZATION_ROLES)
+  @Roles(...ORGANIZATION_ROLES, ...AFFILIATE_ROLES)
   async updateOwn(
     @CurrentUser() user: USER,
     @Body() dto: UpdateAffiliatePayoutPreferencesDto,
