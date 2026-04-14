@@ -699,11 +699,13 @@ export class OrganizationService {
         });
 
         if (!existingOwner) {
+          console.error(`Selected owner user not found: ${data.owner_id}`);
           throw new BadRequestException('Selected owner user not found');
         }
 
         // Check if user is already an owner of another organization
         if (existingOwner.is_organization_owner) {
+          console.error(`User ${existingOwner.id} is already an owner of another organization`);
           throw new BadRequestException(
             'User is already an owner of another organization',
           );
@@ -718,6 +720,7 @@ export class OrganizationService {
         });
 
         if (existingUser) {
+          console.error(`User with email ${data.owner_email} already exists: ${existingUser.id}`);
           throw new BadRequestException(
             'User with this email already exists.',
           );
@@ -729,6 +732,7 @@ export class OrganizationService {
         data.owner_type !== 'existing' &&
         data.owner_type !== 'new'
       ) {
+        console.error(`Invalid owner_type: ${data.owner_type}`);
         throw new BadRequestException(
           'Invalid owner_type. Must be "existing" or "new"',
         );
@@ -756,7 +760,7 @@ export class OrganizationService {
             adminId = availableAdmins[randomIndex].id;
           }
         }
-        console.log('Assigned adminId:', adminId);
+        //console.log('Assigned adminId:', adminId);
       }
       let specialtiesArray: string[] = [];
       let servicesArray: string[] = [];
@@ -779,7 +783,7 @@ export class OrganizationService {
       const organization = await this.prisma.organization.create({
         data: {
           name: data.name,
-          email: data.email,
+          email: !referred_by_affiliate_id ? data.email : undefined,
           phone: data.phone,
           website_url: data.website_url,
           address: data.address,
