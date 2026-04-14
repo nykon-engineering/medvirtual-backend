@@ -189,6 +189,7 @@ export class ReferredCompaniesService {
           createdAt: true,
           contact_first_name: true,
           contact_last_name: true,
+          contact_email: true,
           med_alliance_referral_status: true,
           referToUser: {
             select: { id: true, first_name: true, last_name: true },

@@ -815,6 +815,7 @@ export class OrganizationService {
           ...((d: any) => ({
             contact_first_name: d.contact_first_name || undefined,
             contact_last_name: d.contact_last_name || undefined,
+            contact_email: data.email || undefined,
             refer_to_user_id: d.refer_to_user_id || undefined,
           }))(data),
         },

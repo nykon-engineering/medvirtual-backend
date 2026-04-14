@@ -154,6 +154,7 @@ model Organization {
   // Primary contact at the referred company (collected at referral time for HubSpot import).
   contact_first_name           String?
   contact_last_name            String?
+  contact_email                String?
 
   // User ID of the affiliate who referred this organization into the Med Alliance program
   referred_by_affiliate_id     String?
