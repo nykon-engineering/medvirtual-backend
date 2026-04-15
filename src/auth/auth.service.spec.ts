@@ -50,6 +50,7 @@ describe('AuthService - signIn', () => {
       findUnique: jest.fn(),
     },
     affiliateProfile: {
+      findUnique: jest.fn(),
       update: jest.fn(),
     },
   };
@@ -625,6 +626,7 @@ describe('AuthService - invitedUserSignup', () => {
         update: jest.fn(),
       },
       affiliateProfile: {
+        findUnique: jest.fn(),
         update: jest.fn(),
       },
       session:{
@@ -691,6 +693,7 @@ describe('AuthService - invitedUserSignup', () => {
     prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
     prisma.uSER.findFirst = jest.fn().mockResolvedValue(true);
     prisma.uSER.update = jest.fn().mockResolvedValue(false);
+    prisma.affiliateProfile.findUnique = jest.fn().mockResolvedValue(null);
     prisma.affiliateProfile.update = jest.fn().mockResolvedValue(true);
 
     await expect(service.invitedUserSignup(dataFake)).rejects.toThrow(
@@ -714,6 +717,7 @@ describe('AuthService - invitedUserSignup', () => {
     prisma.emailInvitation.findFirst = jest.fn().mockResolvedValue(true);
     prisma.uSER.findFirst = jest.fn().mockResolvedValue(true);
     prisma.uSER.update = jest.fn().mockResolvedValue(true);
+    prisma.affiliateProfile.findUnique = jest.fn().mockResolvedValue(null);
     prisma.affiliateProfile.update = jest.fn().mockResolvedValue(true);
 
     jest.spyOn(jwt, 'sign').mockImplementation(() => 'mocked-jwt-token');

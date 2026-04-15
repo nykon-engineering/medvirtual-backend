@@ -709,12 +709,21 @@ export class AuthService {
       where: { id: decodedToken.id },
     });
 
-    await this.prisma.affiliateProfile.update({
-      where: { user_id: decodedToken.id },
-      data: {
-        status: 'active',
-      },
-    })
+    const existingAffiliate = await this.prisma.affiliateProfile.findUnique({ 
+      where: {
+        user_id: decodedToken.id
+      }
+    } )
+
+    if (existingAffiliate){
+      //if the user already have an affiliate profile, I need to set the status to active, because the user just accepted the invite, so the affiliate profile need to be active for the user can receive the commission
+      await this.prisma.affiliateProfile.update({
+        where: { user_id: decodedToken.id },
+        data: {
+          status: 'active',
+        },
+      })
+    }
 
     if (!updatePass) {
       throw new BadRequestException('Error in set user password');
