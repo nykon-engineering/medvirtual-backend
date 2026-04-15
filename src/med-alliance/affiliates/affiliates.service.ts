@@ -247,20 +247,37 @@ export class AffiliatesService {
   }
 
   async findAll(dto: ListAffiliatesDto) {
-    const { page = 1, limit = 20, search, status, sortOrder = 'desc' } = dto;
+    const { page = 1, limit = 20, search, status, banking, organization, sortOrder = 'desc' } = dto;
     const skip = (page - 1) * limit;
 
     // Build where clause — search applies to the linked user's name/email.
     const where: any = {};
     if (status) where.status = status;
+
+    // Banking filter: payout_details being non-null indicates banking is complete.
+    if (banking === 'complete') {
+      where.payout_details = { not: null };
+    } else if (banking === 'incomplete') {
+      where.payout_details = null;
+    }
+
+    // Build user-level conditions (search + organization may both apply).
+    const userConditions: any = {};
     if (search) {
-      where.user = {
-        OR: [
-          { first_name: { contains: search, mode: 'insensitive' } },
-          { last_name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      };
+      userConditions.OR = [
+        { first_name: { contains: search, mode: 'insensitive' } },
+        { last_name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (organization === 'with_org') {
+      userConditions.organization_id = { not: null };
+    } else if (organization === 'without_org') {
+      userConditions.organization_id = null;
+    }
+
+    if (Object.keys(userConditions).length > 0) {
+      where.user = userConditions;
     }
 
     const [data, total] = await this.prisma.$transaction([
