@@ -16,13 +16,15 @@ import {
 } from './dto/update-affiliate-profile.dto';
 import { ListAffiliatesDto } from './dto/list-affiliates.dto';
 import { MailService } from '../../mail/mail.service';
-import { MedAllianceInvitation } from '../../common/utils/email-templates/med-alliance-invitation';
+
 import { getUserEmailTheme } from '../../common/utils/email-templates/theme-helper';
 import { AffiliateCreationService } from '../../hubspot/create/affiliate';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
 
 import * as jwt from 'jsonwebtoken';
 import InviteSignup from '../../common/utils/email-templates/invite-signup';
+import { MedAllianceInvitation } from '../../common/utils/email-templates/med-alliance-invitation';
+import { MedAllianceInvitationForOrgUsers } from '../../common/utils/email-templates/med-alliance-invitation-for-org-users';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
 const USER_SELECT = {
@@ -544,7 +546,7 @@ export class AffiliatesService {
           from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
           to: currentUser.email,
           subject: 'Welcome to the Med Alliance Program',
-          html: MedAllianceInvitation(currentUser.first_name, theme ?? undefined),
+          html: MedAllianceInvitationForOrgUsers(currentUser.first_name, theme ?? undefined),
         });
       } catch (emailError) {
         console.error('Failed to send Med Alliance invitation email:', emailError);
