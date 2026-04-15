@@ -29,6 +29,8 @@ export class HandlerAffiliatePropertyChange {
         const fieldUpdated = affiliateToDbDictionary[event.propertyName];
 
         if (event.propertyName === 'earning_status'){
+            //stop here! The affiliate status only changes when user accepts the invite
+            if (existingAffiliate.status === 'invited') return;
             //if status = active, set to active, else set to inactive
             event.propertyValue = event.propertyValue === 'Active' ? 'active' : 'inactive';
         }
@@ -41,6 +43,7 @@ export class HandlerAffiliatePropertyChange {
                 [fieldUpdated]: event.propertyValue
             }
         })
+
 
         if(event.propertyName === 'earning_status') {
             const user = await this.prisma.uSER.findFirst({
