@@ -45,6 +45,7 @@ import { ContactCreationService } from './create/contact';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { CompanyDeleteService } from './delete/company';
 
 
 
@@ -219,6 +220,10 @@ const deleteContactServiceMock = {
   execute: jest.fn(),
 };
 
+const companyDeleteServiceMock = {
+  execute: jest.fn(),
+};
+
 const HandlerInvoiceCreationMock = {
   execute: jest.fn(),
 };
@@ -288,6 +293,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: ContactFromCompanyCreationService, useValue: contactCreationFromCompanyServiceMock},
         {provide: ContactUpdateService, useValue: updateContactServiceMock},
         {provide: ContactDeleteService, useValue: deleteContactServiceMock},
+        {provide: CompanyDeleteService, useValue: companyDeleteServiceMock},
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
         {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
@@ -369,6 +375,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: ContactFromCompanyCreationService, useValue: contactCreationFromCompanyServiceMock},
         {provide: ContactUpdateService, useValue: updateContactServiceMock},
         {provide: ContactDeleteService, useValue: deleteContactServiceMock},
+        {provide: CompanyDeleteService, useValue: companyDeleteServiceMock},
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
         {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},

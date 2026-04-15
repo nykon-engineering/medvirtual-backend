@@ -19,6 +19,19 @@ const mockPrisma = {
     findFirst: jest.fn(),
     findMany: jest.fn(),
     count: jest.fn(),
+    delete: jest.fn(),
+  },
+  affiliateCommission: {
+    deleteMany: jest.fn(),
+  },
+  hubspotInvoiceSnapshot: {
+    deleteMany: jest.fn(),
+  },
+  medAllianceAdminReviewCase: {
+    deleteMany: jest.fn(),
+  },
+  medAllianceAuditLog: {
+    deleteMany: jest.fn(),
   },
   $transaction: jest.fn(),
 };
@@ -46,6 +59,9 @@ const mockOrganizationService = {
 
 const mockHubspotService = {
   createOrganizationInHubspot: jest.fn(),
+  createContactFromReferredCompanyInHubspot: jest.fn(),
+  deleteCompanyInHubspot: jest.fn(),
+  deleteContactInHubspot: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------

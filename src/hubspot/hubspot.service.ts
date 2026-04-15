@@ -42,6 +42,7 @@ import { ContactCreationService } from './create/contact';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { CompanyDeleteService } from './delete/company';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
@@ -91,6 +92,7 @@ export class HubspotService {
       private readonly contactCreationFromCompanyService: ContactFromCompanyCreationService,
       private readonly contactUpdateService: ContactUpdateService,
       private readonly contactDeleteService: ContactDeleteService,
+      private readonly companyDeleteService: CompanyDeleteService,
 
       private readonly ownerCreation: HandlerOwnerCreation,
       private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -366,6 +368,10 @@ export class HubspotService {
 
     async deleteContactInHubspot(data: any): Promise<any> {
         return await this.contactDeleteService.execute(data);
+    }
+
+    async deleteCompanyInHubspot(hubspotCompanyId: string): Promise<boolean> {
+        return await this.companyDeleteService.execute(hubspotCompanyId);
     }
 
     ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot

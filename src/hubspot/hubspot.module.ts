@@ -52,6 +52,7 @@ import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 
@@ -95,6 +96,7 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     AffiliateCreationService,
     ContactUpdateService,
     ContactDeleteService,
+    CompanyDeleteService,
     HandlerInvoiceCreation,
     HandlerInvoicePropertyChange,
     HandlerInvoiceAssociationChange,

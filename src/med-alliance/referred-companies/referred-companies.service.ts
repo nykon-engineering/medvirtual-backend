@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -31,84 +32,127 @@ export class ReferredCompaniesService {
 
 
   async create(dto: CreateReferredCompanyDto | CreateOrganizationDto, currentUser: USER) {
-    // Require an active affiliate profile before accepting the referral.
+    // Step 0: Validation — read-only, no rollback needed.
     await this.affiliatesService.requireActiveProfile(currentUser.id);
 
+    const cleanupStack: Array<() => Promise<void>> = [];
 
-    //call the create origanization function to maintain the system reusable 
-    const org =  await this.organizationService.create(dto, currentUser, currentUser.id);
+    try {
+      // Step 1: Create organization (DB + HubSpot company).
+      const org = await this.organizationService.create(dto, currentUser, currentUser.id);
+      cleanupStack.push(async () => {
+        // Delete HubSpot company if it was created during org creation.
+        const freshOrg = await this.prisma.organization.findUnique({
+          where: { id: org.id },
+          select: { hubspot_id: true },
+        });
+        if (freshOrg?.hubspot_id) {
+          await this.hubspot.deleteCompanyInHubspot(freshOrg.hubspot_id).catch((e) =>
+            console.error('[rollback] Failed to delete HubSpot company:', e),
+          );
+        }
+        // Delete child records that do NOT cascade on org deletion.
+        await this.prisma.$transaction([
+          this.prisma.affiliateCommission.deleteMany({ where: { organization_id: org.id } }),
+          this.prisma.hubspotInvoiceSnapshot.deleteMany({ where: { organization_id: org.id } }),
+          this.prisma.medAllianceAdminReviewCase.deleteMany({ where: { organization_id: org.id } }),
+        ]).catch((e) => console.error('[rollback] Failed to delete child records:', e));
 
-    // MA-004: block if this company is already an active client.
-    await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
+        // Delete audit logs (uses entity_id, not a FK).
+        await this.prisma.medAllianceAuditLog.deleteMany({
+          where: { entity_id: org.id },
+        }).catch((e) => console.error('[rollback] Failed to delete audit logs:', e));
 
-    // MA-006: soft duplicate check — warn if another referred org with the same name or email exists.
-    const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto as CreateReferredCompanyDto);
+        // Finally delete the organization itself.
+        await this.prisma.organization.delete({ where: { id: org.id } }).catch((e) =>
+          console.error('[rollback] Failed to delete organization:', e),
+        );
+      });
 
-    // MA-005: run HubSpot matching + invoice ingestion + commission detection synchronously.
-    await this.referralSync.run(org.id);
+      // Step 2: MA-004 — block if this company is already an active client.
+      await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
 
-    // Return the org with all updated fields after the sync pipeline.
-    const newOrganization = await this.prisma.organization.findUnique({
-      where: { id: org.id },
-      include: {
-        owner: true,
-        admin: true,
-        users: true,
-        referredByAffiliate: {
-          select: {
-            email: true,
-            affiliateProfile:{
-              select: {
-                id: true,
-                full_name: true,
-                hubspot_id: true,
-                commission_percent_default: true,
-                payout_preference_method: true,
-              }
-            },
-            organization: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-              }
+      // Step 3: MA-006 — soft duplicate check.
+      const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto as CreateReferredCompanyDto);
 
+      // Step 4: MA-005 — HubSpot matching + invoice ingestion + commission detection.
+      await this.referralSync.run(org.id);
+
+      // Step 5: Reload org with all updated fields after the sync pipeline.
+      const newOrganization = await this.prisma.organization.findUnique({
+        where: { id: org.id },
+        include: {
+          owner: true,
+          admin: true,
+          users: true,
+          referredByAffiliate: {
+            select: {
+              email: true,
+              affiliateProfile:{
+                select: {
+                  id: true,
+                  full_name: true,
+                  hubspot_id: true,
+                  commission_percent_default: true,
+                  payout_preference_method: true,
+                }
+              },
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  phone: true,
+                }
+              },
             },
           },
-        },
-        referToUser: {
-          select: {
-            id: true,
-            hubspot_id: true,
-            first_name: true,
-            last_name: true,
+          referToUser: {
+            select: {
+              id: true,
+              hubspot_id: true,
+              first_name: true,
+              last_name: true,
+            },
           },
-        },
+        }
+      });
+
+      if (!newOrganization) throw new NotFoundException('Organization not found after creation');
+
+      // Step 6: Create HubSpot contact with referral data + associations.
+      if (currentUser) {
+        const hubspotContactId = await this.hubspot.createContactFromReferredCompanyInHubspot(newOrganization);
+        if (hubspotContactId && typeof hubspotContactId === 'string') {
+          cleanupStack.push(async () => {
+            await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }).catch((e) =>
+              console.error('[rollback] Failed to delete HubSpot contact:', e),
+            );
+          });
+        }
       }
-    });
 
-    if (!newOrganization) throw new NotFoundException('Organization not found after creation');
+      return softDuplicateWarning ? { ...newOrganization, warning: softDuplicateWarning } : newOrganization;
 
-
-    if (currentUser){ 
-      try{
-        // Here we need to work with flow asked by Hanieh
-        // 1. Create an organization - this is done on organization service
-        // 2. Create a contact with organization data and referral information from Affiliates
-        // 3. Associate the contact with the organization in HubSpot
-        // 4. Associate the contact with the affiliate in HubSpot
-       
-        await this.hubspot.createContactFromReferredCompanyInHubspot(newOrganization);   
-
-      }catch(error){
-        console.error('[hubspot] Error creating organization in HubSpot:', error);
-      }
-      
-
+    } catch (error) {
+      console.error('[ReferredCompaniesService.create] Error occurred, initiating rollback:', error);
+      await this.executeRollback(cleanupStack);
+      throw new BadRequestException(`Failed to create referred company: ${error.message || 'Unknown error'}`);
     }
+  }
 
-    return softDuplicateWarning ? { ...newOrganization, warning: softDuplicateWarning } : newOrganization;
+  /**
+   * Executes the cleanup stack in reverse order (LIFO).
+   * Each cleanup function has its own error handling so one failure does not block the rest.
+   */
+  private async executeRollback(cleanupStack: Array<() => Promise<void>>): Promise<void> {
+    for (let i = cleanupStack.length - 1; i >= 0; i--) {
+      try {
+        await cleanupStack[i]();
+      } catch (cleanupError) {
+        console.error(`[rollback] Cleanup step ${i} failed:`, cleanupError);
+      }
+    }
   }
 
   /**

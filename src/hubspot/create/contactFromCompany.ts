@@ -95,7 +95,7 @@ export class ContactFromCompanyCreationService {
             }
           );
          
-          return true;
+          return response.data?.id ?? true;
         } catch (error) {
           if (error.response) {
             console.error("Error to created contact from company:", error.response.data);

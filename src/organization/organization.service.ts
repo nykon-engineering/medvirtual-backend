@@ -794,7 +794,7 @@ export class OrganizationService {
           description: data.description,
           industry: data.industry ? organizationIndustryToDbDictionary[data.industry] || data.industry : undefined,
           business_unit: data.business_unit,
-          type: data.type,
+          type: referred_by_affiliate_id ? 'PROSPECT' : data.type,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
           number_of_employees: Number(data.number_of_employees),
