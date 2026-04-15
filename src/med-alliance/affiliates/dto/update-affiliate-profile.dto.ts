@@ -13,6 +13,7 @@ import { Prisma } from '@prisma/client';
 export enum AffiliateStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
+  INVITED = 'invited',
 }
 
 // Used by admin — all fields optional, including status and commission rate.
