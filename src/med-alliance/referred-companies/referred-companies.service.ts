@@ -122,19 +122,32 @@ export class ReferredCompaniesService {
 
       // Step 6: Create HubSpot contact with referral data + associations.
       if (currentUser) {
-        const hubspotContactId = await this.hubspot.createContactFromReferredCompanyInHubspot(newOrganization);
-        if (hubspotContactId && typeof hubspotContactId === 'string') {
-          cleanupStack.push(async () => {
-            await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }).catch((e) =>
-              console.error('[rollback] Failed to delete HubSpot contact:', e),
-            );
-          });
+        try {
+          const hubspotContactId = await this.hubspot.createContactFromReferredCompanyInHubspot(newOrganization);
+          if (hubspotContactId && typeof hubspotContactId === 'string') {
+            cleanupStack.push(async () => {
+              await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }).catch((e) =>
+                console.error('[rollback] Failed to delete HubSpot contact:', e),
+              );
+            });
+          }
+        } catch (hubspotError) {
+          const errData = hubspotError?.response?.data || hubspotError;
+          if (errData?.category === 'CONFLICT') {
+            console.error('[ReferredCompaniesService.create] HubSpot contact conflict, initiating rollback:', errData);
+            await this.executeRollback(cleanupStack);
+            throw new BadRequestException(errData.message || 'Contact already exists in HubSpot');
+          }
+          throw hubspotError;
         }
       }
 
       return softDuplicateWarning ? { ...newOrganization, warning: softDuplicateWarning } : newOrganization;
 
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new BadRequestException(`The contact already exists with this email.`);
+      }
       console.error('[ReferredCompaniesService.create] Error occurred, initiating rollback:', error);
       await this.executeRollback(cleanupStack);
       throw new BadRequestException(`Failed to create referred company: ${error.message || 'Unknown error'}`);

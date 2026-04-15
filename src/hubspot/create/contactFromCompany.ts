@@ -102,6 +102,7 @@ export class ContactFromCompanyCreationService {
           } else {
             console.error("Connection error:", error.message);
           }
+          throw error;
         }
         
     }
