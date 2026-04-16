@@ -290,9 +290,10 @@ export class StaffService {
 
     const where: any = {};
 
-    where.hubspot_dealstage = {
-        in: activePipelines.map(([key, _value]) => String(key))
-    };
+    //removed on 2026-04-16 by Paulo asked by Pauli because we need to retrieve all staffs on frontend and filter by status
+    //where.hubspot_dealstage = {
+    //    in: activePipelines.map(([key, _value]) => String(key))
+    //};
 
     if (status) {
       where.status = status;
