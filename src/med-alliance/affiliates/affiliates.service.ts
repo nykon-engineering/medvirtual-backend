@@ -35,6 +35,7 @@ const USER_SELECT = {
   organization_id: true,
   role: true,
   status: true,
+  status_before_deactivation: true,
 };
 
 @Injectable()
@@ -626,6 +627,58 @@ export class AffiliatesService {
         data: {
           status: 'inactive',
           status_before_deactivation: user.status,
+        },
+      });
+    }
+  }
+
+  // Admin: delete an invited affiliate profile (only allowed for status='invited').
+  // - If the user's role is 'affiliate': soft-deletes the user account AND hard-deletes the profile.
+  // - If the user's role is 'organization_admin' or 'organization_super_admin': deletes only the profile.
+  async deleteInvited(id: string) {
+    const profile = await this.findOne(id);
+    const user = profile.user as any;
+
+    if (profile.status !== 'invited') {
+      throw new BadRequestException('Only invited affiliates can be deleted');
+    }
+
+    // Always hard-delete the affiliate profile
+    await this.prisma.affiliateProfile.delete({ where: { id } });
+
+    // If user role is 'affiliate', also soft-delete the user account
+    if (user.role === 'affiliate') {
+      await this.prisma.uSER.update({
+        where: { id: profile.user_id },
+        data: { status: 'deleted' },
+      });
+    }
+  }
+
+  // Admin: reactivate an inactive affiliate profile (and user account if role is 'affiliate').
+  // - If the user's role is 'affiliate': restores user status (from status_before_deactivation or 'active') AND profile status → 'active'.
+  // - If the user's role is 'organization_admin' or 'organization_super_admin': reactivates profile only.
+  async reactivate(id: string) {
+    const profile = await this.findOne(id);
+    const user = profile.user as any;
+
+    if (profile.status !== 'inactive') {
+      throw new BadRequestException('Only inactive affiliates can be reactivated');
+    }
+
+    // Always reactivate the affiliate profile
+    await this.prisma.affiliateProfile.update({
+      where: { id },
+      data: { status: 'active' },
+    });
+
+    // If user role is 'affiliate', restore the user account status
+    if (user.role === 'affiliate') {
+      await this.prisma.uSER.update({
+        where: { id: profile.user_id },
+        data: {
+          status: user.status_before_deactivation ?? 'active',
+          status_before_deactivation: null,
         },
       });
     }

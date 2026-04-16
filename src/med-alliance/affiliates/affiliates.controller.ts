@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -197,6 +198,24 @@ export class AffiliatesController {
   async deactivate(@Param('id') id: string) {
     await this.affiliatesService.deactivate(id);
     return { status: 200, message: 'Affiliate deactivated successfully' };
+  }
+
+  // PATCH /med-alliance/admin/affiliates/:id/reactivate — Reactivate affiliate (and user if role is 'affiliate').
+  @Patch('admin/affiliates/:id/reactivate')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async reactivate(@Param('id') id: string) {
+    await this.affiliatesService.reactivate(id);
+    return { status: 200, message: 'Affiliate reactivated successfully' };
+  }
+
+  // DELETE /med-alliance/admin/affiliates/:id — Delete an invited affiliate (status must be 'invited').
+  @Delete('admin/affiliates/:id')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async deleteInvited(@Param('id') id: string) {
+    await this.affiliatesService.deleteInvited(id);
+    return { status: 200, message: 'Affiliate deleted successfully' };
   }
 
   // PATCH /med-alliance/admin/affiliates/:id — Update profile (admin full access).
