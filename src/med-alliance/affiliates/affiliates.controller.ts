@@ -89,6 +89,7 @@ export class AffiliatesController {
         hubspot_pipeline: profile.hubspot_pipeline ?? null,
         hubspot_pipeline_stage: profile.hubspot_pipeline_stage ?? null,
         business_unit: profile.business_unit ?? null,
+        user_role: user?.role ?? null,
       };
     });
     return { status: 200, message: 'Affiliate profiles retrieved successfully', data, pagination: result.pagination };
@@ -187,6 +188,15 @@ export class AffiliatesController {
     };
 
     return { status: 200, message: 'Affiliate profile retrieved successfully', data };
+  }
+
+  // PATCH /med-alliance/admin/affiliates/:id/deactivate — Deactivate affiliate profile (and user if role is 'affiliate').
+  @Patch('admin/affiliates/:id/deactivate')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async deactivate(@Param('id') id: string) {
+    await this.affiliatesService.deactivate(id);
+    return { status: 200, message: 'Affiliate deactivated successfully' };
   }
 
   // PATCH /med-alliance/admin/affiliates/:id — Update profile (admin full access).

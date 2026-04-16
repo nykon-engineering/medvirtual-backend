@@ -606,6 +606,31 @@ export class AffiliatesService {
     return { profile, pendingAgg, lifetimeAgg, payoutHistory, commsByOrg };
   }
 
+  // Admin: deactivate an affiliate profile (and optionally the user account).
+  // - If the user's role is 'affiliate': deactivates both the user account and the profile.
+  // - If the user's role is 'organization_admin' or 'organization_super_admin': deactivates only the profile.
+  async deactivate(id: string) {
+    const profile = await this.findOne(id); // throws NotFoundException if not found
+    const user = profile.user as any;
+
+    // Always deactivate the affiliate profile
+    await this.prisma.affiliateProfile.update({
+      where: { id },
+      data: { status: 'inactive' },
+    });
+
+    // If user role is 'affiliate', also deactivate the user account
+    if (user.role === 'affiliate') {
+      await this.prisma.uSER.update({
+        where: { id: profile.user_id },
+        data: {
+          status: 'inactive',
+          status_before_deactivation: user.status,
+        },
+      });
+    }
+  }
+
   // Admin: link the affiliate's connected user to an existing organization.
   async linkOrganization(id: string, dto: LinkOrganizationDto) {
     const profile = await this.findOne(id); // ensures profile exists
