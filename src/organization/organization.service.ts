@@ -687,7 +687,7 @@ export class OrganizationService {
       // if (existingOrganization) {
       //   throw new BadRequestException('Organization already exists');
       // }
-
+      //console.log(data)
       // Handle owner assignment based on owner_type
       let ownerId: string | undefined = undefined;
       let ownerEmail: string | undefined = undefined;
@@ -745,6 +745,7 @@ export class OrganizationService {
           adminId= user.id; // Added on 2025-11-18 by Paulo to get the logged in user as default admin
         }else{
           let availableAdmins;
+          //console.log(referred_by_affiliate_id, data.refer_to_user_id)
           //If we have an referral and a refer_to_user_id, we will try to assign the referred admin, if not we will assign randomly as before | Added on 2026-04-16
           if (referred_by_affiliate_id && data.refer_to_user_id) {
             availableAdmins = await this.prisma.uSER.findMany({
@@ -752,14 +753,15 @@ export class OrganizationService {
                 id: data.refer_to_user_id
               }
             });
+          }else{
+            availableAdmins = await this.prisma.uSER.findMany({
+              where: {
+                email: process.env.ENVIRONMENT === 'DEV' ? 'pauli@regenta.ai' : 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
+                role: 'system_super_admin',
+                status: 'active',
+              },
+            });
           }
-          availableAdmins = await this.prisma.uSER.findMany({
-            where: {
-              email: process.env.ENVIRONMENT === 'DEV' ? 'pauli@regenta.ai' : 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
-              role: 'system_super_admin',
-              status: 'active',
-            },
-          });
   
           if (availableAdmins.length > 0) {
             // Simple round-robin assignment - could be enhanced with load balancing
