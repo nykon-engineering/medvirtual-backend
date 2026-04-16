@@ -8,6 +8,7 @@ import {
   IsDateString,
   IsEnum,
   IsArray,
+  IsUUID,
 } from 'class-validator';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
@@ -227,5 +228,9 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsString()
   hubspot_id?: string;
+
+  @IsOptional()
+  @IsUUID()
+  refer_to_user_id?: string;
   
 }

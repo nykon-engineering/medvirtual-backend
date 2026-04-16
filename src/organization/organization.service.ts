@@ -744,7 +744,16 @@ export class OrganizationService {
         if (user && !referred_by_affiliate_id){
           adminId= user.id; // Added on 2025-11-18 by Paulo to get the logged in user as default admin
         }else{
-          const availableAdmins = await this.prisma.uSER.findMany({
+          let availableAdmins;
+          //If we have an referral and a refer_to_user_id, we will try to assign the referred admin, if not we will assign randomly as before | Added on 2026-04-16
+          if (referred_by_affiliate_id && data.refer_to_user_id) {
+            availableAdmins = await this.prisma.uSER.findMany({
+              where: {
+                id: data.refer_to_user_id
+              }
+            });
+          }
+          availableAdmins = await this.prisma.uSER.findMany({
             where: {
               email: process.env.ENVIRONMENT === 'DEV' ? 'pauli@regenta.ai' : 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
               role: 'system_super_admin',
