@@ -670,13 +670,16 @@ export class AffiliatesService {
     }
 
     // Always hard-delete the affiliate profile
-    await this.prisma.affiliateProfile.delete({ where: { id } });
-
     // Hard-delete the user account — the user never completed signup (status='invited'),
     // so there is no data to preserve and the email must be freely reusable.
-    await this.prisma.uSER.delete({
-      where: { id: profile.user_id },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.affiliateProfile.delete({ where: { id } });
+      await tx.emailInvitation.deleteMany({ where: { userId: user.id } });
+      await tx.uSER.delete({
+        where: { id: user.id },
+      });
+    })
+    
   }
 
   // Admin: reactivate an inactive affiliate profile (and user account if role is 'affiliate').
