@@ -325,6 +325,8 @@ export class TicketService {
                 organization: user.organization_id ? { id: user.organization_id } : undefined
               } : user.role === 'organization_admin' ? {
                 created_by: user.id
+              } : user.role === 'affiliate' ? {
+                created_by: user.id
               } : { user: { is: { id: user.id } } }),
           ...(search ? {
             OR: [
