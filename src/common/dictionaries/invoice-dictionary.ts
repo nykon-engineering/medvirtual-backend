@@ -4,6 +4,7 @@ export const invoiceToDbDictionary : Record<string, string> = {
     hs_payment_status: 'payment_status',
     hs_amount_billed: 'invoice_amount',
     hs_currency: 'currency',
+    hs_pdf_download_link: 'hubspot_pdf_link',
     //paid_at: 'paid_at',
 }
 

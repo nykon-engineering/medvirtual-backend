@@ -716,6 +716,7 @@ model HubspotInvoiceSnapshot {
   paid_at        DateTime?
   sync_hash      String?
   raw_payload    Json?
+  hubspot_pdf_link String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
