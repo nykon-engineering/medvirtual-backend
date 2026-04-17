@@ -112,8 +112,14 @@ export class CommissionsService {
     } = dto;
     const skip = (page - 1) * limit;
 
+    const AFFILIATE_VISIBLE_STATUSES = ['eligible', 'requested', 'paid', 'rejected'];
+
     const where: any = { affiliate_id: currentUser.id };
-    if (status) where.status = status;
+    if (status && AFFILIATE_VISIBLE_STATUSES.includes(status)) {
+      where.status = status;
+    } else {
+      where.status = { in: AFFILIATE_VISIBLE_STATUSES };
+    }
     if (created_from || created_to) {
       where.createdAt = {};
       if (created_from) where.createdAt.gte = new Date(created_from);
