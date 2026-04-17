@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("LOCAL_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -722,11 +722,29 @@ model HubspotInvoiceSnapshot {
 
   organization Organization            @relation(fields: [organization_id], references: [id])
   commissions  AffiliateCommission[]
+  lineItems    HubspotLineItemSnapshot[]
 
   @@index([organization_id], map: "idx_hubspot_invoice_snapshots_org_id")
   @@index([invoice_status], map: "idx_hubspot_invoice_snapshots_invoice_status")
   @@index([paid_at], map: "idx_hubspot_invoice_snapshots_paid_at")
   @@index([sync_hash], map: "idx_hubspot_invoice_snapshots_sync_hash")
+}
+
+model HubspotLineItemSnapshot {
+  id          String   @id @default(uuid())
+  hubspot_id  String   @unique
+  invoice_id  String
+  name        String?
+  description String?
+  quantity    String?
+  amount      Decimal? @db.Decimal(14, 2)
+  discount    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoice HubspotInvoiceSnapshot @relation(fields: [invoice_id], references: [id])
+
+  @@index([invoice_id], map: "idx_hubspot_line_item_snapshots_invoice_id")
 }
 
 // AffiliateCommission

@@ -117,11 +117,9 @@ export class HandlerInvoiceCreation {
                             invoice_id: invoiceCreated.id
                         }
                         console.log(`Line item data for line item ${lineItem.id}:`, lineItemData);
-                        /*
-                            await this.prisma.hubspotLineItemSnapshot.create({
-                                data: lineItemData
-                            })
-                        */
+                        await this.prisma.hubspotLineItemSnapshot.create({
+                            data: lineItemData
+                        })
                     } catch (error) {
                         console.error(`❌ Error fetching line item ${lineItem.id} details from HubSpot`);
                         console.error('Status:', error.response?.status);
