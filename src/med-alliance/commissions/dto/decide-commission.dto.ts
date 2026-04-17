@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { IsEnum, IsNumberString, IsString, ValidateIf } from 'class-validator';
 
 export class DecideCommissionDto {
   @IsEnum(['eligible', 'rejected'])
@@ -19,4 +19,9 @@ export class VoidCommissionDto {
 export class ReinstateCommissionDto {
   @IsString()
   reason: string;
+}
+
+export class UpdateBaseAmountDto {
+  @IsNumberString()
+  base_amount: string;
 }

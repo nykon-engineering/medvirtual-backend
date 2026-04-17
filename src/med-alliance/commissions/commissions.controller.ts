@@ -16,7 +16,7 @@ import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
-import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto } from './dto/decide-commission.dto';
+import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto, UpdateBaseAmountDto } from './dto/decide-commission.dto';
 
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
@@ -113,6 +113,19 @@ export class CommissionsController {
   ) {
     const data = await this.commissionsService.reinstate(id, dto, admin);
     return { status: 200, message: 'Commission reinstated to eligible', data };
+  }
+
+  // PATCH /med-alliance/admin/commissions/:id/update-base-amount — Update base amount (detected only).
+  @Patch('admin/commissions/:id/update-base-amount')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async updateBaseAmount(
+    @Param('id') id: string,
+    @Body() dto: UpdateBaseAmountDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.commissionsService.updateBaseAmount(id, dto, admin);
+    return { status: 200, message: 'Commission base amount updated successfully', data };
   }
 
   // GET /med-alliance/admin/commissions/:id/audit — Full audit timeline.

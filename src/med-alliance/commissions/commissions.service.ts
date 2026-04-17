@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
-import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto } from './dto/decide-commission.dto';
+import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto, UpdateBaseAmountDto } from './dto/decide-commission.dto';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 
 // Terminal statuses — transitions out of these are not allowed.
@@ -41,6 +41,7 @@ const COMMISSION_SELECT = {
       invoice_amount: true,
       currency: true,
       paid_at: true,
+      hubspot_pdf_link: true,
     },
   },
 };
@@ -399,6 +400,55 @@ export class CommissionsService {
       newStatus: 'eligible',
       reason: dto.reason,
       source: 'admin_action',
+    });
+
+    return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: update base_amount_snapshot on a detected commission.
+  // ---------------------------------------------------------------------------
+  async updateBaseAmount(id: string, dto: UpdateBaseAmountDto, adminUser: USER) {
+    const commission = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: { id: true, status: true, base_amount_snapshot: true, commission_percent_snapshot: true },
+    });
+    if (!commission) throw new NotFoundException('Commission not found');
+
+    if (commission.status !== 'detected') {
+      throw new BadRequestException(
+        `Base amount can only be updated when the commission is in "detected" status. Current status: "${commission.status}".`,
+      );
+    }
+
+    const baseAmount = parseFloat(dto.base_amount);
+    if (isNaN(baseAmount) || baseAmount <= 0) {
+      throw new BadRequestException('base_amount must be a positive number');
+    }
+    const pct = Number(commission.commission_percent_snapshot);
+    const newCommissionAmount = ((baseAmount * pct) / 100).toFixed(2);
+
+    const updated = await this.prisma.affiliateCommission.update({
+      where: { id },
+      data: {
+        base_amount_snapshot: baseAmount.toString(),
+        commission_amount: newCommissionAmount,
+      },
+      select: COMMISSION_SELECT,
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'admin_updated_base_amount',
+      oldStatus: commission.status,
+      newStatus: commission.status,
+      source: 'admin_action',
+      metadata: {
+        old_base_amount: commission.base_amount_snapshot,
+        new_base_amount: baseAmount.toString(),
+        new_commission_amount: newCommissionAmount,
+      },
     });
 
     return updated;
