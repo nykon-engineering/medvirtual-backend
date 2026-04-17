@@ -42,6 +42,16 @@ const COMMISSION_SELECT = {
       currency: true,
       paid_at: true,
       hubspot_pdf_link: true,
+      lineItems: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          quantity: true,
+          amount: true,
+          discount: true,
+        },
+      },
     },
   },
 };
