@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { USER } from '@prisma/client';
+import { CommissionStatus, USER } from '@prisma/client';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
   JoinProgramDto,
@@ -25,6 +25,7 @@ import * as jwt from 'jsonwebtoken';
 import InviteSignup from '../../common/utils/email-templates/invite-signup';
 import { MedAllianceInvitation } from '../../common/utils/email-templates/med-alliance-invitation';
 import { MedAllianceInvitationForOrgUsers } from '../../common/utils/email-templates/med-alliance-invitation-for-org-users';
+import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
 const USER_SELECT = {
@@ -372,7 +373,7 @@ export class AffiliatesService {
           _sum: { commission_amount: true },
           where: {
             affiliate_id: currentUser.id,
-            status: { notIn: ['void', 'rejected'] },
+            status: { in: AFFILIATE_VISIBLE_STATUSES as CommissionStatus[] },
           },
         }),
         this.prisma.affiliateCommission.aggregate({
@@ -392,7 +393,10 @@ export class AffiliatesService {
           select: { paid_amount: true, paid_at: true },
         }),
         this.prisma.affiliateCommission.findMany({
-          where: { affiliate_id: currentUser.id },
+          where: { 
+            affiliate_id: currentUser.id,
+            status: { in: AFFILIATE_VISIBLE_STATUSES as CommissionStatus[] }
+           },
           orderBy: { createdAt: 'desc' },
           take: 5,
           include: { organization: { select: { id: true, name: true } } },

@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
 import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto } from './dto/decide-commission.dto';
+import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 
 // Terminal statuses — transitions out of these are not allowed.
 const TERMINAL_STATUSES = ['paid', 'void', 'rejected'];
@@ -112,7 +113,7 @@ export class CommissionsService {
     } = dto;
     const skip = (page - 1) * limit;
 
-    const AFFILIATE_VISIBLE_STATUSES = ['eligible', 'requested', 'paid', 'rejected'];
+    
 
     const where: any = { affiliate_id: currentUser.id };
     if (status && AFFILIATE_VISIBLE_STATUSES.includes(status)) {

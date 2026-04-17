@@ -1,0 +1,1 @@
+export const AFFILIATE_VISIBLE_STATUSES = ['eligible', 'requested', 'paid', 'rejected'];
