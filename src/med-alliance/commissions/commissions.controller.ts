@@ -16,7 +16,7 @@ import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
-import { DecideCommissionDto, VoidCommissionDto } from './dto/decide-commission.dto';
+import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto } from './dto/decide-commission.dto';
 
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
@@ -91,6 +91,28 @@ export class CommissionsController {
   ) {
     const data = await this.commissionsService.void(id, dto, admin);
     return { status: 200, message: 'Commission voided successfully', data };
+  }
+
+  // PATCH /med-alliance/admin/commissions/:id/revert-to-detected — Revert eligible → detected.
+  @Patch('admin/commissions/:id/revert-to-detected')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async revertToDetected(@Param('id') id: string, @CurrentUser() admin: USER) {
+    const data = await this.commissionsService.revertToDetected(id, admin);
+    return { status: 200, message: 'Commission reverted to detected', data };
+  }
+
+  // PATCH /med-alliance/admin/commissions/:id/reinstate — Reinstate rejected → eligible.
+  @Patch('admin/commissions/:id/reinstate')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async reinstate(
+    @Param('id') id: string,
+    @Body() dto: ReinstateCommissionDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.commissionsService.reinstate(id, dto, admin);
+    return { status: 200, message: 'Commission reinstated to eligible', data };
   }
 
   // GET /med-alliance/admin/commissions/:id/audit — Full audit timeline.

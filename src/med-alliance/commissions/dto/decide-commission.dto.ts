@@ -15,3 +15,8 @@ export class VoidCommissionDto {
   @IsString()
   reason: string;
 }
+
+export class ReinstateCommissionDto {
+  @IsString()
+  reason: string;
+}
