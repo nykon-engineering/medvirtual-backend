@@ -116,6 +116,17 @@ export class AffiliatesController {
     return { status: 200, message: 'Eligible users retrieved successfully', data };
   }
 
+  // GET /med-alliance/admin/users/eligible-org-users?search=xxx
+  // Returns active organization_admin / organization_super_admin users
+  // that do not yet have an affiliate profile.
+  @Get('admin/users/eligible-org-users')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async findEligibleOrgUsers(@Query('search') search?: string) {
+    const data = await this.affiliatesService.findEligibleOrgUsers(search);
+    return { status: 200, message: 'Eligible org users retrieved successfully', data };
+  }
+
   // GET /med-alliance/admin/affiliates/by-user/:userId — Get affiliate profile by user ID.
   // Must be declared BEFORE the /:id route so NestJS does not treat "by-user" as an id.
   @Get('admin/affiliates/by-user/:userId')

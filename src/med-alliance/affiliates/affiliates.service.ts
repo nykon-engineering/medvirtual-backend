@@ -569,6 +569,32 @@ export class AffiliatesService {
     });
   }
 
+  // Admin: list active organization_admin / organization_super_admin users
+  // that do not yet have an affiliate profile — used to populate the
+  // "Use an existing user" dropdown in the Create Affiliate modal.
+  async findEligibleOrgUsers(search?: string) {
+    const where: any = {
+      status: 'active',
+      role: { in: ['organization_admin', 'organization_super_admin'] },
+      affiliateProfile: null,
+    };
+
+    if (search && search.trim().length > 0) {
+      where.OR = [
+        { first_name: { contains: search.trim(), mode: 'insensitive' } },
+        { last_name: { contains: search.trim(), mode: 'insensitive' } },
+        { email: { contains: search.trim(), mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.uSER.findMany({
+      where,
+      select: { id: true, first_name: true, last_name: true, email: true, role: true },
+      orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
+      take: 100,
+    });
+  }
+
   // Admin: get enriched affiliate detail — adds financial aggregates + payout history.
   // Keeps findOne() lightweight for internal use (create / joinProgram).
   async findOneEnriched(id: string) {
