@@ -56,6 +56,13 @@ export class MarkPayoutPaidDto {
   paid_at?: string;
 }
 
+export class CancelPayoutRequestDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reason?: string;
+}
+
 export class AddPayoutNoteDto {
   @IsEnum(['internal', 'user'])
   type: 'internal' | 'user';

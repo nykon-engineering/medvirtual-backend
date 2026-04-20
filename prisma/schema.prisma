@@ -69,6 +69,8 @@ model USER {
   payoutReviews                AffiliatePayoutRequest[]   @relation("PayoutReviewedBy")
   // Notes authored on payout requests
   payoutRequestNotes           PayoutRequestNote[]        @relation("PayoutRequestNoteAuthor")
+  // Payout requests cancelled by this admin user
+  payoutCancellations          AffiliatePayoutRequest[]   @relation("PayoutCancelledBy")
   // Commission records where this admin user made the eligibility decision
   commissionAdminDecisions     AffiliateCommission[]      @relation("CommissionAdminDecision")
   // Commissions linked to this user as the affiliate owner
@@ -813,6 +815,9 @@ model AffiliatePayoutRequest {
   rejection_reason      String?
   reviewed_by           String?
   reviewed_at           DateTime?
+  cancellation_reason   String?
+  cancelled_by          String?
+  cancelled_at          DateTime?
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
@@ -821,6 +826,7 @@ model AffiliatePayoutRequest {
   affiliateProfile AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
   approvedBy       USER?                             @relation("PayoutApprovedBy", fields: [approved_by], references: [id])
   reviewedBy       USER?                             @relation("PayoutReviewedBy", fields: [reviewed_by], references: [id])
+  cancelledBy      USER?                             @relation("PayoutCancelledBy", fields: [cancelled_by], references: [id])
   // Junction records linking this request to its selected commissions
   commissions      AffiliatePayoutRequestCommission[]
   // Admin + affiliate notes on this request
@@ -1070,6 +1076,7 @@ enum PayoutRequestStatus {
   approved
   rejected
   paid
+  cancelled
 }
 
 enum PayoutNoteType {

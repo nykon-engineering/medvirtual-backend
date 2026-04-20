@@ -19,6 +19,7 @@ import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreatePayoutRequestDto } from './dto/create-payout-request.dto';
 import {
   AddPayoutNoteDto,
+  CancelPayoutRequestDto,
   DecidePayoutRequestDto,
   MarkPayoutPaidDto,
 } from './dto/decide-payout-request.dto';
@@ -137,6 +138,20 @@ export class PayoutRequestsController {
   ) {
     const data = await this.payoutRequestsService.markPaid(id, dto, admin);
     return { status: 200, message: 'Payout request marked as paid', data };
+  }
+
+  // POST /med-alliance/admin/payout-requests/:id/cancel — Cancel a payout request.
+  // Allowed from: requested | under_review
+  @Post('admin/payout-requests/:id/cancel')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async cancel(
+    @Param('id') id: string,
+    @Body() dto: CancelPayoutRequestDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.payoutRequestsService.cancelPayoutRequest(id, dto, admin);
+    return { status: 200, message: 'Payout request cancelled successfully', data };
   }
 
   // B3: POST /med-alliance/admin/payout-requests/:id/notes — Add a note.

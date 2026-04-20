@@ -10,6 +10,7 @@ import { AffiliatesService } from '../affiliates/affiliates.service';
 import { CreatePayoutRequestDto } from './dto/create-payout-request.dto';
 import {
   AddPayoutNoteDto,
+  CancelPayoutRequestDto,
   DecidePayoutRequestDto,
   MarkPayoutPaidDto,
 } from './dto/decide-payout-request.dto';
@@ -37,6 +38,9 @@ const PAYOUT_REQUEST_SELECT = {
   reviewed_at: true,
   paid_at: true,
   rejection_reason: true,
+  cancellation_reason: true,
+  cancelled_by: true,
+  cancelled_at: true,
   createdAt: true,
   updatedAt: true,
   commissions: {
@@ -640,6 +644,85 @@ export class PayoutRequestsService {
   }
 
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Admin: cancel a payout request.
+  // Allowed from: "requested" or "under_review".
+  // Reverts linked commissions from "requested" → "eligible".
+  // Idempotent: if already cancelled, returns the request without error.
+  // ---------------------------------------------------------------------------
+  async cancelPayoutRequest(id: string, dto: CancelPayoutRequestDto, adminUser: USER) {
+    const request = await this.prisma.affiliatePayoutRequest.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        commissions: { select: { commission_id: true } },
+      },
+    });
+    if (!request) throw new NotFoundException('Payout request not found');
+
+    if (request.status === 'cancelled') {
+      return this.findOneForAdmin(id);
+    }
+
+    const cancellableStatuses = ['requested', 'under_review'];
+    if (!cancellableStatuses.includes(request.status)) {
+      throw new BadRequestException(
+        `Payout request is in status "${request.status}". Only "requested" or "under_review" requests can be cancelled.`,
+      );
+    }
+
+    const commissionIds = request.commissions.map((c) => c.commission_id);
+    const oldStatus = request.status;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.affiliatePayoutRequest.update({
+        where: { id },
+        data: {
+          status: 'cancelled',
+          cancellation_reason: dto.reason ?? null,
+          cancelled_by: adminUser.id,
+          cancelled_at: new Date(),
+        },
+      });
+
+      if (commissionIds.length > 0) {
+        await tx.affiliateCommission.updateMany({
+          where: { id: { in: commissionIds }, status: 'requested' },
+          data: { status: 'eligible' },
+        });
+      }
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'status_changed',
+      oldStatus,
+      newStatus: 'cancelled',
+      reason: dto.reason,
+      source: 'admin_action',
+    });
+
+    for (const commissionId of commissionIds) {
+      await this.prisma.medAllianceAuditLog.create({
+        data: {
+          actor_user_id: adminUser.id,
+          entity_type: 'commission',
+          entity_id: commissionId,
+          event: 'status_changed',
+          old_status: 'requested',
+          new_status: 'eligible',
+          reason: 'Payout request cancelled',
+          source: 'admin_action',
+          metadata: { payout_request_id: id } as any,
+        },
+      });
+    }
+
+    return this.findOneForAdmin(id);
+  }
+
   // B3: Admin: add a note to a payout request.
   // ---------------------------------------------------------------------------
   async addNote(id: string, dto: AddPayoutNoteDto, adminUser: USER) {
@@ -800,6 +883,7 @@ export class PayoutRequestsService {
       approved: 0,
       paid: 0,
       rejected: 0,
+      cancelled: 0,
     };
 
     for (const row of counts) {
