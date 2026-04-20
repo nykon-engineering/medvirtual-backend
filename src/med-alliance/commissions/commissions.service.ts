@@ -376,6 +376,46 @@ export class CommissionsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Admin: unvoid a voided commission back to detected.
+  // ---------------------------------------------------------------------------
+  async unvoid(id: string, dto: { reason: string }, adminUser: USER) {
+    const commission = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!commission) throw new NotFoundException('Commission not found');
+
+    if (commission.status !== 'void') {
+      throw new BadRequestException(
+        `Only commissions in "void" status can be unvoided. Current status: "${commission.status}".`,
+      );
+    }
+
+    const updated = await this.prisma.affiliateCommission.update({
+      where: { id },
+      data: {
+        status: 'detected',
+        admin_decision_by: adminUser.id,
+        admin_decision_reason: dto.reason,
+        admin_decision_at: new Date(),
+      },
+      select: COMMISSION_SELECT,
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'admin_unvoided',
+      oldStatus: 'void',
+      newStatus: 'detected',
+      reason: dto.reason,
+      source: 'admin_action',
+    });
+
+    return updated;
+  }
+
+  // ---------------------------------------------------------------------------
   // Admin: reinstate a rejected commission back to eligible.
   // ---------------------------------------------------------------------------
   async reinstate(id: string, dto: ReinstateCommissionDto, adminUser: USER) {

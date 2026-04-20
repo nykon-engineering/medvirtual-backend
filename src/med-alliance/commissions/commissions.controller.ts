@@ -16,7 +16,7 @@ import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
-import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto, UpdateBaseAmountDto } from './dto/decide-commission.dto';
+import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto, UnvoidCommissionDto, UpdateBaseAmountDto } from './dto/decide-commission.dto';
 
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
@@ -100,6 +100,19 @@ export class CommissionsController {
   async revertToDetected(@Param('id') id: string, @CurrentUser() admin: USER) {
     const data = await this.commissionsService.revertToDetected(id, admin);
     return { status: 200, message: 'Commission reverted to detected', data };
+  }
+
+  // PATCH /med-alliance/admin/commissions/:id/unvoid — Unvoid void → detected.
+  @Patch('admin/commissions/:id/unvoid')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async unvoid(
+    @Param('id') id: string,
+    @Body() dto: UnvoidCommissionDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.commissionsService.unvoid(id, dto, admin);
+    return { status: 200, message: 'Commission unvoided to detected', data };
   }
 
   // PATCH /med-alliance/admin/commissions/:id/reinstate — Reinstate rejected → eligible.

@@ -78,6 +78,9 @@ const ADMIN_SELECT = {
       id: true,
       payout_details: true,
       payout_preference_method: true,
+      payout_preference_reference: true,
+      payout_preference_notes: true,
+      createdAt: true,
     },
   },
   approvedBy: {

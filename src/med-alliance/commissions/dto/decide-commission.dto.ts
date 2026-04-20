@@ -21,6 +21,11 @@ export class ReinstateCommissionDto {
   reason: string;
 }
 
+export class UnvoidCommissionDto {
+  @IsString()
+  reason: string;
+}
+
 export class UpdateBaseAmountDto {
   @IsNumberString()
   base_amount: string;
