@@ -688,7 +688,7 @@ export class PayoutRequestsService {
 
       if (commissionIds.length > 0) {
         await tx.affiliateCommission.updateMany({
-          where: { id: { in: commissionIds }, status: 'requested' },
+          where: { id: { in: commissionIds } },
           data: { status: 'eligible' },
         });
       }

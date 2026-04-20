@@ -626,4 +626,198 @@ describe('PayoutRequestsService', () => {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  // cancelPayoutRequest
+  // -------------------------------------------------------------------------
+  describe('cancelPayoutRequest', () => {
+    it('should throw NotFoundException when payout request does not exist', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.cancelPayoutRequest('payout-99', {}, mockAdminUser),
+      ).rejects.toThrow(new NotFoundException('Payout request not found'));
+    });
+
+    it('should return the current request without error when already cancelled (idempotent)', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({ id: 'payout-1', status: 'cancelled', commissions: [] })
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
+
+      const result = await service.cancelPayoutRequest('payout-1', {}, mockAdminUser);
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect((result as any).status).toBe('cancelled');
+      expect((result as any).id).toBe('payout-1');
+    });
+
+    it('should throw BadRequestException when status is "approved"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest({ status: 'approved' }),
+      );
+
+      await expect(
+        service.cancelPayoutRequest('payout-1', {}, mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when status is "paid"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest({ status: 'paid' }),
+      );
+
+      await expect(
+        service.cancelPayoutRequest('payout-1', {}, mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when status is "rejected"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest({ status: 'rejected' }),
+      );
+
+      await expect(
+        service.cancelPayoutRequest('payout-1', {}, mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should cancel a "requested" payout and revert commissions to "eligible"', async () => {
+      const commissionIds = ['commission-1', 'commission-2'];
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'requested',
+          commissions: commissionIds.map((id) => ({ commission_id: id })),
+        })
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.cancelPayoutRequest('payout-1', {}, mockAdminUser);
+
+      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'cancelled', cancelled_by: 'admin-1' }),
+        }),
+      );
+      expect(txMock.affiliateCommission.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: { in: commissionIds }, status: 'requested' }),
+          data: { status: 'eligible' },
+        }),
+      );
+    });
+
+    it('should cancel an "under_review" payout request', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'under_review',
+          commissions: [{ commission_id: 'commission-1' }],
+        })
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.cancelPayoutRequest('payout-1', {}, mockAdminUser);
+
+      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'cancelled' }),
+        }),
+      );
+    });
+
+    it('should persist the cancellation reason when provided', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'requested',
+          commissions: [],
+        })
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.cancelPayoutRequest('payout-1', { reason: 'Duplicate entry' }, mockAdminUser);
+
+      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ cancellation_reason: 'Duplicate entry' }),
+        }),
+      );
+    });
+
+    it('should not call updateMany when there are no linked commissions', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({ id: 'payout-1', status: 'requested', commissions: [] })
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.cancelPayoutRequest('payout-1', {}, mockAdminUser);
+
+      expect(txMock.affiliateCommission.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('should write a payout request audit log entry plus one per commission', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'requested',
+          commissions: [{ commission_id: 'commission-1' }, { commission_id: 'commission-2' }],
+        })
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.cancelPayoutRequest('payout-1', {}, mockAdminUser);
+
+      // 1 for payout request + 2 for commissions
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledTimes(3);
+    });
+
+    it('should return the updated payout request with cancelled status', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({ id: 'payout-1', status: 'requested', commissions: [] })
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled', cancellation_reason: 'Test' }));
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.cancelPayoutRequest('payout-1', { reason: 'Test' }, mockAdminUser);
+
+      expect((result as any).status).toBe('cancelled');
+      expect((result as any).id).toBe('payout-1');
+    });
+  });
 });
