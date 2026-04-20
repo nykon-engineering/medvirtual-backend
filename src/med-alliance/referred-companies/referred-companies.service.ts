@@ -5,7 +5,24 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { OrganizationStatus, USER } from '@prisma/client';
+import { MedAllianceReferralStatus, OrganizationStatus, USER } from '@prisma/client';
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Returns the effective eligibility status for display.
+ * If the stored status is eligible but the one-year window has elapsed,
+ * we compute not_eligible at read-time so the UI stays accurate without
+ * requiring a background job.
+ */
+function computeEffectiveStatus(
+  stored: MedAllianceReferralStatus | null,
+  eligibilityStartAt: Date | null,
+): MedAllianceReferralStatus | null {
+  if (stored !== 'eligible' || !eligibilityStartAt) return stored;
+  if (Date.now() - eligibilityStartAt.getTime() > ONE_YEAR_MS) return 'not_eligible';
+  return 'eligible';
+}
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
@@ -248,6 +265,7 @@ export class ReferredCompaniesService {
           contact_last_name: true,
           contact_email: true,
           med_alliance_referral_status: true,
+          eligibility_start_at: true,
           referToUser: {
             select: { id: true, first_name: true, last_name: true },
           },
@@ -276,8 +294,13 @@ export class ReferredCompaniesService {
         commission_status = 'pending';
       }
 
-      const { affiliateCommissions: _, ...rest } = org;
-      return { ...rest, my_commissions, commission_status };
+      const { affiliateCommissions: _, eligibility_start_at, ...rest } = org;
+      return {
+        ...rest,
+        med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+        my_commissions,
+        commission_status,
+      };
     });
 
     return { data, pagination: { page, limit, total } };
@@ -319,10 +342,16 @@ export class ReferredCompaniesService {
         contact_first_name: true,
         contact_last_name: true,
         med_alliance_referral_status: true,
+        eligibility_start_at: true,
       },
     });
 
-    return org;
+    if (!org) return org;
+    const { eligibility_start_at, ...rest } = org;
+    return {
+      ...rest,
+      med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -371,6 +400,7 @@ export class ReferredCompaniesService {
           contact_first_name: true,
           contact_last_name: true,
           med_alliance_referral_status: true,
+          eligibility_start_at: true,
           hubspot_sync_status: true,
           createdAt: true,
           referredByAffiliate: {
@@ -403,8 +433,14 @@ export class ReferredCompaniesService {
         .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
       const has_open_review = (org._count?.adminReviewCases ?? 0) > 0;
 
-      const { affiliateCommissions: _, _count: __, ...rest } = org;
-      return { ...rest, total_paid, total_pending, has_open_review };
+      const { affiliateCommissions: _, _count: __, eligibility_start_at, ...rest } = org;
+      return {
+        ...rest,
+        med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+        total_paid,
+        total_pending,
+        has_open_review,
+      };
     });
 
     return { data, pagination: { page, limit, total } };
@@ -434,6 +470,8 @@ export class ReferredCompaniesService {
         contact_last_name: true,
         // MA status
         med_alliance_referral_status: true,
+        eligibility_start_at: true,
+        first_paid_invoice_at: true,
         med_alliance_block_reason: true,
         hubspot_id: true,
         hubspot_sync_status: true,
@@ -508,7 +546,12 @@ export class ReferredCompaniesService {
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
-    return org;
+    const { eligibility_start_at, ...rest } = org;
+    return {
+      ...rest,
+      eligibility_start_at,
+      med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+    };
   }
 
   // Get available referral options for the "referred_to" field when creating a referral (i.e. list of active users to whom the referral can be assigned).

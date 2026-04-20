@@ -236,14 +236,14 @@ describe('EligibilityCheckService', () => {
       expect(result).toEqual(expect.objectContaining({ id: 'org-1' }));
     });
 
-    it('should update org with not_eligible_active_client when hubspot_id match found', async () => {
+    it('should update org with not_eligible when hubspot_id match found', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue(
         makeOrg({ hubspot_id: 'hs-999' }),
       );
       mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: 'client-org' });
       mockPrisma.organization.update.mockResolvedValue({
         id: 'org-1',
-        med_alliance_referral_status: 'not_eligible_active_client',
+        med_alliance_referral_status: 'not_eligible',
       });
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
@@ -252,7 +252,7 @@ describe('EligibilityCheckService', () => {
       expect(mockPrisma.organization.update).toHaveBeenCalledWith({
         where: { id: 'org-1' },
         data: {
-          med_alliance_referral_status: 'not_eligible_active_client',
+          med_alliance_referral_status: 'not_eligible',
           med_alliance_block_reason:
             'active_client_block: organization_active_by_hubspot_id',
         },
@@ -260,7 +260,7 @@ describe('EligibilityCheckService', () => {
       expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            new_status: 'not_eligible_active_client',
+            new_status: 'not_eligible',
             reason: 'active_client_block: organization_active_by_hubspot_id',
             source: 'admin_action',
             actor_user_id: 'admin-1',

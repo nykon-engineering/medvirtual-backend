@@ -177,10 +177,10 @@ describe('ReferredCompaniesService', () => {
       expect(result).toEqual(mockOrgWithEligibility);
     });
 
-    it('should return org with not_eligible_active_client when check blocks the referral', async () => {
+    it('should return org with not_eligible when check blocks the referral', async () => {
       const blockedOrg = {
         ...mockOrg,
-        med_alliance_referral_status: 'not_eligible_active_client',
+        med_alliance_referral_status: 'not_eligible',
         med_alliance_block_reason: 'active_client_block: organization_active_by_email',
       };
 
@@ -193,7 +193,7 @@ describe('ReferredCompaniesService', () => {
 
       const result = await service.create(createDto, mockCurrentUser);
 
-      expect(result!.med_alliance_referral_status).toBe('not_eligible_active_client');
+      expect(result!.med_alliance_referral_status).toBe('not_eligible');
       expect(result!.med_alliance_block_reason).toBe(
         'active_client_block: organization_active_by_email',
       );

@@ -263,9 +263,9 @@ export class CommissionsService {
         where: { id: commission.organization_id },
         select: { med_alliance_referral_status: true },
       });
-      if (org?.med_alliance_referral_status === 'not_eligible_active_client') {
+      if (org?.med_alliance_referral_status === 'not_eligible') {
         throw new BadRequestException(
-          'Cannot approve commission: referred organization is blocked as an active MedVirtual client.',
+          'Cannot approve commission: referred organization is not eligible for the Med Alliance program.',
         );
       }
     }

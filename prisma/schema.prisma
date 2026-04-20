@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("PROD_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -167,6 +167,11 @@ model Organization {
   med_alliance_referral_status MedAllianceReferralStatus?
   // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
   med_alliance_block_reason    String?
+  // Anchor timestamp that starts the one-year eligibility window; set when the first paid invoice is received;
+  // cleared when the window expires so the status reflects not_eligible correctly.
+  eligibility_start_at         DateTime?
+  // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
+  first_paid_invoice_at        DateTime?
 
   // HubSpot sync state — only relevant for referred organizations
   // 'pending' | 'synced' | 'no_match' | 'multiple_matches' | 'error'
@@ -1089,8 +1094,7 @@ enum MedAllianceEntityType {
 // Does NOT affect OrganizationStatus — these are independent concerns.
 enum MedAllianceReferralStatus {
   eligible
-  not_eligible_active_client
-  needs_admin_review // HubSpot returned multiple company matches — requires admin review before pipeline continues
+  not_eligible
 }
 
 // MA-006 — Reason why a review case was opened

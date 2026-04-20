@@ -194,7 +194,7 @@ describe('HubspotMatchingService', () => {
   // multiple_matches
   // -------------------------------------------------------------------------
   describe('multiple_matches', () => {
-    it('should set needs_admin_review and send email when 2+ matches are found', async () => {
+    it('should set not_eligible and send email when 2+ matches are found', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
       mockedAxios.post.mockResolvedValue(
         hubspotSearchResponse([{ id: 'hs-1' }, { id: 'hs-2' }]),
@@ -209,7 +209,7 @@ describe('HubspotMatchingService', () => {
       expect(mockPrisma.organization.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            med_alliance_referral_status: 'needs_admin_review',
+            med_alliance_referral_status: 'not_eligible',
             hubspot_sync_status: 'multiple_matches',
           }),
         }),

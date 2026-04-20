@@ -95,7 +95,7 @@ export class EligibilityCheckService {
 
     const newStatus = result.eligible
       ? 'eligible'
-      : 'not_eligible_active_client';
+      : 'not_eligible';
 
     // Persist the eligibility result on the organization
     const updated = await this.prisma.organization.update({

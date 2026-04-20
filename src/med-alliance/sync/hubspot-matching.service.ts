@@ -184,7 +184,7 @@ export class HubspotMatchingService {
     await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
-        med_alliance_referral_status: 'needs_admin_review',
+        med_alliance_referral_status: 'not_eligible',
         hubspot_sync_status: 'multiple_matches',
         hubspot_sync_error:
           'Multiple HubSpot company records matched. Manual review required.',

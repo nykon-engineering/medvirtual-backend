@@ -76,13 +76,17 @@ export class ReferralSyncService {
       select: {
         hubspot_id: true,
         med_alliance_referral_status: true,
+        med_alliance_block_reason: true,
       },
     });
 
     // Guard: do not run Phase B for blocked referrals
-    if (org?.med_alliance_referral_status === 'not_eligible_active_client') {
+    // Active-client block is permanent — skip Phase B entirely.
+    // Other not_eligible states (no first invoice yet, expired window) are handled
+    // inside CommissionDetectionService with the full eligibility lifecycle logic.
+    if (org?.med_alliance_block_reason?.startsWith('active_client_block')) {
       this.logger.log(
-        `Phase B skipped for org ${organizationId} — blocked as active client`,
+        `Phase B skipped for org ${organizationId} — active-client block`,
       );
       return result;
     }
