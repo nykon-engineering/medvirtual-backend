@@ -428,7 +428,7 @@ describe('PayoutRequestsService', () => {
       expect(txMock.affiliateCommission.updateMany).not.toHaveBeenCalled();
     });
 
-    it('should reject the payout request and revert commissions to "eligible"', async () => {
+    it('should reject the payout request and revert commissions to "rejected"', async () => {
       const commissionIds = ['commission-1', 'commission-2'];
       mockPrisma.affiliatePayoutRequest.findUnique
         .mockResolvedValueOnce({
@@ -452,7 +452,7 @@ describe('PayoutRequestsService', () => {
 
       expect(txMock.affiliateCommission.updateMany).toHaveBeenCalledWith({
         where: { id: { in: commissionIds } },
-        data: { status: 'eligible' },
+        data: { status: 'rejected' },
       });
     });
 
