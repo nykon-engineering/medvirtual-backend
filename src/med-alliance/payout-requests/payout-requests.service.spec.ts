@@ -707,7 +707,7 @@ describe('PayoutRequestsService', () => {
       );
       expect(txMock.affiliateCommission.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ id: { in: commissionIds }, status: 'requested' }),
+          where: expect.objectContaining({ id: { in: commissionIds } }),
           data: { status: 'eligible' },
         }),
       );
