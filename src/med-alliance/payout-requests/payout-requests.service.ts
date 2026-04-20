@@ -520,7 +520,7 @@ export class PayoutRequestsService {
       if (dto.decision === 'rejected') {
         await tx.affiliateCommission.updateMany({
           where: { id: { in: commissionIds } },
-          data: { status: 'eligible' },
+          data: { status: 'rejected' },
         });
       }
     });
@@ -544,7 +544,7 @@ export class PayoutRequestsService {
             entity_id: commissionId,
             event: 'status_changed',
             old_status: 'requested',
-            new_status: 'eligible',
+            new_status: 'rejected',
             reason: 'Payout request rejected',
             source: 'admin_action',
             metadata: { payout_request_id: id } as any,
