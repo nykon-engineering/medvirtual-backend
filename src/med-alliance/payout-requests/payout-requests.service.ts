@@ -712,6 +712,41 @@ export class PayoutRequestsService {
   }
 
   // ---------------------------------------------------------------------------
+  // B3: Affiliate: list notes for a payout request.
+  // ---------------------------------------------------------------------------
+  async getNotesForAffiliates(id: string) {
+    const request = await this.prisma.affiliatePayoutRequest.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!request) throw new NotFoundException('Payout request not found');
+
+    const notes = await this.prisma.payoutRequestNote.findMany({
+      where: { payout_request_id: id, type: 'user' },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        type: true,
+        content: true,
+        createdAt: true,
+        author: {
+          select: { id: true, first_name: true, last_name: true },
+        },
+      },
+    });
+
+    return notes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      content: n.content,
+      created_at: n.createdAt,
+      author: n.author
+        ? `${n.author.first_name} ${n.author.last_name}`.trim()
+        : 'Admin',
+    }));
+  }
+
+  // ---------------------------------------------------------------------------
   // Admin: audit log timeline for a payout request.
   // ---------------------------------------------------------------------------
   async getAuditLog(id: string) {

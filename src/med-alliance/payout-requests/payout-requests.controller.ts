@@ -60,7 +60,7 @@ export class PayoutRequestsController {
   // GET /med-alliance/payout-requests/:id — Get one (scoped to affiliate).
   @Get('payout-requests/:id')
   @HttpCode(200)
-  @Roles(...ADMIN_ROLES)
+  //@Roles(...ADMIN_ROLES)
   async findOne(@Param('id') id: string, @CurrentUser() user: USER) {
     const data = await this.payoutRequestsService.findOneForAffiliate(id, user);
     return { status: 200, message: 'Payout request retrieved successfully', data };
@@ -158,6 +158,15 @@ export class PayoutRequestsController {
   @Roles(...ADMIN_ROLES)
   async getNotes(@Param('id') id: string) {
     const data = await this.payoutRequestsService.getNotes(id);
+    return { status: 200, message: 'Notes retrieved successfully', data };
+  }
+
+  // B3: GET /med-alliance/admin/payout-requests/:id/notes — List notes for Affiliates.
+  @Get('payout-requests/:id/notes')
+  @HttpCode(200)
+  @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
+  async getNotesForAffiliates(@Param('id') id: string) {
+    const data = await this.payoutRequestsService.getNotesForAffiliates(id);
     return { status: 200, message: 'Notes retrieved successfully', data };
   }
 

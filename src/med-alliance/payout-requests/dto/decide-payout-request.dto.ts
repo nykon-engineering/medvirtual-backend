@@ -47,7 +47,6 @@ export class MarkPayoutPaidDto {
   // B2: payment proof notes / description
   @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(5000)
   payment_proof_notes?: string;
 

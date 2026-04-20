@@ -318,7 +318,7 @@ export class OrganizationService {
     user: USER,
     query: GetOrganizationsDto,
   ): Promise<PaginatedOrganizationsResponseDto> {
-    try {
+    //try {
       const {
         page = 1,
         limit = 10,
@@ -651,9 +651,9 @@ export class OrganizationService {
           hasPrev,
         },
       };
-    } catch (error) {
-      throw new NotFoundException('Organizations not found');
-    }
+    //} catch (error) {
+    //  throw new NotFoundException('Organizations not found');
+    //}
   }
 
   async getById(id: string): Promise<Organization> {
