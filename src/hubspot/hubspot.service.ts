@@ -137,8 +137,15 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
-        let orderedData: any[] = [];
         console.log('Received data:', data);
+
+        const expectedAppId = Number(process.env.HUBSPOT_APP_ID);
+        if (expectedAppId && Array.isArray(data) && data.length > 0 && data[0]?.appId !== expectedAppId) {
+            console.log(`Ignoring webhook from appId ${data[0]?.appId} (expected ${expectedAppId})`);
+            return;
+        }
+
+        let orderedData: any[] = [];
 
         if (!data || data.length >= 2) {
             orderedData = data.sort((a,b)=>{
