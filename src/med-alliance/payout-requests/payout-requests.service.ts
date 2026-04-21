@@ -723,6 +723,75 @@ export class PayoutRequestsService {
     return this.findOneForAdmin(id);
   }
 
+  // ---------------------------------------------------------------------------
+  // Admin: reopen a payout request to a previous status.
+  // Transitions supported:
+  //   under_review → requested
+  //   rejected     → requested
+  //   rejected     → under_review
+  // When reopening from "rejected", linked commissions are reverted to "requested".
+  // ---------------------------------------------------------------------------
+  async reopen(id: string, targetStatus: 'requested' | 'under_review', adminUser: USER) {
+    const request = await this.prisma.affiliatePayoutRequest.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        commissions: { select: { commission_id: true } },
+      },
+    });
+    if (!request) throw new NotFoundException('Payout request not found');
+
+    const validSources: Record<'requested' | 'under_review', string[]> = {
+      requested: ['under_review', 'rejected'],
+      under_review: ['rejected'],
+    };
+
+    if (!validSources[targetStatus].includes(request.status)) {
+      throw new BadRequestException(
+        `Cannot reopen from "${request.status}" to "${targetStatus}".`,
+      );
+    }
+
+    const oldStatus = request.status;
+    const commissionIds = request.commissions.map((c) => c.commission_id);
+
+    await this.prisma.$transaction(async (tx) => {
+      const updateData: Record<string, unknown> = { status: targetStatus };
+
+      if (oldStatus === 'under_review') {
+        updateData.reviewed_by = null;
+        updateData.reviewed_at = null;
+      }
+
+      if (oldStatus === 'rejected') {
+        updateData.rejection_reason = null;
+        if (commissionIds.length > 0) {
+          await tx.affiliateCommission.updateMany({
+            where: { id: { in: commissionIds } },
+            data: { status: 'requested' },
+          });
+        }
+      }
+
+      await tx.affiliatePayoutRequest.update({
+        where: { id },
+        data: updateData,
+      });
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'status_changed',
+      oldStatus,
+      newStatus: targetStatus,
+      source: 'admin_action',
+    });
+
+    return this.findOneForAdmin(id);
+  }
+
   // B3: Admin: add a note to a payout request.
   // ---------------------------------------------------------------------------
   async addNote(id: string, dto: AddPayoutNoteDto, adminUser: USER) {

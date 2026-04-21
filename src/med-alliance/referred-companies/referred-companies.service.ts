@@ -19,7 +19,8 @@ function computeEffectiveStatus(
   stored: MedAllianceReferralStatus | null,
   eligibilityStartAt: Date | null,
 ): MedAllianceReferralStatus | null {
-  if (stored !== 'eligible' || !eligibilityStartAt) return stored;
+  if (stored !== 'eligible') return stored;
+  if (!eligibilityStartAt) return 'not_eligible';
   if (Date.now() - eligibilityStartAt.getTime() > ONE_YEAR_MS) return 'not_eligible';
   return 'eligible';
 }

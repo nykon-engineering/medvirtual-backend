@@ -23,6 +23,7 @@ import {
   DecidePayoutRequestDto,
   MarkPayoutPaidDto,
 } from './dto/decide-payout-request.dto';
+import { ReopenPayoutRequestDto } from './dto/reopen-payout-request.dto';
 import { ListPayoutRequestsDto } from './dto/list-payout-requests.dto';
 
 @Controller('med-alliance')
@@ -152,6 +153,20 @@ export class PayoutRequestsController {
   ) {
     const data = await this.payoutRequestsService.cancelPayoutRequest(id, dto, admin);
     return { status: 200, message: 'Payout request cancelled successfully', data };
+  }
+
+  // PATCH /med-alliance/admin/payout-requests/:id/reopen — Reopen to a previous status.
+  // Allowed: under_review → requested | rejected → requested | rejected → under_review
+  @Patch('admin/payout-requests/:id/reopen')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async reopen(
+    @Param('id') id: string,
+    @Body() dto: ReopenPayoutRequestDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.payoutRequestsService.reopen(id, dto.target_status, admin);
+    return { status: 200, message: 'Payout request reopened successfully', data };
   }
 
   // B3: POST /med-alliance/admin/payout-requests/:id/notes — Add a note.
