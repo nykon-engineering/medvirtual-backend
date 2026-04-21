@@ -24,6 +24,11 @@ export class HandlerAffiliateCreation {
 
     async execute(event){
         try{
+            if (event.changeSource === 'INTEGRATION'){
+                console.log('Skipping event from integration source:', event);
+                return true; // Skip processing for events originating from integrations
+            }
+
             const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_GROWTH_PARTNER_CUSTOM_OBJECT}/${event.objectId}?properties=growth_partner_name,growth_partner_email_address,hs_pipeline_stage`, 
                 {
                     headers: {
