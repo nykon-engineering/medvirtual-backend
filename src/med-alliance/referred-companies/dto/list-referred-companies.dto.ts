@@ -13,7 +13,7 @@ export class ListReferredCompaniesDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number = 20;
+  limit?: number = 100;
 
   // Search by company name or email
   @IsOptional()
