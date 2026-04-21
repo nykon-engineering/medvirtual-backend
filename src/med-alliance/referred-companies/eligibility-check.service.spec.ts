@@ -216,7 +216,7 @@ describe('EligibilityCheckService', () => {
       expect(mockPrisma.organization.update).toHaveBeenCalledWith({
         where: { id: 'org-1' },
         data: {
-          med_alliance_referral_status: 'eligible',
+          med_alliance_referral_status: 'not_eligible',
           med_alliance_block_reason: null,
         },
       });
@@ -226,7 +226,7 @@ describe('EligibilityCheckService', () => {
             entity_type: 'referred_company',
             entity_id: 'org-1',
             event: 'eligibility_check',
-            new_status: 'eligible',
+            new_status: 'not_eligible',
             source: 'user',
             actor_user_id: 'user-1',
             reason: null,

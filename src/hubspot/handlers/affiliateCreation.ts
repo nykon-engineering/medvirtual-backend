@@ -23,6 +23,14 @@ export class HandlerAffiliateCreation {
 
 
     async execute(event){
+
+        //After alignment with Pauli on 2026-04-19, we decided not create affiliates in our database when they are created in Hubspot
+        //The Affiliate should be create only from our side
+
+        return true; // Skip processing for now, as per decision on 2026-04-19
+
+        {/*
+
         try{
             if (event.changeSource === 'INTEGRATION'){
                 console.log('Skipping event from integration source:', event);
@@ -154,6 +162,8 @@ export class HandlerAffiliateCreation {
             console.error('Error processing HubSpot affiliate creation event:', error);
             throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
         }
+
+        */}
 
     }
 }
