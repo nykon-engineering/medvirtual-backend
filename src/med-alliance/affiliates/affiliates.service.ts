@@ -595,7 +595,7 @@ export class AffiliatesService {
       where,
       select: { id: true, first_name: true, last_name: true, email: true, role: true },
       orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
-      take: 100,
+      //take: 100,
     });
   }
 
