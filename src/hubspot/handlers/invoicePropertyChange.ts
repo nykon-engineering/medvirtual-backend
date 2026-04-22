@@ -80,9 +80,7 @@ export class HandlerInvoicePropertyChange {
             const shouldActivate =
                 org &&
                 org.referred_by_affiliate_id !== null &&
-                org.med_alliance_referral_status === 'not_eligible' &&
-                !org.med_alliance_block_reason?.startsWith('active_client_block') &&
-                org.first_paid_invoice_at === null;
+                org.med_alliance_referral_status === 'not_eligible'
 
             if (shouldActivate) {
                 const now = new Date();
