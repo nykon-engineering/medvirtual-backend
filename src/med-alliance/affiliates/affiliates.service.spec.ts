@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AffiliatesService } from './affiliates.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../../mail/mail.service';
+import { AffiliateCreationService } from '../../hubspot/create/affiliate';
 
 // ---------------------------------------------------------------------------
 // Prisma mock — only the tables touched by AffiliatesService
@@ -18,6 +20,14 @@ const mockPrisma = {
     findUnique: jest.fn(),
   },
   $transaction: jest.fn(),
+};
+
+const mockMailService = {
+  sendMail: jest.fn(),
+};
+
+const mockAffiliateCreationService = {
+  execute: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -57,6 +67,8 @@ const mockProfile = {
   user: mockUser,
 };
 
+
+
 describe('AffiliatesService', () => {
   let service: AffiliatesService;
 
@@ -65,6 +77,8 @@ describe('AffiliatesService', () => {
       providers: [
         AffiliatesService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: MailService, useValue: { sendMail: jest.fn() } },
+        { provide: AffiliateCreationService , useValue: mockAffiliateCreationService },
       ],
     }).compile();
 
@@ -140,7 +154,11 @@ describe('AffiliatesService', () => {
 
     it('should create and return a new profile', async () => {
       mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(null);
+      // 1st call: conflict check → no existing profile
+      // 2nd call: inside findOne after create → return the created profile
+      mockPrisma.affiliateProfile.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockProfile);
       mockPrisma.affiliateProfile.create.mockResolvedValue(mockProfile);
 
       const result = await service.create(createDto, mockAdminUser);

@@ -12,6 +12,23 @@ export class NotificationsService {
     private readonly mail: MailService,
   ) { }
 
+
+  // Helper function to decode HTML entities
+  private decodeHtmlEntities = (text: string): string => {
+  if (!text) return '';
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/')
+    .replace(/&#x2f;/g, '/')
+    .replace(/&#47;/g, '/');
+};
+
   /**
    * 
    * Builds the correct ticket detail URL based on user role
@@ -1629,7 +1646,7 @@ export class NotificationsService {
              <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
              <p><strong>Title:</strong> ${ticket.title}</p>
              <p><strong>Organization:</strong> ${ticket.organization?.name || 'N/A'}</p>
-             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${this.formatDescription(ticket.description)}</p>`}
+             ${isReferralTicket ? '' : `<p><strong>${descriptionLabel}:</strong> ${this.formatDescription(this.decodeHtmlEntities(ticket.description))}</p>`}
              <p><strong>Type:</strong> ${ticketTypeDisplay}</p>
              ${staffDetails}${candidateDetails}
            </div>

@@ -83,7 +83,8 @@ describe('ReferralSyncService', () => {
     mockHubspotMatching.run.mockResolvedValue(makeMatchResult('synced', 'hs-1'));
     mockPrisma.organization.findUnique.mockResolvedValue({
       hubspot_id: 'hs-1',
-      med_alliance_referral_status: 'not_eligible_active_client',
+      med_alliance_referral_status: 'not_eligible',
+      med_alliance_block_reason: 'active_client_block: organization_active_by_email',
     });
 
     const result = await service.run('org-1');
@@ -197,11 +198,10 @@ describe('ReferralSyncService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // needs_admin_review outcome
+  // multiple_matches halts at Phase A
   // -------------------------------------------------------------------------
-  it('should treat needs_admin_review org as non-blocking for Phase B (not in halt list)', async () => {
-    // needs_admin_review is set by hubspot-matching when multiple matches are found,
-    // which sets outcome = 'multiple_matches' → Phase A halts.
+  it('should halt at Phase A when multiple HubSpot matches are found', async () => {
+    // hubspot-matching sets outcome = 'multiple_matches' and med_alliance_referral_status = 'not_eligible'.
     // This test ensures the orchestrator's halt check is based on outcome, not on the DB status.
     mockHubspotMatching.run.mockResolvedValue(makeMatchResult('multiple_matches'));
 

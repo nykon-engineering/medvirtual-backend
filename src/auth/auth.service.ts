@@ -153,6 +153,26 @@ export class AuthService {
     if (!session) {
       throw new BadRequestException('Failed to create session');
     }
+
+    let affiliateId;
+    // lets check if the affiliate is active. If not, we cannot send the affiliate profile id in the response, because the frontend need to know if the affiliate is active or not
+    if (user.affiliateProfile?.id){
+      const affiliate = await this.prisma.affiliateProfile.findUnique({
+        where: {
+          id: user.affiliateProfile.id,
+        },
+        select: {
+          status: true,
+        },
+      });
+      if (affiliate?.status !== 'active') {
+        affiliateId = null; // Set to null if affiliate is not active
+      }else{
+        affiliateId = user.affiliateProfile.id; // Set to the actual ID if affiliate is active
+      }
+    }else{
+      affiliateId = null; // Ensure affiliateProfile is null if no profile exists
+    }
     return {
       statusCode: 200,
       message: 'User authenticated successfully',
@@ -165,7 +185,7 @@ export class AuthService {
         role: user.role,
         clientId: user.organization_id,
         business_unit: business_unit,
-        affiliate_profile_id: user.affiliateProfile?.id ?? null,
+        affiliate_profile_id: affiliateId,
       },
     };
   }
@@ -688,6 +708,22 @@ export class AuthService {
       data: updateData,
       where: { id: decodedToken.id },
     });
+
+    const existingAffiliate = await this.prisma.affiliateProfile.findUnique({ 
+      where: {
+        user_id: decodedToken.id
+      }
+    } )
+
+    if (existingAffiliate){
+      //if the user already have an affiliate profile, I need to set the status to active, because the user just accepted the invite, so the affiliate profile need to be active for the user can receive the commission
+      await this.prisma.affiliateProfile.update({
+        where: { user_id: decodedToken.id },
+        data: {
+          status: 'active',
+        },
+      })
+    }
 
     if (!updatePass) {
       throw new BadRequestException('Error in set user password');

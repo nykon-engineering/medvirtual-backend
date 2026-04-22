@@ -10,7 +10,7 @@ export const ADMIN_ROLES = [
 ] as const;
 
 export const AFFILIATE_ROLES = [
-  'finance_admin',
+  'affiliate'
 ] as const;
 
 

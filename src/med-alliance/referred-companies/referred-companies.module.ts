@@ -5,10 +5,12 @@ import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { AffiliatesModule } from '../affiliates/affiliates.module';
 import { SyncModule } from '../sync/sync.module';
+import { HubspotModule } from '../../hubspot/hubspot.module';
 import { ReviewCasesModule } from '../review-cases/review-cases.module';
+import { OrganizationModule } from '../../organization/organization.module';
 
 @Module({
-  imports: [PrismaModule, AffiliatesModule, SyncModule, ReviewCasesModule],
+  imports: [PrismaModule, AffiliatesModule, SyncModule, HubspotModule, ReviewCasesModule, OrganizationModule],
   controllers: [ReferredCompaniesController],
   providers: [ReferredCompaniesService, EligibilityCheckService],
 })

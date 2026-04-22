@@ -28,4 +28,12 @@ export class ListAffiliatesDto {
   @IsOptional()
   @IsEnum(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
+
+  @IsOptional()
+  @IsEnum(['complete', 'incomplete'])
+  banking?: 'complete' | 'incomplete';
+
+  @IsOptional()
+  @IsEnum(['with_org', 'without_org'])
+  organization?: 'with_org' | 'without_org';
 }

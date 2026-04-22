@@ -3,6 +3,8 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateReferredCompanyDto {
@@ -10,13 +12,21 @@ export class CreateReferredCompanyDto {
   @IsNotEmpty()
   name: string;
 
-  @IsOptional()
   @IsEmail()
-  email?: string;
+  @IsNotEmpty()
+  email: string;
 
-  @IsOptional()
+  @IsUrl()
+  @IsNotEmpty()
+  website_url: string;
+
   @IsString()
-  website_url?: string;
+  @IsNotEmpty()
+  contact_first_name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  contact_last_name: string;
 
   @IsOptional()
   @IsString()
@@ -32,5 +42,13 @@ export class CreateReferredCompanyDto {
 
   @IsOptional()
   @IsString()
+  business_unit?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsUUID()
+  refer_to_user_id?: string;
 }

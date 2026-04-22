@@ -335,14 +335,14 @@ describe('CommissionsService', () => {
           makeCommission({ status: 'detected' }),
         );
         mockPrisma.organization.findUnique.mockResolvedValue({
-          med_alliance_referral_status: 'not_eligible_active_client',
+          med_alliance_referral_status: 'not_eligible',
         });
 
         await expect(
           service.decide('commission-1', { decision: 'eligible' }, mockAdminUser),
         ).rejects.toThrow(
           new BadRequestException(
-            'Cannot approve commission: referred organization is blocked as an active MedVirtual client.',
+            'Cannot approve commission: referred organization is not eligible for the Med Alliance program.',
           ),
         );
         // Commission should NOT be updated

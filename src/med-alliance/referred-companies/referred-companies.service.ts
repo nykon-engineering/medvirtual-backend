@@ -1,37 +1,40 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { USER } from '@prisma/client';
+import { MedAllianceReferralStatus, OrganizationStatus, USER } from '@prisma/client';
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Returns the effective eligibility status for display.
+ * If the stored status is eligible but the one-year window has elapsed,
+ * we compute not_eligible at read-time so the UI stays accurate without
+ * requiring a background job.
+ */
+function computeEffectiveStatus(
+  stored: MedAllianceReferralStatus | null,
+  eligibilityStartAt: Date | null,
+): MedAllianceReferralStatus | null {
+  if (stored !== 'eligible') return stored;
+  if (!eligibilityStartAt) return 'not_eligible';
+  if (Date.now() - eligibilityStartAt.getTime() > ONE_YEAR_MS) return 'not_eligible';
+  return 'eligible';
+}
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
+import { CreateOrganizationDto } from '../../organization/dto/createOrganization.dto';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
+import { OrganizationService } from '../../organization/organization.service';
+import { HubspotService } from '../../hubspot/hubspot.service';
+import axios from 'axios';
 
-// Select shape returned for Organization in Med Alliance context.
-// Excludes internal fields not relevant to the affiliate portal.
-const ORG_SELECT = {
-  id: true,
-  name: true,
-  email: true,
-  phone: true,
-  website_url: true,
-  location: true,
-  industry: true,
-  description: true,
-  organization_role: true,
-  status: true,
-  hubspot_id: true,
-  referred_by_affiliate_id: true,
-  med_alliance_referral_status: true,
-  med_alliance_block_reason: true,
-  createdAt: true,
-  updatedAt: true,
-};
 
 @Injectable()
 export class ReferredCompaniesService {
@@ -41,55 +44,146 @@ export class ReferredCompaniesService {
     private readonly eligibilityCheck: EligibilityCheckService,
     private readonly referralSync: ReferralSyncService,
     private readonly reviewCases: ReviewCasesService,
+    private readonly organizationService: OrganizationService,
+    private readonly hubspot: HubspotService,
   ) {}
 
-  // ---------------------------------------------------------------------------
-  // Affiliate: submit a new company referral.
-  // ---------------------------------------------------------------------------
-  async create(dto: CreateReferredCompanyDto, currentUser: USER) {
-    // Require an active affiliate profile before accepting the referral.
+
+  async create(dto: CreateReferredCompanyDto | CreateOrganizationDto, currentUser: USER) {
+    // Step 0: Validation — read-only, no rollback needed.
     await this.affiliatesService.requireActiveProfile(currentUser.id);
 
-    const org = await this.prisma.organization.create({
-      data: {
-        name: dto.name,
-        email: dto.email ?? null,
-        website_url: dto.website_url ?? null,
-        phone: dto.phone ?? null,
-        location: dto.location ?? null,
-        industry: dto.industry ?? null,
-        description: dto.description ?? null,
-        // Mark as referred by this affiliate.
-        referred_by_affiliate_id: currentUser.id,
-        // New referrals start as prospects.
-        organization_role: 'prospect',
-      },
-      select: ORG_SELECT,
-    });
+    const cleanupStack: Array<() => Promise<void>> = [];
 
-    // MA-004: block if this company is already an active client.
-    await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
+    try {
+      // Step 1: Create organization (DB + HubSpot company).
+      const org = await this.organizationService.create(dto, currentUser, currentUser.id);
+      cleanupStack.push(async () => {
+        // Delete HubSpot company if it was created during org creation.
+        const freshOrg = await this.prisma.organization.findUnique({
+          where: { id: org.id },
+          select: { hubspot_id: true },
+        });
+        if (freshOrg?.hubspot_id) {
+          await this.hubspot.deleteCompanyInHubspot(freshOrg.hubspot_id).catch((e) =>
+            console.error('[rollback] Failed to delete HubSpot company:', e),
+          );
+        }
+        // Delete child records that do NOT cascade on org deletion.
+        await this.prisma.$transaction([
+          this.prisma.affiliateCommission.deleteMany({ where: { organization_id: org.id } }),
+          this.prisma.hubspotInvoiceSnapshot.deleteMany({ where: { organization_id: org.id } }),
+          this.prisma.medAllianceAdminReviewCase.deleteMany({ where: { organization_id: org.id } }),
+        ]).catch((e) => console.error('[rollback] Failed to delete child records:', e));
 
-    // MA-006: soft duplicate check — warn if another referred org with the same name or email exists.
-    const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto);
+        // Delete audit logs (uses entity_id, not a FK).
+        await this.prisma.medAllianceAuditLog.deleteMany({
+          where: { entity_id: org.id },
+        }).catch((e) => console.error('[rollback] Failed to delete audit logs:', e));
 
-    // MA-005: run HubSpot matching + invoice ingestion + commission detection synchronously.
-    await this.referralSync.run(org.id);
+        // Finally delete the organization itself.
+        await this.prisma.organization.delete({ where: { id: org.id } }).catch((e) =>
+          console.error('[rollback] Failed to delete organization:', e),
+        );
+      });
 
-    // Return the org with all updated fields after the sync pipeline.
-    const result = await this.prisma.organization.findUnique({
-      where: { id: org.id },
-      select: {
-        ...ORG_SELECT,
-        med_alliance_referral_status: true,
-        med_alliance_block_reason: true,
-        hubspot_sync_status: true,
-        hubspot_sync_error: true,
-        hubspot_synced_at: true,
-      },
-    });
+      // Step 2: MA-004 — block if this company is already an active client.
+      await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
 
-    return softDuplicateWarning ? { ...result, warning: softDuplicateWarning } : result;
+      // Step 3: MA-006 — soft duplicate check.
+      const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto as CreateReferredCompanyDto);
+
+      // Step 4: MA-005 — HubSpot matching + invoice ingestion + commission detection.
+      await this.referralSync.run(org.id);
+
+      // Step 5: Reload org with all updated fields after the sync pipeline.
+      const newOrganization = await this.prisma.organization.findUnique({
+        where: { id: org.id },
+        include: {
+          owner: true,
+          admin: true,
+          users: true,
+          referredByAffiliate: {
+            select: {
+              email: true,
+              affiliateProfile:{
+                select: {
+                  id: true,
+                  full_name: true,
+                  hubspot_id: true,
+                  commission_percent_default: true,
+                  payout_preference_method: true,
+                }
+              },
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  phone: true,
+                }
+              },
+            },
+          },
+          referToUser: {
+            select: {
+              id: true,
+              hubspot_id: true,
+              first_name: true,
+              last_name: true,
+            },
+          },
+        }
+      });
+
+      if (!newOrganization) throw new NotFoundException('Organization not found after creation');
+
+      // Step 6: Create HubSpot contact with referral data + associations.
+      if (currentUser) {
+        try {
+          const hubspotContactId = await this.hubspot.createContactFromReferredCompanyInHubspot(newOrganization);
+          if (hubspotContactId && typeof hubspotContactId === 'string') {
+            cleanupStack.push(async () => {
+              await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }).catch((e) =>
+                console.error('[rollback] Failed to delete HubSpot contact:', e),
+              );
+            });
+          }
+        } catch (hubspotError) {
+          const errData = hubspotError?.response?.data || hubspotError;
+          if (errData?.category === 'CONFLICT') {
+            console.error('[ReferredCompaniesService.create] HubSpot contact conflict, initiating rollback:', errData);
+            await this.executeRollback(cleanupStack);
+            throw new BadRequestException(errData.message || 'Contact already exists in HubSpot');
+          }
+          throw hubspotError;
+        }
+      }
+
+      return softDuplicateWarning ? { ...newOrganization, warning: softDuplicateWarning } : newOrganization;
+
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw new BadRequestException(`The contact already exists with this email.`);
+      }
+      console.error('[ReferredCompaniesService.create] Error occurred, initiating rollback:', error);
+      await this.executeRollback(cleanupStack);
+      throw new BadRequestException(`Failed to create referred company: ${error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Executes the cleanup stack in reverse order (LIFO).
+   * Each cleanup function has its own error handling so one failure does not block the rest.
+   */
+  private async executeRollback(cleanupStack: Array<() => Promise<void>>): Promise<void> {
+    for (let i = cleanupStack.length - 1; i >= 0; i--) {
+      try {
+        await cleanupStack[i]();
+      } catch (cleanupError) {
+        console.error(`[rollback] Cleanup step ${i} failed:`, cleanupError);
+      }
+    }
   }
 
   /**
@@ -133,11 +227,11 @@ export class ReferredCompaniesService {
   async findAllForAffiliate(dto: ListReferredCompaniesDto, currentUser: USER) {
     const { page = 1, limit = 20, search, status, sortBy = 'createdAt', sortOrder = 'desc' } = dto;
     const skip = (page - 1) * limit;
-
+    
     const where: any = {
       referred_by_affiliate_id: currentUser.id,
     };
-    if (status) where.status = status;
+    where.status = status ?? { not: OrganizationStatus.deleted };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -145,16 +239,70 @@ export class ReferredCompaniesService {
       ];
     }
 
-    const [data, total] = await this.prisma.$transaction([
+    const [rawData, total] = await this.prisma.$transaction([
       this.prisma.organization.findMany({
         where,
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        select: ORG_SELECT,
+        // Scoped DTO for affiliate — only referral-safe fields are returned.
+        // See docs/specs/referred-company-data-access-policy.md for the full allowlist.
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          status: true,
+          industry: true,
+          business_unit: true,
+          location: true,
+          address: true,
+          city: true,
+          state: true,
+          description: true,
+          website_url: true,
+          createdAt: true,
+          contact_first_name: true,
+          contact_last_name: true,
+          contact_email: true,
+          med_alliance_referral_status: true,
+          eligibility_start_at: true,
+          referToUser: {
+            select: { id: true, first_name: true, last_name: true },
+          },
+          affiliateCommissions: {
+            where: { affiliate_id: currentUser.id },
+            select: { commission_amount: true, status: true },
+          },
+        },
       }),
       this.prisma.organization.count({ where }),
     ]);
+
+    // Compute commission aggregate per org and strip the raw affiliateCommissions array.
+    const data = rawData.map((org) => {
+      const comms = org.affiliateCommissions ?? [];
+      const my_commissions = comms
+        .filter((c) => ['eligible', 'requested', 'paid'].includes(c.status))
+        .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
+
+      let commission_status: 'none' | 'pending' | 'eligible' | 'paid' = 'none';
+      if (comms.some((c) => c.status === 'paid')) {
+        commission_status = 'paid';
+      } else if (comms.some((c) => c.status === 'eligible' || c.status === 'requested')) {
+        commission_status = 'eligible';
+      } else if (comms.some((c) => c.status === 'detected' || c.status === 'pending_admin_confirmation')) {
+        commission_status = 'pending';
+      }
+
+      const { affiliateCommissions: _, eligibility_start_at, ...rest } = org;
+      return {
+        ...rest,
+        med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+        my_commissions,
+        commission_status,
+      };
+    });
 
     return { data, pagination: { page, limit, total } };
   }
@@ -163,31 +311,62 @@ export class ReferredCompaniesService {
   // Affiliate: get one referred company — scoped to the requesting affiliate.
   // ---------------------------------------------------------------------------
   async findOneForAffiliate(id: string, currentUser: USER) {
-    const org = await this.prisma.organization.findUnique({
+    // First check existence and ownership with minimal query.
+    const check = await this.prisma.organization.findUnique({
       where: { id },
-      select: { ...ORG_SELECT, referred_by_affiliate_id: true },
+      select: { id: true, referred_by_affiliate_id: true },
     });
-    if (!org) throw new NotFoundException('Referred company not found');
+    if (!check) throw new NotFoundException('Referred company not found');
 
     // Prevent data leak: affiliate can only see their own referrals.
-    if (org.referred_by_affiliate_id !== currentUser.id) {
+    if (check.referred_by_affiliate_id !== currentUser.id) {
       throw new ForbiddenException('You do not have access to this referred company');
     }
 
-    return org;
+    // Return scoped DTO — only referral-safe fields.
+    const org = await this.prisma.organization.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        industry: true,
+        location: true,
+        address: true,
+        city: true,
+        state: true,
+        description: true,
+        website_url: true,
+        createdAt: true,
+        contact_first_name: true,
+        contact_last_name: true,
+        med_alliance_referral_status: true,
+        eligibility_start_at: true,
+      },
+    });
+
+    if (!org) return org;
+    const { eligibility_start_at, ...rest } = org;
+    return {
+      ...rest,
+      med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+    };
   }
 
   // ---------------------------------------------------------------------------
   // Admin: list all referred companies (no affiliate scoping).
   // ---------------------------------------------------------------------------
   async findAllForAdmin(dto: ListReferredCompaniesDto) {
-    const { 
+    const {
       page = 1,
-      limit = 20, 
+      limit = 100,
       search,
       status,
-      sortBy = 'createdAt', 
-      sortOrder = 'desc' 
+      affiliate_id,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
     } = dto;
     const skip = (page - 1) * limit;
 
@@ -195,48 +374,227 @@ export class ReferredCompaniesService {
     const where: any = {
       referred_by_affiliate_id: { not: null },
     };
-    if (status) where.status = status;
+    where.status = status ?? { not: OrganizationStatus.deleted };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
       ];
     }
+    if (affiliate_id) where.referred_by_affiliate_id = affiliate_id;
 
-    const [data, total] = await this.prisma.$transaction([
+    const [rawData, total] = await this.prisma.$transaction([
       this.prisma.organization.findMany({
         where,
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
         select: {
-          ...ORG_SELECT,
-          // Admin also sees who referred the company.
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          business_unit: true,
+          location: true,
+          industry: true,
+          website_url: true,
+          contact_first_name: true,
+          contact_last_name: true,
+          med_alliance_referral_status: true,
+          eligibility_start_at: true,
+          hubspot_sync_status: true,
+          createdAt: true,
           referredByAffiliate: {
             select: { id: true, first_name: true, last_name: true, email: true },
+          },
+          referToUser: {
+            select: { id: true, first_name: true, last_name: true },
+          },
+          affiliateCommissions: {
+            select: { commission_amount: true, status: true },
+          },
+          _count: {
+            select: {
+              adminReviewCases: { where: { status: 'open' } },
+            },
           },
         },
       }),
       this.prisma.organization.count({ where }),
     ]);
 
+    // Aggregate commission totals and strip the raw array before returning.
+    const data = rawData.map((org) => {
+      const comms = org.affiliateCommissions ?? [];
+      const total_paid = comms
+        .filter((c) => c.status === 'paid')
+        .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
+      const total_pending = comms
+        .filter((c) => ['eligible', 'requested'].includes(c.status))
+        .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
+      const has_open_review = (org._count?.adminReviewCases ?? 0) > 0;
+
+      const { affiliateCommissions: _, _count: __, eligibility_start_at, ...rest } = org;
+      return {
+        ...rest,
+        med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+        total_paid,
+        total_pending,
+        has_open_review,
+      };
+    });
+
     return { data, pagination: { page, limit, total } };
   }
 
   // ---------------------------------------------------------------------------
-  // Admin: get one referred company — no scoping.
+  // Admin: get one referred company — enriched with all Sheet data.
   // ---------------------------------------------------------------------------
   async findOneForAdmin(id: string) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
       select: {
-        ...ORG_SELECT,
+        // Identity
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        business_unit: true,
+        industry: true,
+        location: true,
+        address: true,
+        city: true,
+        state: true,
+        website_url: true,
+        description: true,
+        contact_first_name: true,
+        contact_last_name: true,
+        // MA status
+        med_alliance_referral_status: true,
+        eligibility_start_at: true,
+        first_paid_invoice_at: true,
+        med_alliance_block_reason: true,
+        hubspot_id: true,
+        hubspot_sync_status: true,
+        hubspot_sync_error: true,
+        hubspot_synced_at: true,
+        createdAt: true,
+        // Who referred
         referredByAffiliate: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            affiliateProfile: {
+              select: {
+                full_name: true,
+                commission_percent_default: true,
+                payout_preference_method: true,
+                status: true,
+              },
+            },
+          },
+        },
+        // Assigned internal staff member
+        referToUser: {
           select: { id: true, first_name: true, last_name: true, email: true },
+        },
+        // Platform users (staff members) linked to this org
+        users: {
+          select: { id: true, first_name: true, last_name: true, email: true, role: true },
+          orderBy: { first_name: 'asc' },
+        },
+        // Commission records for this org (all affiliates)
+        affiliateCommissions: {
+          select: {
+            id: true,
+            commission_amount: true,
+            status: true,
+            createdAt: true,
+            hubspotInvoiceSnapshot: {
+              select: { hubspot_id: true, invoice_amount: true, invoice_status: true, paid_at: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        // Raw HubSpot invoice snapshots
+        hubspotInvoiceSnapshots: {
+          select: {
+            id: true,
+            hubspot_id: true,
+            invoice_amount: true,
+            invoice_status: true,
+            currency: true,
+            paid_at: true,
+          },
+          orderBy: { paid_at: 'desc' },
+        },
+        // Admin review cases
+        adminReviewCases: {
+          select: {
+            id: true,
+            reason_code: true,
+            status: true,
+            metadata: true,
+            resolution: true,
+            createdAt: true,
+            resolvedBy: { select: { first_name: true, last_name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
+
     if (!org) throw new NotFoundException('Referred company not found');
-    return org;
+    const { eligibility_start_at, ...rest } = org;
+    return {
+      ...rest,
+      eligibility_start_at,
+      med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+    };
+  }
+
+  // Get available referral options for the "referred_to" field when creating a referral (i.e. list of active users to whom the referral can be assigned).
+  async getReferredToOptions(): Promise<any>{
+    try {
+      const url = "https://api.hubapi.com/crm/v3/properties/contacts";
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+  
+      const vaTypeProperty = response.data.results.find(
+        (prop) => prop.name === "referred_to"
+      );
+  
+      if (!vaTypeProperty) {
+        return [];
+      }
+
+      //console.log("VA Type Property:", vaTypeProperty);
+
+      const availableOwners = await this.prisma.uSER.findMany({
+        where: {
+          hubspot_id: {
+            in: vaTypeProperty.options.map((option) => option.value),
+          },
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          hubspot_id: true,
+        },
+      });
+
+      return availableOwners || [];
+    } catch (error) {
+      console.error("Failed to find Referred To options:", error.response?.data || error.message);
+      throw new Error("Failed to find Referred To options");
+    }
   }
 }

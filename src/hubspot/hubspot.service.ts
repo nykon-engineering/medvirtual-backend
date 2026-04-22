@@ -39,11 +39,18 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { OrganizationCreationService } from './create/Organization';
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
+import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { CompanyDeleteService } from './delete/company';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
+
+import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
+import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
+import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
+
 
 
 
@@ -82,8 +89,10 @@ export class HubspotService {
       private readonly organizationCreationService: OrganizationCreationService,
 
       private readonly contactCreationService: ContactCreationService,
+      private readonly contactCreationFromCompanyService: ContactFromCompanyCreationService,
       private readonly contactUpdateService: ContactUpdateService,
       private readonly contactDeleteService: ContactDeleteService,
+      private readonly companyDeleteService: CompanyDeleteService,
 
       private readonly ownerCreation: HandlerOwnerCreation,
       private readonly ownerDeletion: HandlerOwnerDeletion,
@@ -91,6 +100,10 @@ export class HubspotService {
 
       private readonly affiliateCreation: HandlerAffiliateCreation,
       private readonly affiliatePropertyChange: HandlerAffiliatePropertyChange,
+
+      private readonly invoiceCreation: HandlerInvoiceCreation,
+      private readonly invoicePropertyChange: HandlerInvoicePropertyChange,
+      private readonly invoiceAssociationChange: HandlerInvoiceAssociationChange,
 
 
       @Inject(forwardRef (() => CandidatesService))
@@ -124,8 +137,15 @@ export class HubspotService {
     }
 
     async changeDataFromHubspot(data: any): Promise<any> {
-        let orderedData: any[] = [];
         console.log('Received data:', data);
+
+        const expectedAppId = Number(process.env.HUBSPOT_APP_ID);
+        if (expectedAppId && data[0]?.appId != expectedAppId) {
+            console.log(`Ignoring webhook from appId ${data[0]?.appId} (expected ${expectedAppId})`);
+            return;
+        }
+
+        let orderedData: any[] = [];
 
         if (!data || data.length >= 2) {
             orderedData = data.sort((a,b)=>{
@@ -147,17 +167,22 @@ export class HubspotService {
                
                 case 'object.creation':
                 case 'object.restore':
-                    if (event.objectTypeId ==="2-5922196") {
+                    if (event.objectTypeId ==="2-5922196") { // Virtual Assistant
                         await this.objectCreation.execute(event);
-                    }else if (event.objectTypeId === "2-54072002") {
+                    }else if (event.objectTypeId === "2-54072002") { // Growth Partner
                         await this.affiliateCreation.execute(event);
+                    }else if (event.objectTypeId === "0-53") { // Invoice
+                        await this.invoiceCreation.execute(event);
                     }
+
                     break;
                 case 'object.propertyChange':
                     if (event.objectTypeId ==="2-5922196") {
                         await this.objectPropertyChange.execute(event);
                     }else if (event.objectTypeId === "2-54072002") {
                         await this.affiliatePropertyChange.execute(event);
+                    }else if (event.objectTypeId === "0-53") { // Invoice
+                        await this.invoicePropertyChange.execute(event);
                     }
                     break;
 
@@ -169,6 +194,12 @@ export class HubspotService {
                 case 'object.merge':
                     if (event.objectTypeId ==="2-5922196") {
                         await this.objectMerge.execute(event);
+                    }
+                    break;
+
+                case 'object.associationChange':
+                    if (event.associationTypeId ==="179" || event.associationTypeId === "180") { //INVOICE_TO_COMPANY or COMPANY_TO_INVOICE
+                        await this.invoiceAssociationChange.execute(event);
                     }
                     break;
                 
@@ -334,12 +365,20 @@ export class HubspotService {
         return await this.contactCreationService.execute(data);
     }
 
+    async createContactFromReferredCompanyInHubspot(data: any): Promise<any> {
+        return await this.contactCreationFromCompanyService.execute(data);
+    }
+
     async updateContactInHubspot(data: any): Promise<any> {
         return await this.contactUpdateService.execute(data);
     }
 
     async deleteContactInHubspot(data: any): Promise<any> {
         return await this.contactDeleteService.execute(data);
+    }
+
+    async deleteCompanyInHubspot(hubspotCompanyId: string): Promise<boolean> {
+        return await this.companyDeleteService.execute(hubspotCompanyId);
     }
 
     ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot

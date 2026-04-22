@@ -59,10 +59,18 @@ model USER {
   affiliateProfile             AffiliateProfile?
   // Organizations this user referred into the Med Alliance program
   referredOrganizations        Organization[]             @relation("OrganizationReferredBy")
+  // Organizations where this user was selected as the staff contact by an affiliate
+  referToOrganizations         Organization[]             @relation("OrganizationReferTo")
   // Payout requests submitted by this user as an affiliate
   payoutRequestsAsAffiliate    AffiliatePayoutRequest[]   @relation("AffiliatePayoutRequests")
   // Payout requests approved or rejected by this admin user
   payoutApprovals              AffiliatePayoutRequest[]   @relation("PayoutApprovedBy")
+  // Payout requests moved to under_review by this admin user
+  payoutReviews                AffiliatePayoutRequest[]   @relation("PayoutReviewedBy")
+  // Notes authored on payout requests
+  payoutRequestNotes           PayoutRequestNote[]        @relation("PayoutRequestNoteAuthor")
+  // Payout requests cancelled by this admin user
+  payoutCancellations          AffiliatePayoutRequest[]   @relation("PayoutCancelledBy")
   // Commission records where this admin user made the eligibility decision
   commissionAdminDecisions     AffiliateCommission[]      @relation("CommissionAdminDecision")
   // Commissions linked to this user as the affiliate owner
@@ -145,13 +153,27 @@ model Organization {
   source                  String?
   type                    String?
 
+  // Primary contact at the referred company (collected at referral time for HubSpot import).
+  contact_first_name           String?
+  contact_last_name            String?
+  contact_email                String?
+
   // User ID of the affiliate who referred this organization into the Med Alliance program
   referred_by_affiliate_id     String?
+
+  // Internal staff member (concierge) the affiliate selected to handle this referral
+  refer_to_user_id             String?
+  referToUser                  USER?                   @relation("OrganizationReferTo", fields: [refer_to_user_id], references: [id])
 
   // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL)
   med_alliance_referral_status MedAllianceReferralStatus?
   // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
   med_alliance_block_reason    String?
+  // Anchor timestamp that starts the one-year eligibility window; set when the first paid invoice is received;
+  // cleared when the window expires so the status reflects not_eligible correctly.
+  eligibility_start_at         DateTime?
+  // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
+  first_paid_invoice_at        DateTime?
 
   // HubSpot sync state — only relevant for referred organizations
   // 'pending' | 'synced' | 'no_match' | 'multiple_matches' | 'error'
@@ -189,6 +211,8 @@ model Organization {
   @@index([referred_by_affiliate_id], map: "idx_organizations_referred_by")
   // Scoped listing: affiliate's referred orgs filtered by status
   @@index([referred_by_affiliate_id, status], map: "idx_organizations_affiliate_status")
+  // Lookup organizations assigned to a specific staff member
+  @@index([refer_to_user_id], map: "idx_organizations_refer_to_user")
 }
 
 model Candidate {
@@ -600,6 +624,10 @@ model TicketNotes {
 model TalentPoolLead {
   id                  String    @id @default(uuid())
   name                String    @db.VarChar(255)
+  first_name           String?   @db.VarChar(255)
+  last_name            String?   @db.VarChar(255)
+  website_url          String?   @db.VarChar(500)
+  language_preference  String?   @db.VarChar(50)
   email               String    @db.VarChar(255)
   organization        String    @db.VarChar(255)
   main_need           String?
@@ -654,25 +682,20 @@ model PositionRateConfig {
 // detected, reviewed by admin, and paid out on request.
 // =============================================================================
 
-// AffiliateProfile
-// Stores Med Alliance-specific settings for a user acting as a Growth Partner.
-// One-to-one with USER. Created by admin when onboarding a new affiliate.
 model AffiliateProfile {
   id                          String          @id @default(uuid())
-  // The USER this profile belongs to (Growth Partner)
   user_id                     String          @unique
-  // HubSpot contact ID for this affiliate, used during sync jobs
   hubspot_id                  String?         @unique
-  // Default commission percentage applied when detecting new commissions (e.g. 10.00 = 10%)
+  full_name                   String?
+  hubspot_pipeline            String?
+  hubspot_pipeline_stage      String?
+  business_unit               String?
   commission_percent_default  Decimal         @db.Decimal(5, 2)
   status                      AffiliateStatus @default(active)
-  // Preferred payout method selected by the affiliate
   payout_preference_method    PayoutMethod?
-  // Payment reference detail (e.g. account number, PayPal email, Zelle phone)
   payout_preference_reference String?
-  // Free-form notes about the payout preference (e.g. routing instructions)
   payout_preference_notes     String?
-  // Admin user who created this profile
+  payout_details              Json?
   created_by                  String?
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
@@ -691,36 +714,44 @@ model AffiliateProfile {
 // commission creation; raw_payload enables replay if parsing logic changes.
 model HubspotInvoiceSnapshot {
   id             String    @id @default(uuid())
-  // HubSpot native invoice ID — unique across all syncs
   hubspot_id     String    @unique
-  // The organization this invoice belongs to in our system
   organization_id String
-  // Raw status string as returned by HubSpot (e.g. "paid", "outstanding")
   invoice_status String
-  // Payment status if available; not required for V1 eligibility logic
   payment_status String?
-  // Total invoice amount with 2-decimal precision
   invoice_amount Decimal   @db.Decimal(14, 2)
-  // ISO 4217 currency code (defaults to USD)
   currency       String    @default("USD") @db.VarChar(3)
-  // Timestamp when HubSpot confirmed payment; drives commission detection
   paid_at        DateTime?
-  // SHA-256 hash of the HubSpot payload — used to detect changes and skip re-processing
   sync_hash      String?
-  // Full raw JSON payload from HubSpot for debugging and future replay
   raw_payload    Json?
+  hubspot_pdf_link String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   organization Organization            @relation(fields: [organization_id], references: [id])
   commissions  AffiliateCommission[]
+  lineItems    HubspotLineItemSnapshot[]
 
   @@index([organization_id], map: "idx_hubspot_invoice_snapshots_org_id")
   @@index([invoice_status], map: "idx_hubspot_invoice_snapshots_invoice_status")
-  // Queried by sync job to find recently paid invoices
   @@index([paid_at], map: "idx_hubspot_invoice_snapshots_paid_at")
-  // Queried by sync job for change detection
   @@index([sync_hash], map: "idx_hubspot_invoice_snapshots_sync_hash")
+}
+
+model HubspotLineItemSnapshot {
+  id          String   @id @default(uuid())
+  hubspot_id  String   @unique
+  invoice_id  String
+  name        String?
+  description String?
+  quantity    String?
+  amount      Decimal? @db.Decimal(14, 2)
+  discount    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoice HubspotInvoiceSnapshot @relation(fields: [invoice_id], references: [id])
+
+  @@index([invoice_id], map: "idx_hubspot_line_item_snapshots_invoice_id")
 }
 
 // AffiliateCommission
@@ -729,29 +760,17 @@ model HubspotInvoiceSnapshot {
 // The idempotency_key prevents duplicate records on sync retries.
 model AffiliateCommission {
   id                          String           @id @default(uuid())
-  // The affiliate (USER) who owns this commission — kept for direct user lookups
   affiliate_id                String
-  // FK to the affiliate's Med Alliance profile — drives the AffiliateProfile.commissions[] back-relation
   affiliate_profile_id        String
-  // The organization whose invoice generated this commission
   organization_id             String
-  // The HubSpot invoice snapshot that triggered this commission
   hubspot_invoice_snapshot_id String
-  // Commission percentage at the time of detection (snapshot of AffiliateProfile.commission_percent_default)
   commission_percent_snapshot Decimal          @db.Decimal(5, 2)
-  // Invoice amount at time of detection — immutable after creation
   base_amount_snapshot        Decimal          @db.Decimal(14, 2)
-  // Computed as: ROUND(base_amount_snapshot * commission_percent_snapshot / 100, 2) with half-up rounding
   commission_amount           Decimal          @db.Decimal(14, 2)
   status                      CommissionStatus @default(detected)
-  // Unique key to prevent duplicate commission on sync retry:
-  // composed as SHA-256(affiliate_id + hubspot_invoice_id + paid_at + base_amount + commission_percent)
   idempotency_key             String           @unique
-  // Admin user who made the eligibility decision (approved or rejected)
   admin_decision_by           String?
-  // Free-form reason text provided by admin when confirming or rejecting
   admin_decision_reason       String?
-  // Timestamp of the admin eligibility decision
   admin_decision_at           DateTime?
   createdAt                   DateTime         @default(now())
   updatedAt                   DateTime         @updatedAt
@@ -775,45 +794,65 @@ model AffiliateCommission {
 
 // AffiliatePayoutRequest
 // A payout request submitted by an affiliate for one or more eligible commissions.
-// Lifecycle: requested → approved → paid  (or rejected at any admin step).
+// Lifecycle: requested → under_review → paid  (or rejected at any admin step).
+//            requested → approved → paid  (legacy path kept for backwards compat).
 // The set of commissions included is stored in AffiliatePayoutRequestCommission.
 model AffiliatePayoutRequest {
-  id               String              @id @default(uuid())
-  // The affiliate (USER) who submitted this request — kept for direct user lookups
-  affiliate_id     String
-  // FK to the affiliate's Med Alliance profile — drives the AffiliateProfile.payoutRequests[] back-relation
-  affiliate_profile_id String
-  status           PayoutRequestStatus @default(requested)
-  // Sum of commission_amount for all commissions included at request time
-  requested_amount Decimal             @db.Decimal(14, 2)
-  // Amount approved by admin; may differ from requested_amount in edge cases
-  approved_amount  Decimal?            @db.Decimal(14, 2)
-  // Snapshot of the affiliate's payout method at request time
-  payment_method   PayoutMethod?
-  // External payment reference (e.g. wire confirmation number, transaction ID)
-  payment_reference String?
-  // Admin user who approved or rejected this request
-  approved_by      String?
-  approved_at      DateTime?
-  // Timestamp when payment was confirmed as sent
-  paid_at          DateTime?
-  // Free-form reason provided when rejecting the request
-  rejection_reason String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  id                    String              @id @default(uuid())
+  affiliate_id          String
+  affiliate_profile_id  String
+  status                PayoutRequestStatus @default(requested)
+  requested_amount      Decimal             @db.Decimal(14, 2)
+  approved_amount       Decimal?            @db.Decimal(14, 2)
+  paid_amount           Decimal?            @db.Decimal(14, 2)
+  payment_method        PayoutMethod?
+  payment_reference     String?
+  transaction_reference String?
+  payment_proof_notes   String?
+  approved_by           String?
+  approved_at           DateTime?
+  paid_at               DateTime?
+  rejection_reason      String?
+  reviewed_by           String?
+  reviewed_at           DateTime?
+  cancellation_reason   String?
+  cancelled_by          String?
+  cancelled_at          DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   affiliate        USER                              @relation("AffiliatePayoutRequests", fields: [affiliate_id], references: [id])
   // Back-relation to AffiliateProfile — enables AffiliateProfile.payoutRequests[]
   affiliateProfile AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
   approvedBy       USER?                             @relation("PayoutApprovedBy", fields: [approved_by], references: [id])
+  reviewedBy       USER?                             @relation("PayoutReviewedBy", fields: [reviewed_by], references: [id])
+  cancelledBy      USER?                             @relation("PayoutCancelledBy", fields: [cancelled_by], references: [id])
   // Junction records linking this request to its selected commissions
   commissions      AffiliatePayoutRequestCommission[]
+  // Admin + affiliate notes on this request
+  notes            PayoutRequestNote[]
 
   // Scoped listing: affiliate's payout requests filtered by status
   @@index([affiliate_id, status], map: "idx_affiliate_payout_requests_affiliate_status")
   @@index([status], map: "idx_affiliate_payout_requests_status")
   // Finance queries: find requests paid in a given period
   @@index([paid_at], map: "idx_affiliate_payout_requests_paid_at")
+}
+
+// PayoutRequestNote
+// Admin-to-admin (internal) or admin-to-affiliate (user) notes attached to a payout request.
+model PayoutRequestNote {
+  id                String            @id @default(uuid())
+  payout_request_id String
+  author_user_id    String?
+  type              PayoutNoteType
+  content           String
+  createdAt         DateTime          @default(now())
+
+  payoutRequest AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
+  author        USER?                  @relation("PayoutRequestNoteAuthor", fields: [author_user_id], references: [id])
+
+  @@index([payout_request_id], map: "idx_payout_request_notes_request_id")
 }
 
 // AffiliatePayoutRequestCommission
@@ -842,23 +881,14 @@ model AffiliatePayoutRequestCommission {
 // Required for: admin review queue (MA-006), timeline display, compliance traceability.
 model MedAllianceAuditLog {
   id            String                 @id @default(uuid())
-  // User who triggered this event; null when triggered by automated sync job
   actor_user_id String?
-  // The type of entity this log entry refers to (polymorphic discriminator)
   entity_type   MedAllianceEntityType
-  // The ID of the referred entity (Organization.id, AffiliateCommission.id, or AffiliatePayoutRequest.id)
   entity_id     String
-  // Short event code describing what happened (e.g. "status_changed", "admin_decision", "sync_error")
   event         String
-  // Previous status value before this transition (null for creation events)
   old_status    String?
-  // New status value after this transition
   new_status    String?
-  // Free-form reason text (required for admin decisions and blocks)
   reason        String?
-  // Who or what triggered this event
   source        MedAllianceAuditSource @default(user)
-  // Additional structured context (e.g. sync job ID, duplicate match data)
   metadata      Json?
   createdAt     DateTime               @default(now())
 
@@ -1019,6 +1049,7 @@ enum Priority_new {
 enum AffiliateStatus {
   active
   inactive
+  invited
 }
 
 enum PayoutMethod {
@@ -1041,9 +1072,16 @@ enum CommissionStatus {
 
 enum PayoutRequestStatus {
   requested
+  under_review
   approved
   rejected
   paid
+  cancelled
+}
+
+enum PayoutNoteType {
+  internal
+  user
 }
 
 enum MedAllianceAuditSource {
@@ -1063,8 +1101,7 @@ enum MedAllianceEntityType {
 // Does NOT affect OrganizationStatus — these are independent concerns.
 enum MedAllianceReferralStatus {
   eligible
-  not_eligible_active_client
-  needs_admin_review // HubSpot returned multiple company matches — requires admin review before pipeline continues
+  not_eligible
 }
 
 // MA-006 — Reason why a review case was opened

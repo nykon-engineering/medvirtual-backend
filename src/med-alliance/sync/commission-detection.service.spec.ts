@@ -20,6 +20,10 @@ const makeOrg = (overrides: Partial<any> = {}) => ({
   id: 'org-1',
   referred_by_affiliate_id: 'user-1',
   med_alliance_referral_status: 'eligible',
+  med_alliance_block_reason: null,
+  eligibility_start_at: new Date('2026-01-01'),
+  first_paid_invoice_at: new Date('2026-01-01'),
+  createdAt: new Date('2025-01-01'),
   ...overrides,
 });
 
@@ -82,7 +86,10 @@ describe('CommissionDetectionService', () => {
   // -------------------------------------------------------------------------
   it('should return zeros when org is blocked as active client (MA-004)', async () => {
     mockPrisma.organization.findUnique.mockResolvedValue(
-      makeOrg({ med_alliance_referral_status: 'not_eligible_active_client' }),
+      makeOrg({
+        med_alliance_referral_status: 'not_eligible',
+        med_alliance_block_reason: 'active_client_block: organization_active_by_email',
+      }),
     );
 
     const result = await service.run('org-1');

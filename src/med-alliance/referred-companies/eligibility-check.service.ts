@@ -93,16 +93,32 @@ export class EligibilityCheckService {
   ) {
     const result = await this.check(organizationId);
 
-    const newStatus = result.eligible
-      ? 'eligible'
-      : 'not_eligible_active_client';
+    let newStatus: 'eligible' | 'not_eligible';
+    let newBlockReason: string | null;
+
+    if (!result.eligible) {
+      newStatus = 'not_eligible';
+      newBlockReason = result.reason ?? null;
+    } else {
+      newBlockReason = null;
+      // Do not reset an already-active eligibility window (set by CommissionDetectionService
+      // on first paid invoice). Only keep eligible if eligibility_start_at is still set.
+      const current = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { med_alliance_referral_status: true, eligibility_start_at: true },
+      });
+      const isActiveWindow =
+        current?.med_alliance_referral_status === 'eligible' &&
+        current?.eligibility_start_at != null;
+      newStatus = isActiveWindow ? 'eligible' : 'not_eligible';
+    }
 
     // Persist the eligibility result on the organization
     const updated = await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
         med_alliance_referral_status: newStatus,
-        med_alliance_block_reason: result.eligible ? null : result.reason,
+        med_alliance_block_reason: newBlockReason,
       },
     });
 

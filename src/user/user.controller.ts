@@ -122,8 +122,7 @@ export class UserController {
   }
 
   @Get('search')
-  @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
+  @UseGuards(AuthGuard)
   @ApiOperation({ summary: 'Search users for organization owner assignment' })
   @ApiResponse({ status: 200, description: 'Users found successfully.' })
   @ApiQuery({

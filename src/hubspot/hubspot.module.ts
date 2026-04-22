@@ -34,17 +34,27 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 
+import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
+import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
+import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
+
+import { HandlerComissionCreation } from './handlers/comissionCreation';
+
 
 import { HireRequestModule } from '../hire-request/hire-request.module';
 
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
+import { AffiliateCreationService } from './create/affiliate';
+
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
+import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 
 
 
@@ -82,8 +92,16 @@ import { MailModule } from '../mail/mail.module';
     OwnerCreationService,
     OrganizationUpdateService,
     ContactCreationService,
+    ContactFromCompanyCreationService,
+    AffiliateCreationService,
     ContactUpdateService,
-    ContactDeleteService
+    ContactDeleteService,
+    CompanyDeleteService,
+    HandlerInvoiceCreation,
+    HandlerInvoicePropertyChange,
+    HandlerInvoiceAssociationChange,
+    HandlerComissionCreation,
+    
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 
@@ -91,13 +109,13 @@ import { MailModule } from '../mail/mail.module';
     forwardRef(() => CandidatesModule), 
     forwardRef(() => OrganizationModule), 
     forwardRef(() => HireRequestModule) ],
-  exports: [HubspotService, 
-    HandlerOrganizationCreation, 
-    HandlerObjectCreation, 
-    HandlerDealCreation, 
+  exports: [HubspotService,
+    HandlerOrganizationCreation,
+    HandlerObjectCreation,
+    HandlerDealCreation,
     HireRequestCreationService,
     HireRequestUpdateService,
-  
+    AffiliateCreationService,
   ],
 })
 export class HubspotModule {}

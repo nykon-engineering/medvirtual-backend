@@ -24,7 +24,19 @@ export class HandlerAffiliateCreation {
 
     async execute(event){
 
+        //After alignment with Pauli on 2026-04-19, we decided not create affiliates in our database when they are created in Hubspot
+        //The Affiliate should be create only from our side
+
+        return true; // Skip processing for now, as per decision on 2026-04-19
+
+        {/*
+
         try{
+            if (event.changeSource === 'INTEGRATION'){
+                console.log('Skipping event from integration source:', event);
+                return true; // Skip processing for events originating from integrations
+            }
+
             const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_GROWTH_PARTNER_CUSTOM_OBJECT}/${event.objectId}?properties=growth_partner_name,growth_partner_email_address,hs_pipeline_stage`, 
                 {
                     headers: {
@@ -36,7 +48,7 @@ export class HandlerAffiliateCreation {
             if (!getObject) {
                 throw new BadRequestException('No object data found');
             }
-
+            console.log('Fetched object data from HubSpot:', getObject.data);
             const rawProperties = getObject.data.properties;
             const affiliateData: Record<string, any> = {};
 
@@ -131,10 +143,10 @@ export class HandlerAffiliateCreation {
                     throw new BadRequestException('Failed to store invite code');
                 }
             }
-
             
-            const createdAffiliate = await this.prisma.affiliateProfile.create({
+            await this.prisma.affiliateProfile.create({
                 data: {
+                    full_name: rawProperties.growth_partner_name,
                     hubspot_id: rawProperties.hs_object_id,
                     commission_percent_default: 7.0,
                     status: AffiliateStatus.active,
@@ -144,16 +156,14 @@ export class HandlerAffiliateCreation {
                 },
             });
 
-
-            
-
-            
             return true;
 
         }catch (error) {
+            console.error('Error processing HubSpot affiliate creation event:', error);
             throw new BadRequestException(`Error fetching object creation data: ${error.message}`);
         }
 
+        */}
 
     }
 }

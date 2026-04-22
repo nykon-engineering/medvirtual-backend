@@ -74,7 +74,6 @@ export class TicketController {
 
   @Get()
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
   @ApiOperation({ summary: 'Get all tickets' })
   @ApiQuery({
     name: 'type',

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { USER } from '@prisma/client';
 import { HandlerOrganization } from './handlers/organization';
 import { HandlerClient } from './handlers/client';
+import { HandlerAffiliate } from './handlers/affiliate';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class DashboardService {
     constructor(
         private readonly organization: HandlerOrganization,
         private readonly client: HandlerClient,
+        private readonly affiliate: HandlerAffiliate,
         private readonly prisma: PrismaService
     ) {}
               
@@ -23,6 +25,8 @@ export class DashboardService {
             case 'system_super_admin':
             case 'system_admin':
                 return await this.client.execute(user, page, perPage);
+            case 'affiliate':
+                return await this.affiliate.execute(user);
             default:
                 throw new BadRequestException('Invalid currentUser role');
         }

@@ -700,11 +700,22 @@ export class UserService {
         phone: true,
         verified: true,
         createdAt: true,
+        updatedAt: true,
         organization: {
           select: {
             id: true,
             name: true,
             status: true,
+          },
+        },
+        affiliateProfile: {
+          select: {
+            id: true,
+            hubspot_id: true,
+            full_name: true,
+            status: true,
+            commission_percent_default: true,
+            createdAt: true,
           },
         },
       },
@@ -789,6 +800,7 @@ export class UserService {
         phone: true,
         verified: true,
         createdAt: true,
+        updatedAt: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -915,6 +927,16 @@ export class UserService {
           organization_name: true,
           createdAt: true,
           updatedAt: true,
+          affiliateProfile: {
+            select: {
+              id: true,
+              hubspot_id: true,
+              full_name: true,
+              status: true,
+              commission_percent_default: true,
+              createdAt: true,
+            },
+          },
         },
       });
 

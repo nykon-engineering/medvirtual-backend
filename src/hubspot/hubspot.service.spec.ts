@@ -29,13 +29,23 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 
+import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
+import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
+import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
+
+import { HandlerComissionCreation } from './handlers/comissionCreation';
+
 import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
+import { AffiliateCreationService } from './create/affiliate';
+
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
+import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { CompanyDeleteService } from './delete/company';
 
 
 
@@ -194,6 +204,14 @@ const contactCreationServiceMock = {
   execute: jest.fn(),
 };
 
+const contactCreationFromCompanyServiceMock = {
+  execute: jest.fn(),
+};
+
+const affiliateCreationServiceMock = {
+  execute: jest.fn(),
+};
+
 const updateContactServiceMock = {
   execute: jest.fn(),
 };
@@ -201,6 +219,26 @@ const updateContactServiceMock = {
 const deleteContactServiceMock = {
   execute: jest.fn(),
 };
+
+const companyDeleteServiceMock = {
+  execute: jest.fn(),
+};
+
+const HandlerInvoiceCreationMock = {
+  execute: jest.fn(),
+};
+
+const HandlerInvoicePropertyChangeMock = {
+  execute: jest.fn(),
+};
+
+const HandlerInvoiceAssociationChangeMock = {
+  execute: jest.fn(),
+};
+
+const HandlerComissionCreationMock = {
+  execute: jest.fn(),
+};  
 
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
@@ -252,10 +290,17 @@ describe('HubspotService => GetCandidates', () => {
         {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
         {provide: ContactCreationService, useValue: contactCreationServiceMock},
+        {provide: ContactFromCompanyCreationService, useValue: contactCreationFromCompanyServiceMock},
         {provide: ContactUpdateService, useValue: updateContactServiceMock},
         {provide: ContactDeleteService, useValue: deleteContactServiceMock},
+        {provide: CompanyDeleteService, useValue: companyDeleteServiceMock},
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
-        {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock}
+        {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
+        {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
+        {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
+        {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
+        {provide: HandlerComissionCreation, useValue: HandlerComissionCreationMock},
+        {provide: AffiliateCreationService, useValue: affiliateCreationServiceMock},
       ],
     }).compile();
 
@@ -327,10 +372,17 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
         {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
         {provide: ContactCreationService, useValue: contactCreationServiceMock},
+        {provide: ContactFromCompanyCreationService, useValue: contactCreationFromCompanyServiceMock},
         {provide: ContactUpdateService, useValue: updateContactServiceMock},
         {provide: ContactDeleteService, useValue: deleteContactServiceMock},
+        {provide: CompanyDeleteService, useValue: companyDeleteServiceMock},
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
-        {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock}
+        {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
+        {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
+        {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
+        {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
+        {provide: HandlerComissionCreation, useValue: HandlerComissionCreationMock},
+        {provide: AffiliateCreationService, useValue: affiliateCreationServiceMock},
       ]
     }).compile();
 

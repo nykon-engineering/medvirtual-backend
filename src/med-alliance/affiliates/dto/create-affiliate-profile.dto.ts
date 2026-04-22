@@ -1,7 +1,9 @@
+import { Prisma } from '@prisma/client';
 import {
   IsEnum,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -43,4 +45,8 @@ export class CreateAffiliateProfileDto {
   @IsOptional()
   @IsString()
   payout_preference_notes?: string;
+
+  @IsOptional()
+  @IsObject()
+  payout_details?: Prisma.InputJsonValue;
 }

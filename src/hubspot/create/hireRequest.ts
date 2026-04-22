@@ -53,7 +53,7 @@ export class HireRequestCreationService {
                 hs_pipeline_stage: "1",  //=> New agent Request
                 pairing_request_type: data.hubspot_pairing_request_type || 'New Client',
                 ticket_type: "Agent Pairing Request",
-                business_unit: data.organization.business_unit || "Not Specified",
+                business_unit: data.organization.business_unit || "MedVirtual", // we need to send one business unit
                 company_name: data.organization.name,
                 client_name: data.organization.name,
                 company_url: data.organization.website_url || "Not Specified",

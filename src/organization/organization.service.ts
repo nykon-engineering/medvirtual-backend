@@ -318,7 +318,7 @@ export class OrganizationService {
     user: USER,
     query: GetOrganizationsDto,
   ): Promise<PaginatedOrganizationsResponseDto> {
-    try {
+    //try {
       const {
         page = 1,
         limit = 10,
@@ -651,9 +651,9 @@ export class OrganizationService {
           hasPrev,
         },
       };
-    } catch (error) {
-      throw new NotFoundException('Organizations not found');
-    }
+    //} catch (error) {
+    //  throw new NotFoundException('Organizations not found');
+    //}
   }
 
   async getById(id: string): Promise<Organization> {
@@ -677,7 +677,7 @@ export class OrganizationService {
     }
   }
 
-  async create(data: CreateOrganizationDto, user?: USER): Promise<Organization> {
+  async create(data: CreateOrganizationDto, user?: USER, referred_by_affiliate_id?: string): Promise<Organization> {
     try {
       // // Check if the organization already exists
       // const existingOrganization = await this.prisma.organization.findUnique({
@@ -687,7 +687,7 @@ export class OrganizationService {
       // if (existingOrganization) {
       //   throw new BadRequestException('Organization already exists');
       // }
-
+      //console.log(data)
       // Handle owner assignment based on owner_type
       let ownerId: string | undefined = undefined;
       let ownerEmail: string | undefined = undefined;
@@ -699,11 +699,13 @@ export class OrganizationService {
         });
 
         if (!existingOwner) {
+          console.error(`Selected owner user not found: ${data.owner_id}`);
           throw new BadRequestException('Selected owner user not found');
         }
 
         // Check if user is already an owner of another organization
         if (existingOwner.is_organization_owner) {
+          console.error(`User ${existingOwner.id} is already an owner of another organization`);
           throw new BadRequestException(
             'User is already an owner of another organization',
           );
@@ -718,6 +720,7 @@ export class OrganizationService {
         });
 
         if (existingUser) {
+          console.error(`User with email ${data.owner_email} already exists: ${existingUser.id}`);
           throw new BadRequestException(
             'User with this email already exists.',
           );
@@ -729,24 +732,36 @@ export class OrganizationService {
         data.owner_type !== 'existing' &&
         data.owner_type !== 'new'
       ) {
+        console.error(`Invalid owner_type: ${data.owner_type}`);
         throw new BadRequestException(
           'Invalid owner_type. Must be "existing" or "new"',
         );
       }
-
+      
       // Assign a random admin if not specified
       let adminId: string | undefined = data.admin_id;
       if (!adminId) {
-        if (user){
+        if (user && !referred_by_affiliate_id){
           adminId= user.id; // Added on 2025-11-18 by Paulo to get the logged in user as default admin
         }else{
-          const availableAdmins = await this.prisma.uSER.findMany({
-            where: {
-              email: 'hanieh@medvirtual.ai', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
-              role: 'system_super_admin',
-              status: 'active',
-            },
-          });
+          let availableAdmins;
+          //console.log(referred_by_affiliate_id, data.refer_to_user_id)
+          //If we have an referral and a refer_to_user_id, we will try to assign the referred admin, if not we will assign randomly as before | Added on 2026-04-16
+          if (referred_by_affiliate_id && data.refer_to_user_id) {
+            availableAdmins = await this.prisma.uSER.findMany({
+              where: {
+                id: data.refer_to_user_id
+              }
+            });
+          }else{
+            availableAdmins = await this.prisma.uSER.findMany({
+              where: {
+                email: process.env.ENVIRONMENT === 'DEV' ? 'pauli@regenta.ai' : 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
+                role: 'system_super_admin',
+                status: 'active',
+              },
+            });
+          }
   
           if (availableAdmins.length > 0) {
             // Simple round-robin assignment - could be enhanced with load balancing
@@ -756,7 +771,7 @@ export class OrganizationService {
             adminId = availableAdmins[randomIndex].id;
           }
         }
-        
+        //console.log('Assigned adminId:', adminId);
       }
       let specialtiesArray: string[] = [];
       let servicesArray: string[] = [];
@@ -779,7 +794,7 @@ export class OrganizationService {
       const organization = await this.prisma.organization.create({
         data: {
           name: data.name,
-          email: data.email,
+          email: !referred_by_affiliate_id ? data.email : undefined,
           phone: data.phone,
           website_url: data.website_url,
           address: data.address,
@@ -790,7 +805,7 @@ export class OrganizationService {
           description: data.description,
           industry: data.industry ? organizationIndustryToDbDictionary[data.industry] || data.industry : undefined,
           business_unit: data.business_unit,
-          type: data.type,
+          type: referred_by_affiliate_id ? 'PROSPECT' : data.type,
           organization_role:
             data.organization_role || OrganizationRole.prospect,
           number_of_employees: Number(data.number_of_employees),
@@ -807,6 +822,13 @@ export class OrganizationService {
           admin_id: adminId,
           hubspot_id: data.hubspot_id || undefined,
           source: user ? 'MedVirtual app' : 'Hubspot',
+          referred_by_affiliate_id: referred_by_affiliate_id || undefined,
+          ...((d: any) => ({
+            contact_first_name: d.contact_first_name || undefined,
+            contact_last_name: d.contact_last_name || undefined,
+            contact_email: data.email || undefined,
+            refer_to_user_id: d.refer_to_user_id || undefined,
+          }))(data),
         },
       });
 
@@ -849,7 +871,7 @@ export class OrganizationService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Failed to create organization', error);
+      throw new BadRequestException('Failed to create organization:', error);
     }
   }
 

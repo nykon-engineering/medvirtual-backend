@@ -7,7 +7,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
-import { DecideCommissionDto, VoidCommissionDto } from './dto/decide-commission.dto';
+import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto, UpdateBaseAmountDto } from './dto/decide-commission.dto';
+import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 
 // Terminal statuses — transitions out of these are not allowed.
 const TERMINAL_STATUSES = ['paid', 'void', 'rejected'];
@@ -36,9 +37,42 @@ const COMMISSION_SELECT = {
     select: {
       id: true,
       hubspot_id: true,
+      invoice_status: true,
       invoice_amount: true,
       currency: true,
       paid_at: true,
+      hubspot_pdf_link: true,
+      lineItems: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          quantity: true,
+          amount: true,
+          discount: true,
+        },
+      },
+    },
+  },
+};
+
+// Payout linkage — included in admin responses to trace which payout request
+// paid a given commission.
+const PAYOUT_LINKAGE_SELECT = {
+  payoutRequestCommissions: {
+    select: {
+      payoutRequest: {
+        select: {
+          id: true,
+          status: true,
+          requested_amount: true,
+          approved_amount: true,
+          payment_method: true,
+          payment_reference: true,
+          paid_at: true,
+          createdAt: true,
+        },
+      },
     },
   },
 };
@@ -90,8 +124,14 @@ export class CommissionsService {
     } = dto;
     const skip = (page - 1) * limit;
 
+    
+
     const where: any = { affiliate_id: currentUser.id };
-    if (status) where.status = status;
+    if (status && AFFILIATE_VISIBLE_STATUSES.includes(status)) {
+      where.status = status;
+    } else {
+      where.status = { in: AFFILIATE_VISIBLE_STATUSES };
+    }
     if (created_from || created_to) {
       where.createdAt = {};
       if (created_from) where.createdAt.gte = new Date(created_from);
@@ -156,6 +196,7 @@ export class CommissionsService {
 
     const adminSelect = {
       ...COMMISSION_SELECT,
+      ...PAYOUT_LINKAGE_SELECT,
       affiliate: {
         select: { id: true, first_name: true, last_name: true, email: true },
       },
@@ -186,6 +227,7 @@ export class CommissionsService {
       where: { id },
       select: {
         ...COMMISSION_SELECT,
+          ...PAYOUT_LINKAGE_SELECT,
         affiliate: {
           select: { id: true, first_name: true, last_name: true, email: true },
         },
@@ -221,9 +263,9 @@ export class CommissionsService {
         where: { id: commission.organization_id },
         select: { med_alliance_referral_status: true },
       });
-      if (org?.med_alliance_referral_status === 'not_eligible_active_client') {
+      if (org?.med_alliance_referral_status === 'not_eligible') {
         throw new BadRequestException(
-          'Cannot approve commission: referred organization is blocked as an active MedVirtual client.',
+          'Cannot approve commission: referred organization is not eligible for the Med Alliance program.',
         );
       }
     }
@@ -289,6 +331,174 @@ export class CommissionsService {
       newStatus: 'void',
       reason: dto.reason,
       source: 'admin_action',
+    });
+
+    return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: revert an eligible commission back to detected.
+  // ---------------------------------------------------------------------------
+  async revertToDetected(id: string, adminUser: USER) {
+    const commission = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!commission) throw new NotFoundException('Commission not found');
+
+    if (commission.status !== 'eligible') {
+      throw new BadRequestException(
+        `Only commissions in "eligible" status can be reverted to detected. Current status: "${commission.status}".`,
+      );
+    }
+
+    const updated = await this.prisma.affiliateCommission.update({
+      where: { id },
+      data: {
+        status: 'detected',
+        admin_decision_by: null,
+        admin_decision_reason: null,
+        admin_decision_at: null,
+      },
+      select: COMMISSION_SELECT,
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'admin_reverted_to_detected',
+      oldStatus: 'eligible',
+      newStatus: 'detected',
+      source: 'admin_action',
+    });
+
+    return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: unvoid a voided commission back to detected.
+  // ---------------------------------------------------------------------------
+  async unvoid(id: string, dto: { reason: string }, adminUser: USER) {
+    const commission = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!commission) throw new NotFoundException('Commission not found');
+
+    if (commission.status !== 'void') {
+      throw new BadRequestException(
+        `Only commissions in "void" status can be unvoided. Current status: "${commission.status}".`,
+      );
+    }
+
+    const updated = await this.prisma.affiliateCommission.update({
+      where: { id },
+      data: {
+        status: 'detected',
+        admin_decision_by: adminUser.id,
+        admin_decision_reason: dto.reason,
+        admin_decision_at: new Date(),
+      },
+      select: COMMISSION_SELECT,
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'admin_unvoided',
+      oldStatus: 'void',
+      newStatus: 'detected',
+      reason: dto.reason,
+      source: 'admin_action',
+    });
+
+    return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: reinstate a rejected commission back to eligible.
+  // ---------------------------------------------------------------------------
+  async reinstate(id: string, dto: ReinstateCommissionDto, adminUser: USER) {
+    const commission = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    });
+    if (!commission) throw new NotFoundException('Commission not found');
+
+    if (commission.status !== 'rejected') {
+      throw new BadRequestException(
+        `Only commissions in "rejected" status can be reinstated. Current status: "${commission.status}".`,
+      );
+    }
+
+    const updated = await this.prisma.affiliateCommission.update({
+      where: { id },
+      data: {
+        status: 'eligible',
+        admin_decision_by: adminUser.id,
+        admin_decision_reason: dto.reason,
+        admin_decision_at: new Date(),
+      },
+      select: COMMISSION_SELECT,
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'admin_reinstated',
+      oldStatus: 'rejected',
+      newStatus: 'eligible',
+      reason: dto.reason,
+      source: 'admin_action',
+    });
+
+    return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: update base_amount_snapshot on a detected commission.
+  // ---------------------------------------------------------------------------
+  async updateBaseAmount(id: string, dto: UpdateBaseAmountDto, adminUser: USER) {
+    const commission = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: { id: true, status: true, base_amount_snapshot: true, commission_percent_snapshot: true },
+    });
+    if (!commission) throw new NotFoundException('Commission not found');
+
+    if (commission.status !== 'detected') {
+      throw new BadRequestException(
+        `Base amount can only be updated when the commission is in "detected" status. Current status: "${commission.status}".`,
+      );
+    }
+
+    const baseAmount = parseFloat(dto.base_amount);
+    if (isNaN(baseAmount) || baseAmount <= 0) {
+      throw new BadRequestException('base_amount must be a positive number');
+    }
+    const pct = Number(commission.commission_percent_snapshot);
+    const newCommissionAmount = ((baseAmount * pct) / 100).toFixed(2);
+
+    const updated = await this.prisma.affiliateCommission.update({
+      where: { id },
+      data: {
+        base_amount_snapshot: baseAmount.toString(),
+        commission_amount: newCommissionAmount,
+      },
+      select: COMMISSION_SELECT,
+    });
+
+    await this.writeAuditLog({
+      actorUserId: adminUser.id,
+      entityId: id,
+      event: 'admin_updated_base_amount',
+      oldStatus: commission.status,
+      newStatus: commission.status,
+      source: 'admin_action',
+      metadata: {
+        old_base_amount: commission.base_amount_snapshot,
+        new_base_amount: baseAmount.toString(),
+        new_commission_amount: newCommissionAmount,
+      },
     });
 
     return updated;

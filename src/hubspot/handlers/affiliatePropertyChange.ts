@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { HandlerAffiliateCreation } from "./affiliateCreation";
+import { affiliateToDbDictionary } from "../../common/dictionaries/affiliate-dictionary";
 
 @Injectable()
 
@@ -22,9 +23,52 @@ export class HandlerAffiliatePropertyChange {
 
         if(!existingAffiliate) return await this.affiliateCreation.execute(event); 
 
-        // the AffiliateProfile table is a simple table without personal datas;
-        // Thats why we can not update this table
-        // and doesnt make sense update the user table
+        const fieldExists = Object.keys(affiliateToDbDictionary).includes(event.propertyName);
+        if(!fieldExists) return;
+
+        const fieldUpdated = affiliateToDbDictionary[event.propertyName];
+
+        if (event.propertyName === 'earning_status'){
+            //stop here! The affiliate status only changes when user accepts the invite
+            if (existingAffiliate.status === 'invited') return;
+            //if status = active, set to active, else set to inactive
+            event.propertyValue = event.propertyValue === 'Active' ? 'active' : 'inactive';
+        }
+        
+        await this.prisma.affiliateProfile.update({
+            where: {
+                id: existingAffiliate.id
+            },
+            data: {
+                [fieldUpdated]: event.propertyValue
+            }
+        })
+
+
+        if(event.propertyName === 'earning_status') {
+            const user = await this.prisma.uSER.findFirst({
+                where: {
+                    affiliateProfile: {
+                        hubspot_id: String(event.objectId)
+                    }
+                },
+                select: {
+                    id: true,
+                    role: true,
+                }
+            })
+            if (user?.role === 'affiliate') {
+                await this.prisma.uSER.update({
+                    where: {
+                        id: user.id
+                    },
+                    data: {
+                        status: event.propertyValue
+                    }
+                })
+            }
+        }
+        
         return true;
         
 
