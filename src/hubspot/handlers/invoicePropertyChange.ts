@@ -61,6 +61,43 @@ export class HandlerInvoicePropertyChange {
 
             console.log(`Invoice with Hubspot ID ${event.objectId} has been paid. We can create a comission for the affiliate linked to this invoice, if there is one.`);
 
+            const invoiceWithOrg = await this.prisma.hubspotInvoiceSnapshot.findUnique({
+                where: { hubspot_id: String(event.objectId) },
+                select: {
+                    organization: {
+                        select: {
+                            id: true,
+                            referred_by_affiliate_id: true,
+                            med_alliance_referral_status: true,
+                            med_alliance_block_reason: true,
+                            first_paid_invoice_at: true,
+                        }
+                    }
+                }
+            });
+
+            const org = invoiceWithOrg?.organization;
+            const shouldActivate =
+                org &&
+                org.referred_by_affiliate_id !== null &&
+                org.med_alliance_referral_status === 'not_eligible' &&
+                !org.med_alliance_block_reason?.startsWith('active_client_block') &&
+                org.first_paid_invoice_at === null;
+
+            if (shouldActivate) {
+                const now = new Date();
+                await this.prisma.organization.update({
+                    where: { id: org.id },
+                    data: {
+                        med_alliance_referral_status: 'eligible',
+                        eligibility_start_at: now,
+                        first_paid_invoice_at: now,
+                        med_alliance_block_reason: null,
+                    },
+                });
+                console.log(`Organization ${org.id} activated as eligible after first paid invoice ${event.objectId}.`);
+            }
+
             axios.get(`https://api.hubapi.com/crm/v3/objects/invoices/${event.objectId}?properties=hs_pdf_download_link`, {
                 headers: {
                     Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -68,6 +105,7 @@ export class HandlerInvoicePropertyChange {
                 },
             }).then(res => {
                 const pdfLink = res.data?.properties?.hs_pdf_download_link;
+                console.log(`Fetched PDF link for invoice ${event.objectId}:`, pdfLink);
                 if (!pdfLink) return;
                 return this.prisma.hubspotInvoiceSnapshot.update({
                     where: { hubspot_id: String(event.objectId) },

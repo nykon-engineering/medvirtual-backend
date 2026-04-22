@@ -140,7 +140,7 @@ export class HubspotService {
         console.log('Received data:', data);
 
         const expectedAppId = Number(process.env.HUBSPOT_APP_ID);
-        if (expectedAppId && Array.isArray(data) && data.length > 0 && data[0]?.appId !== expectedAppId) {
+        if (expectedAppId && data[0]?.appId != expectedAppId) {
             console.log(`Ignoring webhook from appId ${data[0]?.appId} (expected ${expectedAppId})`);
             return;
         }
