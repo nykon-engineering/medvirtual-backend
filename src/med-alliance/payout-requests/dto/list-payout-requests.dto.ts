@@ -19,6 +19,7 @@ export enum PayoutRequestStatus {
   APPROVED = 'approved',
   REJECTED = 'rejected',
   PAID = 'paid',
+  CANCELLED = 'cancelled',
 }
 
 export class ListPayoutRequestsDto {
