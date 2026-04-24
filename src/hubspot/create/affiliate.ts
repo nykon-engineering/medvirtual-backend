@@ -9,6 +9,23 @@ export class AffiliateCreationService {
       private readonly prisma: PrismaService
     ){}
 
+    async getOwnerId(userId: string): Promise<string | null> {
+      if (!userId) return null;
+      const user = await this.prisma.uSER.findUnique({
+      where: { id: userId },
+      select: {
+          id: true,
+          hubspot_id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+      },
+          
+      });
+
+      return user && user.hubspot_id ? user.hubspot_id : null; 
+    }
+
     async execute(data: any): Promise<any> {
         try {
           const response = await axios.post(
@@ -25,6 +42,8 @@ export class AffiliateCreationService {
                 alliance_commission: 7,
                 attribution_information: 'Alliance Partner',
                 earning_status: 'Active',
+                hubspot_owner_id: data.created_by ? await this.getOwnerId(data.created_by) : null,
+                referral_role: 'Alliance Partner',
               },
               associations: data.user.organization?.hubspot_id ? [
                 {

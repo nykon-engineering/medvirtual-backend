@@ -13,6 +13,7 @@ import {
   CancelPayoutRequestDto,
   DecidePayoutRequestDto,
   MarkPayoutPaidDto,
+  UpdatePayoutNoteDto,
 } from './dto/decide-payout-request.dto';
 import { ListPayoutRequestsDto } from './dto/list-payout-requests.dto';
 
@@ -896,6 +897,50 @@ export class PayoutRequestsService {
         ? `${n.author.first_name} ${n.author.last_name}`.trim()
         : 'Admin',
     }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: update the content of a payout request note.
+  // ---------------------------------------------------------------------------
+  async updateNote(payoutRequestId: string, noteId: string, dto: UpdatePayoutNoteDto) {
+    const note = await this.prisma.payoutRequestNote.findFirst({
+      where: { id: noteId, payout_request_id: payoutRequestId },
+    });
+    if (!note) throw new NotFoundException('Note not found');
+
+    const updated = await this.prisma.payoutRequestNote.update({
+      where: { id: noteId },
+      data: { content: dto.content },
+      select: {
+        id: true,
+        type: true,
+        content: true,
+        createdAt: true,
+        author: {
+          select: { id: true, first_name: true, last_name: true },
+        },
+      },
+    });
+
+    return {
+      ...updated,
+      author: updated.author
+        ? `${updated.author.first_name} ${updated.author.last_name}`.trim()
+        : 'Admin',
+      created_at: updated.createdAt,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: delete a payout request note.
+  // ---------------------------------------------------------------------------
+  async deleteNote(payoutRequestId: string, noteId: string) {
+    const note = await this.prisma.payoutRequestNote.findFirst({
+      where: { id: noteId, payout_request_id: payoutRequestId },
+    });
+    if (!note) throw new NotFoundException('Note not found');
+
+    await this.prisma.payoutRequestNote.delete({ where: { id: noteId } });
   }
 
   // ---------------------------------------------------------------------------

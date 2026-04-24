@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -22,6 +24,7 @@ import {
   CancelPayoutRequestDto,
   DecidePayoutRequestDto,
   MarkPayoutPaidDto,
+  UpdatePayoutNoteDto,
 } from './dto/decide-payout-request.dto';
 import { ReopenPayoutRequestDto } from './dto/reopen-payout-request.dto';
 import { ListPayoutRequestsDto } from './dto/list-payout-requests.dto';
@@ -189,6 +192,30 @@ export class PayoutRequestsController {
   async getNotes(@Param('id') id: string) {
     const data = await this.payoutRequestsService.getNotes(id);
     return { status: 200, message: 'Notes retrieved successfully', data };
+  }
+
+  // B3: PATCH /med-alliance/admin/payout-requests/:id/notes/:noteId — Update a note.
+  @Patch('admin/payout-requests/:id/notes/:noteId')
+  @HttpCode(HttpStatus.OK)
+  @Roles(...ADMIN_ROLES)
+  async updateNote(
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+    @Body() dto: UpdatePayoutNoteDto,
+  ) {
+    const data = await this.payoutRequestsService.updateNote(id, noteId, dto);
+    return { status: 200, message: 'Note updated successfully', data };
+  }
+
+  // B3: DELETE /med-alliance/admin/payout-requests/:id/notes/:noteId — Delete a note.
+  @Delete('admin/payout-requests/:id/notes/:noteId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(...ADMIN_ROLES)
+  async deleteNote(
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+  ) {
+    await this.payoutRequestsService.deleteNote(id, noteId);
   }
 
   // B3: GET /med-alliance/admin/payout-requests/:id/notes — List notes for Affiliates.
