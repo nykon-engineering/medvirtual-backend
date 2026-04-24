@@ -46,9 +46,12 @@ export class ContactFromCompanyCreationService {
                 jobtitle: data.job_title || '',
                 business_unit: data.business_unit === 'Med Virtual' ? 'MedVirtual' : 'Berry Virtual',
                 company: data.name || '',
-                hubspot_owner_id: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
+                //contact owner should be the one we have on the form as assigned to => Asked by Pauli after the first med-alliance meeting
+                hubspot_owner_id: data.referToUser?.id ? await this.getOwnerId(data.referToUser.id) : undefined,
                 demo_owner: data.admin_id ? await this.getOwnerId(data.admin_id) : undefined,
                 title: data.contact_first_name + ' ' + data.contact_last_name,
+                qualification_status: 'Referral',
+                latest_lead_source: 'Referral',
 
                 //starting with referral information
                 account_name: data.referredByAffiliate.affiliateProfile ? data.referredByAffiliate.affiliateProfile.full_name: undefined,
