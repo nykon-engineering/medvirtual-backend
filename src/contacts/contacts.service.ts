@@ -56,7 +56,7 @@ export class ContactService {
     try {
       contact = await this.prisma.contact.create({
         data: {
-          // No user_id for common org creation flow, as the contact is not necessarily linked to a specific user
+          organization_id: orgId,
           first_name: org.contact_first_name ,
           last_name: org.contact_last_name,
           email: org.contact_email,
@@ -172,6 +172,7 @@ export class ContactService {
       try {
         contact = await this.prisma.contact.create({
           data: {
+            organization_id: org.id,
             user_id: org.owner_id,
             first_name: org.contact_first_name,
             last_name: org.contact_last_name,

@@ -201,6 +201,7 @@ model Organization {
   hubspotInvoiceSnapshots      HubspotInvoiceSnapshot[]
   // MA-006 admin review cases opened for this referred organization
   adminReviewCases             MedAllianceAdminReviewCase[]
+  contacts                     Contact[]
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -654,6 +655,7 @@ model Contact {
   id               String    @id @default(uuid())
   user_id          String?    @unique
   hubspot_id       String?   @unique
+  organization_id  String?
   first_name       String?
   last_name        String?
   email            String?
@@ -669,11 +671,13 @@ model Contact {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  user             USER? @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user             USER?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization     Organization? @relation(fields: [organization_id], references: [id])
 
   @@index([user_id], map: "idx_contacts_user_id")
   @@index([hubspot_id], map: "idx_contacts_hubspot_id")
   @@index([email], map: "idx_contacts_email")
+  @@index([organization_id], map: "idx_contacts_organization_id")
 }
 
 model PasswordResetToken {

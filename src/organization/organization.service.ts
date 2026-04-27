@@ -308,6 +308,7 @@ export class OrganizationService {
           owner: true,
           admin: true,
           users: true,
+          contacts: true,
         },
       });
     } catch {
@@ -498,7 +499,18 @@ export class OrganizationService {
               id: true,
               status: true,
             },
-          }
+          },
+          contacts: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+              user_id: true,
+              hubspot_id: true,
+            },
+          },
         },
       });
 
@@ -629,6 +641,14 @@ export class OrganizationService {
         userCount: org.userCount,
         staffCount: org.staffCount,
         source: org.source || undefined,
+        contacts: org.contacts.length > 0 ? org.contacts.map(contact => ({
+          id: contact.id,
+          first_name: contact.first_name,
+          last_name: contact.last_name,
+          email: contact.email,
+          phone: contact.phone,
+          user_id: contact.user_id || undefined,
+        })) : undefined,
       }));
 
       // Calculate pagination metadata
@@ -658,15 +678,8 @@ export class OrganizationService {
   }
 
   async getContactByOrgId(orgId: string) {
-    const org = await this.prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { owner_id: true },
-    });
-
-    if (!org?.owner_id) return null;
-
-    return this.prisma.contact.findUnique({
-      where: { user_id: org.owner_id },
+    return this.prisma.contact.findMany({
+      where: { organization_id: orgId },
       select: {
         id: true,
         hubspot_id: true,
@@ -686,6 +699,7 @@ export class OrganizationService {
           owner: true,
           admin: true,
           users: true,
+          contacts: true,
         },
       });
 

@@ -223,7 +223,8 @@ describe('OrganizationService', () => {
         name: 'Org 1', 
         phone: '123', 
         email: 'org1@example.com', 
-        owner_email: 'admin@admin.com' 
+        owner_email: 'admin@admin.com',
+        contact_email: 'contato@org1.com'
       }, userfake)).rejects.toThrow(BadRequestException);
     });
   });

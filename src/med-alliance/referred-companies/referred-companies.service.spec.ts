@@ -137,6 +137,7 @@ describe('ReferredCompaniesService', () => {
       website_url: 'https://acme.com',
       contact_first_name: 'John',
       contact_last_name: 'Doe',
+      contact_email: 'contato@org1.com',
       location: 'New York',
       industry: 'Healthcare',
     };
@@ -223,6 +224,7 @@ describe('ReferredCompaniesService', () => {
           website_url: 'https://minorg.com',
           contact_first_name: 'John',
           contact_last_name: 'Doe',
+          contact_email: 'contato@org1.com' 
         },
         mockCurrentUser,
       );

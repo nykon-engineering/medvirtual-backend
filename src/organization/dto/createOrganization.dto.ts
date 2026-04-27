@@ -244,7 +244,6 @@ export class CreateOrganizationDto {
   contact_last_name?: string;
 
   @ApiProperty({ required: false, description: 'Email of the main contact' })
-  @IsOptional()
   @IsEmail()
-  contact_email?: string;
+  contact_email: string;
 }

@@ -28,6 +28,10 @@ export class CreateReferredCompanyDto {
   @IsNotEmpty()
   contact_last_name: string;
 
+  @IsEmail()
+  @IsNotEmpty()
+  contact_email: string;
+
   @IsOptional()
   @IsString()
   phone?: string;
