@@ -232,5 +232,19 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsUUID()
   refer_to_user_id?: string;
-  
+
+  @ApiProperty({ required: false, description: 'First name of the main contact' })
+  @IsOptional()
+  @IsString()
+  contact_first_name?: string;
+
+  @ApiProperty({ required: false, description: 'Last name of the main contact' })
+  @IsOptional()
+  @IsString()
+  contact_last_name?: string;
+
+  @ApiProperty({ required: false, description: 'Email of the main contact' })
+  @IsOptional()
+  @IsEmail()
+  contact_email?: string;
 }

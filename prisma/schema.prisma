@@ -54,6 +54,8 @@ model USER {
   talentPoolLeads              TalentPoolLead[]
   PasswordResetTokens          PasswordResetToken[]
 
+  contact                      Contact?
+
   // --- Med Alliance relations ---
   // One-to-one affiliate profile storing commission settings and payout preferences
   affiliateProfile             AffiliateProfile?
@@ -646,6 +648,32 @@ model TalentPoolLead {
   @@index([email], map: "idx_talent_pool_leads_email")
   @@index([status], map: "idx_talent_pool_leads_status")
   @@index([source], map: "idx_talent_pool_leads_source")
+}
+
+model Contact {
+  id               String    @id @default(uuid())
+  user_id          String?    @unique
+  hubspot_id       String?   @unique
+  first_name       String?
+  last_name        String?
+  email            String?
+  phone            String?
+  job_title        String?
+  company_name     String?
+  business_unit    String?
+  account_type     String?
+  website_url      String?
+  type             String?
+  referral_source  String?
+  hubspot_owner_id String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             USER? @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_contacts_user_id")
+  @@index([hubspot_id], map: "idx_contacts_hubspot_id")
+  @@index([email], map: "idx_contacts_email")
 }
 
 model PasswordResetToken {

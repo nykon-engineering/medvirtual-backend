@@ -8,6 +8,7 @@ import { ReferralSyncService } from '../sync/referral-sync.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
 import { OrganizationService } from '../../organization/organization.service';
 import { HubspotService } from '../../hubspot/hubspot.service';
+import { ContactService } from '../../contacts/contacts.service';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -64,6 +65,12 @@ const mockHubspotService = {
   deleteContactInHubspot: jest.fn(),
 };
 
+const mockContactService = {
+  createForOrganization: jest.fn(),
+  createForReferredCompany: jest.fn().mockResolvedValue({ contact: null, hubspotId: null }),
+  deleteById: jest.fn(),
+};
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -109,6 +116,7 @@ describe('ReferredCompaniesService', () => {
         { provide: ReviewCasesService, useValue: mockReviewCasesService },
         { provide: OrganizationService, useValue: mockOrganizationService},
         { provide: HubspotService, useValue: mockHubspotService },
+        { provide: ContactService, useValue: mockContactService },
       ],
     }).compile();
 

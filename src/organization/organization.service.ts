@@ -47,6 +47,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { SqsService } from '../sqs/sqs.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import { ContactService } from '../contacts/contacts.service';
 
 @Injectable()
 export class OrganizationService {
@@ -61,8 +62,8 @@ export class OrganizationService {
     @Inject(forwardRef (() => NotificationsService))
     private readonly notifications: NotificationsService,
 
-    private readonly sqs: SqsService
-    
+    private readonly sqs: SqsService,
+    private readonly contactService: ContactService,
   ) {}
 
   async delay(ms: number) {
@@ -656,6 +657,27 @@ export class OrganizationService {
     //}
   }
 
+  async getContactByOrgId(orgId: string) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { owner_id: true },
+    });
+
+    if (!org?.owner_id) return null;
+
+    return this.prisma.contact.findUnique({
+      where: { user_id: org.owner_id },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        phone: true,
+      },
+    });
+  }
+
   async getById(id: string): Promise<Organization> {
     try {
       const organization = await this.prisma.organization.findUnique({
@@ -791,6 +813,17 @@ export class OrganizationService {
         servicesArray = [];
       }
 
+      const existingOrganization = await this.prisma.organization.findFirst({
+        where: { 
+          email: data.email,
+          status: { not: OrganizationStatus.deleted } // Allow creating organization with same email if the previous one is deleted
+         },
+      });
+
+      if (existingOrganization) {
+        throw new BadRequestException('Organization already exists');
+      }
+
       const organization = await this.prisma.organization.create({
         data: {
           name: data.name,
@@ -823,12 +856,10 @@ export class OrganizationService {
           hubspot_id: data.hubspot_id || undefined,
           source: user ? 'MedVirtual app' : 'Hubspot',
           referred_by_affiliate_id: referred_by_affiliate_id || undefined,
-          ...((d: any) => ({
-            contact_first_name: d.contact_first_name || undefined,
-            contact_last_name: d.contact_last_name || undefined,
-            contact_email: data.email || undefined,
-            refer_to_user_id: d.refer_to_user_id || undefined,
-          }))(data),
+          contact_first_name: data.contact_first_name || undefined,
+          contact_last_name: data.contact_last_name || undefined,
+          contact_email: data.contact_email || undefined,
+          refer_to_user_id: data.refer_to_user_id || undefined,
         },
       });
 
@@ -863,8 +894,10 @@ export class OrganizationService {
 
       if (user){ //this rule avoid re-call on hubspot. If this flow came from hubspot, we dont have logged user and then we avoid send new organization for hubspot
         await this.hubspot.createOrganizationInHubspot(newOrganization);
+        // Reload to get hubspot_id updated by createOrganizationInHubspot, then create the contact
+        await this.contactService.createForOrganization(newOrganization.id);
       }
-      
+
 
       return newOrganization;
     } catch (error) {
@@ -873,6 +906,7 @@ export class OrganizationService {
       }
       throw new BadRequestException('Failed to create organization:', error);
     }
+      
   }
 
   async update(id: string, data: UpdateOrganizationDto): Promise<Organization> {

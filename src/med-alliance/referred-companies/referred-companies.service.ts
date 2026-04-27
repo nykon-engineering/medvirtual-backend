@@ -33,6 +33,7 @@ import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { OrganizationService } from '../../organization/organization.service';
 import { HubspotService } from '../../hubspot/hubspot.service';
+import { ContactService } from '../../contacts/contacts.service';
 import axios from 'axios';
 
 
@@ -46,6 +47,7 @@ export class ReferredCompaniesService {
     private readonly reviewCases: ReviewCasesService,
     private readonly organizationService: OrganizationService,
     private readonly hubspot: HubspotService,
+    private readonly contactService: ContactService,
   ) {}
 
 
@@ -138,10 +140,18 @@ export class ReferredCompaniesService {
 
       if (!newOrganization) throw new NotFoundException('Organization not found after creation');
 
-      // Step 6: Create HubSpot contact with referral data + associations.
+      // Step 6: Create Contact in DB + HubSpot with referral data + associations.
       if (currentUser) {
         try {
-          const hubspotContactId = await this.hubspot.createContactFromReferredCompanyInHubspot(newOrganization);
+          const { contact: newContact, hubspotId: hubspotContactId } =
+            await this.contactService.createForReferredCompany(newOrganization);
+          if (newContact) {
+            cleanupStack.push(async () => {
+              await this.contactService.deleteById(newContact.id).catch((e) =>
+                console.error('[rollback] Failed to delete DB contact:', e),
+              );
+            });
+          }
           if (hubspotContactId && typeof hubspotContactId === 'string') {
             cleanupStack.push(async () => {
               await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }).catch((e) =>

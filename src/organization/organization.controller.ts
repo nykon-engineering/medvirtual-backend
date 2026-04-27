@@ -169,6 +169,16 @@ export class OrganizationController {
     return await this.organizationService.getAllPaginated(user, query);
   }
 
+  @Get(':id/contact')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin', 'organization_admin', 'organization_super_admin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Get the main contact associated with an organization' })
+  @ApiResponse({ status: 200, description: 'Contact retrieved successfully' })
+  async getContactByOrgId(@Param('id') id: string) {
+    return await this.organizationService.getContactByOrgId(id);
+  }
+
   @Get('/:id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(
