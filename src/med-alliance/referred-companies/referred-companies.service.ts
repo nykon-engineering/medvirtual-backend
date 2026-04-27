@@ -60,6 +60,10 @@ export class ReferredCompaniesService {
     try {
       // Step 1: Create organization (DB + HubSpot company).
       const org = await this.organizationService.create(dto, currentUser, currentUser.id);
+      // Save pre-sync hubspot_id: referralSync (Step 4) may update org.hubspot_id to a matched
+      // existing HubSpot company. We keep the original ID so the contact is associated with the
+      // company that was just created for this referral, not the matched one.
+      const preReferralSyncHubspotId = org.hubspot_id;
       cleanupStack.push(async () => {
         // Delete HubSpot company if it was created during org creation.
         const freshOrg = await this.prisma.organization.findUnique({
@@ -144,7 +148,10 @@ export class ReferredCompaniesService {
       if (currentUser) {
         try {
           const { contact: newContact, hubspotId: hubspotContactId } =
-            await this.contactService.createForReferredCompany(newOrganization);
+            await this.contactService.createForReferredCompany({
+              ...newOrganization,
+              hubspot_id: preReferralSyncHubspotId ?? newOrganization.hubspot_id,
+            });
           if (newContact) {
             cleanupStack.push(async () => {
               await this.contactService.deleteById(newContact.id).catch((e) =>

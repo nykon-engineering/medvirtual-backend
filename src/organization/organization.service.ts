@@ -894,8 +894,10 @@ export class OrganizationService {
 
       if (user){ //this rule avoid re-call on hubspot. If this flow came from hubspot, we dont have logged user and then we avoid send new organization for hubspot
         await this.hubspot.createOrganizationInHubspot(newOrganization);
-        // Reload to get hubspot_id updated by createOrganizationInHubspot, then create the contact
-        await this.contactService.createForOrganization(newOrganization.id);
+        // Referred companies have their own contact creation flow (createForReferredCompany in Step 6)
+        if (!referred_by_affiliate_id) {
+          await this.contactService.createForOrganization(organization.id);
+        }
       }
 
 
