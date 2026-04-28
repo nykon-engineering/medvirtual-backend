@@ -1011,6 +1011,18 @@ export class UserService {
         },
       });
 
+      // Link contact to the new user if contact_id was provided
+      if (inviteData.contact_id) {
+        try {
+          await this.prisma.contact.update({
+            where: { id: inviteData.contact_id },
+            data: { user_id: newUser.id },
+          });
+        } catch (err) {
+          console.error('Failed to link contact to new user:', err);
+        }
+      }
+
       // Generate invitation token
       const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
         expiresIn: '48h',
