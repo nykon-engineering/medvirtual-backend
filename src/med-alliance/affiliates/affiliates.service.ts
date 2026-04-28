@@ -19,6 +19,7 @@ import { MailService } from '../../mail/mail.service';
 
 import { getUserEmailTheme } from '../../common/utils/email-templates/theme-helper';
 import { AffiliateCreationService } from '../../hubspot/create/affiliate';
+import { AffiliateUpdateService } from '../../hubspot/update/affiliate';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
 
 import * as jwt from 'jsonwebtoken';
@@ -45,6 +46,7 @@ export class AffiliatesService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly affiliateCreationService: AffiliateCreationService,
+    private readonly affiliateUpdateService: AffiliateUpdateService,
   ) {}
   
   // Shared helper: ensure a user has an active AffiliateProfile.
@@ -642,16 +644,14 @@ export class AffiliatesService {
   // - If the user's role is 'affiliate': deactivates both the user account and the profile.
   // - If the user's role is 'organization_admin' or 'organization_super_admin': deactivates only the profile.
   async deactivate(id: string) {
-    const profile = await this.findOne(id); // throws NotFoundException if not found
+    const profile = await this.findOne(id);
     const user = profile.user as any;
 
-    // Always deactivate the affiliate profile
     await this.prisma.affiliateProfile.update({
       where: { id },
       data: { status: 'inactive' },
     });
 
-    // If user role is 'affiliate', also deactivate the user account
     if (user.role === 'affiliate') {
       await this.prisma.uSER.update({
         where: { id: profile.user_id },
@@ -660,6 +660,10 @@ export class AffiliatesService {
           status_before_deactivation: user.status,
         },
       });
+    }
+
+    if (profile.hubspot_id) {
+      await this.affiliateUpdateService.deactivate(profile.hubspot_id);
     }
   }
 
@@ -713,6 +717,10 @@ export class AffiliatesService {
           status_before_deactivation: null,
         },
       });
+    }
+
+    if (profile.hubspot_id) {
+      await this.affiliateUpdateService.reactivate(profile.hubspot_id);
     }
   }
 

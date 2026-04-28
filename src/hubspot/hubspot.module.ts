@@ -47,6 +47,7 @@ import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
 import { AffiliateCreationService } from './create/affiliate';
+import { AffiliateUpdateService } from './update/affiliate';
 
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
@@ -58,6 +59,7 @@ import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
 import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
+
 
 
 
@@ -107,6 +109,7 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     HandlerInvoicePropertyChange,
     HandlerInvoiceAssociationChange,
     HandlerComissionCreation,
+    AffiliateUpdateService,
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 
@@ -121,6 +124,7 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     HireRequestCreationService,
     HireRequestUpdateService,
     AffiliateCreationService,
+    AffiliateUpdateService,
   ],
 })
 export class HubspotModule {}
