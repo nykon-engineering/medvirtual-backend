@@ -71,7 +71,7 @@ export class HubspotController {
     }
 
     @Post('populate-contacts')
-    @UseGuards(AuthGuard)
+    //@UseGuards(AuthGuard)
     async populateContacts() {
         return this.hubspotService.populateContactsFromHubspot();
     }

@@ -43,7 +43,7 @@ model USER {
   hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
   panelCandidatesCreated       PanelCandidate[]    @relation("PanelCandidateCreatedBy")
   adminOrganizations           Organization[]      @relation("OrganizationAdmin")
-  ownedOrganizations           Organization?       @relation("OrganizationOwner")
+  ownedOrganizations           Organization[]      @relation("OrganizationOwner")
   sessions                     Session[]
   tickets                      Ticket[]
   ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
@@ -131,7 +131,7 @@ model Organization {
   deletedAt               DateTime?
   admin_id                String?
   description             String?
-  owner_id                String?                 @unique
+  owner_id                String?                 
   date_became_client      DateTime?
   date_founded            DateTime?
   date_joined             DateTime?
