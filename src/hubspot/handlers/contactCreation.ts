@@ -14,9 +14,10 @@ export class HandlerContactCreation {
 
 
     async execute(event){
+        const contactId = event.id ?? event.objectId;
         const properties = Object.keys(contactToDbDictionary).join(',');
         try{
-            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/contacts/${event.id}?properties=${properties}`,
+            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/objects/contacts/${Number(contactId)}?properties=${properties}`,
             {
             headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -28,12 +29,12 @@ export class HandlerContactCreation {
                 throw new BadRequestException('No object data found');
             }
             console.log('Fetched Contact Data from HubSpot:', getObject.data);
-            const contactData = mapContactToDb(getObject.data.results[0].properties);
+            const contactData = mapContactToDb(getObject.data.properties);
             
 
             const contactExists = await this.prisma.contact.findUnique({
                 where: {
-                    hubspot_id: String(event.id)
+                    hubspot_id: String(contactId)
                 }
             })
             if(contactExists) throw new BadRequestException('Contact already exists on the database');
