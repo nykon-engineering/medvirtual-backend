@@ -434,6 +434,7 @@ export class AffiliatesService {
         user: {
           select: {
             ...USER_SELECT,
+            hubspot_contact_id: true,
             referredOrganizations: {
               where: { status: { not: 'deleted' } },
               select: {

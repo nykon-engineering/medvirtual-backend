@@ -499,7 +499,10 @@ export class UserService {
   async update(id: string, userData: Prisma.USERUpdateInput): Promise<USER> {
     try {
       let user: Prisma.USERUpdateInput;
-      const currentUser = await this.findById(id);
+      const currentUser = await this.prisma.uSER.findUnique({
+        where: { id },
+        include: { contact: true },
+      });
       if (!currentUser) {
         throw new NotFoundException(`User not found`);
       }
@@ -514,14 +517,15 @@ export class UserService {
       } else {
         user = { ...userData };
       }
-      
 
-      //create contact in hubspot
-      const userForHubspot = {
-        ...user,
-        hubspot_contact_id: currentUser.hubspot_contact_id,
+      const hubspotContactId = currentUser.contact?.hubspot_id ?? null;
+      if (hubspotContactId) {
+        const userForHubspot = {
+          ...user,
+          hubspot_contact_id: hubspotContactId,
+        };
+        await this.hubspotService.updateContactInHubspot(userForHubspot);
       }
-      await this.hubspotService.updateContactInHubspot(userForHubspot);
 
       return await this.prisma.uSER.update({
         where: { id },
