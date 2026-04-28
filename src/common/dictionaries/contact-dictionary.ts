@@ -1,4 +1,4 @@
-export const contactToDbDictionary : Record<string, string | string[]> = {
+export const contactToDbDictionary : Record<string, string | string> = {
 
     hs_object_id: 'hubspot_id',
     firstname: 'first_name',

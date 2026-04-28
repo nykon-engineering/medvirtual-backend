@@ -50,6 +50,9 @@ import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChan
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
 import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
+import { HandlerContactCreation } from './handlers/contactCreation';
+import { Handler } from 'aws-lambda';
+import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
 
 
 
@@ -104,6 +107,9 @@ export class HubspotService {
       private readonly invoiceCreation: HandlerInvoiceCreation,
       private readonly invoicePropertyChange: HandlerInvoicePropertyChange,
       private readonly invoiceAssociationChange: HandlerInvoiceAssociationChange,
+
+      private readonly contactCreation: HandlerContactCreation,
+      private readonly contactPropertyChange: HandlerContactPropertyChange,
 
 
       @Inject(forwardRef (() => CandidatesService))
@@ -270,6 +276,14 @@ export class HubspotService {
                 
                 case 'ticket.propertyChange':
                     await this.ticketPropertyChange.execute(event);
+                    break;
+
+                case 'contact.creation':
+                    await this.contactCreation.execute(event);
+                    break;
+
+                case 'contact.propertyChange':
+                    await this.contactPropertyChange.execute(event);
                     break;
 
                 
