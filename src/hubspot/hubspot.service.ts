@@ -4,8 +4,9 @@ import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects'
 import axios from 'axios';
 import { OrganizationRole, Prisma } from '@prisma/client';
 
-import {  mapHubspotToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util'
+import {  mapHubspotToDb, mapOrganizationToDbHubspot, mapContactToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
+import { contactToDbDictionary } from '../common/dictionaries/contact-dictionary';
 
 import { CandidatesService } from '../candidate/candidates.service';
 
@@ -750,6 +751,67 @@ export class HubspotService {
       }
     }
 
+
+    async populateContactsFromHubspot(): Promise<{ created: number; skipped: number; errors: number }> {
+        const properties = `${Object.keys(contactToDbDictionary).join(',')},lifecyclestage`;
+        let after: string | undefined = undefined;
+        let created = 0, skipped = 0, errors = 0, diferentLifecycleStage = 0;
+
+        do {
+            const url = `https://api.hubapi.com/crm/v3/objects/contacts?properties=${properties}&associations=companies&limit=100${after ? `&after=${after}` : ''}`;
+            const response = await axios.get(url, {
+                headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}` },
+            });
+
+            const contacts = response.data.results ?? [];
+            after = response.data.paging?.next?.after ?? undefined;
+
+            for (const contact of contacts) {
+                try {
+                    if (contact.properties.lifecyclestage !== 'customer') { diferentLifecycleStage++; continue; }
+
+                    const hubspotId = String(contact.id);
+
+                    const exists = await this.prisma.contact.findUnique({ where: { hubspot_id: hubspotId } });
+                    if (exists) { skipped++; continue; }
+
+                    const contactData = mapContactToDb(contact.properties);
+
+                    let userId: string | undefined = undefined;
+                    if (contact.properties.email) {
+                        const userByEmail = await this.prisma.uSER.findFirst({
+                            where: { email: { equals: contact.properties.email, mode: 'insensitive' } },
+                            select: { id: true, contact: { select: { id: true } } },
+                        });
+                        if (userByEmail && !userByEmail.contact) userId = userByEmail.id;
+                    }
+
+                    let organizationId: string | undefined = undefined;
+                    const companyAssocs = contact.associations?.companies?.results ?? [];
+                    if (companyAssocs.length > 0) {
+                        const org = await this.prisma.organization.findUnique({
+                            where: { hubspot_id: String(companyAssocs[0].id) },
+                            select: { id: true },
+                        });
+                        if (org) organizationId = org.id;
+                    }
+
+                    await this.prisma.contact.create({
+                        data: { ...contactData, hubspot_id: hubspotId, user_id: userId, organization_id: organizationId },
+                    });
+                    created++;
+                    console.log(`[populateContactsFromHubspot] Created: ${contact.properties.email ?? hubspotId}`);
+                } catch (err) {
+                    console.error(`[populateContactsFromHubspot] Error for contact ${contact.id}:`, err.message);
+                    errors++;
+                }
+            }
+
+            console.log(`[populateContactsFromHubspot] Page done. Created: ${created}, Skipped: ${skipped}, Errors: ${errors}, Diferent Lifecycle Stage: ${diferentLifecycleStage}`);
+        } while (after);
+
+        return { created, skipped, errors };
+    }
 
     async alignOwners() {
         

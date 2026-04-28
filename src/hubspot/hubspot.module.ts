@@ -52,9 +52,13 @@ import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { HandlerContactCreation } from './handlers/contactCreation';
+import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+
 import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
+
 
 
 
@@ -96,12 +100,13 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     AffiliateCreationService,
     ContactUpdateService,
     ContactDeleteService,
+    HandlerContactCreation,
+    HandlerContactPropertyChange,
     CompanyDeleteService,
     HandlerInvoiceCreation,
     HandlerInvoicePropertyChange,
     HandlerInvoiceAssociationChange,
     HandlerComissionCreation,
-    
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 

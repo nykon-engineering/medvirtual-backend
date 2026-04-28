@@ -70,6 +70,12 @@ export class HubspotController {
         return this.hubspotService.getCandidatesAndDownload(data);
     }
 
+    @Post('populate-contacts')
+    @UseGuards(AuthGuard)
+    async populateContacts() {
+        return this.hubspotService.populateContactsFromHubspot();
+    }
+
     @Get('align-owners')
     async alignOwners() {
         return this.hubspotService.alignOwners();
