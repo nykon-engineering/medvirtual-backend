@@ -91,6 +91,11 @@ export class AffiliatesController {
         hubspot_pipeline_stage: profile.hubspot_pipeline_stage ?? null,
         business_unit: profile.business_unit ?? null,
         user_role: user?.role ?? null,
+        associated_contact_id: user?.contact?.id ?? null,
+        associated_contact_name:
+          [user?.contact?.first_name, user?.contact?.last_name].filter(Boolean).join(' ') || null,
+        associated_contact_email: user?.contact?.email ?? null,
+        associated_contact_job_title: user?.contact?.job_title ?? null,
       };
     });
     return { status: 200, message: 'Affiliate profiles retrieved successfully', data, pagination: result.pagination };

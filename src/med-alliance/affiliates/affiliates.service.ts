@@ -298,6 +298,7 @@ export class AffiliatesService {
               ...USER_SELECT,
               organization: { select: { id: true, name: true } },
               _count: { select: { referredOrganizations: true } },
+              contact: { select: { id: true, first_name: true, last_name: true, email: true, job_title: true } },
             },
           },
         },
