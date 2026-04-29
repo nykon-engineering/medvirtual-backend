@@ -361,6 +361,29 @@ export class ReferredCompaniesService {
         contact_last_name: true,
         med_alliance_referral_status: true,
         eligibility_start_at: true,
+        affiliateCommissions: {
+          where: {
+            affiliate_id: currentUser.id,
+            status: { in: ['eligible', 'requested', 'paid', 'rejected'] },
+          },
+          select: {
+            id: true,
+            commission_amount: true,
+            commission_percent_snapshot: true,
+            base_amount_snapshot: true,
+            status: true,
+            createdAt: true,
+            hubspotInvoiceSnapshot: {
+              select: {
+                hubspot_id: true,
+                invoice_amount: true,
+                invoice_status: true,
+                paid_at: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
