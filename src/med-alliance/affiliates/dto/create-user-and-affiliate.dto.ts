@@ -1,5 +1,6 @@
 import {
   IsNotEmpty,
+  IsOptional,
   IsString,
 } from 'class-validator';
 
@@ -20,4 +21,12 @@ export class CreateUserAndAffiliateProfileDto {
   @IsString()
   @IsNotEmpty()
   role: string;
+
+  @IsOptional()
+  @IsString()
+  phone_number?: string;
+
+  @IsOptional()
+  @IsString()
+  company_name?: string;
 }

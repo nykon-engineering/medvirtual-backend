@@ -138,7 +138,7 @@ export class AffiliatesService {
               email: dto.email,
               first_name: dto.first_name,
               last_name: dto.last_name,
-              phone: '',
+              phone: dto.phone_number ?? '',
               avatar: '',
               organization_name: '',
               role: dto.role,
@@ -218,6 +218,19 @@ export class AffiliatesService {
       },
     });
 
+    // Create a DB Contact record for the affiliate so phone/company are stored and linked
+    await this.prisma.contact.create({
+      data: {
+        user_id: user.id,
+        first_name: dto.first_name,
+        last_name: dto.last_name,
+        email: dto.email,
+        phone: dto.phone_number ?? null,
+        company_name: dto.company_name ?? null,
+        referral_source: 'Referral - Partner',
+      },
+    }).catch(() => {}); // silently skip if a contact already exists for this user
+
     const newAffiliateData = await this.findOne(profile.id);
 
     // => Create Growth Partner in Hubspot
@@ -229,7 +242,7 @@ export class AffiliatesService {
       console.error('Failed to create Growth Partner in Hubspot:', error);
       throw new BadRequestException(error.message || 'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.');
     }
-  
+
     return newAffiliateData;
   }
 
@@ -450,13 +463,15 @@ export class AffiliatesService {
               },
               orderBy: { createdAt: 'desc' as const },
             },
-            organization: { 
-              select: { 
-                id: true, 
+            phone: true,
+            contact: { select: { company_name: true } },
+            organization: {
+              select: {
+                id: true,
                 name: true,
                 business_unit: true,
                 hubspot_id: true,
-              } 
+              }
             },
           },
         },

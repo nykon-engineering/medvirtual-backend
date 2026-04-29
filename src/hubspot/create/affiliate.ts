@@ -26,8 +26,34 @@ export class AffiliateCreationService {
       return user && user.hubspot_id ? user.hubspot_id : null;
     }
 
-    private async ensureContact(userId: string, firstName: string, lastName: string, email: string, existingContactId: string | null): Promise<string | null> {
-      if (existingContactId) return existingContactId;
+    private async ensureContact(
+      userId: string,
+      firstName: string,
+      lastName: string,
+      email: string,
+      existingContactId: string | null,
+      phone?: string,
+      companyName?: string,
+    ): Promise<string | null> {
+      if (existingContactId) {
+        // Update existing contact with Referral qualification and lead source
+        await axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/contacts/${existingContactId}`,
+          {
+            properties: {
+              qualification_status: 'Referral',
+              latest_lead_source: 'Referral',
+            },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+        return existingContactId;
+      }
 
       const response = await axios.post(
         "https://api.hubapi.com/crm/v3/objects/contacts",
@@ -36,6 +62,10 @@ export class AffiliateCreationService {
             firstname: firstName,
             lastname: lastName,
             email: email,
+            phone: phone ?? '',
+            company: companyName ?? '',
+            qualification_status: 'Referral',
+            latest_lead_source: 'Referral',
           },
         },
         {
@@ -53,6 +83,12 @@ export class AffiliateCreationService {
         data: { hubspot_contact_id: contactId },
       });
 
+      // Sync hubspot_id back to DB Contact if one was created for this user
+      await this.prisma.contact.updateMany({
+        where: { user_id: userId, hubspot_id: null },
+        data: { hubspot_id: contactId },
+      });
+
       return contactId;
     }
 
@@ -64,6 +100,8 @@ export class AffiliateCreationService {
             data.user.last_name,
             data.user.email,
             data.user.hubspot_contact_id ?? null,
+            data.user.phone ?? undefined,
+            data.user.contact?.company_name ?? undefined,
           );
 
           const associations: { to: { id: number }; types: { associationCategory: string; associationTypeId: number }[] }[] = [];
