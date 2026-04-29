@@ -585,7 +585,7 @@ export class AffiliatesService {
     return this.prisma.uSER.findMany({
       where: {
         email: { contains: email, mode: 'insensitive' },
-        affiliateProfile: null,
+        //affiliateProfile: null,
       },
       select: { id: true, first_name: true, last_name: true, email: true, role: true },
       take: 10,
