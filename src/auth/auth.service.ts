@@ -28,6 +28,7 @@ import { AuthLogoutDto } from './dto/authLogOut.dto';
 import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
 import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
+import { AffiliateUpdateService } from '../hubspot/update/affiliate';
 
 @Injectable()
 export class AuthService {
@@ -36,6 +37,7 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly mailService: MailService,
     private readonly prisma: PrismaService,
+    private readonly affiliateUpdateService: AffiliateUpdateService,
   ) {}
 
 
@@ -723,6 +725,10 @@ export class AuthService {
           status: 'active',
         },
       })
+
+      if (existingAffiliate.hubspot_id) {
+        await this.affiliateUpdateService.reactivate(existingAffiliate.hubspot_id);
+      }
     }
 
     if (!updatePass) {

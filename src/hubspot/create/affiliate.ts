@@ -127,7 +127,7 @@ export class AffiliateCreationService {
                 growth_partner_name: data.user.first_name + ' ' + data.user.last_name,
                 growth_partner_email_address: data.user.email,
                 hs_pipeline: '883841953',
-                hs_pipeline_stage: '1329693870',
+                hs_pipeline_stage: data.status === 'invited'? '1329066003' : '1329693870', //if invited, set to "Prospect", otherwise set to "Active"
                 business_unit: data.user.organization?.business_unit,
                 growth_partner_company_name: data.user.organization?.name,
                 alliance_commission: 7,

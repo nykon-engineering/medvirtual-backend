@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AffiliateUpdateService } from '../hubspot/update/affiliate';
 import { generateVerificationCode } from '../common/utils/generateCode.util';
 
 import * as jwt from 'jsonwebtoken';
@@ -62,6 +63,7 @@ describe('AuthService - signIn', () => {
         { provide: UserService, useValue: userMock },
         { provide: MailService, useValue: mailMock },
         { provide: PrismaService, useValue: prismaMock },
+        { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
       ],
     }).compile();
 
@@ -363,11 +365,12 @@ describe('AuthService - Signup', () => {
         { provide: UserService, useValue: userServiceMock },
         { provide: MailService, useValue: mailmock },
         { provide: PrismaService, useValue: prismamock },
+        { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    user = module.get<UserService>(UserService);
+user = module.get<UserService>(UserService);
     mail = module.get<MailService>(MailService);
     prisma = module.get<PrismaService>(PrismaService);
   });
@@ -484,6 +487,7 @@ describe('AuthService - inviteUser', () => {
         { provide: UserService, useValue: userServiceMock },
         { provide: MailService, useValue: mailServiceMock },
         { provide: PrismaService, useValue: prismaMock },
+        { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
       ],
     }).compile();
 
@@ -554,9 +558,10 @@ describe('AuthService - getUser', () => {
         { provide: UserService, useValue: {} },
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismamock },
+        { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
       ],
     }).compile();
-    
+
     service = module.get<AuthService>(AuthService);
     prisma = module.get<PrismaService>(PrismaService);
   })
@@ -641,6 +646,7 @@ describe('AuthService - invitedUserSignup', () => {
         { provide: UserService, useValue: {} },
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismamock },
+        { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
       ]
     }).compile();
     service = module.get<AuthService>(AuthService);
