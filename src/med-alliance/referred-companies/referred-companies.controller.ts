@@ -62,7 +62,7 @@ export class ReferredCompaniesController {
   // GET /med-alliance/referred-companies/:id — Get one (scoped to affiliate).
   @Get('referred-companies/:id')
   @HttpCode(200)
-  @Roles(...AFFILIATE_ROLES)
+  @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
   async findOne(@Param('id') id: string, @CurrentUser() user: USER) {
     const data = await this.service.findOneForAffiliate(id, user);
     return { status: 200, message: 'Referred company retrieved successfully', data };
