@@ -24,6 +24,7 @@ function computeEffectiveStatus(
   if (Date.now() - eligibilityStartAt.getTime() > ONE_YEAR_MS) return 'not_eligible';
   return 'eligible';
 }
+import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
@@ -364,7 +365,7 @@ export class ReferredCompaniesService {
         affiliateCommissions: {
           where: {
             affiliate_id: currentUser.id,
-            status: { in: ['eligible', 'requested', 'paid', 'rejected'] },
+            status: { in: AFFILIATE_VISIBLE_STATUSES as any[] },
           },
           select: {
             id: true,

@@ -493,9 +493,9 @@ export class AffiliatesService {
   }
 
   async update(id: string, dto: UpdateAffiliateProfileDto) {
-    await this.findOne(id); // ensures it exists
+    const existing = await this.findOne(id); // ensures it exists
 
-    return this.prisma.affiliateProfile.update({
+    const updated = await this.prisma.affiliateProfile.update({
       where: { id },
       data: {
         ...(dto.commission_percent_default !== undefined && {
@@ -517,6 +517,36 @@ export class AffiliatesService {
       },
       include: { user: { select: USER_SELECT } },
     });
+
+    if (existing.hubspot_id) {
+      if (dto.commission_percent_default !== undefined) {
+        try {
+          await this.affiliateUpdateService.updateCommission(
+            existing.hubspot_id,
+            dto.commission_percent_default,
+          );
+        } catch (err) {
+          console.error('[HubSpot] Failed to sync commission:', err);
+        }
+      }
+
+      if (dto.payout_details !== undefined) {
+        const details = dto.payout_details as Record<string, unknown> | null;
+        if (details?.method === 'bill_com' && details.account_name && details.account_number) {
+          try {
+            await this.affiliateUpdateService.updateBankingData(
+              existing.hubspot_id,
+              String(details.account_name),
+              String(details.account_number),
+            );
+          } catch (err) {
+            console.error('[HubSpot] Failed to sync banking data:', err);
+          }
+        }
+      }
+    }
+
+    return updated;
   }
 
   async findOwn(currentUser: USER) {
