@@ -102,6 +102,13 @@ export class CommissionDetectionService {
       );
       return { created: 0, skipped: 0 };
     }
+    if (!profile.user_id) {
+      this.logger.warn(
+        `Active affiliate profile ${profile.id} has no connected user — skipping commission detection`,
+      );
+      return { created: 0, skipped: 0 };
+    }
+    const affiliateUserId: string = profile.user_id;
 
     // Fetch all candidate paid snapshots for this organization.
     const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
@@ -140,7 +147,7 @@ export class CommissionDetectionService {
 
     for (const snapshot of candidates) {
       const idempotencyKey = this.buildIdempotencyKey({
-        affiliateId: profile.user_id,
+        affiliateId: affiliateUserId,
         hubspotInvoiceId: snapshot.hubspot_id,
         paidAt: snapshot.paid_at,
         baseAmount: snapshot.invoice_amount.toString(),
@@ -155,7 +162,7 @@ export class CommissionDetectionService {
 
         await this.prisma.affiliateCommission.create({
           data: {
-            affiliate_id: profile.user_id,
+            affiliate_id: affiliateUserId,
             affiliate_profile_id: profile.id,
             organization_id: organizationId,
             hubspot_invoice_snapshot_id: snapshot.id,

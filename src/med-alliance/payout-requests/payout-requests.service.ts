@@ -315,6 +315,13 @@ export class PayoutRequestsService {
         `Affiliate profile not found: ${dto.affiliate_profile_id}`,
       );
     }
+    if (!profile.user_id) {
+      throw new BadRequestException(
+        'This affiliate has no connected user account. Invite the user first before creating a payout request.',
+      );
+    }
+    // Extract to a local const so TypeScript keeps the `string` type inside async callbacks.
+    const affiliateUserId: string = profile.user_id;
 
     // 2. Validate commissions exist, belong to that affiliate, and are eligible
     const commissions = await this.prisma.affiliateCommission.findMany({
@@ -327,7 +334,7 @@ export class PayoutRequestsService {
     }
 
     const foreignCommission = commissions.find(
-      (c) => c.affiliate_id !== profile.user_id,
+      (c) => c.affiliate_id !== affiliateUserId,
     );
     if (foreignCommission) {
       throw new BadRequestException(
@@ -354,7 +361,7 @@ export class PayoutRequestsService {
     const payoutRequest = await this.prisma.$transaction(async (tx) => {
       const request = await tx.affiliatePayoutRequest.create({
         data: {
-          affiliate_id: profile.user_id,
+          affiliate_id: affiliateUserId,
           affiliate_profile_id: profile.id,
           status: 'requested',
           requested_amount: requestedAmount,

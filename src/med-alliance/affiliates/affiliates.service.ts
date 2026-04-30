@@ -21,6 +21,7 @@ import { getUserEmailTheme } from '../../common/utils/email-templates/theme-help
 import { AffiliateCreationService } from '../../hubspot/create/affiliate';
 import { AffiliateUpdateService } from '../../hubspot/update/affiliate';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
+import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 
 import * as jwt from 'jsonwebtoken';
 import InviteSignup from '../../common/utils/email-templates/invite-signup';
@@ -246,6 +247,89 @@ export class AffiliatesService {
     return newAffiliateData;
   }
 
+
+  // Admin: invite a new user and link them to an existing affiliate that has no connected user.
+  // Used when a growth partner was created in HubSpot without an associated contact.
+  async inviteUserForAffiliate(id: string, dto: InviteUserForAffiliateDto, adminUserId: string) {
+    const affiliate = await this.prisma.affiliateProfile.findUnique({ where: { id } });
+    if (!affiliate) throw new NotFoundException('Affiliate profile not found');
+    if (affiliate.user_id) throw new BadRequestException('This affiliate already has a connected user');
+
+    const emailInUse = await this.prisma.uSER.findUnique({ where: { email: dto.email } });
+    if (emailInUse) throw new ConflictException('A user with this email already exists');
+
+    // 1. Create USER with status 'invited'
+    const user = await this.prisma.uSER.create({
+      data: {
+        email: dto.email,
+        first_name: dto.first_name,
+        last_name: dto.last_name,
+        phone: dto.phone_number ?? '',
+        avatar: '',
+        organization_name: '',
+        role: 'affiliate',
+        job_title: dto.job_title ?? '',
+        workos_id: '',
+        password: '',
+        authentication_method: 'OwnSign',
+        status: 'invited',
+      },
+    });
+
+    // 2. Generate JWT invite token and send email
+    const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '48h' });
+    const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+    const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+    const inviteLink = emailTheme?.companyName === 'Berry Virtual'
+      ? `${baseInviteLink}&company=berry`
+      : baseInviteLink;
+
+    const mailSent = await this.mailService.sendMail({
+      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+      to: dto.email,
+      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
+      html: InviteSignup(inviteLink, emailTheme || undefined),
+    });
+    if (!mailSent) throw new BadRequestException('Failed to send invitation email');
+
+    const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    await this.prisma.emailInvitation.create({
+      data: { userId: user.id, email_from: dto.email, code, expiresAt: codeExpiresAt },
+    });
+
+    // 3. Create Contact in DB
+    await this.prisma.contact.create({
+      data: {
+        user_id: user.id,
+        first_name: dto.first_name,
+        last_name: dto.last_name,
+        email: dto.email,
+        phone: dto.phone_number ?? null,
+        job_title: dto.job_title ?? null,
+        company_name: dto.company_name ?? null,
+        referral_source: 'Referral - Partner',
+      },
+    }).catch(() => {}); // skip silently if contact constraint is violated
+
+    // 4. Link user to the affiliate profile
+    await this.prisma.affiliateProfile.update({
+      where: { id },
+      data: { user_id: user.id },
+    });
+
+    // 5. Create HubSpot contact and link to existing Growth Partner (non-blocking)
+    this.affiliateCreationService.createContactAndLinkToGrowthPartner(
+      user.id,
+      dto.first_name,
+      dto.last_name,
+      dto.email,
+      affiliate.hubspot_id ?? null,
+      dto.phone_number,
+      dto.company_name,
+    ).catch((err) => console.error('[HubSpot] invite-user-for-affiliate background task failed:', err));
+
+    return this.findOneEnriched(id);
+  }
 
   async findByUserId(userId: string) {
     return this.prisma.affiliateProfile.findUnique({
@@ -654,6 +738,17 @@ export class AffiliatesService {
     const profile = await this.findOne(id);
     const userId = profile.user_id;
 
+    // Affiliate with no connected user yet — return empty financial aggregates.
+    if (!userId) {
+      return {
+        profile,
+        pendingAgg: { _sum: { requested_amount: null } },
+        lifetimeAgg: { _sum: { commission_amount: null } },
+        payoutHistory: [],
+        commsByOrg: [],
+      };
+    }
+
     const [pendingAgg, lifetimeAgg, payoutHistory, commsByOrg] = await Promise.all([
       this.prisma.affiliatePayoutRequest.aggregate({
         _sum: { requested_amount: true },
@@ -698,7 +793,7 @@ export class AffiliatesService {
       data: { status: 'inactive' },
     });
 
-    if (user.role === 'affiliate') {
+    if (profile.user_id && user?.role === 'affiliate') {
       await this.prisma.uSER.update({
         where: { id: profile.user_id },
         data: {
@@ -724,17 +819,13 @@ export class AffiliatesService {
       throw new BadRequestException('Only invited affiliates can be deleted');
     }
 
-    // Always hard-delete the affiliate profile
-    // Hard-delete the user account — the user never completed signup (status='invited'),
-    // so there is no data to preserve and the email must be freely reusable.
     await this.prisma.$transaction(async (tx) => {
       await tx.affiliateProfile.delete({ where: { id } });
-      await tx.emailInvitation.deleteMany({ where: { userId: user.id } });
-      await tx.uSER.delete({
-        where: { id: user.id },
-      });
-    })
-    
+      if (profile.user_id && user?.id) {
+        await tx.emailInvitation.deleteMany({ where: { userId: user.id } });
+        await tx.uSER.delete({ where: { id: user.id } });
+      }
+    });
   }
 
   // Admin: reactivate an inactive affiliate profile (and user account if role is 'affiliate').
@@ -755,7 +846,7 @@ export class AffiliatesService {
     });
 
     // If user role is 'affiliate', restore the user account status
-    if (user.role === 'affiliate') {
+    if (profile.user_id && user?.role === 'affiliate') {
       await this.prisma.uSER.update({
         where: { id: profile.user_id },
         data: {
@@ -773,6 +864,7 @@ export class AffiliatesService {
   // Admin: link the affiliate's connected user to an existing organization.
   async linkOrganization(id: string, dto: LinkOrganizationDto) {
     const profile = await this.findOne(id); // ensures profile exists
+    if (!profile.user_id) throw new BadRequestException('Affiliate has no connected user');
 
     const org = await this.prisma.organization.findUnique({
       where: { id: dto.organization_id },

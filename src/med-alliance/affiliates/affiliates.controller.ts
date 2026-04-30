@@ -26,6 +26,7 @@ import {
 } from './dto/update-affiliate-profile.dto';
 import { ListAffiliatesDto } from './dto/list-affiliates.dto';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
+import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
@@ -232,6 +233,75 @@ export class AffiliatesController {
   async deleteInvited(@Param('id') id: string) {
     await this.affiliatesService.deleteInvited(id);
     return { status: 200, message: 'Affiliate deleted successfully' };
+  }
+
+  // POST /med-alliance/admin/affiliates/:id/invite-user — Invite a user and link them to an affiliate that has no connected user.
+  @Post('admin/affiliates/:id/invite-user')
+  @HttpCode(201)
+  @Roles(...ADMIN_ROLES)
+  async inviteUserForAffiliate(
+    @Param('id') id: string,
+    @Body() dto: InviteUserForAffiliateDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const enriched = await this.affiliatesService.inviteUserForAffiliate(id, dto, admin.id);
+    const profile = enriched.profile;
+    const user = profile.user as any;
+
+    const commsByOrgMap: Record<string, number> = Object.fromEntries(
+      enriched.commsByOrg.map((r: any) => [
+        r.organization_id,
+        Number(r._sum.commission_amount ?? 0),
+      ])
+    );
+
+    const data = {
+      id: profile.id,
+      user_id: profile.user_id,
+      full_name: profile.full_name || `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim(),
+      email: user?.email ?? '',
+      status: profile.status,
+      commission_percent_default: Number(profile.commission_percent_default),
+      payout_preference_method: profile.payout_preference_method,
+      payout_preference_reference: profile.payout_preference_reference,
+      payout_preference_notes: profile.payout_preference_notes,
+      payout_details: profile.payout_details,
+      banking_complete: !!(profile.payout_details),
+      linked_company: user?.organization?.name ?? null,
+      linked_company_id: user?.organization?.id ?? null,
+      referred_companies_count: user?.referredOrganizations?.length ?? 0,
+      pending_payout_amount: Number(enriched.pendingAgg._sum.requested_amount ?? 0),
+      lifetime_commissions: Number(enriched.lifetimeAgg._sum.commission_amount ?? 0),
+      hubspot_id: profile.hubspot_id ?? null,
+      hubspot_pipeline: profile.hubspot_pipeline ?? null,
+      hubspot_pipeline_stage: profile.hubspot_pipeline_stage ?? null,
+      business_unit: profile.business_unit ?? null,
+      created_at: profile.createdAt.toISOString(),
+      referred_companies: (user?.referredOrganizations ?? []).map((org: any) => ({
+        id: org.id,
+        name: org.name,
+        referral_status: org.med_alliance_referral_status ?? org.status,
+        total_commissions: commsByOrgMap[org.id] ?? 0,
+      })),
+      recent_commissions: (profile.commissions ?? []).map((c: any) => ({
+        id: c.id,
+        organization_name: c.organization?.name ?? '',
+        amount: Number(c.commission_amount),
+        status: c.status,
+        date: c.createdAt.toISOString(),
+      })),
+      payout_history: enriched.payoutHistory.map((pr: any) => ({
+        id: pr.id,
+        payout_request_id: pr.id,
+        amount: Number(pr.paid_amount ?? pr.requested_amount ?? 0),
+        paid_at: pr.paid_at?.toISOString() ?? '',
+        payment_method: pr.payment_method ?? '',
+        transaction_reference: pr.transaction_reference ?? null,
+        status: 'paid' as const,
+      })),
+    };
+
+    return { status: 201, message: 'User invited and linked to affiliate successfully', data };
   }
 
   // PATCH /med-alliance/admin/affiliates/:id — Update profile (admin full access).

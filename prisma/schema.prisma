@@ -716,7 +716,7 @@ model PositionRateConfig {
 
 model AffiliateProfile {
   id                          String          @id @default(uuid())
-  user_id                     String          @unique
+  user_id                     String?         @unique
   hubspot_id                  String?         @unique
   full_name                   String?
   hubspot_pipeline            String?
@@ -732,7 +732,7 @@ model AffiliateProfile {
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
 
-  user           USER                   @relation(fields: [user_id], references: [id])
+  user           USER?                  @relation(fields: [user_id], references: [id])
   commissions    AffiliateCommission[]
   payoutRequests AffiliatePayoutRequest[]
 

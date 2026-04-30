@@ -26,6 +26,34 @@ export class AffiliateCreationService {
       return user && user.hubspot_id ? user.hubspot_id : null;
     }
 
+    async createContactAndLinkToGrowthPartner(
+      userId: string,
+      firstName: string,
+      lastName: string,
+      email: string,
+      growthPartnerHubspotId: string | null,
+      phone?: string,
+      companyName?: string,
+    ): Promise<void> {
+      try {
+        const contactId = await this.ensureContact(userId, firstName, lastName, email, null, phone, companyName);
+        if (contactId && growthPartnerHubspotId) {
+          await axios.put(
+            `https://api.hubapi.com/crm/v4/objects/p20630393_growth_partners/${growthPartnerHubspotId}/associations/contacts/${contactId}`,
+            [{ associationCategory: 'USER_DEFINED', associationTypeId: 119 }],
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+        }
+      } catch (error) {
+        console.error('[HubSpot] Failed to create contact / link to growth partner:', error?.response?.data ?? error?.message);
+      }
+    }
+
     private async ensureContact(
       userId: string,
       firstName: string,
