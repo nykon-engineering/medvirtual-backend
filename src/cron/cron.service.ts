@@ -8,10 +8,15 @@ import systemReport from '../common/utils/email-templates/system-report';
 import clientUsersDeactivationReport from '../common/utils/email-templates/client-users-deactivation-report';
 import cronJobErrorReport from '../common/utils/email-templates/cron-job-error-report';
 import newPositionsAlert from '../common/utils/email-templates/new-positions-alert';
+import quarterlyPayoutReport, {
+  PayoutReportEntry,
+  PayoutReportFailure,
+} from '../common/utils/email-templates/quarterly-payout-report';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 
 type Event = {
     objectId?: string;
@@ -27,6 +32,7 @@ export class CronService {
         private readonly mailService: MailService,
         private readonly hireRequestService: HireRequestService,
         private readonly positionRateConfigService: PositionRateConfigService,
+        private readonly payoutRequestsService: PayoutRequestsService,
     ){}
 
     
@@ -494,6 +500,85 @@ export class CronService {
             console.error('Error in syncPositionsFromHubspot:', error);
             return false;
         }
+    }
+
+    async createQuarterlyPayoutRequests(): Promise<{
+        created: number;
+        failed: number;
+        total_amount: string;
+    }> {
+        const runAt = new Date();
+        console.log('Starting createQuarterlyPayoutRequests cron job...');
+
+        const affiliates = await this.prisma.affiliateProfile.findMany({
+            where: { commissions: { some: { status: 'eligible' } } },
+            select: {
+                id: true,
+                full_name: true,
+                user: { select: { email: true, first_name: true, last_name: true } },
+                commissions: {
+                    where: { status: 'eligible' },
+                    select: { id: true, commission_amount: true },
+                },
+            },
+        });
+
+        console.log(`createQuarterlyPayoutRequests: found ${affiliates.length} affiliate(s) with eligible commissions.`);
+
+        const successes: PayoutReportEntry[] = [];
+        const failures: PayoutReportFailure[] = [];
+
+        for (const affiliate of affiliates) {
+            const affiliateName =
+                affiliate.full_name ??
+                (affiliate.user
+                    ? `${affiliate.user.first_name} ${affiliate.user.last_name}`.trim()
+                    : affiliate.id);
+            const affiliateEmail = affiliate.user?.email ?? '';
+            const commissionIds = affiliate.commissions.map((c) => c.id);
+
+            try {
+                const result = await this.payoutRequestsService.createFromCron(
+                    affiliate.id,
+                    commissionIds,
+                );
+
+                successes.push({
+                    affiliateName,
+                    affiliateEmail,
+                    commissionCount: commissionIds.length,
+                    totalAmount: result.requested_amount.toString(),
+                    payoutRequestId: result.id,
+                });
+
+                console.log(`createQuarterlyPayoutRequests: created payout request ${result.id} for affiliate ${affiliate.id}`);
+            } catch (error) {
+                const errorMessage =
+                    error instanceof Error ? error.message : String(error);
+
+                failures.push({ affiliateName, affiliateEmail, error: errorMessage });
+                console.error(
+                    `createQuarterlyPayoutRequests: failed for affiliate ${affiliate.id} — ${errorMessage}`,
+                );
+            }
+        }
+
+        const totalAmount = successes
+            .reduce((sum, s) => sum + parseFloat(s.totalAmount), 0)
+            .toFixed(2);
+
+        await this.mailService.sendMail({
+            from: 'MedVirtual <noreply@medvirtual.ai>',
+            to: 'paulo@regenta.ai',
+            subject: `Quarterly Payout Report — ${runAt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
+            html: quarterlyPayoutReport(successes, failures, runAt),
+        });
+
+        console.log(
+            `createQuarterlyPayoutRequests: done. Created=${successes.length}, Failed=${failures.length}, Total=$${totalAmount}`,
+        );
+
+        return { created: successes.length, failed: failures.length, total_amount: totalAmount };
     }
 
 }

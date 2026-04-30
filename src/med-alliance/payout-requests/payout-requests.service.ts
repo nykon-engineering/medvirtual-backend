@@ -190,7 +190,7 @@ export class PayoutRequestsService {
     oldStatus: string | null;
     newStatus: string | null;
     reason?: string;
-    source: 'user' | 'sync' | 'admin_action';
+    source: 'user' | 'sync' | 'admin_action' | 'cron';
   }) {
     await this.prisma.medAllianceAuditLog.create({
       data: {
@@ -412,6 +412,110 @@ export class PayoutRequestsService {
     }
 
     return this.findOneForAdmin(payoutRequest.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal: create a payout request on behalf of an affiliate from a cron job.
+  // ---------------------------------------------------------------------------
+  async createFromCron(
+    affiliateProfileId: string,
+    commissionIds: string[],
+  ): Promise<{ id: string; requested_amount: Decimal }> {
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateProfileId },
+      select: { id: true, user_id: true, payout_preference_method: true },
+    });
+    if (!profile) {
+      throw new NotFoundException(`Affiliate profile not found: ${affiliateProfileId}`);
+    }
+    if (!profile.user_id) {
+      throw new BadRequestException(
+        'This affiliate has no connected user account and cannot receive a payout request.',
+      );
+    }
+    const affiliateUserId: string = profile.user_id;
+
+    const commissions = await this.prisma.affiliateCommission.findMany({
+      where: { id: { in: commissionIds } },
+      select: { id: true, affiliate_id: true, status: true, commission_amount: true },
+    });
+
+    if (commissions.length !== commissionIds.length) {
+      throw new BadRequestException('One or more commission IDs were not found');
+    }
+
+    const foreignCommission = commissions.find((c) => c.affiliate_id !== affiliateUserId);
+    if (foreignCommission) {
+      throw new BadRequestException(
+        'One or more commissions do not belong to this affiliate',
+      );
+    }
+
+    const nonEligible = commissions.find((c) => c.status !== 'eligible');
+    if (nonEligible) {
+      throw new BadRequestException(
+        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
+      );
+    }
+
+    const requestedAmount = commissions.reduce(
+      (acc, c) => acc.add(new Decimal(c.commission_amount)),
+      new Decimal(0),
+    );
+
+    const payoutRequest = await this.prisma.$transaction(async (tx) => {
+      const request = await tx.affiliatePayoutRequest.create({
+        data: {
+          affiliate_id: affiliateUserId,
+          affiliate_profile_id: profile.id,
+          status: 'requested',
+          requested_amount: requestedAmount,
+          payment_method: profile.payout_preference_method ?? null,
+        },
+      });
+
+      await tx.affiliatePayoutRequestCommission.createMany({
+        data: commissionIds.map((commissionId) => ({
+          payout_request_id: request.id,
+          commission_id: commissionId,
+        })),
+      });
+
+      await tx.affiliateCommission.updateMany({
+        where: { id: { in: commissionIds } },
+        data: { status: 'requested' },
+      });
+
+      return request;
+    });
+
+    await this.writeAuditLog({
+      actorUserId: null,
+      entityId: payoutRequest.id,
+      event: 'status_changed',
+      oldStatus: null,
+      newStatus: 'requested',
+      reason: 'Automated quarterly payout request',
+      source: 'cron',
+    });
+
+    for (const commissionId of commissionIds) {
+      await this.prisma.medAllianceAuditLog.create({
+        data: {
+          actor_user_id: null,
+          entity_type: 'commission',
+          entity_id: commissionId,
+          event: 'status_changed',
+          old_status: 'eligible',
+          new_status: 'requested',
+          reason: 'Automated quarterly payout request',
+          source: 'cron',
+          metadata: { payout_request_id: payoutRequest.id } as any,
+        },
+      });
+    }
+
+    return { id: payoutRequest.id, requested_amount: requestedAmount };
   }
 
   // ---------------------------------------------------------------------------

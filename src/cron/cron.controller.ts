@@ -89,4 +89,15 @@ export class CronController {
         };
     }
 
+    @Get('create-quarterly-payout-requests')
+    @ApiProperty({ description: 'Create payout requests for all affiliates with at least one eligible commission and send a summary report email' })
+    async createQuarterlyPayoutRequests() {
+        const result = await this.cron.createQuarterlyPayoutRequests();
+        return {
+            status: 200,
+            message: 'Quarterly payout requests job completed',
+            data: result,
+        };
+    }
+
 }

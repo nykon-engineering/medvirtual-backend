@@ -7,6 +7,7 @@ import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 
 describe('CronService', () => {
   let service: CronService;
@@ -16,6 +17,7 @@ describe('CronService', () => {
   let mailServiceMock: { sendMail: jest.Mock };
   let hireRequestServiceMock: Record<string, jest.Mock>;
   let positionRateConfigServiceMock: Record<string, jest.Mock>;
+  let payoutRequestsServiceMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     prismaServiceMock = {
@@ -49,6 +51,10 @@ describe('CronService', () => {
       findAllUnpaginated: jest.fn().mockResolvedValue([]),
     };
 
+    payoutRequestsServiceMock = {
+      createFromCron: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [CronService,
         {provide: PrismaService, useValue: prismaServiceMock},
@@ -57,6 +63,7 @@ describe('CronService', () => {
         { provide: MailService, useValue: mailServiceMock },
         { provide: HireRequestService, useValue: hireRequestServiceMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
+        { provide: PayoutRequestsService, useValue: payoutRequestsServiceMock },
       ],
     }).compile();
 
