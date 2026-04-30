@@ -103,4 +103,30 @@ export class AffiliateUpdateService {
             }
         }
     }
+
+    async clearBankingData(hubspotId: string): Promise<void> {
+        try {
+            await axios.patch(
+                `https://api.hubapi.com/crm/v3/objects/p20630393_growth_partners/${Number(hubspotId)}`,
+                {
+                    properties: {
+                        account_name: '',
+                        account_number: '',
+                    },
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
+        } catch (error) {
+            if (error.response) {
+                console.error("Error clearing Growth Partner banking data in HubSpot:", error.response.data);
+            } else {
+                console.error("Connection error:", error.message);
+            }
+        }
+    }
 }

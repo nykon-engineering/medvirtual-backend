@@ -626,6 +626,12 @@ export class AffiliatesService {
           } catch (err) {
             console.error('[HubSpot] Failed to sync banking data:', err);
           }
+        } else if (details?.method === 'will_be_provided_later') {
+          try {
+            await this.affiliateUpdateService.clearBankingData(existing.hubspot_id);
+          } catch (err) {
+            console.error('[HubSpot] Failed to clear banking data:', err);
+          }
         }
       }
     }
@@ -884,7 +890,7 @@ export class AffiliatesService {
   async updateOwn(currentUser: USER, dto: UpdateAffiliatePayoutPreferencesDto) {
     const profile = await this.requireActiveProfile(currentUser.id);
 
-    return this.prisma.affiliateProfile.update({
+    const updated = await this.prisma.affiliateProfile.update({
       where: { id: profile.id },
       data: {
         ...(dto.payout_preference_method !== undefined && {
@@ -902,5 +908,18 @@ export class AffiliatesService {
       },
       include: { user: { select: USER_SELECT } },
     });
+
+    if (profile.hubspot_id && dto.payout_details !== undefined) {
+      const details = dto.payout_details as Record<string, unknown> | null;
+      if (details?.method === 'will_be_provided_later') {
+        try {
+          await this.affiliateUpdateService.clearBankingData(profile.hubspot_id);
+        } catch (err) {
+          console.error('[HubSpot] Failed to clear banking data:', err);
+        }
+      }
+    }
+
+    return updated;
   }
 }
