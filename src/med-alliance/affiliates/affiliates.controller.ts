@@ -150,7 +150,7 @@ export class AffiliatesController {
   async findOne(@Param('id') id: string) {
     const enriched = await this.affiliatesService.findOneEnriched(id);
     const profile = enriched.profile;
-    const user = profile.user as any;
+    const user = enriched.user as any;
 
     const commsByOrgMap: Record<string, number> = Object.fromEntries(
       enriched.commsByOrg.map((r: any) => [
@@ -203,6 +203,14 @@ export class AffiliatesController {
         transaction_reference: pr.transaction_reference ?? null,
         status: 'paid' as const,
       })),
+      user: {
+        id: user?.id ?? null,
+        first_name: user?.first_name ?? null,
+        last_name: user?.last_name ?? null,
+        email: user?.email ?? null,
+        role: user?.role ?? null,
+        status: user?.status ?? null,
+      },
     };
 
     return { status: 200, message: 'Affiliate profile retrieved successfully', data };

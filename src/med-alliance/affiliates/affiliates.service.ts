@@ -737,6 +737,7 @@ export class AffiliatesService {
   async findOneEnriched(id: string) {
     const profile = await this.findOne(id);
     const userId = profile.user_id;
+    const user = profile.user as any;
 
     // Affiliate with no connected user yet — return empty financial aggregates.
     if (!userId) {
@@ -777,8 +778,7 @@ export class AffiliatesService {
         _sum: { commission_amount: true },
       }),
     ]);
-
-    return { profile, pendingAgg, lifetimeAgg, payoutHistory, commsByOrg };
+    return { profile, pendingAgg, lifetimeAgg, payoutHistory, commsByOrg, user };
   }
 
   // Admin: deactivate an affiliate profile (and optionally the user account).
