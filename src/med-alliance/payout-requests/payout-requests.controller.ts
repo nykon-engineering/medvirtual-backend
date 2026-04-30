@@ -18,7 +18,7 @@ import { Roles } from '../../auth/roles.decorator';
 import { CurrentUser } from '../../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
-import { CreatePayoutRequestDto } from './dto/create-payout-request.dto';
+import { AdminCreatePayoutRequestDto, CreatePayoutRequestDto } from './dto/create-payout-request.dto';
 import {
   AddPayoutNoteDto,
   CancelPayoutRequestDto,
@@ -74,6 +74,18 @@ export class PayoutRequestsController {
   // ---------------------------------------------------------------------------
   // Admin routes
   // ---------------------------------------------------------------------------
+
+  // POST /med-alliance/admin/payout-requests — Admin creates a payout request on behalf of an affiliate.
+  @Post('admin/payout-requests')
+  @HttpCode(201)
+  @Roles(...ADMIN_ROLES)
+  async createForAdmin(
+    @Body() dto: AdminCreatePayoutRequestDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.payoutRequestsService.createForAdmin(dto, admin);
+    return { status: 201, message: 'Payout request created successfully', data };
+  }
 
   // B7: GET /med-alliance/admin/payout-requests/counts — Status counters for kanban.
   // NOTE: must be declared BEFORE /:id to avoid route conflict.

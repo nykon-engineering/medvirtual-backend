@@ -19,3 +19,14 @@ export class CreatePayoutRequestDto {
   @IsEnum(PayoutMethod)
   payment_method?: PayoutMethod;
 }
+
+// Admin-initiated payout request on behalf of an affiliate.
+export class AdminCreatePayoutRequestDto {
+  @IsUUID()
+  affiliate_profile_id: string;
+
+  @IsArray()
+  @IsUUID('all', { each: true })
+  @ArrayMinSize(1)
+  commission_ids: string[];
+}
