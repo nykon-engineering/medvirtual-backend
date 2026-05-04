@@ -357,11 +357,17 @@ export class AffiliatesService {
     const where: any = {};
     if (status) where.status = status;
 
-    // Banking filter: payout_details being non-null indicates banking is complete.
+    // Banking filter: complete = has real payout details (not will_be_provided_later).
     if (banking === 'complete') {
-      where.payout_details = { not: null };
+      where.AND = [
+        { payout_details: { not: null } },
+        { NOT: { payout_details: { path: ['method'], equals: 'will_be_provided_later' } } },
+      ];
     } else if (banking === 'incomplete') {
-      where.payout_details = null;
+      where.OR = [
+        { payout_details: null },
+        { payout_details: { path: ['method'], equals: 'will_be_provided_later' } },
+      ];
     }
 
     // Build user-level conditions (search + organization may both apply).

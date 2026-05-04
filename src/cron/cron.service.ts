@@ -569,7 +569,7 @@ export class CronService {
 
         await this.mailService.sendMail({
             from: 'MedVirtual <noreply@medvirtual.ai>',
-            to: 'paulo@regenta.ai',
+            to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
             subject: `Quarterly Payout Report — ${runAt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
             html: quarterlyPayoutReport(successes, failures, runAt),
         });
