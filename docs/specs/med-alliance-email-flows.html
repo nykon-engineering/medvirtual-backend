@@ -156,6 +156,14 @@
       display: block;
       width: 100%;
       border: none;
+      overflow: hidden;
+    }
+
+    code {
+      display: block;
+      width: 100%;
+      border: none;
+      overflow: hidden;
     }
   </style>
 </head>
@@ -205,8 +213,9 @@
       <span class="subject-text">You're now a MedVirtual Med Alliance Partner — here's what's next</span>
     </div>
     <div class="preview-label">Email Preview</div>
+    
     <div class="email-frame-wrapper">
-      <iframe srcdoc='<!DOCTYPE html>
+      <iframe height="1000" srcdoc='<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -264,7 +273,7 @@
     </div>
   </div>
 </body>
-</html>' height="620" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+</html>' scrolling="no" style="width:100%;border:none; height: 100%;"></iframe>
     </div>
   </div>
 </div>
@@ -309,7 +318,7 @@
     </div>
     <div class="preview-label">Email Preview</div>
     <div class="email-frame-wrapper">
-      <iframe srcdoc='<!DOCTYPE html>
+      <iframe height="1000" srcdoc='<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -373,7 +382,7 @@
     </div>
   </div>
 </body>
-</html>' height="720" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+</html>' scrolling="no"></iframe>
     </div>
   </div>
 </div>
@@ -418,7 +427,7 @@
     </div>
     <div class="preview-label">Email Preview</div>
     <div class="email-frame-wrapper">
-      <iframe srcdoc='<!DOCTYPE html>
+      <iframe height="1000" srcdoc='<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -482,7 +491,7 @@
     </div>
   </div>
 </body>
-</html>' height="720" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+</html>' scrolling="no"></iframe>
     </div>
   </div>
 </div>
@@ -527,7 +536,7 @@
     </div>
     <div class="preview-label">Email Preview</div>
     <div class="email-frame-wrapper">
-      <iframe srcdoc='<!DOCTYPE html>
+      <iframe height="1000" srcdoc='<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -585,10 +594,28 @@
     </div>
   </div>
 </body>
-</html>' height="660" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+</html>' scrolling="no"></iframe>
     </div>
   </div>
 </div>
 
+<script>
+  function resizeIframe(iframe) {
+    iframe.style.height = '1000px';
+  }
+
+  document.querySelectorAll('iframe').forEach(function(iframe) {
+    iframe.addEventListener('load', function() {
+      var idoc = iframe.contentDocument;
+      var iwin = iframe.contentWindow;
+
+      if (idoc.readyState === 'complete') {
+        resizeIframe(iframe);
+      } else {
+        iwin.addEventListener('load', function() { resizeIframe(iframe); });
+      }
+    });
+  });
+</script>
 </body>
 </html>

@@ -156,8 +156,8 @@ export class AffiliatesService {
       expiresIn: '48h',
       });
 
-      // Get user email theme
-      const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+      // Theme is resolved from the admin's org since the new user has no org yet
+      const emailTheme = await getUserEmailTheme(this.prisma, adminUser.id);
       
       // Send signup link via email
       const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
@@ -278,7 +278,8 @@ export class AffiliatesService {
 
     // 2. Generate JWT invite token and send email
     const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '48h' });
-    const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+    // Theme is resolved from the admin's org since the new user has no org yet
+    const emailTheme = await getUserEmailTheme(this.prisma, adminUserId);
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
     const inviteLink = emailTheme?.companyName === 'Berry Virtual'
       ? `${baseInviteLink}&company=berry`
