@@ -829,13 +829,13 @@ export class OrganizationService {
 
       const existingOrganization = await this.prisma.organization.findFirst({
         where: { 
-          email: data.email,
+          contact_email: data.contact_email, // The email field was removed on the UI  
           status: { not: OrganizationStatus.deleted } // Allow creating organization with same email if the previous one is deleted
          },
       });
 
       if (existingOrganization) {
-        throw new BadRequestException('Organization already exists');
+        throw new BadRequestException(`The ${data.contact_email} is main contact of another organization. Please use another email or update the existing organization.`);
       }
 
       const organization = await this.prisma.organization.create({

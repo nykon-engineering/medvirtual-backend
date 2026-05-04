@@ -13,11 +13,11 @@ export class CreateReferredCompanyDto {
   name: string;
 
   @IsEmail()
-  @IsNotEmpty()
+  @IsOptional()
   email: string;
 
-  @IsUrl()
-  @IsNotEmpty()
+  @IsString()
+  @IsOptional()
   website_url: string;
 
   @IsString()

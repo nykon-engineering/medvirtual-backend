@@ -120,9 +120,12 @@ export class ContactService {
       return { ...contact, hubspot_id: response.data.id };
     } catch (error) {
       const errData = error.response?.data;
+      //console.error('[ContactService.createForOrganization] HubSpot sync error:', errData ?? error.message);
       if (errData?.category === 'CONFLICT') { //Get existing hubspot_id from error message and update contact, then create association if org.hubspot_id is available
         const match = errData.message?.match(/Existing ID:\s*(\d+)/);
+        //console.log('[ContactService.createForOrganization] Extracted HubSpot ID from error message:', match?.[1] ?? 'No match found');
         const existingHubspotId = match?.[1] ?? null;
+        //console.log('[ContactService.createForOrganization] Existing HubSpot ID:', existingHubspotId);
         if (existingHubspotId) {
           await this.prisma.contact.update({
             where: { id: contact.id },

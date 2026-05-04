@@ -125,7 +125,7 @@ model EmailInvitation {
 model Organization {
   id                      String                  @id @default(uuid())
   name                    String
-  email                   String?                 @unique
+  email                   String?                 
   hubspot_id              String?                 @unique
   createdAt               DateTime                @default(now())
   deletedAt               DateTime?
