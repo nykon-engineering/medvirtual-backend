@@ -1,11 +1,11 @@
 import { getEmailFooter } from './components';
 import { EmailTheme } from './theme';
 
-export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): string {
+export function MedAllianceInviteSignup(inviteLink: string, theme?: EmailTheme, firstName?: string): string {
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
-  const ctaLink = `${process.env.FRONTEND_URL}/med-alliance`;
+  const greeting = firstName ? `Hello, ${firstName}!` : 'Hi,';
 
   return `
 <!DOCTYPE html>
@@ -13,7 +13,7 @@ export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): st
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>You've been invited to join the Med Alliance Program</title>
+  <title>Med Alliance Partner Account Setup</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -39,7 +39,7 @@ export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): st
     .content {
       padding: 40px 30px;
     }
-      .logo {
+    .logo {
       text-align: left;
       margin-bottom: 30px;
     }
@@ -57,6 +57,9 @@ export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): st
       font-size: 16px;
       line-height: 1.5;
       margin-bottom: 30px;
+    }
+    .main-message p {
+      margin: 0 0 14px 0;
     }
     .cta-button {
       display: inline-block;
@@ -95,39 +98,53 @@ export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): st
       margin-top: 20px;
       line-height: 1.5;
     }
+    .text-link {
+      color: #666666;
+      font-size: 12px;
+      word-break: break-all;
+      margin-top: 20px;
+    }
+    .text-link a {
+      color: ${primaryColor};
+      text-decoration: none;
+    }
   </style>
 </head>
 
 <body>
   <div class="email-wrapper">
     <div class="container">
-
       <div class="content">
         <div class="logo">
           <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
         </div>
 
-        <div class="greeting">Hello, ${firstName}!</div>
+        <div class="greeting">${greeting}</div>
 
         <div class="main-message">
-          <p>Great news — you have been added to the <strong>Med Alliance Program</strong> by ${companyName}.</p>
-          <p>As a Med Alliance Partner, your dashboard is ready. Here's what you now have access to:</p>
+          <p>You have been invited to join the <strong>Med Alliance Program</strong> with ${companyName}.</p>
+          <p>Before you can access your partner dashboard, you need to activate your account — it takes less than two minutes.</p>
+          <p>As a Med Alliance Partner, you'll have access to:</p>
           <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
             <li>Commission earnings on every successful referral</li>
             <li>A dedicated partner dashboard with real-time tracking</li>
             <li>Transparent payout history and on-demand payout requests</li>
             <li>Full visibility into the organizations you've referred</li>
           </ul>
-          <p>Your partner profile is active. Log in to start tracking your referrals and commissions.</p>
         </div>
 
         <div style="text-align: left; margin: 30px 0;">
-          <a href="${ctaLink}" class="cta-button">
-            Go to My Partner Dashboard
+          <a href="${inviteLink}" class="cta-button">
+            Activate My Account and Get Started
           </a>
         </div>
 
-        <p class="note">If you have any questions, please contact our support team.</p>
+        <p class="note"><strong>Important:</strong> This invitation expires in 48 hours. If it has expired, contact our support team to request a new one.</p>
+
+        <div class="text-link">
+          Having trouble with the button? Copy and paste this link into your browser:<br>
+          <a href="${inviteLink}">${inviteLink}</a>
+        </div>
 
         <div class="closing">Best,</div>
         <div class="sender">

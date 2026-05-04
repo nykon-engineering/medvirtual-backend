@@ -24,9 +24,9 @@ import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliat
 import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 
 import * as jwt from 'jsonwebtoken';
-import InviteSignup from '../../common/utils/email-templates/invite-signup';
 import { MedAllianceInvitation } from '../../common/utils/email-templates/med-alliance-invitation';
 import { MedAllianceInvitationForOrgUsers } from '../../common/utils/email-templates/med-alliance-invitation-for-org-users';
+import { MedAllianceInviteSignup } from '../../common/utils/email-templates/med-alliance-invite-signup';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
@@ -119,7 +119,7 @@ export class AffiliatesService {
       await this.mailService.sendMail({
         from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
         to: user.email,
-        subject: "You've been invited to join the Med Alliance Program",
+        subject: `You're now a ${theme?.companyName || 'MedVirtual'} Med Alliance Partner — here's what's next`,
         html: MedAllianceInvitation(user.first_name, theme ?? undefined),
       });
     } catch (emailError) {
@@ -164,11 +164,11 @@ export class AffiliatesService {
       const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
       ? `${baseInviteLink}&company=berry` 
       : baseInviteLink;
-      const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
+      const emailBody = MedAllianceInviteSignup(inviteLink, emailTheme || undefined, dto.first_name);
       const mailSent = await this.mailService.sendMail({
       from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
       to: dto.email,
-      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
+      subject: `You've been invited to join the ${emailTheme?.companyName || 'MedVirtual'} Med Alliance Program — activate your account`,
       html: emailBody,
       headers: {
           'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
@@ -287,8 +287,8 @@ export class AffiliatesService {
     const mailSent = await this.mailService.sendMail({
       from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
       to: dto.email,
-      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
-      html: InviteSignup(inviteLink, emailTheme || undefined),
+      subject: `You've been invited to join the ${emailTheme?.companyName || 'MedVirtual'} Med Alliance Program — activate your account`,
+      html: MedAllianceInviteSignup(inviteLink, emailTheme || undefined, dto.first_name),
     });
     if (!mailSent) throw new BadRequestException('Failed to send invitation email');
 
@@ -695,7 +695,7 @@ export class AffiliatesService {
         await this.mailService.sendMail({
           from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
           to: currentUser.email,
-          subject: 'Welcome to the Med Alliance Program',
+          subject: `Welcome to the Med Alliance Program, ${currentUser.first_name}`,
           html: MedAllianceInvitationForOrgUsers(currentUser.first_name, theme ?? undefined),
         });
       } catch (emailError) {

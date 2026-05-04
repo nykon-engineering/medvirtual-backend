@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Med Alliance Program — Email Flows Reference</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      margin: 0;
+      padding: 40px 20px;
+    }
+    .page-header {
+      max-width: 900px;
+      margin: 0 auto 48px auto;
+      border-bottom: 3px solid #01546B;
+      padding-bottom: 24px;
+    }
+    .page-header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin: 0 0 6px 0;
+      color: #01546B;
+    }
+    .page-header p {
+      font-size: 15px;
+      color: #555;
+      margin: 0;
+    }
+    .flow-card {
+      max-width: 900px;
+      margin: 0 auto 56px auto;
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    .flow-header {
+      background: #01546B;
+      color: #fff;
+      padding: 20px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .flow-number {
+      background: rgba(255,255,255,0.2);
+      border-radius: 50%;
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .flow-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+    .flow-subtitle {
+      font-size: 13px;
+      opacity: 0.8;
+      margin: 2px 0 0 0;
+    }
+    .flow-meta {
+      padding: 20px 28px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      border-bottom: 1px solid #eee;
+    }
+    .meta-item {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .meta-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      margin-bottom: 5px;
+    }
+    .meta-value {
+      font-size: 13px;
+      color: #222;
+      line-height: 1.5;
+    }
+    .meta-value code {
+      background: #e8f4f7;
+      color: #01546B;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .role-badge {
+      display: inline-block;
+      background: #e8f4f7;
+      color: #01546B;
+      border: 1px solid #b3d9e4;
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      margin: 2px 2px 2px 0;
+    }
+    .email-preview-section {
+      padding: 24px 28px 32px 28px;
+    }
+    .subject-line {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 16px;
+      background: #fffbea;
+      border: 1px solid #f0d060;
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+    .subject-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #a07800;
+      flex-shrink: 0;
+    }
+    .subject-text {
+      font-size: 14px;
+      color: #222;
+      font-weight: 500;
+    }
+    .preview-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      margin-bottom: 10px;
+    }
+    .email-frame-wrapper {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    }
+    iframe {
+      display: block;
+      width: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Med Alliance Program — Email Flows Reference</h1>
+  <p>All 4 partner onboarding email scenarios. Previews use MedVirtual default theme with placeholder data (firstName = "Sarah", companyName = "MedVirtual").</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     FLOW 1 — Admin promotes existing user to Alliance Partner
+     Template: MedAllianceInvitation
+════════════════════════════════════════════════════════════════ -->
+<div class="flow-card">
+  <div class="flow-header">
+    <div class="flow-number">1</div>
+    <div>
+      <p class="flow-title">Admin Promotes Existing User to Alliance Partner</p>
+      <p class="flow-subtitle">Existing platform user gets added as an affiliate by an admin</p>
+    </div>
+  </div>
+  <div class="flow-meta">
+    <div class="meta-item">
+      <div class="meta-label">API Endpoint</div>
+      <div class="meta-value"><code>POST /med-alliance/admin/affiliates</code></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Who Can Trigger</div>
+      <div class="meta-value">
+        <span class="role-badge">system_admin</span>
+        <span class="role-badge">system_super_admin</span>
+      </div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Business Scenario</div>
+      <div class="meta-value">User already has a platform account. Admin creates an AffiliateProfile linked to that user. Email is sent non-blocking — user's account status is unchanged.</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Template File</div>
+      <div class="meta-value"><code>med-alliance-invitation.ts</code></div>
+    </div>
+  </div>
+  <div class="email-preview-section">
+    <div class="subject-line">
+      <span class="subject-label">Subject</span>
+      <span class="subject-text">You're now a MedVirtual Med Alliance Partner — here's what's next</span>
+    </div>
+    <div class="preview-label">Email Preview</div>
+    <div class="email-frame-wrapper">
+      <iframe srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo { text-align: left; margin-bottom: 30px; }
+    .logo img { max-width: 200px; height: auto; }
+    .greeting { color: #333333; font-size: 16px; margin-bottom: 20px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .main-message p { margin: 0 0 14px 0; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
+    .sender { color: #333333; font-size: 16px; }
+    .note { color: #666666; font-size: 14px; margin-top: 20px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" />
+        </div>
+        <div class="greeting">Hello, Sarah!</div>
+        <div class="main-message">
+          <p>Great news — you have been added to the <strong>Med Alliance Program</strong> by MedVirtual.</p>
+          <p>As a Med Alliance Partner, your dashboard is ready. Here&rsquo;s what you now have access to:</p>
+          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
+            <li>Commission earnings on every successful referral</li>
+            <li>A dedicated partner dashboard with real-time tracking</li>
+            <li>Transparent payout history and on-demand payout requests</li>
+            <li>Full visibility into the organizations you&rsquo;ve referred</li>
+          </ul>
+          <p>Your partner profile is active. Log in to start tracking your referrals and commissions.</p>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">Go to My Partner Dashboard</a>
+        </div>
+        <p class="note">If you have any questions, please contact our support team.</p>
+        <div class="closing">Best,</div>
+        <div class="sender"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div style="background-color:#f8f9fa;padding:30px 20px;text-align:center;border-top:1px solid #e9ecef;">
+        <p style="color:#666666;font-size:14px;line-height:1.5;margin:5px 0;margin-top:20px;">MedVirtual &copy; 2025. All rights reserved.</p>
+        <div style="margin-top:20px;font-size:12px;">
+          <a href="mailto:support@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Contact Support</a>
+          <a href="mailto:unsubscribe@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Unsubscribe</a>
+          <a href="#" style="color:#666666;text-decoration:none;margin:0 10px;">Privacy Policy</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>' height="620" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     FLOW 2 — Admin creates new user + affiliate together
+     Template: MedAllianceInviteSignup
+════════════════════════════════════════════════════════════════ -->
+<div class="flow-card">
+  <div class="flow-header">
+    <div class="flow-number">2</div>
+    <div>
+      <p class="flow-title">Admin Creates New User as Alliance Partner</p>
+      <p class="flow-subtitle">New user account and affiliate profile created together — user must set a password</p>
+    </div>
+  </div>
+  <div class="flow-meta">
+    <div class="meta-item">
+      <div class="meta-label">API Endpoint</div>
+      <div class="meta-value"><code>POST /med-alliance/admin/user-and-affiliates</code></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Who Can Trigger</div>
+      <div class="meta-value">
+        <span class="role-badge">system_admin</span>
+        <span class="role-badge">system_super_admin</span>
+      </div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Business Scenario</div>
+      <div class="meta-value">Admin creates a brand-new user with role <code>affiliate</code> and an AffiliateProfile in one operation. User receives an invite link to set their password. Link expires in 48 hours.</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Template File</div>
+      <div class="meta-value"><code>med-alliance-invite-signup.ts</code></div>
+    </div>
+  </div>
+  <div class="email-preview-section">
+    <div class="subject-line">
+      <span class="subject-label">Subject</span>
+      <span class="subject-text">You've been invited to join the MedVirtual Med Alliance Program — activate your account</span>
+    </div>
+    <div class="preview-label">Email Preview</div>
+    <div class="email-frame-wrapper">
+      <iframe srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo { text-align: left; margin-bottom: 30px; }
+    .logo img { max-width: 200px; height: auto; }
+    .greeting { color: #333333; font-size: 16px; margin-bottom: 20px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .main-message p { margin: 0 0 14px 0; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
+    .sender { color: #333333; font-size: 16px; }
+    .note { color: #666666; font-size: 14px; margin-top: 20px; line-height: 1.5; }
+    .text-link { color: #666666; font-size: 12px; word-break: break-all; margin-top: 20px; }
+    .text-link a { color: #01546B; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" />
+        </div>
+        <div class="greeting">Hello, Sarah!</div>
+        <div class="main-message">
+          <p>You have been invited to join the <strong>Med Alliance Program</strong> with MedVirtual.</p>
+          <p>Before you can access your partner dashboard, you need to activate your account &mdash; it takes less than two minutes.</p>
+          <p>As a Med Alliance Partner, you&rsquo;ll have access to:</p>
+          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
+            <li>Commission earnings on every successful referral</li>
+            <li>A dedicated partner dashboard with real-time tracking</li>
+            <li>Transparent payout history and on-demand payout requests</li>
+            <li>Full visibility into the organizations you&rsquo;ve referred</li>
+          </ul>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">Activate My Account and Get Started</a>
+        </div>
+        <p class="note"><strong>Important:</strong> This invitation expires in 48 hours. If it has expired, contact our support team to request a new one.</p>
+        <div class="text-link">
+          Having trouble with the button? Copy and paste this link into your browser:<br>
+          <a href="#">https://app.medvirtual.ai/invite-signup?code=eyJhbGciOi...</a>
+        </div>
+        <div class="closing">Best,</div>
+        <div class="sender"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div style="background-color:#f8f9fa;padding:30px 20px;text-align:center;border-top:1px solid #e9ecef;">
+        <p style="color:#666666;font-size:14px;line-height:1.5;margin:5px 0;margin-top:20px;">MedVirtual &copy; 2025. All rights reserved.</p>
+        <div style="margin-top:20px;font-size:12px;">
+          <a href="mailto:support@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Contact Support</a>
+          <a href="mailto:unsubscribe@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Unsubscribe</a>
+          <a href="#" style="color:#666666;text-decoration:none;margin:0 10px;">Privacy Policy</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>' height="720" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     FLOW 3 — Admin links new user to existing unlinked affiliate
+     Template: MedAllianceInviteSignup
+════════════════════════════════════════════════════════════════ -->
+<div class="flow-card">
+  <div class="flow-header">
+    <div class="flow-number">3</div>
+    <div>
+      <p class="flow-title">Admin Links New User to Existing Affiliate Profile</p>
+      <p class="flow-subtitle">AffiliateProfile already exists (e.g. created via HubSpot) — admin invites a user to claim it</p>
+    </div>
+  </div>
+  <div class="flow-meta">
+    <div class="meta-item">
+      <div class="meta-label">API Endpoint</div>
+      <div class="meta-value"><code>POST /med-alliance/admin/affiliates/:id/invite-user</code></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Who Can Trigger</div>
+      <div class="meta-value">
+        <span class="role-badge">system_admin</span>
+        <span class="role-badge">system_super_admin</span>
+      </div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Business Scenario</div>
+      <div class="meta-value">An AffiliateProfile exists (typically synced from HubSpot as a Growth Partner) but has no linked user. Admin creates a new user with role <code>affiliate</code> and links them. User receives an invite link to set their password. Link expires in 48 hours.</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Template File</div>
+      <div class="meta-value"><code>med-alliance-invite-signup.ts</code></div>
+    </div>
+  </div>
+  <div class="email-preview-section">
+    <div class="subject-line">
+      <span class="subject-label">Subject</span>
+      <span class="subject-text">You've been invited to join the MedVirtual Med Alliance Program — activate your account</span>
+    </div>
+    <div class="preview-label">Email Preview</div>
+    <div class="email-frame-wrapper">
+      <iframe srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo { text-align: left; margin-bottom: 30px; }
+    .logo img { max-width: 200px; height: auto; }
+    .greeting { color: #333333; font-size: 16px; margin-bottom: 20px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .main-message p { margin: 0 0 14px 0; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
+    .sender { color: #333333; font-size: 16px; }
+    .note { color: #666666; font-size: 14px; margin-top: 20px; line-height: 1.5; }
+    .text-link { color: #666666; font-size: 12px; word-break: break-all; margin-top: 20px; }
+    .text-link a { color: #01546B; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" />
+        </div>
+        <div class="greeting">Hello, Sarah!</div>
+        <div class="main-message">
+          <p>You have been invited to join the <strong>Med Alliance Program</strong> with MedVirtual.</p>
+          <p>Before you can access your partner dashboard, you need to activate your account &mdash; it takes less than two minutes.</p>
+          <p>As a Med Alliance Partner, you&rsquo;ll have access to:</p>
+          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
+            <li>Commission earnings on every successful referral</li>
+            <li>A dedicated partner dashboard with real-time tracking</li>
+            <li>Transparent payout history and on-demand payout requests</li>
+            <li>Full visibility into the organizations you&rsquo;ve referred</li>
+          </ul>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">Activate My Account and Get Started</a>
+        </div>
+        <p class="note"><strong>Important:</strong> This invitation expires in 48 hours. If it has expired, contact our support team to request a new one.</p>
+        <div class="text-link">
+          Having trouble with the button? Copy and paste this link into your browser:<br>
+          <a href="#">https://app.medvirtual.ai/invite-signup?code=eyJhbGciOi...</a>
+        </div>
+        <div class="closing">Best,</div>
+        <div class="sender"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div style="background-color:#f8f9fa;padding:30px 20px;text-align:center;border-top:1px solid #e9ecef;">
+        <p style="color:#666666;font-size:14px;line-height:1.5;margin:5px 0;margin-top:20px;">MedVirtual &copy; 2025. All rights reserved.</p>
+        <div style="margin-top:20px;font-size:12px;">
+          <a href="mailto:support@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Contact Support</a>
+          <a href="mailto:unsubscribe@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Unsubscribe</a>
+          <a href="#" style="color:#666666;text-decoration:none;margin:0 10px;">Privacy Policy</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>' height="720" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     FLOW 4 — Organization admin self-joins the Alliance Program
+     Template: MedAllianceInvitationForOrgUsers
+════════════════════════════════════════════════════════════════ -->
+<div class="flow-card">
+  <div class="flow-header">
+    <div class="flow-number">4</div>
+    <div>
+      <p class="flow-title">Organization Admin Self-Joins the Alliance Program</p>
+      <p class="flow-subtitle">Existing org admin activates their own affiliate status — no invite link needed</p>
+    </div>
+  </div>
+  <div class="flow-meta">
+    <div class="meta-item">
+      <div class="meta-label">API Endpoint</div>
+      <div class="meta-value"><code>POST /med-alliance/affiliates/join</code></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Who Can Trigger</div>
+      <div class="meta-value">
+        <span class="role-badge">organization_admin</span>
+        <span class="role-badge">organization_super_admin</span>
+      </div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Business Scenario</div>
+      <div class="meta-value">A logged-in organization admin opts into the Med Alliance Program on their own initiative. AffiliateProfile is created with status <code>active</code> immediately — no signup step required. Email confirms enrollment and directs them to the dashboard.</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Template File</div>
+      <div class="meta-value"><code>med-alliance-invitation-for-org-users.ts</code></div>
+    </div>
+  </div>
+  <div class="email-preview-section">
+    <div class="subject-line">
+      <span class="subject-label">Subject</span>
+      <span class="subject-text">Welcome to the Med Alliance Program, Sarah</span>
+    </div>
+    <div class="preview-label">Email Preview</div>
+    <div class="email-frame-wrapper">
+      <iframe srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo { text-align: left; margin-bottom: 30px; }
+    .logo img { max-width: 200px; height: auto; }
+    .greeting { color: #333333; font-size: 16px; margin-bottom: 20px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .main-message p { margin: 0 0 14px 0; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
+    .sender { color: #333333; font-size: 16px; }
+    .note { color: #666666; font-size: 14px; margin-top: 20px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" />
+        </div>
+        <div class="greeting">Hello, Sarah!</div>
+        <div class="main-message">
+          <p>Your Med Alliance Partner profile is now active.</p>
+          <p>By joining the Med Alliance Program with MedVirtual, you&rsquo;ve unlocked a new revenue stream directly from your existing network. Here&rsquo;s what&rsquo;s available to you right now:</p>
+          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
+            <li>Commission earnings on every successful referral you make</li>
+            <li>A dedicated partner dashboard with real-time referral tracking</li>
+            <li>Transparent payout history and on-demand payout requests</li>
+            <li>Full visibility into the organizations you&rsquo;ve referred</li>
+          </ul>
+          <p>Your dashboard is live &mdash; head over to review your partner profile and start sharing your referral link.</p>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">View My Partner Dashboard</a>
+        </div>
+        <p class="note">If you have any questions, please contact our support team.</p>
+        <div class="closing">Best,</div>
+        <div class="sender"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div style="background-color:#f8f9fa;padding:30px 20px;text-align:center;border-top:1px solid #e9ecef;">
+        <p style="color:#666666;font-size:14px;line-height:1.5;margin:5px 0;margin-top:20px;">MedVirtual &copy; 2025. All rights reserved.</p>
+        <div style="margin-top:20px;font-size:12px;">
+          <a href="mailto:support@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Contact Support</a>
+          <a href="mailto:unsubscribe@medvirtual.ai" style="color:#666666;text-decoration:none;margin:0 10px;">Unsubscribe</a>
+          <a href="#" style="color:#666666;text-decoration:none;margin:0 10px;">Privacy Policy</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>' height="660" scrolling="no" onload="this.style.height=this.contentDocument.body.scrollHeight+40+'px'"></iframe>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
