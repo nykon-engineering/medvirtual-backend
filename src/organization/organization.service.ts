@@ -910,7 +910,8 @@ export class OrganizationService {
         await this.hubspot.createOrganizationInHubspot(newOrganization);
         // Referred companies have their own contact creation flow (createForReferredCompany in Step 6)
         if (!referred_by_affiliate_id) {
-          await this.contactService.createForOrganization(organization.id);
+          console.log('Creating contact for organization:', newOrganization.id);
+          await this.contactService.createForOrganization(newOrganization.id);
         }
       }
 

@@ -77,13 +77,14 @@ export class HandlerOrganizationAssociationChange {
                 break;
             case 'COMPANY_TO_CONTACT':
 
-            
+
                 let contact = await this.prisma.contact.findUnique({
                     where: {
                         hubspot_id: String(event.toObjectId)
                     },
                     select: {
                         id: true,
+                        organization_id: true,
                     }
                 })
                 const eventContact = {...event, objectId: event.toObjectId}
@@ -93,18 +94,23 @@ export class HandlerOrganizationAssociationChange {
                         console.log('Impossible to create contact from contactCreation handler | Maybe this contact is not in the right pipeline');
                         return;
                     }
-                } 
+                }
 
-                await this.prisma.contact.update({
-                    where: {
-                        hubspot_id: String(event.toObjectId)
-                    },
-                    data: {
-                        organization_id: organization.id 
-                    }
-                })
-                
-            
+                // Only update organization_id if the contact has no org yet.
+                // Contacts created by the app already have the correct organization_id set
+                // and should not be overwritten by HubSpot's auto-association webhooks.
+                if (!contact?.organization_id) {
+                    await this.prisma.contact.update({
+                        where: {
+                            hubspot_id: String(event.toObjectId)
+                        },
+                        data: {
+                            organization_id: organization.id
+                        }
+                    })
+                }
+
+
             break;
         }
 

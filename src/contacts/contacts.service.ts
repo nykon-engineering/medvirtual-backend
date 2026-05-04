@@ -22,7 +22,7 @@ export class ContactService {
    * Returns null silently if the org has no owner yet (owner_type: 'new' invitation pending).
    */
   async createForOrganization(orgId: string): Promise<Contact | null> {
-    //console.log(`[ContactService] Creating contact for organization ${orgId}`);
+    console.log(`[ContactService] Creating contact for organization ${orgId}`);
     const org = await this.prisma.organization.findUnique({
       where: { id: orgId },
       include: {
@@ -42,7 +42,7 @@ export class ContactService {
       },
     });
 
-    //console.log(`[ContactService] Fetched organization:`, org);
+    console.log(`[ContactService] Fetched organization:`, org);
 
     if (!org) throw new NotFoundException('Organization not found');
 
@@ -68,6 +68,7 @@ export class ContactService {
           hubspot_owner_id: hubspotOwnerId,
         },
       });
+      console.log(`[ContactService] Created contact in DB:`, contact);
     } catch {
       throw new BadRequestException('Failed to create contact in DB');
     }
@@ -123,9 +124,9 @@ export class ContactService {
       //console.error('[ContactService.createForOrganization] HubSpot sync error:', errData ?? error.message);
       if (errData?.category === 'CONFLICT') { //Get existing hubspot_id from error message and update contact, then create association if org.hubspot_id is available
         const match = errData.message?.match(/Existing ID:\s*(\d+)/);
-        //console.log('[ContactService.createForOrganization] Extracted HubSpot ID from error message:', match?.[1] ?? 'No match found');
+        console.log('[ContactService.createForOrganization] Extracted HubSpot ID from error message:', match?.[1] ?? 'No match found');
         const existingHubspotId = match?.[1] ?? null;
-        //console.log('[ContactService.createForOrganization] Existing HubSpot ID:', existingHubspotId);
+        console.log('[ContactService.createForOrganization] Existing HubSpot ID:', existingHubspotId);
         if (existingHubspotId) {
           await this.prisma.contact.update({
             where: { id: contact.id },
