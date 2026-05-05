@@ -12,6 +12,9 @@ import quarterlyPayoutReport, {
   PayoutReportEntry,
   PayoutReportFailure,
 } from '../common/utils/email-templates/quarterly-payout-report';
+import medAllianceDeployedCompaniesReport, {
+  PromotedCompanyEntry,
+} from '../common/utils/email-templates/med-alliance-deployed-companies-report';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
@@ -599,12 +602,13 @@ export class CronService {
                 eligibility_start_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
                 med_alliance_referral_status: 'not_eligible',
             },
-            select: { id: true, eligibility_start_at: true },
+            select: { id: true, name: true, eligibility_start_at: true },
         });
 
         let companiesPromoted = 0;
         let commissionsPromoted = 0;
         const errors: string[] = [];
+        const promotedEntries: PromotedCompanyEntry[] = [];
 
         for (const org of orgs) {
             try {
@@ -651,6 +655,15 @@ export class CronService {
                     });
                     commissionsPromoted++;
                 }
+
+                promotedEntries.push({
+                    orgId: org.id,
+                    orgName: org.name ?? org.id,
+                    eligibilityStartAt: org.eligibility_start_at
+                        ? org.eligibility_start_at.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                        : 'N/A',
+                    commissionsPromoted: detected.length,
+                });
             } catch (err: any) {
                 const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
                 console.error(msg);
@@ -661,6 +674,18 @@ export class CronService {
         console.log(
             `promoteDeployedCompanies: companies=${companiesPromoted}, commissions=${commissionsPromoted}, errors=${errors.length}`,
         );
+
+        try {
+            await this.mailService.sendMail({
+                from: 'MedVirtual <noreply@medvirtual.ai>',
+                to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+                subject: `Med Alliance — Deployed Companies Report (${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
+                html: medAllianceDeployedCompaniesReport(promotedEntries, errors, now),
+            });
+        } catch (mailError) {
+            console.error('promoteDeployedCompanies: failed to send report email:', mailError);
+        }
+
         return { companiesPromoted, commissionsPromoted, errors };
     }
 
