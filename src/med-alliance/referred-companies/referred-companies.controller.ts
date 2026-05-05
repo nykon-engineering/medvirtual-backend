@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -19,6 +20,7 @@ import { USER } from '@prisma/client';
 import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
+import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
 import { ApiOperation } from '@nestjs/swagger';
 
 @Controller('med-alliance')
@@ -88,6 +90,19 @@ export class ReferredCompaniesController {
   async findOneAdmin(@Param('id') id: string) {
     const data = await this.service.findOneForAdmin(id);
     return { status: 200, message: 'Referred company retrieved successfully', data };
+  }
+
+  // PATCH /med-alliance/admin/referred-companies/:id/stage — Move company to a new pipeline stage.
+  @Patch('admin/referred-companies/:id/stage')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  async updateReferralStage(
+    @Param('id') id: string,
+    @Body() dto: UpdateReferralStageDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.service.updateReferralStage(id, dto, admin);
+    return { status: 200, message: 'Pipeline stage updated successfully', data };
   }
 
   // POST /med-alliance/admin/referred-companies/:id/eligibility-check

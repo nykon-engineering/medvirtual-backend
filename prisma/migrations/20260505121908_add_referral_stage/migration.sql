@@ -1,0 +1,27 @@
+/*
+  Warnings:
+
+  - You are about to drop the column `comfortable_with_basic_tools__google_workspace__zoom__ehr_softw` on the `Candidate` table. All the data in the column will be lost.
+  - You are about to drop the column `demonstrates_understanding_of_medical_terminology_and_procedure` on the `Candidate` table. All the data in the column will be lost.
+  - You are about to drop the column `familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks` on the `Candidate` table. All the data in the column will be lost.
+  - You are about to drop the column `understands_workflow_in_medical_offices___telehealth_environmen` on the `Candidate` table. All the data in the column will be lost.
+
+*/
+-- CreateEnum
+CREATE TYPE "ReferralStage" AS ENUM ('referred', 'contacted', 'in_negotiation', 'contract_signed', 'deployed', 'churned');
+
+-- AlterTable
+ALTER TABLE "Candidate" DROP COLUMN "comfortable_with_basic_tools__google_workspace__zoom__ehr_softw",
+DROP COLUMN "demonstrates_understanding_of_medical_terminology_and_procedure",
+DROP COLUMN "familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks",
+DROP COLUMN "understands_workflow_in_medical_offices___telehealth_environmen",
+ADD COLUMN     "comfortable_with_basic_tools__google_workspace__zoom__ehr_software_" TEXT,
+ADD COLUMN     "demonstrates_understanding_of_medical_terminology_and_procedures" TEXT,
+ADD COLUMN     "familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__" TEXT,
+ADD COLUMN     "understands_workflow_in_medical_offices___telehealth_environments" TEXT;
+
+-- AlterTable
+ALTER TABLE "Organization" ADD COLUMN     "referral_stage" "ReferralStage" DEFAULT 'referred';
+
+-- CreateIndex
+CREATE INDEX "idx_organizations_referral_stage" ON "Organization"("referral_stage", "eligibility_start_at");

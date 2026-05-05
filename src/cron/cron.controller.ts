@@ -100,4 +100,15 @@ export class CronController {
         };
     }
 
+    @Get('promote-deployed-companies')
+    @ApiProperty({ description: 'Promote referred companies deployed for 30+ days from not_eligible to eligible and move their detected commissions to pending_admin_confirmation' })
+    async promoteDeployedCompanies() {
+        const result = await this.cron.promoteDeployedCompanies();
+        return {
+            status: 200,
+            message: 'Deployed companies promotion completed',
+            data: result,
+        };
+    }
+
 }

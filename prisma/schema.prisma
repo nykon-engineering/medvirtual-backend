@@ -176,6 +176,9 @@ model Organization {
   eligibility_start_at         DateTime?
   // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
   first_paid_invoice_at        DateTime?
+  // Pipeline stage tracking where this referral is in the sales-to-deployment lifecycle.
+  // 'deployed' starts the 30-day stabilization clock (eligibility_start_at); cron promotes to eligible after 30 days.
+  referral_stage               ReferralStage?              @default(referred)
 
   // HubSpot sync state — only relevant for referred organizations
   // 'pending' | 'synced' | 'no_match' | 'multiple_matches' | 'error'
@@ -216,6 +219,8 @@ model Organization {
   @@index([referred_by_affiliate_id, status], map: "idx_organizations_affiliate_status")
   // Lookup organizations assigned to a specific staff member
   @@index([refer_to_user_id], map: "idx_organizations_refer_to_user")
+  // Med Alliance pipeline: find deployed companies ready for eligibility promotion
+  @@index([referral_stage, eligibility_start_at], map: "idx_organizations_referral_stage")
 }
 
 model Candidate {
@@ -1078,6 +1083,17 @@ enum Priority_new {
 }
 
 // ============== here I started with MED ALLIANCE enums ==========================
+
+// Pipeline stage for referred companies — tracks where a referral is in the sales lifecycle.
+enum ReferralStage {
+  referred
+  contacted
+  in_negotiation
+  contract_signed
+  deployed
+  churned
+}
+
 enum AffiliateStatus {
   active
   inactive

@@ -14,7 +14,8 @@ import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 const TERMINAL_STATUSES = ['paid', 'void', 'rejected'];
 
 // Statuses eligible for an admin eligibility decision.
-const DECIDABLE_STATUSES = ['detected', 'pending_admin_confirmation'];
+// 'detected' is excluded: commissions must reach 'pending_admin_confirmation' via the 30-day cron before admins can decide.
+const DECIDABLE_STATUSES = ['pending_admin_confirmation'];
 
 const COMMISSION_SELECT = {
   id: true,
@@ -337,9 +338,9 @@ export class CommissionsService {
   }
 
   // ---------------------------------------------------------------------------
-  // Admin: revert an eligible commission back to detected.
+  // Admin: revert an eligible commission back to pending_admin_confirmation.
   // ---------------------------------------------------------------------------
-  async revertToDetected(id: string, adminUser: USER) {
+  async revertToPending(id: string, adminUser: USER) {
     const commission = await this.prisma.affiliateCommission.findUnique({
       where: { id },
       select: { id: true, status: true },
@@ -348,14 +349,14 @@ export class CommissionsService {
 
     if (commission.status !== 'eligible') {
       throw new BadRequestException(
-        `Only commissions in "eligible" status can be reverted to detected. Current status: "${commission.status}".`,
+        `Only commissions in "eligible" status can be reverted to pending. Current status: "${commission.status}".`,
       );
     }
 
     const updated = await this.prisma.affiliateCommission.update({
       where: { id },
       data: {
-        status: 'detected',
+        status: 'pending_admin_confirmation',
         admin_decision_by: null,
         admin_decision_reason: null,
         admin_decision_at: null,
@@ -366,9 +367,9 @@ export class CommissionsService {
     await this.writeAuditLog({
       actorUserId: adminUser.id,
       entityId: id,
-      event: 'admin_reverted_to_detected',
+      event: 'admin_reverted_to_pending',
       oldStatus: 'eligible',
-      newStatus: 'detected',
+      newStatus: 'pending_admin_confirmation',
       source: 'admin_action',
     });
 
@@ -376,12 +377,18 @@ export class CommissionsService {
   }
 
   // ---------------------------------------------------------------------------
-  // Admin: unvoid a voided commission back to detected.
+  // Admin: unvoid a voided commission back to detected or pending_admin_confirmation.
+  // Restores to pending_admin_confirmation if the company is already eligible (30-day gate passed),
+  // otherwise restores to detected so the commission waits for the cron promotion.
   // ---------------------------------------------------------------------------
   async unvoid(id: string, dto: { reason: string }, adminUser: USER) {
     const commission = await this.prisma.affiliateCommission.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        organization: { select: { med_alliance_referral_status: true } },
+      },
     });
     if (!commission) throw new NotFoundException('Commission not found');
 
@@ -391,10 +398,15 @@ export class CommissionsService {
       );
     }
 
+    const targetStatus =
+      commission.organization?.med_alliance_referral_status === 'eligible'
+        ? 'pending_admin_confirmation'
+        : 'detected';
+
     const updated = await this.prisma.affiliateCommission.update({
       where: { id },
       data: {
-        status: 'detected',
+        status: targetStatus,
         admin_decision_by: adminUser.id,
         admin_decision_reason: dto.reason,
         admin_decision_at: new Date(),
@@ -407,7 +419,7 @@ export class CommissionsService {
       entityId: id,
       event: 'admin_unvoided',
       oldStatus: 'void',
-      newStatus: 'detected',
+      newStatus: targetStatus,
       reason: dto.reason,
       source: 'admin_action',
     });
@@ -465,9 +477,9 @@ export class CommissionsService {
     });
     if (!commission) throw new NotFoundException('Commission not found');
 
-    if (commission.status !== 'detected') {
+    if (!['detected', 'pending_admin_confirmation'].includes(commission.status)) {
       throw new BadRequestException(
-        `Base amount can only be updated when the commission is in "detected" status. Current status: "${commission.status}".`,
+        `Base amount can only be updated on "detected" or "pending" commissions. Current: "${commission.status}".`,
       );
     }
 

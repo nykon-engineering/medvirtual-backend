@@ -93,13 +93,13 @@ export class CommissionsController {
     return { status: 200, message: 'Commission voided successfully', data };
   }
 
-  // PATCH /med-alliance/admin/commissions/:id/revert-to-detected — Revert eligible → detected.
-  @Patch('admin/commissions/:id/revert-to-detected')
+  // PATCH /med-alliance/admin/commissions/:id/revert-to-pending — Revert eligible → pending_admin_confirmation.
+  @Patch('admin/commissions/:id/revert-to-pending')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
-  async revertToDetected(@Param('id') id: string, @CurrentUser() admin: USER) {
-    const data = await this.commissionsService.revertToDetected(id, admin);
-    return { status: 200, message: 'Commission reverted to detected', data };
+  async revertToPending(@Param('id') id: string, @CurrentUser() admin: USER) {
+    const data = await this.commissionsService.revertToPending(id, admin);
+    return { status: 200, message: 'Commission reverted to pending', data };
   }
 
   // PATCH /med-alliance/admin/commissions/:id/unvoid — Unvoid void → detected.

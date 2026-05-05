@@ -581,4 +581,87 @@ export class CronService {
         return { created: successes.length, failed: failures.length, total_amount: totalAmount };
     }
 
+    /**
+     * Daily cron: promotes referred companies from 'deployed' to 'eligible' after 30 days,
+     * and promotes their 'detected' commissions to 'pending_admin_confirmation'.
+     * Safe to re-run — already-eligible companies are excluded by the where clause.
+     */
+    async promoteDeployedCompanies(): Promise<{ companiesPromoted: number; commissionsPromoted: number; errors: string[] }> {
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
+        const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
+
+        const orgs = await this.prisma.organization.findMany({
+            where: {
+                referral_stage: 'deployed' as any,
+                eligibility_start_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+                med_alliance_referral_status: 'not_eligible',
+            },
+            select: { id: true, eligibility_start_at: true },
+        });
+
+        let companiesPromoted = 0;
+        let commissionsPromoted = 0;
+        const errors: string[] = [];
+
+        for (const org of orgs) {
+            try {
+                await this.prisma.organization.update({
+                    where: { id: org.id },
+                    data: { med_alliance_referral_status: 'eligible', med_alliance_block_reason: null },
+                });
+                await this.prisma.medAllianceAuditLog.create({
+                    data: {
+                        entity_type: 'referred_company',
+                        entity_id: org.id,
+                        event: 'eligibility_activated',
+                        old_status: 'not_eligible',
+                        new_status: 'eligible',
+                        reason: '30-day deployment window elapsed',
+                        source: 'cron',
+                        actor_user_id: null,
+                        metadata: { eligibility_start_at: org.eligibility_start_at?.toISOString() } as any,
+                    },
+                });
+                companiesPromoted++;
+
+                const detected = await this.prisma.affiliateCommission.findMany({
+                    where: { organization_id: org.id, status: 'detected' },
+                    select: { id: true },
+                });
+                for (const commission of detected) {
+                    await this.prisma.affiliateCommission.update({
+                        where: { id: commission.id },
+                        data: { status: 'pending_admin_confirmation' },
+                    });
+                    await this.prisma.medAllianceAuditLog.create({
+                        data: {
+                            entity_type: 'commission',
+                            entity_id: commission.id,
+                            event: 'status_changed',
+                            old_status: 'detected',
+                            new_status: 'pending_admin_confirmation',
+                            reason: '30-day deployment window elapsed — promoted for admin review',
+                            source: 'cron',
+                            actor_user_id: null,
+                            metadata: { organization_id: org.id } as any,
+                        },
+                    });
+                    commissionsPromoted++;
+                }
+            } catch (err: any) {
+                const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
+                console.error(msg);
+                errors.push(msg);
+            }
+        }
+
+        console.log(
+            `promoteDeployedCompanies: companies=${companiesPromoted}, commissions=${commissionsPromoted}, errors=${errors.length}`,
+        );
+        return { companiesPromoted, commissionsPromoted, errors };
+    }
+
 }

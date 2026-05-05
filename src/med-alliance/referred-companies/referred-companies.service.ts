@@ -6,14 +6,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MedAllianceReferralStatus, OrganizationStatus, USER } from '@prisma/client';
+import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Returns the effective eligibility status for display.
- * If the stored status is eligible but the one-year window has elapsed,
- * we compute not_eligible at read-time so the UI stays accurate without
- * requiring a background job.
+ * Applies both the 30-day stabilization gate and the one-year window check
+ * at read-time so the UI stays accurate without requiring a cron to have run.
+ *
+ * eligibilityStartAt is the deployment date — not the invoice date.
  */
 function computeEffectiveStatus(
   stored: MedAllianceReferralStatus | null,
@@ -21,7 +24,9 @@ function computeEffectiveStatus(
 ): MedAllianceReferralStatus | null {
   if (stored !== 'eligible') return stored;
   if (!eligibilityStartAt) return 'not_eligible';
-  if (Date.now() - eligibilityStartAt.getTime() > ONE_YEAR_MS) return 'not_eligible';
+  const elapsed = Date.now() - eligibilityStartAt.getTime();
+  if (elapsed < THIRTY_DAYS_MS) return 'not_eligible';
+  if (elapsed > ONE_YEAR_MS) return 'not_eligible';
   return 'eligible';
 }
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
@@ -285,6 +290,7 @@ export class ReferredCompaniesService {
           contact_email: true,
           med_alliance_referral_status: true,
           eligibility_start_at: true,
+          referral_stage: true,
           referToUser: {
             select: { id: true, first_name: true, last_name: true },
           },
@@ -362,6 +368,7 @@ export class ReferredCompaniesService {
         contact_last_name: true,
         med_alliance_referral_status: true,
         eligibility_start_at: true,
+        referral_stage: true,
         affiliateCommissions: {
           where: {
             affiliate_id: currentUser.id,
@@ -406,6 +413,9 @@ export class ReferredCompaniesService {
       search,
       status,
       affiliate_id,
+      affiliate_user_id,
+      referral_stage,
+      med_alliance_referral_status,
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = dto;
@@ -423,6 +433,9 @@ export class ReferredCompaniesService {
       ];
     }
     if (affiliate_id) where.referred_by_affiliate_id = affiliate_id;
+    if (affiliate_user_id) where.referred_by_affiliate_id = affiliate_user_id;
+    if (referral_stage) where.referral_stage = referral_stage;
+    if (med_alliance_referral_status) where.med_alliance_referral_status = med_alliance_referral_status;
 
     const [rawData, total] = await this.prisma.$transaction([
       this.prisma.organization.findMany({
@@ -443,6 +456,8 @@ export class ReferredCompaniesService {
           contact_last_name: true,
           med_alliance_referral_status: true,
           eligibility_start_at: true,
+          referral_stage: true,
+          hubspot_id: true,
           hubspot_sync_status: true,
           createdAt: true,
           referredByAffiliate: {
@@ -515,6 +530,7 @@ export class ReferredCompaniesService {
         eligibility_start_at: true,
         first_paid_invoice_at: true,
         med_alliance_block_reason: true,
+        referral_stage: true,
         hubspot_id: true,
         hubspot_sync_status: true,
         hubspot_sync_error: true,
@@ -594,6 +610,46 @@ export class ReferredCompaniesService {
       eligibility_start_at,
       med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: update the pipeline stage for a referred company.
+  // Starting the deployed stage also starts the 30-day eligibility clock.
+  // ---------------------------------------------------------------------------
+  async updateReferralStage(id: string, dto: UpdateReferralStageDto, adminUser: USER) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id },
+      select: { id: true, referral_stage: true, eligibility_start_at: true, referred_by_affiliate_id: true },
+    });
+    if (!org) throw new NotFoundException('Referred company not found');
+    if (!org.referred_by_affiliate_id) throw new BadRequestException('Not a referred company');
+
+    const dataUpdate: Record<string, unknown> = { referral_stage: dto.stage };
+
+    // Manually moving to deployed starts the 30-day clock if not already running.
+    if (dto.stage === 'deployed' && !org.eligibility_start_at) {
+      dataUpdate.eligibility_start_at = new Date();
+    }
+
+    await this.prisma.organization.update({ where: { id }, data: dataUpdate as any });
+
+    await this.prisma.medAllianceAuditLog.create({
+      data: {
+        entity_type: 'referred_company',
+        entity_id: id,
+        event: 'stage_changed',
+        old_status: org.referral_stage ?? 'referred',
+        new_status: dto.stage,
+        reason: dto.reason ?? null,
+        source: 'admin_action',
+        actor_user_id: adminUser.id,
+        metadata: dataUpdate.eligibility_start_at
+          ? { eligibility_start_at: (dataUpdate.eligibility_start_at as Date).toISOString() } as any
+          : undefined,
+      },
+    });
+
+    return this.findOneForAdmin(id);
   }
 
   // Get available referral options for the "referred_to" field when creating a referral (i.e. list of active users to whom the referral can be assigned).
