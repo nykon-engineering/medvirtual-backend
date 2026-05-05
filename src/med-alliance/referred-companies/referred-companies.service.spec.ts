@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReferredCompaniesService } from './referred-companies.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -20,6 +20,7 @@ const mockPrisma = {
     findFirst: jest.fn(),
     findMany: jest.fn(),
     count: jest.fn(),
+    update: jest.fn(),
     delete: jest.fn(),
   },
   affiliateCommission: {
@@ -32,7 +33,11 @@ const mockPrisma = {
     deleteMany: jest.fn(),
   },
   medAllianceAuditLog: {
+    create: jest.fn(),
     deleteMany: jest.fn(),
+  },
+  uSER: {
+    findMany: jest.fn(),
   },
   $transaction: jest.fn(),
 };
@@ -416,6 +421,30 @@ describe('ReferredCompaniesService', () => {
 
       expect(result.data).toHaveLength(0);
     });
+
+    it('should filter by referral_stage when provided', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      const result = await service.findAllForAdmin({ referral_stage: 'deployed' as any });
+
+      expect(result.data).toHaveLength(0);
+    });
+
+    it('should filter by med_alliance_referral_status when provided', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      const result = await service.findAllForAdmin({ med_alliance_referral_status: 'eligible' as any });
+
+      expect(result.data).toHaveLength(0);
+    });
+
+    it('should filter by affiliate_user_id when provided', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      const result = await service.findAllForAdmin({ affiliate_user_id: 'user-99' });
+
+      expect(result.data).toHaveLength(0);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -460,6 +489,251 @@ describe('ReferredCompaniesService', () => {
       expect(result).toHaveProperty('admin');
       expect(result).toHaveProperty('users');
       expect(result).toHaveProperty('referredByAffiliate');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // computeEffectiveStatus — 30-day gate (tested via findOneForAffiliate)
+  // -------------------------------------------------------------------------
+  describe('computeEffectiveStatus — 30-day gate', () => {
+    const makeOrgWithStatus = (
+      stored: string,
+      eligibilityStartAt: Date | null,
+    ) => ({
+      id: 'org-1',
+      name: 'Acme Corp',
+      referred_by_affiliate_id: 'user-1',
+      med_alliance_referral_status: stored,
+      eligibility_start_at: eligibilityStartAt,
+      affiliateCommissions: [],
+    });
+
+    beforeEach(() => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
+        referred_by_affiliate_id: 'user-1',
+      });
+    });
+
+    it('should return "not_eligible" when stored=eligible but deployed < 30 days ago', async () => {
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgWithStatus('eligible', tenDaysAgo),
+      );
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+    });
+
+    it('should return "eligible" when stored=eligible and deployed > 30 days and < 1 year ago', async () => {
+      const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgWithStatus('eligible', fortyDaysAgo),
+      );
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect((result as any).med_alliance_referral_status).toBe('eligible');
+    });
+
+    it('should return "not_eligible" when stored=eligible but deployed > 1 year ago', async () => {
+      const twoYearsAgo = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgWithStatus('eligible', twoYearsAgo),
+      );
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+    });
+
+    it('should return "not_eligible" when stored=eligible but eligibility_start_at is null', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgWithStatus('eligible', null),
+      );
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+    });
+
+    it('should pass through "not_eligible" unchanged', async () => {
+      const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgWithStatus('not_eligible', fortyDaysAgo),
+      );
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // updateReferralStage
+  // -------------------------------------------------------------------------
+  describe('updateReferralStage', () => {
+    const mockAdminUser = {
+      id: 'admin-1',
+      first_name: 'Admin',
+      last_name: 'User',
+      role: 'system_admin',
+    } as any;
+
+    const makeFullOrg = (overrides: Partial<any> = {}) => ({
+      ...mockOrg,
+      referral_stage: 'referred',
+      eligibility_start_at: null,
+      med_alliance_block_reason: null,
+      hubspot_id: null,
+      hubspot_sync_status: null,
+      hubspot_sync_error: null,
+      hubspot_synced_at: null,
+      first_paid_invoice_at: null,
+      referredByAffiliate: null,
+      referToUser: null,
+      users: [],
+      affiliateCommissions: [],
+      hubspotInvoiceSnapshots: [],
+      adminReviewCases: [],
+      ...overrides,
+    });
+
+    it('should throw NotFoundException when org does not exist', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateReferralStage('org-99', { stage: 'contacted' as any }, mockAdminUser),
+      ).rejects.toThrow(new NotFoundException('Referred company not found'));
+    });
+
+    it('should throw BadRequestException when org is not a referred company', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        referral_stage: 'referred',
+        eligibility_start_at: null,
+        referred_by_affiliate_id: null, // not a referral
+      });
+
+      await expect(
+        service.updateReferralStage('org-1', { stage: 'contacted' as any }, mockAdminUser),
+      ).rejects.toThrow(new BadRequestException('Not a referred company'));
+    });
+
+    it('should update referral_stage and write audit log', async () => {
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referral_stage: 'referred',
+          eligibility_start_at: null,
+          referred_by_affiliate_id: 'user-1',
+        })
+        .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'contacted' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.updateReferralStage(
+        'org-1',
+        { stage: 'contacted' as any },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: expect.objectContaining({ referral_stage: 'contacted' }),
+        }),
+      );
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            event: 'stage_changed',
+            old_status: 'referred',
+            new_status: 'contacted',
+            source: 'admin_action',
+            actor_user_id: 'admin-1',
+          }),
+        }),
+      );
+      expect((result as any).referral_stage).toBe('contacted');
+    });
+
+    it('should set eligibility_start_at when moving to "deployed" with no prior start', async () => {
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referral_stage: 'contract_signed',
+          eligibility_start_at: null, // no clock started yet
+          referred_by_affiliate_id: 'user-1',
+        })
+        .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'deployed' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'deployed' as any },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            referral_stage: 'deployed',
+            eligibility_start_at: expect.any(Date),
+          }),
+        }),
+      );
+    });
+
+    it('should NOT overwrite eligibility_start_at when already set on move to "deployed"', async () => {
+      const existingStart = new Date('2026-03-01');
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referral_stage: 'contract_signed',
+          eligibility_start_at: existingStart, // already running
+          referred_by_affiliate_id: 'user-1',
+        })
+        .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'deployed' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'deployed' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      // eligibility_start_at must NOT be set in the update payload
+      expect(updateData).not.toHaveProperty('eligibility_start_at');
+    });
+
+    it('should include optional reason in the audit log', async () => {
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referral_stage: 'referred',
+          eligibility_start_at: null,
+          referred_by_affiliate_id: 'user-1',
+        })
+        .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'contacted' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'contacted' as any, reason: 'Reached out via email' },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reason: 'Reached out via email' }),
+        }),
+      );
     });
   });
 });

@@ -27,6 +27,17 @@ describe('CronService', () => {
       positionRateConfig: {
         create: jest.fn(),
       },
+      organization: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      affiliateCommission: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+      medAllianceAuditLog: {
+        create: jest.fn(),
+      },
     };
 
     candidatesServiceMock = {
@@ -127,6 +138,190 @@ describe('CronService', () => {
       const result = await service.syncPositionsFromHubspot();
 
       expect(result).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // promoteDeployedCompanies
+  // -------------------------------------------------------------------------
+  describe('promoteDeployedCompanies', () => {
+    it('should return zero counts when no orgs qualify', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([]);
+
+      const result = await service.promoteDeployedCompanies();
+
+      expect(result).toEqual({ companiesPromoted: 0, commissionsPromoted: 0, errors: [] });
+      expect(prismaServiceMock.organization.update).not.toHaveBeenCalled();
+      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should promote eligible orgs and their detected commissions', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000); // 40 days ago
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', eligibility_start_at: deployedAt },
+        { id: 'org-2', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany
+        .mockResolvedValueOnce([{ id: 'comm-1' }, { id: 'comm-2' }]) // 2 commissions for org-1
+        .mockResolvedValueOnce([{ id: 'comm-3' }]);                   // 1 commission for org-2
+      prismaServiceMock.affiliateCommission.update.mockResolvedValue({});
+
+      const result = await service.promoteDeployedCompanies();
+
+      expect(result.companiesPromoted).toBe(2);
+      expect(result.commissionsPromoted).toBe(3);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should set org status to eligible and clear block reason', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
+
+      await service.promoteDeployedCompanies();
+
+      expect(prismaServiceMock.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: expect.objectContaining({
+            med_alliance_referral_status: 'eligible',
+            med_alliance_block_reason: null,
+          }),
+        }),
+      );
+    });
+
+    it('should promote detected commissions to pending_admin_confirmation', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-1' }]);
+      prismaServiceMock.affiliateCommission.update.mockResolvedValue({});
+
+      await service.promoteDeployedCompanies();
+
+      expect(prismaServiceMock.affiliateCommission.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'comm-1' },
+          data: { status: 'pending_admin_confirmation' },
+        }),
+      );
+    });
+
+    it('should write eligibility_activated audit log for each promoted org', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
+
+      await service.promoteDeployedCompanies();
+
+      expect(prismaServiceMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            entity_type: 'referred_company',
+            entity_id: 'org-1',
+            event: 'eligibility_activated',
+            old_status: 'not_eligible',
+            new_status: 'eligible',
+            reason: '30-day deployment window elapsed',
+            source: 'cron',
+            actor_user_id: null,
+          }),
+        }),
+      );
+    });
+
+    it('should write status_changed audit log for each promoted commission', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-1' }]);
+      prismaServiceMock.affiliateCommission.update.mockResolvedValue({});
+
+      await service.promoteDeployedCompanies();
+
+      expect(prismaServiceMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            entity_type: 'commission',
+            entity_id: 'comm-1',
+            event: 'status_changed',
+            old_status: 'detected',
+            new_status: 'pending_admin_confirmation',
+            source: 'cron',
+          }),
+        }),
+      );
+    });
+
+    it('should skip orgs with no detected commissions without error', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]); // no detected commissions
+
+      const result = await service.promoteDeployedCompanies();
+
+      expect(result.companiesPromoted).toBe(1);
+      expect(result.commissionsPromoted).toBe(0);
+      expect(result.errors).toHaveLength(0);
+      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
+    });
+
+    it('should catch per-org errors and continue processing remaining orgs', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-fail', eligibility_start_at: deployedAt },
+        { id: 'org-ok', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update
+        .mockRejectedValueOnce(new Error('DB timeout'))  // org-fail throws
+        .mockResolvedValueOnce({});                       // org-ok succeeds
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
+
+      const result = await service.promoteDeployedCompanies();
+
+      expect(result.companiesPromoted).toBe(1);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toContain('org-fail');
+    });
+
+    it('should query orgs with correct date window constraints', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([]);
+
+      await service.promoteDeployedCompanies();
+
+      expect(prismaServiceMock.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            med_alliance_referral_status: 'not_eligible',
+            eligibility_start_at: expect.objectContaining({
+              lte: expect.any(Date), // ≤ 30 days ago
+              gte: expect.any(Date), // ≥ 1 year ago
+            }),
+          }),
+        }),
+      );
     });
   });
 

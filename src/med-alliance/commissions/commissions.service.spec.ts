@@ -289,7 +289,9 @@ describe('CommissionsService', () => {
     });
 
     it('should reject a commission and persist reason', async () => {
-      mockPrisma.affiliateCommission.findUnique.mockResolvedValue(makeCommission());
+      mockPrisma.affiliateCommission.findUnique.mockResolvedValue(
+        makeCommission({ status: 'pending_admin_confirmation' }),
+      );
       // MA-004 guard is skipped for rejections — no org lookup needed
       const updated = makeCommission({
         status: 'rejected',
@@ -312,7 +314,9 @@ describe('CommissionsService', () => {
     });
 
     it('should write an audit log entry after a decision', async () => {
-      mockPrisma.affiliateCommission.findUnique.mockResolvedValue(makeCommission());
+      mockPrisma.affiliateCommission.findUnique.mockResolvedValue(
+        makeCommission({ status: 'pending_admin_confirmation' }),
+      );
       mockPrisma.organization.findUnique.mockResolvedValue({ med_alliance_referral_status: 'eligible' });
       mockPrisma.affiliateCommission.update.mockResolvedValue(makeCommission({ status: 'eligible' }));
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
@@ -325,7 +329,7 @@ describe('CommissionsService', () => {
             entity_type: 'commission',
             entity_id: 'commission-1',
             event: 'admin_decision',
-            old_status: 'detected',
+            old_status: 'pending_admin_confirmation',
             new_status: 'eligible',
             source: 'admin_action',
             actor_user_id: 'admin-1',
