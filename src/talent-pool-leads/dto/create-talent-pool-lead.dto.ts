@@ -105,4 +105,13 @@ export class CreateTalentPoolLeadDto {
     message: 'Source must be either "talent-pool-page" or "berry-talent-pool-page"',
   })
   source: string;
+
+  @ApiProperty({
+    description: 'ID of the talent pool candidate the visitor was viewing when they submitted the form',
+    example: 'abc123',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  candidate_id?: string;
 }
