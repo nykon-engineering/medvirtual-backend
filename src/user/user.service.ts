@@ -496,7 +496,7 @@ export class UserService {
     }
   }
 
-  async update(id: string, userData: Prisma.USERUpdateInput): Promise<USER> {
+  async update(id: string, userData: Prisma.USERUpdateInput, actorUserId?: string): Promise<USER> {
     try {
       let user: Prisma.USERUpdateInput;
       const currentUser = await this.prisma.uSER.findUnique({
@@ -524,7 +524,7 @@ export class UserService {
           ...user,
           hubspot_contact_id: hubspotContactId,
         };
-        await this.hubspotService.updateContactInHubspot(userForHubspot);
+        await this.hubspotService.updateContactInHubspot(userForHubspot, actorUserId);
       }
 
       return await this.prisma.uSER.update({
@@ -537,7 +537,7 @@ export class UserService {
     }
   }
 
-  async delete(id: string): Promise<USER> {
+  async delete(id: string, actorUserId?: string): Promise<USER> {
     try {
       const user = await this.findById(id);
       if (!user) {
@@ -580,7 +580,7 @@ export class UserService {
         ...user,
         hubspot_contact_id: user.hubspot_contact_id,
       }
-      await this.hubspotService.deleteContactInHubspot(userForHubspot);
+      await this.hubspotService.deleteContactInHubspot(userForHubspot, actorUserId);
 
       // Use a transaction to handle all deletions atomically
       return await this.prisma.$transaction(async (tx) => {
@@ -1084,7 +1084,7 @@ export class UserService {
             },
           }
 
-          await this.hubspotService.createContactInHubspot(newUserForHubspot);
+          await this.hubspotService.createContactInHubspot(newUserForHubspot, currentUser.id);
       }catch(err){
         console.error('Error creating contact in Hubspot:', err);
       }

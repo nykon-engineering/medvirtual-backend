@@ -1,12 +1,15 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { HubspotAuditService } from "../hubspot-audit.service";
 
 @Injectable()
 
 export class AffiliateCreationService {
     constructor(
-      private readonly prisma: PrismaService
+      private readonly prisma: PrismaService,
+      private readonly audit: HubspotAuditService,
     ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
@@ -120,7 +123,8 @@ export class AffiliateCreationService {
       return contactId;
     }
 
-    async execute(data: any): Promise<any> {
+    async execute(data: any, actorUserId?: string): Promise<any> {
+        const source = actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron;
         try {
           const contactHubspotId = await this.ensureContact(
             data.user.id,
@@ -179,13 +183,48 @@ export class AffiliateCreationService {
             data: { hubspot_id: response.data.id },
           });
 
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.affiliate,
+            entityId: data.id,
+            hubspotObjectId: response.data.id,
+            hubspotObjectType: 'p20630393_growth_partners',
+            action: HubspotAuditAction.CREATE,
+            source,
+            success: true,
+            payload: { email: data.user.email },
+            response: { id: response.data.id },
+          });
+
           return true;
         } catch (error) {
           if (error.response) {
             console.error("Error creating affiliate:", error.response.data);
+            void this.audit.log({
+              actorUserId,
+              entityType: HubspotEntityType.affiliate,
+              entityId: data.id,
+              hubspotObjectType: 'p20630393_growth_partners',
+              action: HubspotAuditAction.CREATE,
+              source,
+              success: false,
+              errorCode: error.response?.status?.toString(),
+              errorMessage: error.message,
+            });
             throw new BadRequestException('Failed to create Growth Partner in Hubspot. Your affiliate profile has not been created. Please try again later.');
           } else {
             console.error("Connection error:", error.message);
+            void this.audit.log({
+              actorUserId,
+              entityType: HubspotEntityType.affiliate,
+              entityId: data.id,
+              hubspotObjectType: 'p20630393_growth_partners',
+              action: HubspotAuditAction.CREATE,
+              source,
+              success: false,
+              errorCode: error.code,
+              errorMessage: error.message,
+            });
             throw new BadRequestException('Failed to create Growth Partner in Hubspot. Your affiliate profile has not been created. Please try again later.');
           }
         }

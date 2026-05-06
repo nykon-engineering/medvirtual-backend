@@ -231,8 +231,8 @@ export class OrganizationController {
     status: 200,
     description: 'Organization updated successfully',
   })
-  async update(@Param('id') id: string, @Body() data: UpdateOrganizationDto) {
-    const org = await this.organizationService.update(id, data);
+  async update(@Param('id') id: string, @Body() data: UpdateOrganizationDto, @CurrentUser() user: USER) {
+    const org = await this.organizationService.update(id, data, user?.id);
     return {
       status: 200,
       message: 'Organization updated successfully',

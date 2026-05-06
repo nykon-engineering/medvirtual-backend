@@ -2,7 +2,8 @@ import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException 
 import { Client } from '@hubspot/api-client'
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects';
 import axios from 'axios';
-import { OrganizationRole, Prisma } from '@prisma/client';
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType, OrganizationRole, Prisma } from '@prisma/client';
+import { HubspotAuditService } from './hubspot-audit.service';
 
 import {  mapHubspotToDb, mapOrganizationToDbHubspot, mapContactToDb } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
@@ -112,6 +113,8 @@ export class HubspotService {
       private readonly contactCreation: HandlerContactCreation,
       private readonly contactPropertyChange: HandlerContactPropertyChange,
 
+      private readonly audit: HubspotAuditService,
+
 
       @Inject(forwardRef (() => CandidatesService))
       private readonly candidate: CandidatesService
@@ -143,6 +146,35 @@ export class HubspotService {
         }
     }
 
+    private resolveWebhookMeta(event: any): { entityType: HubspotEntityType; objectType: string; action: HubspotAuditAction } | null {
+        const sub: string = event.subscriptionType ?? '';
+        const objTypeId: string = event.objectTypeId ?? '';
+        const assocTypeId: string = event.associationTypeId ?? '';
+
+        const getAction = (type: string): HubspotAuditAction => {
+            if (type.endsWith('.creation') || type.endsWith('.restore')) return HubspotAuditAction.CREATE;
+            if (type.endsWith('.propertyChange') || type.endsWith('.associationChange')) return HubspotAuditAction.UPDATE;
+            if (type.endsWith('.deletion')) return HubspotAuditAction.DELETE;
+            if (type.endsWith('.merge')) return HubspotAuditAction.SYNC;
+            return HubspotAuditAction.UPDATE;
+        };
+
+        const action = getAction(sub);
+
+        if (sub.startsWith('object.')) {
+            if (objTypeId === '2-5922196') return { entityType: HubspotEntityType.candidate, objectType: process.env.HUBSPOT_CUSTOM_OBJECT ?? '2-5922196', action };
+            if (objTypeId === '2-54072002') return { entityType: HubspotEntityType.affiliate, objectType: 'p20630393_growth_partners', action };
+            if (objTypeId === '0-53' || assocTypeId === '179' || assocTypeId === '180') return { entityType: HubspotEntityType.invoice, objectType: '0-53', action };
+            return null;
+        }
+        if (sub.startsWith('company.')) return { entityType: HubspotEntityType.organization, objectType: 'companies', action };
+        if (sub.startsWith('deal.'))    return { entityType: HubspotEntityType.deal, objectType: 'deals', action };
+        if (sub.startsWith('ticket.'))  return { entityType: HubspotEntityType.hire_request, objectType: 'tickets', action };
+        if (sub.startsWith('contact.')) return { entityType: HubspotEntityType.contact, objectType: 'contacts', action };
+        if (sub.startsWith('owners.'))  return { entityType: HubspotEntityType.owner, objectType: 'owners', action };
+        return null;
+    }
+
     async changeDataFromHubspot(data: any): Promise<any> {
         console.log('Received data:', data);
 
@@ -165,133 +197,170 @@ export class HubspotService {
         }
 
         for (const event of orderedData){
-            switch (event.subscriptionType) {
+            const meta = this.resolveWebhookMeta(event);
+            const objectId = event.objectId?.toString() ?? 'unknown';
 
-                /*
-                2-5922196 => This is the objectTypeId for our custom object "Virtual Assistant"
-                2-54072002 => This is the objectTypeId for our custom object "Growth Partner"
-                */
-               
-                case 'object.creation':
-                case 'object.restore':
-                    if (event.objectTypeId ==="2-5922196") { // Virtual Assistant
-                        await this.objectCreation.execute(event);
-                    }else if (event.objectTypeId === "2-54072002") { // Growth Partner
-                        await this.affiliateCreation.execute(event);
-                    }else if (event.objectTypeId === "0-53") { // Invoice
-                        await this.invoiceCreation.execute(event);
-                    }
+            try {
+                switch (event.subscriptionType) {
 
-                    break;
-                case 'object.propertyChange':
-                    if (event.objectTypeId ==="2-5922196") {
-                        await this.objectPropertyChange.execute(event);
-                    }else if (event.objectTypeId === "2-54072002") {
-                        await this.affiliatePropertyChange.execute(event);
-                    }else if (event.objectTypeId === "0-53") { // Invoice
-                        await this.invoicePropertyChange.execute(event);
-                    }
-                    break;
+                    /*
+                    2-5922196 => This is the objectTypeId for our custom object "Virtual Assistant"
+                    2-54072002 => This is the objectTypeId for our custom object "Growth Partner"
+                    */
 
-                case 'object.deletion':
-                    if (event.objectTypeId ==="2-5922196") {
-                        await this.objectDeletion.execute(event);
-                    }
-                    break;
-                case 'object.merge':
-                    if (event.objectTypeId ==="2-5922196") {
-                        await this.objectMerge.execute(event);
-                    }
-                    break;
+                    case 'object.creation':
+                    case 'object.restore':
+                        if (event.objectTypeId ==="2-5922196") { // Virtual Assistant
+                            await this.objectCreation.execute(event);
+                        }else if (event.objectTypeId === "2-54072002") { // Growth Partner
+                            await this.affiliateCreation.execute(event);
+                        }else if (event.objectTypeId === "0-53") { // Invoice
+                            await this.invoiceCreation.execute(event);
+                        }
+                        break;
 
-                case 'object.associationChange':
-                    if (event.associationTypeId ==="179" || event.associationTypeId === "180") { //INVOICE_TO_COMPANY or COMPANY_TO_INVOICE
-                        await this.invoiceAssociationChange.execute(event);
-                    }
-                    break;
-                
-                case 'owners.creation':
-                case 'owners.restore':
-                //case 'contact.creation':
-                //case 'contact.restore':
-                    await this.ownerCreation.execute(event);
-                    break;
+                    case 'object.propertyChange':
+                        if (event.objectTypeId ==="2-5922196") {
+                            await this.objectPropertyChange.execute(event);
+                        }else if (event.objectTypeId === "2-54072002") {
+                            await this.affiliatePropertyChange.execute(event);
+                        }else if (event.objectTypeId === "0-53") { // Invoice
+                            await this.invoicePropertyChange.execute(event);
+                        }
+                        break;
 
-                case 'owners.deletion':
-                //case 'contact.deletion':
-                    await this.ownerDeletion.execute(event);
-                    break;
+                    case 'object.deletion':
+                        if (event.objectTypeId ==="2-5922196") {
+                            await this.objectDeletion.execute(event);
+                        }
+                        break;
 
-                case 'owners.propertyChange':
-                //case 'contact.propertyChange':
-                    await this.ownerPropertyChange.execute(event);
-                    break;
-                
-                case 'company.creation':
-                case 'company.restore':
-                    await this.organizationCreation.execute(event);
-                    break;
+                    case 'object.merge':
+                        if (event.objectTypeId ==="2-5922196") {
+                            await this.objectMerge.execute(event);
+                        }
+                        break;
 
-                case 'company.propertyChange':
-                    await this.organizationPropertyChange.execute(event);
-                    break;
-                
-                case 'company.deletion':
-                    await this.organizationDeletion.execute(event);
-                    break;
-                
-                case 'company.merge':
-                    await this.organizationMerge.execute(event);
-                    break;
+                    case 'object.associationChange':
+                        if (event.associationTypeId ==="179" || event.associationTypeId === "180") { //INVOICE_TO_COMPANY or COMPANY_TO_INVOICE
+                            await this.invoiceAssociationChange.execute(event);
+                        }
+                        break;
 
-                case 'company.associationChange': 
-                    await this.organizationAssociationChange.execute(event);
-                    break;
-                
-                case 'deal.creation':
-                case 'deal.restore':
-                    await this.dealCreation.execute(event);
-                    break;
+                    case 'owners.creation':
+                    case 'owners.restore':
+                    //case 'contact.creation':
+                    //case 'contact.restore':
+                        await this.ownerCreation.execute(event);
+                        break;
 
-                case 'deal.propertyChange':
-                    await this.dealPropertyChange.execute(event);
-                    break;
+                    case 'owners.deletion':
+                    //case 'contact.deletion':
+                        await this.ownerDeletion.execute(event);
+                        break;
 
-                case 'deal.deletion':
-                    await this.dealDeletion.execute(event);
-                    break;
+                    case 'owners.propertyChange':
+                    //case 'contact.propertyChange':
+                        await this.ownerPropertyChange.execute(event);
+                        break;
 
-                case 'deal.associationChange':
-                    await this.dealAssociationChange.execute(event);
-                    break;
+                    case 'company.creation':
+                    case 'company.restore':
+                        await this.organizationCreation.execute(event);
+                        break;
 
-                //case 'ticket.creation': =. just comment because we dont have rules 
-                
-                //case 'ticket.restore':
-                //    await this.ticketRestore.execute(event);
-                //    break;
+                    case 'company.propertyChange':
+                        await this.organizationPropertyChange.execute(event);
+                        break;
 
-                case 'ticket.deletion':
-                    await this.ticketDeletion.execute(event);
-                    break;
-                
-                case 'ticket.propertyChange':
-                    await this.ticketPropertyChange.execute(event);
-                    break;
+                    case 'company.deletion':
+                        await this.organizationDeletion.execute(event);
+                        break;
 
-                case 'contact.creation':
-                    await this.contactCreation.execute(event);
-                    break;
+                    case 'company.merge':
+                        await this.organizationMerge.execute(event);
+                        break;
 
-                case 'contact.propertyChange':
-                    await this.contactPropertyChange.execute(event);
-                    break;
+                    case 'company.associationChange':
+                        await this.organizationAssociationChange.execute(event);
+                        break;
 
-                
+                    case 'deal.creation':
+                    case 'deal.restore':
+                        await this.dealCreation.execute(event);
+                        break;
+
+                    case 'deal.propertyChange':
+                        await this.dealPropertyChange.execute(event);
+                        break;
+
+                    case 'deal.deletion':
+                        await this.dealDeletion.execute(event);
+                        break;
+
+                    case 'deal.associationChange':
+                        await this.dealAssociationChange.execute(event);
+                        break;
+
+                    //case 'ticket.creation': =. just comment because we dont have rules
+
+                    //case 'ticket.restore':
+                    //    await this.ticketRestore.execute(event);
+                    //    break;
+
+                    case 'ticket.deletion':
+                        await this.ticketDeletion.execute(event);
+                        break;
+
+                    case 'ticket.propertyChange':
+                        await this.ticketPropertyChange.execute(event);
+                        break;
+
+                    case 'contact.creation':
+                        await this.contactCreation.execute(event);
+                        break;
+
+                    case 'contact.propertyChange':
+                        await this.contactPropertyChange.execute(event);
+                        break;
+                }
+
+                if (meta) {
+                    void this.audit.log({
+                        actorLabel: 'WebhookHubspot',
+                        entityType: meta.entityType,
+                        entityId: objectId,
+                        hubspotObjectId: objectId,
+                        hubspotObjectType: meta.objectType,
+                        action: meta.action,
+                        source: HubspotAuditSource.webhook,
+                        success: true,
+                        payload: {
+                            subscriptionType: event.subscriptionType,
+                            objectId: event.objectId,
+                            propertyName: event.propertyName ?? undefined,
+                        },
+                    });
+                }
+            } catch (err) {
+                if (meta) {
+                    void this.audit.log({
+                        actorLabel: 'WebhookHubspot',
+                        entityType: meta.entityType,
+                        entityId: objectId,
+                        hubspotObjectId: objectId,
+                        hubspotObjectType: meta.objectType,
+                        action: meta.action,
+                        source: HubspotAuditSource.webhook,
+                        success: false,
+                        payload: { subscriptionType: event.subscriptionType, objectId: event.objectId },
+                        errorCode: err.status?.toString() ?? err.code,
+                        errorMessage: err.message,
+                    });
+                }
+                throw err;
             }
         }
-
-        
     }
 
     async changeDataToHubspot(objectId: string, data: changeDataToHubspotDto): Promise<boolean> {
@@ -319,7 +388,8 @@ export class HubspotService {
         }
     }
 
-    async updateManyCandidatesFromHireRequest(candidates, pipelineStatus): Promise<boolean> {
+    async updateManyCandidatesFromHireRequest(candidates, pipelineStatus, actorUserId?: string, hireRequestId?: string): Promise<boolean> {
+        const objectType = process.env.HUBSPOT_CUSTOM_OBJECT ?? 'candidate_custom_object';
         try{
             if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
             await this.hubspotClient.crm.objects.batchApi.update(process.env.HUBSPOT_CUSTOM_OBJECT,
@@ -332,17 +402,40 @@ export class HubspotService {
                   })),
                 }
               );
+              void this.audit.log({
+                actorUserId,
+                entityType: HubspotEntityType.candidate,
+                entityId: hireRequestId ?? 'bulk',
+                hubspotObjectType: objectType,
+                action: HubspotAuditAction.BATCH_UPDATE,
+                source: actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron,
+                success: true,
+                payload: { count: candidates.length, pipelineStatus },
+              });
               return true;
         }catch (error) {
+            void this.audit.log({
+              actorUserId,
+              entityType: HubspotEntityType.candidate,
+              entityId: hireRequestId ?? 'bulk',
+              hubspotObjectType: objectType,
+              action: HubspotAuditAction.BATCH_UPDATE,
+              source: actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron,
+              success: false,
+              errorCode: error.code,
+              errorMessage: error.message,
+            });
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
     }
 
-    async updateOneCandidateFromHireRequest(hubspot_id: string, pipelineStatus: string): Promise<boolean> {
+    async updateOneCandidateFromHireRequest(hubspot_id: string, pipelineStatus: string, actorUserId?: string, source?: HubspotAuditSource): Promise<boolean> {
         console.log('Updating candidate in HubSpot with ID:', hubspot_id, 'to pipeline status:', pipelineStatus);
+        const objectType = process.env.HUBSPOT_CUSTOM_OBJECT ?? 'candidate_custom_object';
+        const auditSource = source ?? (actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron);
         try{
             if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
-            
+
             const updateBody = {
                 properties: {
                     hs_pipeline_stage: pipelineStatus,
@@ -352,48 +445,71 @@ export class HubspotService {
             await this.hubspotClient.crm.objects.basicApi.update(
                 process.env.HUBSPOT_CUSTOM_OBJECT,
                 hubspot_id,
-                updateBody, 
+                updateBody,
             );
+            void this.audit.log({
+              actorUserId,
+              entityType: HubspotEntityType.candidate,
+              entityId: hubspot_id,
+              hubspotObjectId: hubspot_id,
+              hubspotObjectType: objectType,
+              action: HubspotAuditAction.UPDATE,
+              source: auditSource,
+              success: true,
+              payload: { pipelineStatus },
+            });
             return true;
         }catch (error) {
+            void this.audit.log({
+              actorUserId,
+              entityType: HubspotEntityType.candidate,
+              entityId: hubspot_id,
+              hubspotObjectId: hubspot_id,
+              hubspotObjectType: objectType,
+              action: HubspotAuditAction.UPDATE,
+              source: auditSource,
+              success: false,
+              errorCode: error.code,
+              errorMessage: error.message,
+            });
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
     }
 
-    async createHireRequestInHubspot(data: any): Promise<any> {
-        return await this.hireRequestCreationService.execute(data);
+    async createHireRequestInHubspot(data: any, actorUserId?: string): Promise<any> {
+        return await this.hireRequestCreationService.execute(data, actorUserId);
     }
 
-    async updateHireRequestInHubspot(data: any, specificField?: string): Promise<any> {
-        return await this.hireRequestUpdateService.execute(data, specificField);
+    async updateHireRequestInHubspot(data: any, specificField?: string, actorUserId?: string): Promise<any> {
+        return await this.hireRequestUpdateService.execute(data, specificField, actorUserId);
     }
 
-    async createOrganizationInHubspot(data: any): Promise<any> {
-        return await this.organizationCreationService.execute(data);
+    async createOrganizationInHubspot(data: any, actorUserId?: string): Promise<any> {
+        return await this.organizationCreationService.execute(data, actorUserId);
     }
 
-    async updateOrganizationInHubspot(data: any): Promise<any> {
-        return await this.organizationUpdateService.execute(data);
+    async updateOrganizationInHubspot(data: any, actorUserId?: string): Promise<any> {
+        return await this.organizationUpdateService.execute(data, actorUserId);
     }
 
-    async createContactInHubspot(data: any): Promise<any> {
-        return await this.contactCreationService.execute(data);
+    async createContactInHubspot(data: any, actorUserId?: string): Promise<any> {
+        return await this.contactCreationService.execute(data, actorUserId);
     }
 
-    async createContactFromReferredCompanyInHubspot(data: any): Promise<any> {
-        return await this.contactCreationFromCompanyService.execute(data);
+    async createContactFromReferredCompanyInHubspot(data: any, actorUserId?: string): Promise<any> {
+        return await this.contactCreationFromCompanyService.execute(data, actorUserId);
     }
 
-    async updateContactInHubspot(data: any): Promise<any> {
-        return await this.contactUpdateService.execute(data);
+    async updateContactInHubspot(data: any, actorUserId?: string): Promise<any> {
+        return await this.contactUpdateService.execute(data, actorUserId);
     }
 
-    async deleteContactInHubspot(data: any): Promise<any> {
-        return await this.contactDeleteService.execute(data);
+    async deleteContactInHubspot(data: any, actorUserId?: string): Promise<any> {
+        return await this.contactDeleteService.execute(data, actorUserId);
     }
 
-    async deleteCompanyInHubspot(hubspotCompanyId: string): Promise<boolean> {
-        return await this.companyDeleteService.execute(hubspotCompanyId);
+    async deleteCompanyInHubspot(hubspotCompanyId: string, actorUserId?: string, entityId?: string): Promise<boolean> {
+        return await this.companyDeleteService.execute(hubspotCompanyId, actorUserId, entityId);
     }
 
     ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot

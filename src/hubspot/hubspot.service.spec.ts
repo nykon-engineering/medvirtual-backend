@@ -49,6 +49,7 @@ import { ContactDeleteService } from './delete/contact';
 import { CompanyDeleteService } from './delete/company';
 import { HandlerContactCreation } from './handlers/contactCreation';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+import { HubspotAuditService } from './hubspot-audit.service';
 
 
 
@@ -255,6 +256,10 @@ const handlerContactPropertyChangeMock = {
   execute: jest.fn(),
 };
 
+const auditServiceMock = {
+  log: jest.fn(),
+};
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
 }));
@@ -319,6 +324,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: AffiliateUpdateService, useValue: AffiliateUpdateServiceMock},
         {provide: HandlerContactCreation, useValue: handlerContactCreationMock},
         {provide: HandlerContactPropertyChange, useValue: handlerContactPropertyChangeMock},
+        {provide: HubspotAuditService, useValue: auditServiceMock},
       ],
     }).compile();
 
@@ -404,6 +410,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: AffiliateUpdateService, useValue: AffiliateUpdateServiceMock},
         {provide: HandlerContactCreation, useValue: handlerContactCreationMock},
         {provide: HandlerContactPropertyChange, useValue: handlerContactPropertyChangeMock},
+        {provide: HubspotAuditService, useValue: auditServiceMock},
       ]
     }).compile();
 

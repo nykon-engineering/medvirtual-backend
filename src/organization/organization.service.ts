@@ -907,7 +907,7 @@ export class OrganizationService {
       const newOrganization = await this.getById(organization.id);
 
       if (user){ //this rule avoid re-call on hubspot. If this flow came from hubspot, we dont have logged user and then we avoid send new organization for hubspot
-        await this.hubspot.createOrganizationInHubspot(newOrganization);
+        await this.hubspot.createOrganizationInHubspot(newOrganization, user?.id);
         // Referred companies have their own contact creation flow (createForReferredCompany in Step 6)
         if (!referred_by_affiliate_id) {
           console.log('Creating contact for organization:', newOrganization.id);
@@ -926,7 +926,7 @@ export class OrganizationService {
       
   }
 
-  async update(id: string, data: UpdateOrganizationDto): Promise<Organization> {
+  async update(id: string, data: UpdateOrganizationDto, actorUserId?: string): Promise<Organization> {
     try {
       const updateData: any = {};
 
@@ -1018,7 +1018,7 @@ export class OrganizationService {
       });
 
       //updateOrganizationInHubspot
-      await this.hubspot.updateOrganizationInHubspot(res);
+      await this.hubspot.updateOrganizationInHubspot(res, actorUserId);
 
       return res;
     } catch (error) {
@@ -1130,7 +1130,7 @@ export class OrganizationService {
       //updateOrganizationInHubspot
       await this.hubspot.updateOrganizationInHubspot(res);
 
-      return res
+      return res;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -2037,7 +2037,7 @@ export class OrganizationService {
         return dbToStageDictionary[key] === 'Hired';
       })
       if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
-      await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, pipelineStatus);
+      await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, pipelineStatus, user.id);
 
       const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
         return dbToStageDictionary[key] === 'Available Candidates';
@@ -2130,7 +2130,7 @@ export class OrganizationService {
                 where: { id: c.id },
                 data: { pipeline_status: pipeline_treated},
               });
-              await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+              await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated, user.id);
             }
             )
           );

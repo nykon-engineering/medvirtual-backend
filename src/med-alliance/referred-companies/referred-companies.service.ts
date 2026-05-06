@@ -77,7 +77,7 @@ export class ReferredCompaniesService {
           select: { hubspot_id: true },
         });
         if (freshOrg?.hubspot_id) {
-          await this.hubspot.deleteCompanyInHubspot(freshOrg.hubspot_id).catch((e) =>
+          await this.hubspot.deleteCompanyInHubspot(freshOrg.hubspot_id, currentUser.id, org.id).catch((e) =>
             console.error('[rollback] Failed to delete HubSpot company:', e),
           );
         }
@@ -167,7 +167,7 @@ export class ReferredCompaniesService {
           }
           if (hubspotContactId && typeof hubspotContactId === 'string') {
             cleanupStack.push(async () => {
-              await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }).catch((e) =>
+              await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }, currentUser.id).catch((e) =>
                 console.error('[rollback] Failed to delete HubSpot contact:', e),
               );
             });

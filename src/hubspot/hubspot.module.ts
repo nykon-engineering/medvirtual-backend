@@ -59,6 +59,7 @@ import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
 import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
+import { HubspotAuditService } from './hubspot-audit.service';
 
 
 
@@ -110,6 +111,7 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     HandlerInvoiceAssociationChange,
     HandlerComissionCreation,
     AffiliateUpdateService,
+    HubspotAuditService,
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 
@@ -125,6 +127,7 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     HireRequestUpdateService,
     AffiliateCreationService,
     AffiliateUpdateService,
+    HubspotAuditService,
   ],
 })
 export class HubspotModule {}

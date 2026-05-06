@@ -935,7 +935,8 @@ describe('HireRequestService', () => {
           expect.objectContaining({ id: 'cand1' }),
           expect.objectContaining({ id: 'cand2' }),
         ]),
-        expect.any(String)
+        expect.any(String),
+        expect.anything(),
       );
     });
   });

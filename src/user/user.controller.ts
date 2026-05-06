@@ -374,7 +374,7 @@ export class UserController {
       }
     }
 
-    return this.userService.update(id, userData);
+    return this.userService.update(id, userData, currentUser.id);
   }
 
   @Patch('profile/:id')
@@ -419,7 +419,7 @@ export class UserController {
       }
     }
 
-    return this.userService.update(id, userData);
+    return this.userService.update(id, userData, currentUser.id);
   }
 
   @Delete(':id')
@@ -445,8 +445,8 @@ export class UserController {
     status: 403, 
     description: 'Insufficient permissions'
   })
-  async deleteUser(@Param('id') id: string) {
-    return this.userService.delete(id);
+  async deleteUser(@Param('id') id: string, @CurrentUser() currentUser: USER) {
+    return this.userService.delete(id, currentUser.id);
   }
 
   @Patch('update-status/:id')

@@ -79,6 +79,8 @@ model USER {
   affiliateCommissions         AffiliateCommission[]      @relation("AffiliateCommissions")
   // Audit log entries where this user was the acting subject
   medAllianceAuditActorLogs    MedAllianceAuditLog[]      @relation("MedAllianceAuditActor")
+  // Hubspot audit log entries where this user triggered the API call
+  hubspotAuditLogs             HubspotAuditLog[]          @relation("HubspotAuditActor")
   // MA-006 review cases resolved by this admin user
   resolvedReviewCases          MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
 
@@ -237,6 +239,7 @@ model Candidate {
   processing_error           String?
   processed_at               DateTime?
   createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt @default(now())
   hourly_pay_rate            Decimal?
   organization_id            String?
   pipeline_status            String                  @default("available")
@@ -1164,4 +1167,63 @@ enum AdminReviewReasonCode {
 enum AdminReviewStatus {
   open
   resolved
+}
+
+// ============== Hubspot Audit Log ==========================
+
+enum HubspotEntityType {
+  candidate
+  hire_request
+  organization
+  contact
+  affiliate
+  deal
+  owner
+  invoice
+}
+
+enum HubspotAuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  SYNC
+  BATCH_UPDATE
+}
+
+enum HubspotAuditSource {
+  user_action
+  cron
+  webhook
+  bulk_sync
+}
+
+// Append-only audit trail for all Hubspot API interactions (outbound calls and inbound webhooks).
+// Never soft-delete or mutate records. entity_type + entity_id act as a polymorphic reference.
+// actor_user_id is set for human users; actor_label holds 'WebhookHubspot', 'CronJob',
+// or 'BulkSync' for non-human sources.
+model HubspotAuditLog {
+  id                  String             @id @default(uuid())
+  actor_user_id       String?
+  actor_label         String?
+  entity_type         HubspotEntityType
+  entity_id           String
+  hubspot_object_id   String?
+  hubspot_object_type String
+  action              HubspotAuditAction
+  source              HubspotAuditSource @default(user_action)
+  success             Boolean
+  payload             Json?
+  response            Json?
+  error_code          String?
+  error_message       String?
+  createdAt           DateTime           @default(now())
+
+  actorUser USER? @relation("HubspotAuditActor", fields: [actor_user_id], references: [id])
+
+  @@index([entity_type, entity_id, createdAt], map: "idx_hs_audit_entity_timeline")
+  @@index([actor_user_id],                      map: "idx_hs_audit_actor")
+  @@index([actor_label],                        map: "idx_hs_audit_actor_label")
+  @@index([source],                             map: "idx_hs_audit_source")
+  @@index([success],                            map: "idx_hs_audit_success")
+  @@index([createdAt],                          map: "idx_hs_audit_created_at")
 }
