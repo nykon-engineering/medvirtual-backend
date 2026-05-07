@@ -675,7 +675,7 @@ export class CronService {
             `promoteDeployedCompanies: companies=${companiesPromoted}, commissions=${commissionsPromoted}, errors=${errors.length}`,
         );
 
-        if (promotedEntries.length > 0 || errors.length > 0) {
+        if (companiesPromoted > 0) {
             try {
                 
                 await this.mailService.sendMail({
