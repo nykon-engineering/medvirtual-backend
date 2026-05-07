@@ -135,7 +135,7 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
         </div>
       
       <div class="greeting">Hi,</div>
-      
+    
       <div class="main-message">
         You have been invited to join our healthcare platform. Just click the button below to easily and securely create your account :)
       </div>

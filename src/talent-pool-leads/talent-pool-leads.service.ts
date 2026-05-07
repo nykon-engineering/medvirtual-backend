@@ -142,6 +142,8 @@ export class TalentPoolLeadsService {
         });
       }
 
+      //console.log(org);
+
       // 2. Determine assignee based on environment
       let assignedUserId: string | null = null;
       const assigneeEmail =
@@ -202,6 +204,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
 
       // 5. Sync Organization to HubSpot (if not already synced)
       let orgHubspotId = org.hubspot_id;
+      //console.log('orgHubspotId', orgHubspotId);
       if (!orgHubspotId) {
         try {
           const hubspotOrgRes = await axios.post(
@@ -209,10 +212,10 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
             {
               properties: {
                 name: org.name,
-                domain: org.website_url || '',
+                domain: org.website_url?.replaceAll('&#x2F;','/') || '',
                 business_unit: businessUnit,
                 referral_email: normalizedEmail,
-                type: 'prospect',
+                type: 'PROSPECT',
               },
             },
             {
@@ -230,7 +233,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
         } catch (err) {
           console.warn(
             `[talent-pool-lead] HubSpot org sync failed for lead ${lead.id}:`,
-            err?.message,
+            err?.response?.data || err?.message || err,
           );
         }
       }
@@ -270,7 +273,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
                 company: sanitizedOrganization,
                 business_unit: businessUnit,
                 account_type: accountType,
-                qualification_status: 'Demo done',
+                qualification_status: 'Demo Done',
                 latest_lead_source: 'Website',
               },
               associations: orgHubspotId
@@ -301,7 +304,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
         } catch (err) {
           console.warn(
             `[talent-pool-lead] HubSpot contact sync failed for lead ${lead.id}:`,
-            err?.message,
+            err?.response?.data || err?.message || err,
           );
         }
       }
