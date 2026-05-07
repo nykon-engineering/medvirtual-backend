@@ -81,6 +81,7 @@ export class HireRequestCreationService {
                 pairing_time: data.hubspot_pairing_time ? data.hubspot_pairing_time : undefined,
                 client_signed_contract: data.client_signed_contract_ticket_submission ? data.client_signed_contract_ticket_submission : undefined,
                 expected_start_date: data.expected_start_date ? data.expected_start_date : undefined,
+                background_requirements_of_candidate: data.background_requirements_of_candidate ? data.background_requirements_of_candidate : undefined,
 
                 //ticketOwner
                 hubspot_owner_id: data.assign_user_id

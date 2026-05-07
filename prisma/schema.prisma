@@ -410,6 +410,7 @@ model HireRequest {
   hubspot_additional_training_requested String?
   hubspot_pairing_date              String? //String for avoid misunderstanding about timeZone
   hubspot_pairing_time              String?
+  background_requirements_of_candidate String?
   request_role                      String?
   assign_staffing_coordinator       String?
   client_signed_contract_ticket_submission String?
