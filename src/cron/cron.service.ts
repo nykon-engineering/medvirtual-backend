@@ -675,15 +675,19 @@ export class CronService {
             `promoteDeployedCompanies: companies=${companiesPromoted}, commissions=${commissionsPromoted}, errors=${errors.length}`,
         );
 
-        try {
-            await this.mailService.sendMail({
-                from: 'MedVirtual <noreply@medvirtual.ai>',
-                to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
-                subject: `Med Alliance — Deployed Companies Report (${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
-                html: medAllianceDeployedCompaniesReport(promotedEntries, errors, now),
-            });
-        } catch (mailError) {
-            console.error('promoteDeployedCompanies: failed to send report email:', mailError);
+        if (promotedEntries.length > 0 || errors.length > 0) {
+            try {
+                
+                await this.mailService.sendMail({
+                    from: 'MedVirtual <noreply@medvirtual.ai>',
+                    to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+                    subject: `Med Alliance — Deployed Companies Report (${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
+                    html: medAllianceDeployedCompaniesReport(promotedEntries, errors, now),
+                });
+                
+            } catch (mailError) {
+                console.error('promoteDeployedCompanies: failed to send report email:', mailError);
+            }
         }
 
         return { companiesPromoted, commissionsPromoted, errors };
