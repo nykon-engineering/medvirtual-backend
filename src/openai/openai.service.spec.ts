@@ -80,7 +80,7 @@ describe('OpenaiService', () => {
 
       const result = await service.extractDataFromResumeImages(mockImagePaths);
 
-      expect(result).toEqual(mockExtractedData);
+      expect(result).toEqual({ data: mockExtractedData, cost: 0 });
       expect(fs.readFileSync).toHaveBeenCalledWith(mockImagePaths[0]);
       expect(mockChatCreate).toHaveBeenCalled();
     });

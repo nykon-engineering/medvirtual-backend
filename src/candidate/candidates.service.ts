@@ -809,7 +809,7 @@ export class CandidatesService {
         console.log('Failed to download image from Google Drive:', imageDownloaded);
       }
       console.log('Image downloaded successfully from Google Drive', imageDownloaded);
-      const avatarImage = await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
+      const { imagePath: avatarImage, cost: avatarCost } = await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
       console.log('Avatar generated successfully: ', avatarImage);
 
       const bucketFile = await this.s3.uploadFile(avatarImage, path.basename(avatarImage), 'medvirtual-avatar');
@@ -825,6 +825,7 @@ export class CandidatesService {
         where: { id: id },
         data: {
           avatar_url: bucketFile,
+          processing_cost: { increment: avatarCost },
         }
       });
 
@@ -926,7 +927,7 @@ export class CandidatesService {
         console.log('Sending images to OpenAI...');
         await this.updateStatus(id, 'processing_organizeData');
 
-        const organizedData = await this.openai.extractDataFromResumeImages(imagePaths);
+        const { data: organizedData, cost: resumeCost } = await this.openai.extractDataFromResumeImages(imagePaths);
 
         // Transform data to match expectations (e.g. join array descriptions)
         const transformedData = {
@@ -954,6 +955,7 @@ export class CandidatesService {
             processed_at: new Date(),
             about_me: transformedData.bio,
             years_of_experience: transformedData.years_of_experience || 0,
+            processing_cost: { increment: resumeCost },
           }
         });
 
