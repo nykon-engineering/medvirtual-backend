@@ -122,15 +122,9 @@ export function MedAllianceInviteSignup(inviteLink: string, theme?: EmailTheme, 
         <div class="greeting">${greeting}</div>
 
         <div class="main-message">
-          <p>You have been invited to join the <strong>Med Alliance Program</strong> with ${companyName}.</p>
-          <p>Before you can access your partner dashboard, you need to activate your account — it takes less than two minutes.</p>
-          <p>As a Med Alliance Partner, you'll have access to:</p>
-          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
-            <li>Commission earnings on every successful referral</li>
-            <li>A dedicated partner dashboard with real-time tracking</li>
-            <li>Transparent payout history and on-demand payout requests</li>
-            <li>Full visibility into the organizations you've referred</li>
-          </ul>
+          <p>Thank you for becoming a MedVirtual Alliance Partner. Please click the button below to securely set your password and activate your account.</p>
+          <p>Once you${'`'}re in, you can refer clients, track your referral status, and manage your commissions all in one place.</p>
+          <p>You${'`'}ll also have access to our talent pool if you${'`'}d like to recommend specific virtual staff to your referrals.</p>
         </div>
 
         <div style="text-align: left; margin: 30px 0;">
