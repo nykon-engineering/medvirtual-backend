@@ -168,7 +168,7 @@ export class AffiliatesService {
       const mailSent = await this.mailService.sendMail({
       from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
       to: dto.email,
-      subject: `You've been invited to join the ${emailTheme?.companyName || 'MedVirtual'} Med Alliance Program — activate your account`,
+      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
       html: emailBody,
       headers: {
           'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
@@ -288,7 +288,7 @@ export class AffiliatesService {
     const mailSent = await this.mailService.sendMail({
       from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
       to: dto.email,
-      subject: `You've been invited to join the ${emailTheme?.companyName || 'MedVirtual'} Med Alliance Program — activate your account`,
+      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
       html: MedAllianceInviteSignup(inviteLink, emailTheme || undefined, dto.first_name),
     });
     if (!mailSent) throw new BadRequestException('Failed to send invitation email');
