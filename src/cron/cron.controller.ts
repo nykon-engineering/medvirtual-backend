@@ -1,8 +1,9 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { CronService } from './cron.service';
-import { ApiProperty, ApiQuery } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 
+@ApiTags('cron')
 @Controller('cron')
 export class CronController {
 
@@ -11,8 +12,9 @@ export class CronController {
     ) {}
 
     @Get()
-    @ApiProperty({ description: 'Trigger the cron job to re-run pipeline of the candidates on processing' })
+    @ApiOperation({ summary: 'Re-run pipeline for candidates currently in processing status' })
     @ApiQuery({ name: 'status', type: reRunPipelineDto, description: 'Status to filter candidates for re-running pipeline' })
+    @ApiResponse({ status: 200, description: 'Pipeline re-run successfully' })
     async reRunPipeline(@Query() status: reRunPipelineDto) {
         const result = await this.cron.reRunPipeline(status);
         return {
@@ -24,7 +26,8 @@ export class CronController {
 
 
     @Get('get-candidate-id')
-    @ApiProperty({ description: 'Trigger the cron job to get current staffs without candidate_id and check it on hubspot' })
+    @ApiOperation({ summary: 'Sync candidate IDs for staff records missing them by looking up HubSpot' })
+    @ApiResponse({ status: 200, description: 'Cron working successfully' })
     async getCandidateId() {
         const result = await this.cron.getCandidateId();
         return {
@@ -35,7 +38,8 @@ export class CronController {
     }
 
     @Get('system-report')
-    @ApiProperty({ description: 'Send email with important datas' })
+    @ApiOperation({ summary: 'Send a system report email with key platform metrics' })
+    @ApiResponse({ status: 200, description: 'System report sent successfully' })
     async systemReport() {
         const result = await this.cron.systemReport();
         return {
@@ -46,7 +50,8 @@ export class CronController {
     }
 
     @Get('sync-clients-with-active-staffs')
-    @ApiProperty({ description: 'Send email with important datas' })
+    @ApiOperation({ summary: 'Sync client organizations that have active staff members in HubSpot' })
+    @ApiResponse({ status: 200, description: 'Sync completed successfully' })
     async syncClientsWithActiveStaffs() {
         const result = await this.cron.syncClientsWithActiveStaffs();
         return {
@@ -57,7 +62,8 @@ export class CronController {
     }
 
     @Get('deactivate-client-users-no-staff')
-    @ApiProperty({ description: 'Deactivate active client users and remove invited ones on clients with no active staff after 60 days of user creation' })
+    @ApiOperation({ summary: 'Deactivate client users on organizations with no active staff after 60 days of account creation' })
+    @ApiResponse({ status: 200, description: 'Client users deactivation completed successfully' })
     async deactivateClientUsersWithNoStaff() {
         const result = await this.cron.deactivateClientUsersWithNoStaff();
         return {
@@ -68,7 +74,8 @@ export class CronController {
     }
 
     @Get('update-hubspot-deal-stages')
-    @ApiProperty({ description: 'Update HubSpot deal stages for staffs' })
+    @ApiOperation({ summary: 'Update HubSpot deal stages for all active staff members' })
+    @ApiResponse({ status: 200, description: 'HubSpot deal stages updated successfully' })
     async syncStaffHubspotDealStages() {
         const result = await this.cron.syncStaffHubspotDealStages();
         return {
@@ -79,7 +86,8 @@ export class CronController {
     }
 
     @Get('sync-positions-from-hubspot')
-    @ApiProperty({ description: 'Check for new VA positions in HubSpot and create them in PositionRateConfig if missing' })
+    @ApiOperation({ summary: 'Check for new VA positions in HubSpot and create missing entries in PositionRateConfig' })
+    @ApiResponse({ status: 200, description: 'Position sync completed successfully' })
     async syncPositionsFromHubspot() {
         const result = await this.cron.syncPositionsFromHubspot();
         return {
@@ -90,7 +98,8 @@ export class CronController {
     }
 
     @Get('create-quarterly-payout-requests')
-    @ApiProperty({ description: 'Create payout requests for all affiliates with at least one eligible commission and send a summary report email' })
+    @ApiOperation({ summary: 'Create quarterly payout requests for affiliates with eligible commissions and send a summary report' })
+    @ApiResponse({ status: 200, description: 'Quarterly payout requests job completed' })
     async createQuarterlyPayoutRequests() {
         const result = await this.cron.createQuarterlyPayoutRequests();
         return {
@@ -101,7 +110,8 @@ export class CronController {
     }
 
     @Get('promote-deployed-companies')
-    @ApiProperty({ description: 'Promote referred companies deployed for 30+ days from not_eligible to eligible and move their detected commissions to pending_admin_confirmation' })
+    @ApiOperation({ summary: 'Promote referred companies deployed 30+ days to eligible status and move their commissions to pending admin confirmation' })
+    @ApiResponse({ status: 200, description: 'Deployed companies promotion completed' })
     async promoteDeployedCompanies() {
         const result = await this.cron.promoteDeployedCompanies();
         return {

@@ -13,10 +13,10 @@ import {
   ApiBody,
   ApiOperation,
   ApiParam,
-  ApiProperty,
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
@@ -41,12 +41,14 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 
 @ApiTags('Organization')
+@ApiBearerAuth()
 @Controller('organization')
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
   @Get('hubspot')
-  @ApiProperty({ description: 'Get all organizations from hubspot' })
+  @ApiOperation({ summary: 'Fetch all organizations from HubSpot CRM' })
+  @ApiResponse({ status: 200, description: 'Organizations retrieved from HubSpot successfully' })
   async getfromHubspot() {
     return await this.organizationService.getAllFromHubspot();
   }
@@ -610,13 +612,15 @@ export class OrganizationController {
   }
 
   @Get('populate-db/from-hubspot')
-  @ApiProperty({ description: 'Populate DB with organizations from hubspot' })
+  @ApiOperation({ summary: 'Populate the database with organizations imported from HubSpot' })
+  @ApiResponse({ status: 200, description: 'Organizations populated successfully' })
   async populateDbFromHubspot() {
     return await this.organizationService.populateDbFromHubspot();
   }
 
   @Get('desactive-all/without-staff')
-  @ApiProperty({ description: 'Desactive the records which doesnt have staff' })
+  @ApiOperation({ summary: 'Deactivate all organization records that have no associated staff members' })
+  @ApiResponse({ status: 200, description: 'Organizations deactivated successfully' })
   async desactiveWithoutStaff() {
     return await this.organizationService.desactiveWithoutStaff();
   }
@@ -624,7 +628,8 @@ export class OrganizationController {
   @Get('sync-all/organizations-with-deals')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Sync all organizations with deals' })
+  @ApiOperation({ summary: 'Sync all organizations with their associated deals in HubSpot' })
+  @ApiResponse({ status: 200, description: 'Organizations synced with deals successfully' })
   async syncAllOrganizationsWithDeals() {
     return await this.organizationService.syncOrganizationsWithDeals();
   }
@@ -632,7 +637,8 @@ export class OrganizationController {
   @Get('get-organization/industry-types')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Get industry Types from hubspot' })
+  @ApiOperation({ summary: 'Get available industry type options from HubSpot for organization forms' })
+  @ApiResponse({ status: 200, description: 'Industry types retrieved successfully' })
   async getOrganizationIndustryTypes() {
     return await this.organizationService.getOrganizationIndustryTypes();
   }
@@ -640,7 +646,8 @@ export class OrganizationController {
   @Get('get-organization-types/all')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Get organization Types from hubspot' })
+  @ApiOperation({ summary: 'Get available organization type options from HubSpot for organization forms' })
+  @ApiResponse({ status: 200, description: 'Organization types retrieved successfully' })
   async getOrganizationTypes() {
     return await this.organizationService.getOrganizationTypes();
   }

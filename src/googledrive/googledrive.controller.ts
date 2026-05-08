@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Query, Redirect, UseGuards } from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GoogledriveService } from './googledrive.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -6,6 +7,7 @@ import { Roles } from '../auth/roles.decorator';
 
 
 
+@ApiTags('googledrive')
 @Controller('googledrive')
 export class GoogledriveController {
     constructor(
@@ -17,16 +19,22 @@ export class GoogledriveController {
     //@UseGuards(AuthGuard, RolesGuard)
     //@Roles('SuperAdmin')
     @Redirect()
+    @ApiOperation({ summary: 'Redirect to Google OAuth consent screen to authorize Google Drive access' })
+    @ApiResponse({ status: 302, description: 'Redirect to Google OAuth authorization URL' })
     async redirectToGoogle() {
         const url = await this.googledriveService.generateAuthUrl();
         return {url: url};
     }
 
     @Get('callback')
+    @ApiOperation({ summary: 'Handle the OAuth callback from Google and exchange the authorization code for tokens' })
+    @ApiQuery({ name: 'code', required: true, description: 'Authorization code returned by Google OAuth' })
+    @ApiResponse({ status: 200, description: 'Authentication successful and tokens stored' })
+    @ApiResponse({ status: 400, description: 'Invalid or missing authorization code' })
     async handleGoogleCallback(@Query('code') code: string) {
         const tokens = await this.googledriveService.getTokens(code);
         //return tokens;
-        return { 
+        return {
             status: 200,
             message: 'Authentication successful! Tokens received.'
         };

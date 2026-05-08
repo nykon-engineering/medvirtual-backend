@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, UseGuards, Query, HttpCode } from '@nestjs/common';
 import { USER } from '@prisma/client';
-import { ApiBody, ApiParam, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiParam, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 
 import { CandidatesService } from './candidates.service';
@@ -17,6 +17,8 @@ import { RemoveCandidateDto } from './dto/remove-candidate.dto';
 
 
 
+@ApiTags('candidates')
+@ApiBearerAuth()
 @Controller('candidates')
 export class CandidatesController {
   constructor(private readonly candidatesService: CandidatesService) {}

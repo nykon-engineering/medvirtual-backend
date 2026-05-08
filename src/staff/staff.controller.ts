@@ -14,6 +14,8 @@ import {
   ApiQuery,
   ApiResponse,
   ApiParam,
+  ApiTags,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { USER } from '@prisma/client';
 
@@ -29,6 +31,8 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { CreateBonusDto } from './dto/create-bonus.dto';
 import { terminateDto } from './dto/terminate.dto';
 
+@ApiTags('staff')
+@ApiBearerAuth()
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}

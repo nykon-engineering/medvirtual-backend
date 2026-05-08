@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CommissionsService } from './commissions.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
@@ -18,6 +19,8 @@ import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
 import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto, UnvoidCommissionDto, UpdateBaseAmountDto } from './dto/decide-commission.dto';
 
+@ApiTags('med-alliance')
+@ApiBearerAuth()
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
 export class CommissionsController {
@@ -31,6 +34,9 @@ export class CommissionsController {
   @Get('commissions')
   @HttpCode(200)
   @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
+  @ApiOperation({ summary: 'List commissions for the current affiliate with filtering and pagination' })
+  @ApiResponse({ status: 200, description: 'Commissions retrieved successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAll(@Query() query: ListCommissionsDto, @CurrentUser() user: USER) {
     const result = await this.commissionsService.findAllForAffiliate(query, user);
     return { status: 200, message: 'Commissions retrieved successfully', ...result };
@@ -40,6 +46,11 @@ export class CommissionsController {
   @Get('commissions/:id')
   @HttpCode(200)
   @Roles(...ORGANIZATION_ROLES)
+  @ApiOperation({ summary: 'Get a single commission detail scoped to the current affiliate' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 403, description: 'Access denied to this commission' })
   async findOne(@Param('id') id: string, @CurrentUser() user: USER) {
     const data = await this.commissionsService.findOneForAffiliate(id, user);
     return { status: 200, message: 'Commission retrieved successfully', data };
@@ -53,6 +64,9 @@ export class CommissionsController {
   @Get('admin/commissions')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'List all commissions across all affiliates for admin review' })
+  @ApiResponse({ status: 200, description: 'Commissions retrieved successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAllAdmin(@Query() query: ListCommissionsDto) {
     const result = await this.commissionsService.findAllForAdmin(query);
     return { status: 200, message: 'Commissions retrieved successfully', ...result };
@@ -62,6 +76,11 @@ export class CommissionsController {
   @Get('admin/commissions/:id')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Get full details for a single commission including audit trail' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findOneAdmin(@Param('id') id: string) {
     const data = await this.commissionsService.findOneForAdmin(id);
     return { status: 200, message: 'Commission retrieved successfully', data };
@@ -71,6 +90,12 @@ export class CommissionsController {
   @Patch('admin/commissions/:id/decide')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Approve or reject a commission pending admin confirmation' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission decision recorded successfully' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 400, description: 'Commission is not in a decidable state' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async decide(
     @Param('id') id: string,
     @Body() dto: DecideCommissionDto,
@@ -84,6 +109,11 @@ export class CommissionsController {
   @Patch('admin/commissions/:id/void')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Void a commission with a reason, removing it from payout eligibility' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission voided successfully' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async void(
     @Param('id') id: string,
     @Body() dto: VoidCommissionDto,
@@ -97,6 +127,11 @@ export class CommissionsController {
   @Patch('admin/commissions/:id/revert-to-pending')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Revert an eligible commission back to pending admin confirmation status' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission reverted to pending' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async revertToPending(@Param('id') id: string, @CurrentUser() admin: USER) {
     const data = await this.commissionsService.revertToPending(id, admin);
     return { status: 200, message: 'Commission reverted to pending', data };
@@ -106,6 +141,11 @@ export class CommissionsController {
   @Patch('admin/commissions/:id/unvoid')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Unvoid a voided commission and move it back to detected status' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission unvoided to detected' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async unvoid(
     @Param('id') id: string,
     @Body() dto: UnvoidCommissionDto,
@@ -119,6 +159,11 @@ export class CommissionsController {
   @Patch('admin/commissions/:id/reinstate')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Reinstate a rejected commission back to eligible status' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission reinstated to eligible' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async reinstate(
     @Param('id') id: string,
     @Body() dto: ReinstateCommissionDto,
@@ -132,6 +177,12 @@ export class CommissionsController {
   @Patch('admin/commissions/:id/update-base-amount')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Update the base invoice amount for a detected commission before it is confirmed' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Commission base amount updated successfully' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 400, description: 'Commission must be in detected status to update base amount' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async updateBaseAmount(
     @Param('id') id: string,
     @Body() dto: UpdateBaseAmountDto,
@@ -145,6 +196,11 @@ export class CommissionsController {
   @Get('admin/commissions/:id/audit')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Get the full audit timeline of status changes and admin actions for a commission' })
+  @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiResponse({ status: 200, description: 'Audit log retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Commission not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async getAuditLog(@Param('id') id: string) {
     const data = await this.commissionsService.getAuditLog(id);
     return { status: 200, message: 'Audit log retrieved successfully', data };
