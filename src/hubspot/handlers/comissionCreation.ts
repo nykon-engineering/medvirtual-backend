@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
+import { CommissionStatus } from "@prisma/client";
 
 @Injectable()
 
@@ -20,6 +21,8 @@ export class HandlerComissionCreation {
                     organization:{
                         select: {
                             id: true,
+                            med_alliance_referral_status: true,
+                            eligibility_start_at: true,
                             referredByAffiliate: { //user
                                 select: {
                                     id: true,
@@ -54,6 +57,20 @@ export class HandlerComissionCreation {
             let comissionAmountValue = (Number(baseAmmount) * Number(comissionAmount)) / 100;
             const idempotencyKey = `${invoiceExists.id}-${invoiceExists.organization.referredByAffiliate.id}`;
 
+            // One year in milliseconds — used for the eligibility window and referral-age rule.
+            const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+            // 30-day stabilization window: deployed companies must be deployed for this long before going eligible.
+            const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+            const isEligibleNow =
+            invoiceExists.organization.med_alliance_referral_status === 'eligible' &&
+            invoiceExists.organization.eligibility_start_at != null &&
+            Date.now() - invoiceExists.organization.eligibility_start_at.getTime() >= THIRTY_DAYS_MS &&
+            Date.now() - invoiceExists.organization.eligibility_start_at.getTime() <= ONE_YEAR_MS;
+
+            const commissionStatus = isEligibleNow ? CommissionStatus.pending_admin_confirmation : CommissionStatus.detected;
+
 
             await this.prisma.affiliateCommission.upsert({
             where: { idempotency_key: idempotencyKey },
@@ -66,7 +83,8 @@ export class HandlerComissionCreation {
                 hubspot_invoice_snapshot_id: invoiceExists.id,
                 commission_percent_snapshot: comissionAmount,
                 base_amount_snapshot: baseAmmount,
-                commission_amount: comissionAmountValue
+                commission_amount: comissionAmountValue,
+                status: commissionStatus,
                 }
             })
             
