@@ -29,6 +29,7 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
 import { SecretsModule } from './secrets/secrets.module';
 import { HubstaffModule } from './hubstaff/hubstaff.module';
 import { RedisModule } from './redis/redis.module';
+import { PusherModule } from './pusher/pusher.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { RedisModule } from './redis/redis.module';
     SecretsModule,
     HubstaffModule,
     RedisModule,
+    PusherModule,
   ],
   controllers: [AppController],
   providers: [

@@ -131,6 +131,15 @@ export class GetOrganizationsDto {
   @IsBoolean()
   hasStaff?: boolean;
 
+  @ApiProperty({
+    required: false,
+    description: 'Filter by Hubstaff connection status',
+    enum: ['true', 'false'],
+  })
+  @IsOptional()
+  @IsEnum(['true', 'false'])
+  hubstaffConnected?: 'true' | 'false';
+
 
 
   @ApiProperty({

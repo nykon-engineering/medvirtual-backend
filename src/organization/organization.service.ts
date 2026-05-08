@@ -18,6 +18,7 @@ import {
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { ConvertToClientDto } from './dto/convertToClient.dto';
+import { UpdateInvoiceConfigurationDto } from './dto/updateInvoiceConfiguration.dto';
 import { GetOrganizationsDto } from './dto/getOrganizations.dto';
 import {
   PaginatedOrganizationsResponseDto,
@@ -332,6 +333,7 @@ export class OrganizationService {
       business_unit,
       hasUser,
       hasStaff,
+      hubstaffConnected,
       sortBy = 'createdAt',
       sortOrder = 'desc',
     } = query;
@@ -443,6 +445,20 @@ export class OrganizationService {
           status: { not: { in: ['terminated', 'inactive'] } },
         },
       };
+    }
+
+    // Filter by Hubstaff connection status
+    if (hubstaffConnected === 'true') {
+      whereClause.invoiceConfiguration = {
+        hubstaff_id: { not: null },
+      };
+    } else if (hubstaffConnected === 'false') {
+      // Include organizations with no configuration or configuration with null hubstaff_id
+      whereClause.OR = [
+        ...(whereClause.OR || []),
+        { invoiceConfiguration: null },
+        { invoiceConfiguration: { hubstaff_id: null } },
+      ];
     }
 
     // Check if sorting by calculated fields (userCount or activeStaffCount)
@@ -864,7 +880,7 @@ export class OrganizationService {
         };
         await this.auth.inviteUser(inviteData);
       }
-      
+
       // Create initial InvoiceConfiguration record
       await this.prisma.invoiceConfiguration.create({
         data: {
@@ -990,6 +1006,52 @@ export class OrganizationService {
       }
       console.error('Failed to update organization:', error);
       throw new BadRequestException('Failed to update organization');
+    }
+  }
+
+  async updateInvoiceConfiguration(
+    organizationId: string,
+    data: UpdateInvoiceConfigurationDto,
+  ): Promise<any> {
+    try {
+      // Check if organization exists
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      // Filter out undefined fields to only update what's provided
+      const filteredData = Object.entries(data).reduce((acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
+
+      // Upsert the invoice configuration
+      const updatedConfig = await this.prisma.invoiceConfiguration.upsert({
+        where: { organization_id: organizationId },
+        update: filteredData,
+        create: {
+          ...filteredData,
+          organization_id: organizationId,
+        },
+      });
+
+      return {
+        status: 200,
+        message: 'Invoice configuration updated successfully',
+        data: updatedConfig,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Failed to update invoice configuration:', error);
+      throw new BadRequestException('Failed to update invoice configuration');
     }
   }
 

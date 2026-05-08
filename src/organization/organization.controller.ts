@@ -22,6 +22,7 @@ import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { ConvertToClientDto } from './dto/convertToClient.dto';
+import { UpdateInvoiceConfigurationDto } from './dto/updateInvoiceConfiguration.dto';
 import { GetOrganizationsDto } from './dto/getOrganizations.dto';
 import { PaginatedOrganizationsResponseDto } from './dto/organizationResponse.dto';
 import {
@@ -43,7 +44,7 @@ import { USER } from '@prisma/client';
 @ApiTags('Organization')
 @Controller('organization')
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) {}
+  constructor(private readonly organizationService: OrganizationService) { }
 
   @Get('hubspot')
   @ApiProperty({ description: 'Get all organizations from hubspot' })
@@ -139,6 +140,12 @@ export class OrganizationController {
       'Filter by admin ID (only available for system_super_admin)',
   })
   @ApiQuery({
+    name: 'hubstaffConnected',
+    required: false,
+    enum: ['true', 'false'],
+    description: 'Filter by Hubstaff connection status',
+  })
+  @ApiQuery({
     name: 'sortBy',
     required: false,
     enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees', 'userCount', 'activeStaffCount'],
@@ -228,6 +235,28 @@ export class OrganizationController {
       message: 'Organization updated successfully',
       organization: org,
     };
+  }
+
+  @Put('/:id/invoice-configuration')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(
+    'system_admin',
+    'system_super_admin',
+    'organization_admin',
+    'organization_super_admin',
+  )
+  @HttpCode(200)
+  @ApiBody({ type: UpdateInvoiceConfigurationDto })
+  @ApiOperation({ summary: 'Update organization invoice configuration' })
+  @ApiResponse({
+    status: 200,
+    description: 'Invoice configuration updated successfully',
+  })
+  async updateInvoiceConfiguration(
+    @Param('id') id: string,
+    @Body() data: UpdateInvoiceConfigurationDto,
+  ) {
+    return await this.organizationService.updateInvoiceConfiguration(id, data);
   }
 
   @Post('convert-to-client/:id')
