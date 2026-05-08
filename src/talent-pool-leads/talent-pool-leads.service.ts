@@ -46,6 +46,46 @@ export class TalentPoolLeadsService {
     }
   }
 
+  private salesTeamEmails_MedVirtual = [
+    'heather@medvirtual.ai',
+    'lyndsey@medvirtual.ai',
+     'nilad@medvirtual.ai',
+    'ava@medvirtual.ai',
+    'christina@medvirtual.ai',
+    'vanessa.gudiel@medvirtual.ai'
+  ];
+  private salesTeamEmails_BerryVirtual =[
+    'kimberly@berryvirtual.ai'
+  ];
+
+  private SDRTeamEmails_MedVirtual = [
+    'nilad@medvirtual.ai',
+    'noel.alcarion@medvirtual.ai',
+    'ricky.olivares@medvirtual.ai',
+    'cristie.baldemor@medvirtual.ai'
+  ];
+
+  private SDRTeamEmails_BerryVirtual = [
+  'maureen@berryvirtual.ai'
+  ];
+
+
+  async getOwnerId(emailUser: string): Promise<string | null> {
+    if (!emailUser) return null;
+    const user = await this.prisma.uSER.findUnique({
+    where: { email: emailUser },
+    select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+    },
+
+    });
+
+    return user && user.hubspot_id ? user.hubspot_id : null;
+  }
   /**
    * Create a new talent pool lead
    */
@@ -263,6 +303,37 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
         try {
           const accountType =
             businessUnit === 'Berry Virtual' ? 'Berry Virtual' : 'Med Virtual';
+
+          let ownerEmail = '';
+          if (process.env.ENVIRONMENT !== 'PROD') {
+            ownerEmail = 'pauli@regenta.ai';
+          } else {
+            const isBerry = businessUnit === 'Berry Virtual';
+            const hasCandidate = !!createDto.candidate_id;
+            // if we have candidate id, we should use sales team pool, otherwise SDR pool. 
+            // And then pick from Berry or Med pool based on business unit
+            const emailPool = hasCandidate
+              ? (isBerry
+                  ? this.salesTeamEmails_BerryVirtual
+                  : this.salesTeamEmails_MedVirtual)
+              : (isBerry
+                  ? this.SDRTeamEmails_BerryVirtual
+                  : this.SDRTeamEmails_MedVirtual);
+
+            ownerEmail = emailPool[Math.floor(Math.random() * emailPool.length)];
+          }
+
+          const ownerId = await this.getOwnerId(ownerEmail);
+
+          const existingCandidate = await this.prisma.candidate.findUnique({
+            where: { id: createDto.candidate_id || '' },
+            select: { id: true, first_name: true, last_name: true, approved_positions_pairing: true },
+          });
+
+          const selectedCandidateInfo = existingCandidate
+            ? `Candidate: ${existingCandidate.first_name} ${existingCandidate.last_name}\nRole: ${existingCandidate.approved_positions_pairing.map(p => p).join(', ')}`
+            : '';
+
           const hubspotContactRes = await axios.post(
             'https://api.hubapi.com/crm/v3/objects/contacts',
             {
@@ -273,8 +344,16 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
                 company: sanitizedOrganization,
                 business_unit: businessUnit,
                 account_type: accountType,
-                qualification_status: 'Demo Done',
                 latest_lead_source: 'Website',
+                hubspot_owner_id: ownerId ? ownerId : undefined,
+                ...(createDto.candidate_id ? { 
+                  qualification_status: 'Demo Done',
+                  candidate_selected: 'Yes',
+                  selected_candidate_information: `Candidate: ${selectedCandidateInfo}`,
+                 } : {
+                  qualification_status: 'New Leads Day 1',
+                 }),
+
               },
               associations: orgHubspotId
                 ? [
