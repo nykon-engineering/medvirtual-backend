@@ -30,6 +30,7 @@ import { SecretsModule } from './secrets/secrets.module';
 import { HubstaffModule } from './hubstaff/hubstaff.module';
 import { RedisModule } from './redis/redis.module';
 import { PusherModule } from './pusher/pusher.module';
+import { InvoiceModule } from './invoice/invoice.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { PusherModule } from './pusher/pusher.module';
     HubstaffModule,
     RedisModule,
     PusherModule,
+    InvoiceModule,
   ],
   controllers: [AppController],
   providers: [

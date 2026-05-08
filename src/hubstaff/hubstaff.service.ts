@@ -5,6 +5,33 @@ import Bottleneck from 'bottleneck';
 import { SecretsService } from '../secrets/secrets.service';
 import * as redis from 'redis';
 
+export enum ActivityType {
+  WORK = 'WORK',
+}
+
+export interface IncomingActivityInterface {
+  project_id: number;
+  date: string;
+  overall: number;
+  tracked: number;
+  input_tracked?: number;
+  user_id: number;
+}
+
+export interface ActivityAttributes {
+  id?: number;
+  clientId: number;
+  day: string;
+  overall: number;
+  type: ActivityType;
+  performance: number;
+  screenshots: any[];
+  total_time_logged: number;
+  user_id: number;
+  created_at?: Date;
+  updated_at?: Date;
+}
+
 @Injectable()
 export class HubstaffService implements OnModuleInit {
   private redisBaseKey: string;
@@ -12,6 +39,7 @@ export class HubstaffService implements OnModuleInit {
   private refreshQueues: Record<string, Bottleneck>;
   private hubstaffGlobalLimiter: Bottleneck;
   private organizationId: string = "355251";
+  private readonly API_BASE_URL = 'https://api.hubstaff.com/';
 
   constructor(
     private readonly configService: ConfigService,
@@ -292,5 +320,126 @@ export class HubstaffService implements OnModuleInit {
   public async getProjectById(projectId: string) {
     const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/projects/${projectId}`);
     return res.data;
+  }
+
+  /**
+   * Fetches all members in a project with pagination support.
+   * API: https://developer.hubstaff.com/docs/hubstaff_v2#tag/members/GET/v2/projects/{project_id}/members
+   */
+  public async getProjectMembers(projectId: string) {
+    let allMembers: any[] = [];
+    let nextPageStartId: number | undefined = undefined;
+
+    do {
+      const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/projects/${projectId}/members`, {
+        params: nextPageStartId ? { page_start_id: nextPageStartId } : {},
+      });
+
+      const { members, pagination } = res.data;
+      if (members) {
+        allMembers = allMembers.concat(members);
+      }
+      nextPageStartId = pagination?.next_page_start_id;
+    } while (nextPageStartId);
+
+    return allMembers;
+  }
+
+  /**
+   * Fetches daily activity records for a project within a date range and optional users.
+   * API: https://developer.hubstaff.com/docs/hubstaff_v2#tag/activities/GET/v2/projects/{project_id}/activities/daily
+   */
+  public async getProjectDailyActivity(
+    projectId: string,
+    query: { startDate: string; endDate: string; userIds?: string[] }
+  ) {
+    let allActivities: any[] = [];
+    let nextPageStartId: number | undefined = undefined;
+
+    const { startDate, endDate, userIds } = query;
+    const baseParams: any = {
+      'date[start]': startDate,
+      'date[stop]': endDate,
+    };
+
+    if (userIds && userIds.length > 0) {
+      baseParams['user_ids'] = userIds.join(',');
+    }
+
+    do {
+      const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/projects/${projectId}/activities/daily`, {
+        params: {
+          ...baseParams,
+          ...(nextPageStartId ? { page_start_id: nextPageStartId } : {}),
+        },
+      });
+
+      const { activities, pagination } = res.data;
+      if (activities) {
+        allActivities = allActivities.concat(activities);
+      }
+      nextPageStartId = pagination?.next_page_start_id;
+    } while (nextPageStartId);
+
+    return allActivities;
+  }
+
+
+  public async getHubstaffDailyActivityForInvoice({
+    hubstaffId,
+    start_date,
+    end_date,
+  }: {
+    hubstaffId: number;
+    start_date: string;
+    end_date: string;
+  }) {
+    try {
+      let activities: Omit<
+        ActivityAttributes,
+        "id" | "created_at" | "updated_at"
+      >[] = [];
+      let nextCursor: string | null = "yes";
+      while (nextCursor) {
+        let q = `page_limit=500&date[start]=${start_date}&date[stop]=${end_date}`;
+        if (nextCursor && nextCursor !== "yes") {
+          q += `&page_start_id=${nextCursor}`;
+        }
+        const res = await this.hubstaffRequest<{
+          daily_activities: IncomingActivityInterface[];
+          pagination: { next_page_start_id: string };
+        }>(
+          "get",
+          `${this.API_BASE_URL}v2/projects/${hubstaffId}/activities/daily?${q}`,
+        );
+
+        const data = res.data;
+
+        activities.push(
+          ...data.daily_activities.map((activity) => ({
+            clientId: Number(activity.project_id),
+            day: activity.date,
+            overall: activity.overall,
+            type: ActivityType.WORK,
+            performance:
+              (activity.overall /
+                (activity.input_tracked || activity.tracked)) *
+              100,
+            screenshots: [],
+            total_time_logged: activity.tracked,
+            user_id: activity.user_id,
+          })),
+        );
+        if (data.pagination) {
+          nextCursor = data.pagination.next_page_start_id;
+        } else {
+          nextCursor = null;
+        }
+      }
+      return activities;
+    } catch (error) {
+      console.log(error);
+      return [];
+    }
   }
 }

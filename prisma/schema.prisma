@@ -1262,6 +1262,10 @@ model Invoice {
   // public invoice chain status
   status                InvoiceStatus @default(draft)
 
+  // cycle identification for idempotency
+  billing_start_date    DateTime
+  billing_end_date      DateTime
+
   // numbering assigned only on publish
   invoice_number        String?       @unique
 
@@ -1290,6 +1294,7 @@ model Invoice {
   @@index([organization_id], map: "idx_invoice_org")
   @@index([status], map: "idx_invoice_status")
   @@index([createdAt], map: "idx_invoice_created")
+  @@unique([organization_id, billing_start_date, billing_end_date], name: "uq_invoice_cycle")
 }
 
 model InvoiceVersion {
@@ -1304,6 +1309,7 @@ model InvoiceVersion {
 
   issue_date            DateTime?
   due_date              DateTime?
+  public_due_date       DateTime?
 
   billing_start_date    DateTime?
   billing_end_date      DateTime?
@@ -1792,4 +1798,30 @@ model WorkerBillingStats {
   fees_generated      Decimal  @db.Decimal(14,2)
 
   generated_at          DateTime @default(now())
+}
+
+model InvoiceJob {
+  id                String           @id @default(uuid())
+  status            InvoiceJobStatus @default(queued)
+  
+  total_tasks       Int              @default(0)
+  completed_tasks   Int              @default(0)
+  failed_tasks      Int              @default(0)
+  
+  payload           Json?
+  result            Json?
+  error_message     String?
+  
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([status])
+}
+
+enum InvoiceJobStatus {
+  queued
+  processing
+  completed
+  partial_success
+  failed
 }

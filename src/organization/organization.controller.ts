@@ -169,6 +169,12 @@ export class OrganizationController {
     type: Boolean,
     description: 'Filter to show only organizations with at least one active staff (staffCount > 0)',
   })
+  @ApiQuery({
+    name: 'billing_mode',
+    required: false,
+    enum: ['arrears', 'prebill'],
+    description: 'Filter by billing mode',
+  })
   async getAllPaginated(
     @CurrentUser() user: USER,
     @Query() query: GetOrganizationsDto,

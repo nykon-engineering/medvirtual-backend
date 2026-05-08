@@ -330,6 +330,7 @@ export class OrganizationService {
       industry,
       location,
       admin,
+      billing_mode,
       business_unit,
       hasUser,
       hasStaff,
@@ -447,18 +448,29 @@ export class OrganizationService {
       };
     }
 
-    // Filter by Hubstaff connection status
-    if (hubstaffConnected === 'true') {
+    // Combined filter for Hubstaff connection and Billing Mode
+    if (hubstaffConnected === 'true' || billing_mode) {
       whereClause.invoiceConfiguration = {
-        hubstaff_id: { not: null },
+        ...(hubstaffConnected === 'true' ? { hubstaff_id: { not: null } } : {}),
+        ...(billing_mode ? { billing_mode: { equals: billing_mode } } : {}),
       };
-    } else if (hubstaffConnected === 'false') {
-      // Include organizations with no configuration or configuration with null hubstaff_id
-      whereClause.OR = [
-        ...(whereClause.OR || []),
-        { invoiceConfiguration: null },
-        { invoiceConfiguration: { hubstaff_id: null } },
-      ];
+    }
+
+    if (hubstaffConnected === 'false') {
+      if (billing_mode) {
+        // If billing mode is specified, configuration must exist, so we just check for null hubstaff_id
+        whereClause.invoiceConfiguration = {
+          ...whereClause.invoiceConfiguration,
+          hubstaff_id: null,
+        };
+      } else {
+        // No billing mode, so allow null configuration OR configuration with null hubstaff_id
+        whereClause.OR = [
+          ...(whereClause.OR || []),
+          { invoiceConfiguration: null },
+          { invoiceConfiguration: { hubstaff_id: null } },
+        ];
+      }
     }
 
     // Check if sorting by calculated fields (userCount or activeStaffCount)

@@ -140,7 +140,14 @@ export class GetOrganizationsDto {
   @IsEnum(['true', 'false'])
   hubstaffConnected?: 'true' | 'false';
 
-
+  @ApiProperty({
+    required: false,
+    description: 'Filter by billing mode',
+    enum: ['arrears', 'prebill'],
+  })
+  @IsOptional()
+  @IsEnum(['arrears', 'prebill'])
+  billing_mode?: 'arrears' | 'prebill';
 
   @ApiProperty({
     required: false,
