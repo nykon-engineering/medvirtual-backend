@@ -140,7 +140,7 @@ export class CommissionDetectionService {
 
     for (const snapshot of candidates) {
       const idempotencyKey = this.buildIdempotencyKey({
-        affiliateId: profile.user_id,
+        affiliateId: profile.user_id!,
         hubspotInvoiceId: snapshot.hubspot_id,
         paidAt: snapshot.paid_at,
         baseAmount: snapshot.invoice_amount.toString(),
@@ -155,7 +155,7 @@ export class CommissionDetectionService {
 
         await this.prisma.affiliateCommission.create({
           data: {
-            affiliate_id: profile.user_id,
+            affiliate_id: profile.user_id!,
             affiliate_profile_id: profile.id,
             organization_id: organizationId,
             hubspot_invoice_snapshot_id: snapshot.id,

@@ -520,16 +520,16 @@ export class HireRequestService {
                       can_articulate_experience_clearly_to_clients: true,
                       can_multitask_between_systems_or_windows_efficiently: true,
                       client_readiness___fit_evaluator_notes: true,
-                      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+                      comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
                       comfortable_with_camera_on_setup: true,
                       communication_skills_evaluator_notes: true,
                       confident_on_video_and_phone_calls: true,
                       cultural_alignment_with_us_healthcare_environment: true,
                       demonstrates_problem_solving_and_tech_adaptability: true,
                       demonstrates_stability_and_commitment: true,
-                      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+                      demonstrates_understanding_of_medical_terminology_and_procedure: true,
                       exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-                      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+                      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
                       for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
                       grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
                       handles_feedback_constructively: true,
@@ -547,7 +547,7 @@ export class HireRequestService {
                       technical_competence_evaluator_notes: true,
                       tier_level: true,
                       total_points: true,
-                      understands_workflow_in_medical_offices___telehealth_environments: true,
+                      understands_workflow_in_medical_offices___telehealth_environmen: true,
 
 
 
@@ -659,13 +659,13 @@ export class HireRequestService {
           ? timestampToUSDate(hr.hubspot_pairing_date)
           : null,
 
-        panels: hr.panels.map(panel => ({
+        panels: (hr as any).panels.map(panel => ({
           ...panel,
           interview_date: panel.interviews[0]?.scheduled_date || null,
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
           panelCandidates: panel.panelCandidates.map(pc => {
-            const rates_A = computeCandidateRates(pc.candidate, _cfgMap_A);
+            const rates_A = computeCandidateRates(pc.candidate as any, _cfgMap_A);
             return {
               ...pc,
               candidate: {
@@ -911,7 +911,7 @@ export class HireRequestService {
           const years_of_experience = startDate
           ? new Date().getFullYear() - new Date(startDate).getFullYear()
           : 0;
-          const rates_B = computeCandidateRates(pc.candidate, _cfgMap_B);
+          const rates_B = computeCandidateRates(pc.candidate as any, _cfgMap_B);
           return {
             ...pc,
             candidate:{
@@ -1125,7 +1125,7 @@ export class HireRequestService {
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
           panelCandidates: panel.panelCandidates.map(pc => {
-            const rates_C = computeCandidateRates(pc.candidate, _cfgMap_C);
+            const rates_C = computeCandidateRates(pc.candidate as any, _cfgMap_C);
             return {
               ...pc,
               candidate: {
@@ -2079,16 +2079,16 @@ export class HireRequestService {
         can_articulate_experience_clearly_to_clients: true,
         can_multitask_between_systems_or_windows_efficiently: true,
         client_readiness___fit_evaluator_notes: true,
-        comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+        comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
         comfortable_with_camera_on_setup: true,
         communication_skills_evaluator_notes: true,
         confident_on_video_and_phone_calls: true,
         cultural_alignment_with_us_healthcare_environment: true,
         demonstrates_problem_solving_and_tech_adaptability: true,
         demonstrates_stability_and_commitment: true,
-        demonstrates_understanding_of_medical_terminology_and_procedures: true,
+        demonstrates_understanding_of_medical_terminology_and_procedure: true,
         exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
         for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
         grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
         handles_feedback_constructively: true,
@@ -2106,7 +2106,7 @@ export class HireRequestService {
         technical_competence_evaluator_notes: true,
         tier_level: true,
         total_points: true,
-        understands_workflow_in_medical_offices___telehealth_environments: true,
+        understands_workflow_in_medical_offices___telehealth_environmen: true,
 
         languages: {
           select: {
@@ -2197,7 +2197,7 @@ export class HireRequestService {
         candidate.hourly_pay_rate.toNumber() <= hourly_to
       ) score += 1;
   
-      const candidateSkills = candidate.skills.map(s => s.skill_name);
+      const candidateSkills = (candidate as any).skills.map(s => s.skill_name);
       const matchedSkills = candidateSkills.filter(skill => requiredSkills.includes(skill));
       score += matchedSkills.length;
   
@@ -2216,13 +2216,13 @@ export class HireRequestService {
     const _cfgMap_D = buildConfigMap(_pCfgs_D);
 
     const candidatesWithSalary = scoredCandidates.map(c => {
-      const rates_D = computeCandidateRates(c, _cfgMap_D);
+      const rates_D = computeCandidateRates(c as any, _cfgMap_D);
       return ({
       ...c,
       ...rates_D,
       approved_positions_pairing: c.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
       avatar: c.avatar_url ? `${process.env.AVATAR_URL}${c.avatar_url}` :  null,
-      panelCandidates: c.panelCandidates ? c.panelCandidates.map(pc => ({
+      panelCandidates: (c as any).panelCandidates ? (c as any).panelCandidates.map(pc => ({
         title: pc.panel.hireRequest.title,
         organization_name: pc.panel.hireRequest.organization.name,
         

@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
+import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
 import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
 import { GoogledriveService } from '../googledrive/googledrive.service';
@@ -139,10 +140,13 @@ export class CandidatesService {
           .split(',')
           .map(f => f.trim())
           .filter(f => VA_SCORECARD_FIELDS.has(f))
-          .flatMap(f => [
-            { [f]: { not: null } },
-            { [f]: { not: 'false' } },
-          ])
+          .flatMap(f => {
+            const dbField = (candidadeToDbDictionary[f] as string) || f;
+            return [
+              { [dbField]: { not: null } },
+              { [dbField]: { not: 'false' } },
+            ];
+          })
       : [];
 
     const availabilityArray = availability
@@ -368,16 +372,16 @@ export class CandidatesService {
       can_articulate_experience_clearly_to_clients: true,
       can_multitask_between_systems_or_windows_efficiently: true,
       client_readiness___fit_evaluator_notes: true,
-      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
       comfortable_with_camera_on_setup: true,
       communication_skills_evaluator_notes: true,
       confident_on_video_and_phone_calls: true,
       cultural_alignment_with_us_healthcare_environment: true,
       demonstrates_problem_solving_and_tech_adaptability: true,
       demonstrates_stability_and_commitment: true,
-      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+      demonstrates_understanding_of_medical_terminology_and_procedure: true,
       exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
       for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
       grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
       handles_feedback_constructively: true,
@@ -395,7 +399,7 @@ export class CandidatesService {
       technical_competence_evaluator_notes: true,
       tier_level: true,
       total_points: true,
-      understands_workflow_in_medical_offices___telehealth_environments: true,
+      understands_workflow_in_medical_offices___telehealth_environmen: true,
       languages: {
         select: {
           name: true,
@@ -586,16 +590,16 @@ export class CandidatesService {
       can_articulate_experience_clearly_to_clients: true,
       can_multitask_between_systems_or_windows_efficiently: true,
       client_readiness___fit_evaluator_notes: true,
-      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
       comfortable_with_camera_on_setup: true,
       communication_skills_evaluator_notes: true,
       confident_on_video_and_phone_calls: true,
       cultural_alignment_with_us_healthcare_environment: true,
       demonstrates_problem_solving_and_tech_adaptability: true,
       demonstrates_stability_and_commitment: true,
-      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+      demonstrates_understanding_of_medical_terminology_and_procedure: true,
       exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
       for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
       grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
       handles_feedback_constructively: true,
@@ -613,7 +617,7 @@ export class CandidatesService {
       technical_competence_evaluator_notes: true,
       tier_level: true,
       total_points: true,
-      understands_workflow_in_medical_offices___telehealth_environments: true,
+      understands_workflow_in_medical_offices___telehealth_environmen: true,
       languages: {
         select: {
           name: true,
@@ -1692,16 +1696,16 @@ export class CandidatesService {
         can_articulate_experience_clearly_to_clients: true,
         can_multitask_between_systems_or_windows_efficiently: true,
         client_readiness___fit_evaluator_notes: true,
-        comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+        comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
         comfortable_with_camera_on_setup: true,
         communication_skills_evaluator_notes: true,
         confident_on_video_and_phone_calls: true,
         cultural_alignment_with_us_healthcare_environment: true,
         demonstrates_problem_solving_and_tech_adaptability: true,
         demonstrates_stability_and_commitment: true,
-        demonstrates_understanding_of_medical_terminology_and_procedures: true,
+        demonstrates_understanding_of_medical_terminology_and_procedure: true,
         exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
         for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
         grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
         handles_feedback_constructively: true,
@@ -1719,7 +1723,7 @@ export class CandidatesService {
         technical_competence_evaluator_notes: true,
         tier_level: true,
         total_points: true,
-        understands_workflow_in_medical_offices___telehealth_environments: true,
+        understands_workflow_in_medical_offices___telehealth_environmen: true,
         languages: {
           select: {
             name: true,
@@ -1784,7 +1788,7 @@ export class CandidatesService {
 
     const _pConfigs3 = await this.positionRateConfigService.findAllUnpaginated();
     const _configMap3 = buildConfigMap(_pConfigs3);
-    const rates3 = computeCandidateRates(candidate, _configMap3);
+    const rates3 = computeCandidateRates(candidate as any, _configMap3);
 
     const candidateWithFullAvatarUrl = {
       ...candidate,
@@ -1920,9 +1924,17 @@ export class CandidatesService {
         const properties = response.data.properties;
         console.log('Properties fetched from HubSpot for candidate ID:', candidate.id, properties);
 
+        const hubspotToPrismaMap: Record<string, string> = {
+          'comfortable_with_basic_tools__google_workspace__zoom__ehr_software_': 'comfortable_with_basic_tools__google_workspace__zoom__ehr_softw',
+          'demonstrates_understanding_of_medical_terminology_and_procedures': 'demonstrates_understanding_of_medical_terminology_and_procedure',
+          'familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__': 'familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks',
+          'understands_workflow_in_medical_offices___telehealth_environments': 'understands_workflow_in_medical_offices___telehealth_environmen',
+        };
+
         const updateData: Record<string, string | null> = {};
         for (const prop of vaScoreCardProperties) {
-          updateData[prop] = properties[prop] || null;
+          const prismaProp = hubspotToPrismaMap[prop] || prop;
+          updateData[prismaProp] = properties[prop] || null;
         }
 
         await this.prisma.candidate.update({

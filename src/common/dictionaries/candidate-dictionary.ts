@@ -28,16 +28,16 @@ export const candidadeToDbDictionary : Record<string, string | string[]> = {
     can_articulate_experience_clearly_to_clients: 'can_articulate_experience_clearly_to_clients',
     can_multitask_between_systems_or_windows_efficiently: 'can_multitask_between_systems_or_windows_efficiently',
     client_readiness___fit_evaluator_notes: 'client_readiness___fit_evaluator_notes',
-    comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: 'comfortable_with_basic_tools__google_workspace__zoom__ehr_software_',
+    comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: 'comfortable_with_basic_tools__google_workspace__zoom__ehr_softw',
     comfortable_with_camera_on_setup: 'comfortable_with_camera_on_setup',
     communication_skills_evaluator_notes: 'communication_skills_evaluator_notes',
     confident_on_video_and_phone_calls: 'confident_on_video_and_phone_calls',
     cultural_alignment_with_us_healthcare_environment: 'cultural_alignment_with_us_healthcare_environment',
     demonstrates_problem_solving_and_tech_adaptability: 'demonstrates_problem_solving_and_tech_adaptability',
     demonstrates_stability_and_commitment: 'demonstrates_stability_and_commitment',
-    demonstrates_understanding_of_medical_terminology_and_procedures: 'demonstrates_understanding_of_medical_terminology_and_procedures',
+    demonstrates_understanding_of_medical_terminology_and_procedures: 'demonstrates_understanding_of_medical_terminology_and_procedure',
     exhibits_confidence_and_empathy_in_roleplay_scenarios: 'exhibits_confidence_and_empathy_in_roleplay_scenarios',
-    familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: 'familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__',
+    familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: 'familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks',
     for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: 'for_bilinguals__fluent_and_accurate_in_both_english_and_spanish',
     grammar__vocabulary__and_tone_are_appropriate_for_us_clients: 'grammar__vocabulary__and_tone_are_appropriate_for_us_clients',
     handles_feedback_constructively: 'handles_feedback_constructively',
@@ -55,7 +55,7 @@ export const candidadeToDbDictionary : Record<string, string | string[]> = {
     technical_competence_evaluator_notes: 'technical_competence_evaluator_notes',
     tier_level: 'tier_level',
     total_points: 'total_points',
-    understands_workflow_in_medical_offices___telehealth_environments: 'understands_workflow_in_medical_offices___telehealth_environments',
+    understands_workflow_in_medical_offices___telehealth_environments: 'understands_workflow_in_medical_offices___telehealth_environmen',
 }
 
 export const dbToCandidateDictionary : Record<string, string> = Object.fromEntries(

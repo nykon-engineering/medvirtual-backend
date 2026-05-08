@@ -26,6 +26,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { SqsModule } from './sqs/sqs.module';
 import { PositionRateConfigModule } from './position-rate-config/position-rate-config.module';
 import { MedAllianceModule } from './med-alliance/med-alliance.module';
+import { SecretsModule } from './secrets/secrets.module';
+import { HubstaffModule } from './hubstaff/hubstaff.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -58,6 +61,9 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
     SqsModule,
     PositionRateConfigModule,
     MedAllianceModule,
+    SecretsModule,
+    HubstaffModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [

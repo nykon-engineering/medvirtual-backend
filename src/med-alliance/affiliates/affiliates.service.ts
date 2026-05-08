@@ -608,14 +608,14 @@ export class AffiliatesService {
     const [pendingAgg, lifetimeAgg, payoutHistory, commsByOrg] = await Promise.all([
       this.prisma.affiliatePayoutRequest.aggregate({
         _sum: { requested_amount: true },
-        where: { affiliate_id: userId, status: { in: ['requested', 'under_review'] } },
+        where: { affiliate_id: userId!, status: { in: ['requested', 'under_review'] } },
       }),
       this.prisma.affiliateCommission.aggregate({
         _sum: { commission_amount: true },
-        where: { affiliate_id: userId, status: { notIn: ['void', 'rejected'] } },
+        where: { affiliate_id: userId!, status: { notIn: ['void', 'rejected'] } },
       }),
       this.prisma.affiliatePayoutRequest.findMany({
-        where: { affiliate_id: userId, status: 'paid' },
+        where: { affiliate_id: userId!, status: 'paid' },
         orderBy: { paid_at: 'desc' },
         take: 20,
         select: {
@@ -629,7 +629,7 @@ export class AffiliatesService {
       }),
       this.prisma.affiliateCommission.groupBy({
         by: ['organization_id'],
-        where: { affiliate_id: userId, status: { notIn: ['void', 'rejected'] } },
+        where: { affiliate_id: userId!, status: { notIn: ['void', 'rejected'] } },
         _sum: { commission_amount: true },
       }),
     ]);
@@ -653,7 +653,7 @@ export class AffiliatesService {
     // If user role is 'affiliate', also deactivate the user account
     if (user.role === 'affiliate') {
       await this.prisma.uSER.update({
-        where: { id: profile.user_id },
+        where: { id: profile.user_id! },
         data: {
           status: 'inactive',
           status_before_deactivation: user.status,
@@ -706,7 +706,7 @@ export class AffiliatesService {
     // If user role is 'affiliate', restore the user account status
     if (user.role === 'affiliate') {
       await this.prisma.uSER.update({
-        where: { id: profile.user_id },
+        where: { id: profile.user_id! },
         data: {
           status: user.status_before_deactivation ?? 'active',
           status_before_deactivation: null,
@@ -726,7 +726,7 @@ export class AffiliatesService {
     if (!org) throw new NotFoundException('Organization not found');
 
     await this.prisma.uSER.update({
-      where: { id: profile.user_id },
+      where: { id: profile.user_id! },
       data: { organization_id: dto.organization_id },
     });
 

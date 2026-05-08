@@ -3,16 +3,15 @@ generator client {
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
-
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model USER {
-  id                           String              @id @default(uuid())
-  email                        String              @unique
+  id                           String                       @id @default(uuid())
+  email                        String                       @unique
   organization_id              String?
   organization_name            String
   first_name                   String
@@ -22,63 +21,51 @@ model USER {
   job_title                    String
   role                         String
   workos_id                    String
-  password                     String              @db.VarChar(255)
+  password                     String                       @db.VarChar(255)
   authentication_method        String
   status                       String
-  status_before_deactivation   String?
-  verified                     Boolean             @default(false)
-  createdAt                    DateTime            @default(now())
-  updatedAt                    DateTime            @updatedAt
-  activatedAt                  DateTime?
-  is_organization_owner        Boolean             @default(false)
-  createdByMethod              String              @default("self_signup")
+  verified                     Boolean                      @default(false)
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+  is_organization_owner        Boolean                      @default(false)
+  createdByMethod              String                       @default("self_signup")
   createdByUserId              String?
-  hubspot_id                   String?             @unique
-  hubspot_contact_id           String?             @unique
+  hubspot_id                   String?                      @unique
+  hubspot_contact_id           String?                      @unique
+  status_before_deactivation   String?
+  activatedAt                  DateTime?
+  commissionAdminDecisions     AffiliateCommission[]        @relation("CommissionAdminDecision")
+  affiliateCommissions         AffiliateCommission[]        @relation("AffiliateCommissions")
+  payoutRequestsAsAffiliate    AffiliatePayoutRequest[]     @relation("AffiliatePayoutRequests")
+  payoutApprovals              AffiliatePayoutRequest[]     @relation("PayoutApprovedBy")
+  payoutCancellations          AffiliatePayoutRequest[]     @relation("PayoutCancelledBy")
+  payoutReviews                AffiliatePayoutRequest[]     @relation("PayoutReviewedBy")
+  affiliateProfile             AffiliateProfile?
+  Contact                      Contact?
   email_invitations            EmailInvitation[]
   email_verifications          EmailVerification[]
-  hireRequestsSourcingAssigned HireRequest[]       @relation("AssignedSourcing")
-  hireRequestsStaffingAssigned HireRequest[]       @relation("AssignedStaffing")
-  hireRequestsAssignedMany     HireRequest[]       @relation("AssignedUsers")
-  hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
-  panelCandidatesCreated       PanelCandidate[]    @relation("PanelCandidateCreatedBy")
-  adminOrganizations           Organization[]      @relation("OrganizationAdmin")
-  ownedOrganizations           Organization?       @relation("OrganizationOwner")
-  sessions                     Session[]
-  tickets                      Ticket[]
-  ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
-  TicketNotes                  TicketNotes[]
-  createdBy                    USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
-  createdUsers                 USER[]              @relation("UserCreatedBy")
-  organization                 Organization?       @relation(fields: [organization_id], references: [id])
-  talentPoolLeads              TalentPoolLead[]
-  PasswordResetTokens          PasswordResetToken[]
-
-  // --- Med Alliance relations ---
-  // One-to-one affiliate profile storing commission settings and payout preferences
-  affiliateProfile             AffiliateProfile?
-  // Organizations this user referred into the Med Alliance program
-  referredOrganizations        Organization[]             @relation("OrganizationReferredBy")
-  // Organizations where this user was selected as the staff contact by an affiliate
-  referToOrganizations         Organization[]             @relation("OrganizationReferTo")
-  // Payout requests submitted by this user as an affiliate
-  payoutRequestsAsAffiliate    AffiliatePayoutRequest[]   @relation("AffiliatePayoutRequests")
-  // Payout requests approved or rejected by this admin user
-  payoutApprovals              AffiliatePayoutRequest[]   @relation("PayoutApprovedBy")
-  // Payout requests moved to under_review by this admin user
-  payoutReviews                AffiliatePayoutRequest[]   @relation("PayoutReviewedBy")
-  // Notes authored on payout requests
-  payoutRequestNotes           PayoutRequestNote[]        @relation("PayoutRequestNoteAuthor")
-  // Payout requests cancelled by this admin user
-  payoutCancellations          AffiliatePayoutRequest[]   @relation("PayoutCancelledBy")
-  // Commission records where this admin user made the eligibility decision
-  commissionAdminDecisions     AffiliateCommission[]      @relation("CommissionAdminDecision")
-  // Commissions linked to this user as the affiliate owner
-  affiliateCommissions         AffiliateCommission[]      @relation("AffiliateCommissions")
-  // Audit log entries where this user was the acting subject
-  medAllianceAuditActorLogs    MedAllianceAuditLog[]      @relation("MedAllianceAuditActor")
-  // MA-006 review cases resolved by this admin user
+  hireRequestsSourcingAssigned HireRequest[]                @relation("AssignedSourcing")
+  hireRequestsStaffingAssigned HireRequest[]                @relation("AssignedStaffing")
+  hireRequestsCreated          HireRequest[]                @relation("HireRequestCreatedBy")
+  HubspotAuditLog              HubspotAuditLog[]
   resolvedReviewCases          MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
+  medAllianceAuditActorLogs    MedAllianceAuditLog[]        @relation("MedAllianceAuditActor")
+  adminOrganizations           Organization[]               @relation("OrganizationAdmin")
+  ownedOrganizations           Organization[]               @relation("OrganizationOwner")
+  referToOrganizations         Organization[]               @relation("OrganizationReferTo")
+  referredOrganizations        Organization[]               @relation("OrganizationReferredBy")
+  panelCandidatesCreated       PanelCandidate[]             @relation("PanelCandidateCreatedBy")
+  PasswordResetTokens          PasswordResetToken[]
+  payoutRequestNotes           PayoutRequestNote[]          @relation("PayoutRequestNoteAuthor")
+  sessions                     Session[]
+  talentPoolLeads              TalentPoolLead[]
+  ticketsCreated               Ticket[]                     @relation("TicketCreatedBy")
+  tickets                      Ticket[]
+  TicketNotes                  TicketNotes[]
+  createdBy                    USER?                        @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
+  createdUsers                 USER[]                       @relation("UserCreatedBy")
+  organization                 Organization?                @relation(fields: [organization_id], references: [id])
+  hireRequestsAssignedMany     HireRequest[]                @relation("AssignedUsers")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -121,84 +108,64 @@ model EmailInvitation {
 }
 
 model Organization {
-  id                      String                  @id @default(uuid())
-  name                    String
-  email                   String?                 @unique
-  hubspot_id              String?                 @unique
-  createdAt               DateTime                @default(now())
-  deletedAt               DateTime?
-  admin_id                String?
-  description             String?
-  owner_id                String?                 @unique
-  date_became_client      DateTime?
-  date_founded            DateTime?
-  date_joined             DateTime?
-  industry                String?
-  location                String?
-  number_of_employees     Int?
-  organization_role       OrganizationRole        @default(prospect)
-  phone                   String?
-  services                String[]
-  signed_document_date    DateTime?
-  signed_document_url     String?
-  updatedAt               DateTime                @updatedAt
-  website_url             String?
-  status                  OrganizationStatus      @default(active)
-  specialties             String[]
-  address                 String?
-  city                    String?
-  postal_code             String?
-  state                   String?
-  business_unit           String?
-  source                  String?
-  type                    String?
-
-  // Primary contact at the referred company (collected at referral time for HubSpot import).
+  id                           String                       @id @default(uuid())
+  name                         String
+  email                        String?
+  hubspot_id                   String?                      @unique
+  createdAt                    DateTime                     @default(now())
+  admin_id                     String?
+  description                  String?
+  owner_id                     String?
+  date_became_client           DateTime?
+  date_founded                 DateTime?
+  date_joined                  DateTime?
+  industry                     String?
+  location                     String?
+  number_of_employees          Int?
+  organization_role            OrganizationRole             @default(prospect)
+  phone                        String?
+  services                     String[]
+  signed_document_date         DateTime?
+  signed_document_url          String?
+  updatedAt                    DateTime                     @updatedAt
+  website_url                  String?
+  status                       OrganizationStatus           @default(active)
+  specialties                  String[]
+  address                      String?
+  city                         String?
+  postal_code                  String?
+  state                        String?
+  business_unit                String?
+  source                       String?
+  type                         String?
+  deletedAt                    DateTime?
+  referred_by_affiliate_id     String?
+  med_alliance_block_reason    String?
+  med_alliance_referral_status MedAllianceReferralStatus?
+  hubspot_sync_error           String?
+  hubspot_sync_status          String?
+  hubspot_synced_at            DateTime?
   contact_first_name           String?
   contact_last_name            String?
-  contact_email                String?
-
-  // User ID of the affiliate who referred this organization into the Med Alliance program
-  referred_by_affiliate_id     String?
-
-  // Internal staff member (concierge) the affiliate selected to handle this referral
   refer_to_user_id             String?
-  referToUser                  USER?                   @relation("OrganizationReferTo", fields: [refer_to_user_id], references: [id])
-
-  // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL)
-  med_alliance_referral_status MedAllianceReferralStatus?
-  // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
-  med_alliance_block_reason    String?
-  // Anchor timestamp that starts the one-year eligibility window; set when the first paid invoice is received;
-  // cleared when the window expires so the status reflects not_eligible correctly.
+  contact_email                String?
   eligibility_start_at         DateTime?
-  // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
   first_paid_invoice_at        DateTime?
-
-  // HubSpot sync state — only relevant for referred organizations
-  // 'pending' | 'synced' | 'no_match' | 'multiple_matches' | 'error'
-  hubspot_sync_status          String?
-  // Last sync error message, cleared on successful sync
-  hubspot_sync_error           String?
-  // Timestamp of the last successful HubSpot sync
-  hubspot_synced_at            DateTime?
-
-  hire_requests           HireRequest[]
-  admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
-  owner                   USER?                   @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
-  organization_candidates OrganizationCandidate[]
-  staff                   Staff[]
-  tickets                 Ticket[]
-  users                   USER[]
-
-  // The affiliate user who referred this organization; null for organizations not coming from Med Alliance
-  referredByAffiliate          USER?                   @relation("OrganizationReferredBy", fields: [referred_by_affiliate_id], references: [id])
-  // Commission records generated from invoices tied to this organization
+  referral_stage               ReferralStage?               @default(referred)
   affiliateCommissions         AffiliateCommission[]
-  // HubSpot invoice snapshots pulled during sync for this organization
+  Contact                      Contact[]
+  hire_requests                HireRequest[]
   hubspotInvoiceSnapshots      HubspotInvoiceSnapshot[]
-  // MA-006 admin review cases opened for this referred organization
   adminReviewCases             MedAllianceAdminReviewCase[]
+  invoiceConfiguration         InvoiceConfiguration?
+  admin                        USER?                        @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
+  owner                        USER?                        @relation("OrganizationOwner", fields: [owner_id], references: [id], onDelete: Restrict)
+  referToUser                  USER?                        @relation("OrganizationReferTo", fields: [refer_to_user_id], references: [id])
+  referredByAffiliate          USER?                        @relation("OrganizationReferredBy", fields: [referred_by_affiliate_id], references: [id])
+  organization_candidates      OrganizationCandidate[]
+  staff                        Staff[]
+  tickets                      Ticket[]
+  users                        USER[]
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -207,92 +174,88 @@ model Organization {
   @@index([owner_id], map: "idx_organizations_owner_id")
   @@index([organization_role], map: "idx_organizations_role")
   @@index([industry], map: "idx_organizations_industry")
-  // Lookup organizations referred by a specific affiliate
   @@index([referred_by_affiliate_id], map: "idx_organizations_referred_by")
-  // Scoped listing: affiliate's referred orgs filtered by status
   @@index([referred_by_affiliate_id, status], map: "idx_organizations_affiliate_status")
-  // Lookup organizations assigned to a specific staff member
   @@index([refer_to_user_id], map: "idx_organizations_refer_to_user")
+  @@index([referral_stage, eligibility_start_at], map: "idx_organizations_referral_stage")
 }
 
 model Candidate {
-  id                         String                  @id @default(uuid())
-  hubspot_id                 String                  @unique
-  email                      String
-  first_name                 String?
-  last_name                  String?
-  resume_url                 String?
-  about_me                   String?
-  description_summary        String?
-  processed_resume_data      Json?
-  processing_status          ProcessingStatus        @default(pending)
-  processing_error           String?
-  processed_at               DateTime?
-  createdAt                  DateTime                @default(now())
-  hourly_pay_rate            Decimal?
-  organization_id            String?
-  pipeline_status            String                  @default("available")
-  years_of_experience        Int?
-  country                    String?
-  specialization             String?
-  employment_type            String?
-  name                       String?
-  medical_tools              String?
-  tools                      String?
-  gender                     String?
-  pipeline_status_origin     String?
-  approved_positions_pairing String[]
-  processing_cost            Decimal?                @default(0)
-  avatar_url                 String?
-  headshot_url               String?
-  shift_block                String?
-  video_link                 String?
-  business_unit              String?
-
-  //Fields from VA Score Card
-  active_listening_and_comprehension_demonstrated               String?
-  adaptability_to_different_client_personalities_and_workflows  String?
-  can_articulate_experience_clearly_to_clients                  String?
-  can_multitask_between_systems_or_windows_efficiently          String?
-  client_readiness___fit_evaluator_notes                        String?
-  comfortable_with_basic_tools__google_workspace__zoom__ehr_software_ String?
-  comfortable_with_camera_on_setup                              String?
-  communication_skills_evaluator_notes                          String?
-  confident_on_video_and_phone_calls                            String?
-  cultural_alignment_with_us_healthcare_environment             String?
-  demonstrates_problem_solving_and_tech_adaptability            String?
-  demonstrates_stability_and_commitment                         String?
-  demonstrates_understanding_of_medical_terminology_and_procedures String?
-  exhibits_confidence_and_empathy_in_roleplay_scenarios         String?
-  familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__ String?
+  id                                                              String                  @id @default(uuid())
+  hubspot_id                                                      String                  @unique
+  email                                                           String
+  first_name                                                      String?
+  last_name                                                       String?
+  resume_url                                                      String?
+  about_me                                                        String?
+  processed_resume_data                                           Json?
+  processing_status                                               ProcessingStatus        @default(pending)
+  processing_error                                                String?
+  processed_at                                                    DateTime?
+  createdAt                                                       DateTime                @default(now())
+  hourly_pay_rate                                                 Decimal?
+  organization_id                                                 String?
+  pipeline_status                                                 String                  @default("available")
+  years_of_experience                                             Int?
+  country                                                         String?
+  specialization                                                  String?
+  employment_type                                                 String?
+  name                                                            String?
+  medical_tools                                                   String?
+  tools                                                           String?
+  gender                                                          String?
+  pipeline_status_origin                                          String?
+  approved_positions_pairing                                      String[]
+  processing_cost                                                 Decimal?                @default(0)
+  avatar_url                                                      String?
+  headshot_url                                                    String?
+  shift_block                                                     String?
+  video_link                                                      String?
+  business_unit                                                   String?
+  active_listening_and_comprehension_demonstrated                 String?
+  adaptability_to_different_client_personalities_and_workflows    String?
+  can_articulate_experience_clearly_to_clients                    String?
+  can_multitask_between_systems_or_windows_efficiently            String?
+  client_readiness___fit_evaluator_notes                          String?
+  comfortable_with_camera_on_setup                                String?
+  communication_skills_evaluator_notes                            String?
+  confident_on_video_and_phone_calls                              String?
+  cultural_alignment_with_us_healthcare_environment               String?
+  demonstrates_problem_solving_and_tech_adaptability              String?
+  demonstrates_stability_and_commitment                           String?
+  exhibits_confidence_and_empathy_in_roleplay_scenarios           String?
   for_bilinguals__fluent_and_accurate_in_both_english_and_spanish String?
-  grammar__vocabulary__and_tone_are_appropriate_for_us_clients  String?
-  handles_feedback_constructively                               String?
-  has_functioning_headset__webcam__and_backup_device            String?
-  knowledge_of_hipaa_compliance_and_confidentiality             String?
-  medical_knowledge_evaluator_notes                             String?
-  no_medical_industry_experience                                String?
-  positive_attitude_and_professional_demeanor                   String?
-  prior_experience_in_healthcare_or_medical_va_roles            String?
-  professionalism___work_readiness_evaluator_notes              String?
-  punctual_and_responsive_during_recruitment_stages             String?
-  remote_work_discipline_and_time_management                    String?
-  speaks_clearly_and_professionally                             String?
-  stable_internet_connection__min__20_mbps_                     String?
-  technical_competence_evaluator_notes                          String?
-  tier_level                                                    String?
-  total_points                                                  String?
-  understands_workflow_in_medical_offices___telehealth_environments String?
-
-  educations                 CandidateEducation[]
-  experiences                CandidateExperience[]
-  languages                  CandidateLanguage[]
-  skills                     CandidateSkill[]
-  selectedInInterviews       Interview[]             @relation("SelectedCandidate")
-  organizationCandidates     OrganizationCandidate[]
-  panelCandidates            PanelCandidate[]
-  staff                      Staff[]
-  tickets                    Ticket[]
+  grammar__vocabulary__and_tone_are_appropriate_for_us_clients    String?
+  handles_feedback_constructively                                 String?
+  has_functioning_headset__webcam__and_backup_device              String?
+  knowledge_of_hipaa_compliance_and_confidentiality               String?
+  medical_knowledge_evaluator_notes                               String?
+  no_medical_industry_experience                                  String?
+  positive_attitude_and_professional_demeanor                     String?
+  prior_experience_in_healthcare_or_medical_va_roles              String?
+  professionalism___work_readiness_evaluator_notes                String?
+  punctual_and_responsive_during_recruitment_stages               String?
+  remote_work_discipline_and_time_management                      String?
+  speaks_clearly_and_professionally                               String?
+  stable_internet_connection__min__20_mbps_                       String?
+  technical_competence_evaluator_notes                            String?
+  tier_level                                                      String?
+  total_points                                                    String?
+  description_summary                                             String?
+  updatedAt                                                       DateTime                @default(now())
+  comfortable_with_basic_tools__google_workspace__zoom__ehr_softw String?
+  demonstrates_understanding_of_medical_terminology_and_procedure String?
+  familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks String?
+  understands_workflow_in_medical_offices___telehealth_environmen String?
+  educations                                                      CandidateEducation[]
+  experiences                                                     CandidateExperience[]
+  languages                                                       CandidateLanguage[]
+  skills                                                          CandidateSkill[]
+  selectedInInterviews                                            Interview[]             @relation("SelectedCandidate")
+  organizationCandidates                                          OrganizationCandidate[]
+  panelCandidates                                                 PanelCandidate[]
+  staff                                                           Staff[]
+  tickets                                                         Ticket[]
 }
 
 model CandidateLanguage {
@@ -360,71 +323,66 @@ model CandidateEducation {
 }
 
 model HireRequest {
-  id                                String             @id @default(uuid())
-  org_id                            String
-  title                             String
-  description                       String?
-  status                            HireRequestStatus  @default(new)
-  priority                          Priority           @default(medium)
-  createdAt                         DateTime           @default(now())
-  availability                      String
-  contract_length                   String?
-  expected_start_date               DateTime?
-  salary_range_from                 Decimal?
-  salary_range_to                   Decimal?
-  specialization                    String?
-  location                          String?
-  assign_user_id                    String?
-  createdByUserId                   String?
-  hubspot_contract_amount           Decimal?
-  hubspot_language                  String?
-  hubspot_numberVA                  Int?
-  hubspot_role_type                 String?
-  hubspot_ticket_id                 String?            @unique
-  hubspot_business_unit             String?
-  hubspot_company_name              String?
-  hubspot_company_url               String?
-  hubspot_pairing_request_type      String?
-  hubspot_pipeline                  String?
-  hubspot_pipeline_stage            String?
-  hubspot_ticket_type               String?
-  hubspot_tasks                     String?
-  hubspot_n2_monitors_required      String?
-  hubspot_va_shift_hours            String?
-  hubspot_tools_familiarization     String?
-  hubspot_training_request_notes    String?
-  hubspot_camera_on_during_shift    String?
-  hubspot_special_sourcing_needed   String?
-  hubspot_special_requirements      String?
-  hubspot_additional_training_requested String?
-  hubspot_pairing_date              String? //String for avoid misunderstanding about timeZone
-  hubspot_pairing_time              String?
-  request_role                      String?
-  assign_staffing_coordinator       String?
+  id                                       String             @id @default(uuid())
+  org_id                                   String
+  title                                    String
+  description                              String?
+  status                                   HireRequestStatus  @default(new)
+  priority                                 Priority           @default(medium)
+  createdAt                                DateTime           @default(now())
+  availability                             String
+  contract_length                          String?
+  expected_start_date                      DateTime?
+  salary_range_from                        Decimal?
+  salary_range_to                          Decimal?
+  specialization                           String?
+  location                                 String?
+  assign_user_id                           String?
+  createdByUserId                          String?
+  hubspot_contract_amount                  Decimal?
+  hubspot_language                         String?
+  hubspot_numberVA                         Int?
+  hubspot_role_type                        String?
+  hubspot_ticket_id                        String?            @unique
+  hubspot_business_unit                    String?
+  hubspot_company_name                     String?
+  hubspot_company_url                      String?
+  hubspot_pairing_request_type             String?
+  hubspot_pipeline                         String?
+  hubspot_pipeline_stage                   String?
+  hubspot_ticket_type                      String?
+  assign_sourcing_id                       String?
+  old_status                               HireRequestStatus?
+  hubspot_n2_monitors_required             String?
+  hubspot_special_requirements             String?
+  hubspot_special_sourcing_needed          String?
+  hubspot_tasks                            String?
+  hubspot_va_shift_hours                   String?
+  hubspot_additional_training_requested    String?
+  hubspot_pairing_date                     String?
+  hubspot_pairing_time                     String?
+  cancel_date                              DateTime?
+  cancel_reason                            String?
+  request_role                             String?
+  hubspot_camera_on_during_shift           String?
+  hubspot_tools_familiarization            String?
+  hubspot_training_request_notes           String?
+  assign_staffing_coordinator              String?
+  client_signed_contract_closing_ticket    String?
   client_signed_contract_ticket_submission String?
-  client_signed_contract_closing_ticket String?
-
-
-  description_summary               String?
-  summary_generated_at              DateTime?
-
-  hubspot_tasks_summary             String?
-  hubspot_tasks_summary_generated_at DateTime?
-
-  cancel_date                       DateTime?
-  cancel_reason                     String?
-
-  assign_sourcing_id                String?
-  old_status                        HireRequestStatus?
-  panels                            CandidatePanel[]
-  assigned_sourcing                 USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
-  assigned_staffing                 USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
-  assigned_users                    USER[]             @relation("AssignedUsers")
-  createdBy                         USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
-  organization                      Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  skills                            HireRequestSkill[]
-  staff                             Staff[]
-  tickets                           Ticket[]
+  description_summary                      String?
+  summary_generated_at                     DateTime?
+  hubspot_tasks_summary                    String?
+  hubspot_tasks_summary_generated_at       DateTime?
+  panels                                   CandidatePanel[]
+  assigned_sourcing                        USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
+  assigned_staffing                        USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
+  createdBy                                USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
+  organization                             Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  skills                                   HireRequestSkill[]
+  staff                                    Staff[]
+  tickets                                  Ticket[]
+  assigned_users                           USER[]             @relation("AssignedUsers")
 
   @@index([org_id], map: "idx_hire_requests_org_id")
   @@index([status], map: "idx_hire_requests_status")
@@ -451,9 +409,9 @@ model CandidatePanel {
   hire_request_id String
   status          PanelStatus      @default(created)
   scheduled_date  DateTime?
-  decided_date    DateTime?
   createdAt       DateTime         @default(now())
   readable        Boolean          @default(false)
+  decided_date    DateTime?
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
   panelCandidates PanelCandidate[]
@@ -471,8 +429,8 @@ model PanelCandidate {
   createdAt       DateTime             @default(now())
   createdByUserId String?
   candidate       Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
+  createdBy       USER?                @relation("PanelCandidateCreatedBy", fields: [createdByUserId], references: [id])
   panel           CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
-  createdBy       USER?              @relation("PanelCandidateCreatedBy", fields: [createdByUserId], references: [id])
 
   @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
   @@index([panel_id], map: "idx_panel_candidates_panel_id")
@@ -504,27 +462,27 @@ model Interview {
 }
 
 model Ticket {
-  id            String        @id @default(uuid())
-  user_id       String?
-  title         String
-  description   String
-  status        TicketStatus  @default(new)
-  createdAt     DateTime      @default(now())
-  type          String
-  org_id        String?
-  priority      Priority
-  staff_id      String?
-  candidate_id  String?
-  hireRequest_id String?
+  id             String        @id @default(uuid())
+  user_id        String?
+  title          String
+  description    String
+  status         TicketStatus  @default(new)
+  createdAt      DateTime      @default(now())
+  type           String
+  org_id         String?
+  priority       Priority
+  staff_id       String?
+  candidate_id   String?
   updatedAt      DateTime      @updatedAt
-  created_by    String?
-  candidate     Candidate?    @relation(fields: [candidate_id], references: [id])
-  organization  Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  staff         Staff?        @relation(fields: [staff_id], references: [id])
-  hireRequest   HireRequest?  @relation(fields: [hireRequest_id], references: [id])
-  user          USER?         @relation(fields: [user_id], references: [id])
-  createdBy     USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
-  TicketNotes   TicketNotes[]
+  created_by     String?
+  hireRequest_id String?
+  candidate      Candidate?    @relation(fields: [candidate_id], references: [id])
+  createdBy      USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
+  hireRequest    HireRequest?  @relation(fields: [hireRequest_id], references: [id])
+  organization   Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  staff          Staff?        @relation(fields: [staff_id], references: [id])
+  user           USER?         @relation(fields: [user_id], references: [id])
+  TicketNotes    TicketNotes[]
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
@@ -624,10 +582,6 @@ model TicketNotes {
 model TalentPoolLead {
   id                  String    @id @default(uuid())
   name                String    @db.VarChar(255)
-  first_name           String?   @db.VarChar(255)
-  last_name            String?   @db.VarChar(255)
-  website_url          String?   @db.VarChar(500)
-  language_preference  String?   @db.VarChar(50)
   email               String    @db.VarChar(255)
   organization        String    @db.VarChar(255)
   main_need           String?
@@ -640,6 +594,10 @@ model TalentPoolLead {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now())
   contacted_at        DateTime?
+  first_name          String?   @db.VarChar(255)
+  language_preference String?   @db.VarChar(50)
+  last_name           String?   @db.VarChar(255)
+  website_url         String?   @db.VarChar(500)
   assignedTo          USER?     @relation(fields: [assigned_to_user_id], references: [id])
 
   @@index([assigned_to_user_id], map: "idx_talent_pool_leads_assigned_to_user_id")
@@ -649,87 +607,72 @@ model TalentPoolLead {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   tokenHash String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
-
-  user      USER @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  user      USER      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-
 model PositionRateConfig {
-  id                                  String   @id @default(uuid())
-  position                            String   @unique
-  medVirtual_floor_price_english      Decimal?
-  medVirtual_floor_price_bilingual    Decimal?
-  medVirtual_margin_per_hour          Decimal?
-  berryVirtual_floor_price_english    Decimal?
-  berryVirtual_floor_price_bilingual  Decimal?
-  berryVirtual_margin_per_hour         Decimal?
-  createdAt                           DateTime @default(now())
-  updatedAt                           DateTime @updatedAt
+  id                                 String   @id @default(uuid())
+  position                           String   @unique
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
+  berryVirtual_floor_price_bilingual Decimal?
+  berryVirtual_floor_price_english   Decimal?
+  medVirtual_floor_price_bilingual   Decimal?
+  medVirtual_floor_price_english     Decimal?
+  berryVirtual_margin_per_hour       Decimal?
+  medVirtual_margin_per_hour         Decimal?
 }
 
-// =============================================================================
-// MED ALLIANCE — new models
-// Referral and commission tracking program for affiliate (Growth Partner) users.
-// Affiliates refer organizations; HubSpot invoices are synced; commissions are
-// detected, reviewed by admin, and paid out on request.
-// =============================================================================
-
 model AffiliateProfile {
-  id                          String          @id @default(uuid())
-  user_id                     String          @unique
-  hubspot_id                  String?         @unique
-  full_name                   String?
-  hubspot_pipeline            String?
-  hubspot_pipeline_stage      String?
-  business_unit               String?
-  commission_percent_default  Decimal         @db.Decimal(5, 2)
-  status                      AffiliateStatus @default(active)
+  id                          String                   @id @default(uuid())
+  user_id                     String?                  @unique
+  hubspot_id                  String?                  @unique
+  commission_percent_default  Decimal                  @db.Decimal(5, 2)
+  status                      AffiliateStatus          @default(active)
   payout_preference_method    PayoutMethod?
   payout_preference_reference String?
   payout_preference_notes     String?
-  payout_details              Json?
   created_by                  String?
-  createdAt                   DateTime        @default(now())
-  updatedAt                   DateTime        @updatedAt
-
-  user           USER                   @relation(fields: [user_id], references: [id])
-  commissions    AffiliateCommission[]
-  payoutRequests AffiliatePayoutRequest[]
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+  business_unit               String?
+  full_name                   String?
+  hubspot_pipeline            String?
+  hubspot_pipeline_stage      String?
+  payout_details              Json?
+  commissions                 AffiliateCommission[]
+  payoutRequests              AffiliatePayoutRequest[]
+  user                        USER?                    @relation(fields: [user_id], references: [id])
 
   @@index([status], map: "idx_affiliate_profiles_status")
   @@index([user_id], map: "idx_affiliate_profiles_user_id")
 }
 
-// HubspotInvoiceSnapshot
-// Immutable snapshot of a HubSpot invoice pulled during the sync job.
-// Used as the source of truth for commission detection. Never mutated after
-// commission creation; raw_payload enables replay if parsing logic changes.
 model HubspotInvoiceSnapshot {
-  id             String    @id @default(uuid())
-  hubspot_id     String    @unique
-  organization_id String
-  invoice_status String
-  payment_status String?
-  invoice_amount Decimal   @db.Decimal(14, 2)
-  currency       String    @default("USD") @db.VarChar(3)
-  paid_at        DateTime?
-  sync_hash      String?
-  raw_payload    Json?
+  id               String                    @id @default(uuid())
+  hubspot_id       String                    @unique
+  organization_id  String
+  invoice_status   String
+  payment_status   String?
+  invoice_amount   Decimal                   @db.Decimal(14, 2)
+  currency         String                    @default("USD") @db.VarChar(3)
+  paid_at          DateTime?
+  sync_hash        String?
+  raw_payload      Json?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
   hubspot_pdf_link String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  organization Organization            @relation(fields: [organization_id], references: [id])
-  commissions  AffiliateCommission[]
-  lineItems    HubspotLineItemSnapshot[]
+  commissions      AffiliateCommission[]
+  organization     Organization              @relation(fields: [organization_id], references: [id])
+  lineItems        HubspotLineItemSnapshot[]
 
   @@index([organization_id], map: "idx_hubspot_invoice_snapshots_org_id")
   @@index([invoice_status], map: "idx_hubspot_invoice_snapshots_invoice_status")
@@ -738,147 +681,112 @@ model HubspotInvoiceSnapshot {
 }
 
 model HubspotLineItemSnapshot {
-  id          String   @id @default(uuid())
-  hubspot_id  String   @unique
+  id          String                 @id @default(uuid())
+  hubspot_id  String                 @unique
   invoice_id  String
   name        String?
   description String?
   quantity    String?
-  amount      Decimal? @db.Decimal(14, 2)
+  amount      Decimal?               @db.Decimal(14, 2)
   discount    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  invoice HubspotInvoiceSnapshot @relation(fields: [invoice_id], references: [id])
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  invoice     HubspotInvoiceSnapshot @relation(fields: [invoice_id], references: [id])
 
   @@index([invoice_id], map: "idx_hubspot_line_item_snapshots_invoice_id")
 }
 
-// AffiliateCommission
-// Represents a single commission event detected from a paid HubSpot invoice.
-// Lifecycle: detected → pending_admin_confirmation → eligible → requested → paid.
-// The idempotency_key prevents duplicate records on sync retries.
 model AffiliateCommission {
-  id                          String           @id @default(uuid())
+  id                          String                             @id @default(uuid())
   affiliate_id                String
   affiliate_profile_id        String
   organization_id             String
   hubspot_invoice_snapshot_id String
-  commission_percent_snapshot Decimal          @db.Decimal(5, 2)
-  base_amount_snapshot        Decimal          @db.Decimal(14, 2)
-  commission_amount           Decimal          @db.Decimal(14, 2)
-  status                      CommissionStatus @default(detected)
-  idempotency_key             String           @unique
+  commission_percent_snapshot Decimal                            @db.Decimal(5, 2)
+  base_amount_snapshot        Decimal                            @db.Decimal(14, 2)
+  commission_amount           Decimal                            @db.Decimal(14, 2)
+  status                      CommissionStatus                   @default(detected)
+  idempotency_key             String                             @unique
   admin_decision_by           String?
   admin_decision_reason       String?
   admin_decision_at           DateTime?
-  createdAt                   DateTime         @default(now())
-  updatedAt                   DateTime         @updatedAt
+  createdAt                   DateTime                           @default(now())
+  updatedAt                   DateTime                           @updatedAt
+  adminDecisionBy             USER?                              @relation("CommissionAdminDecision", fields: [admin_decision_by], references: [id])
+  affiliate                   USER                               @relation("AffiliateCommissions", fields: [affiliate_id], references: [id])
+  affiliateProfile            AffiliateProfile                   @relation(fields: [affiliate_profile_id], references: [id])
+  hubspotInvoiceSnapshot      HubspotInvoiceSnapshot             @relation(fields: [hubspot_invoice_snapshot_id], references: [id])
+  organization                Organization                       @relation(fields: [organization_id], references: [id])
+  payoutRequestCommissions    AffiliatePayoutRequestCommission[]
 
-  affiliate              USER                              @relation("AffiliateCommissions", fields: [affiliate_id], references: [id])
-  // Back-relation to AffiliateProfile — enables AffiliateProfile.commissions[]
-  affiliateProfile       AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
-  organization           Organization                      @relation(fields: [organization_id], references: [id])
-  hubspotInvoiceSnapshot HubspotInvoiceSnapshot            @relation(fields: [hubspot_invoice_snapshot_id], references: [id])
-  adminDecisionBy        USER?                             @relation("CommissionAdminDecision", fields: [admin_decision_by], references: [id])
-  // Junction records linking this commission to payout requests
-  payoutRequestCommissions AffiliatePayoutRequestCommission[]
-
-  // Scoped listing: all commissions for a given affiliate filtered by status
   @@index([affiliate_id, status], map: "idx_affiliate_commissions_affiliate_status")
-  // Scoped listing: all commissions for a given organization filtered by status
   @@index([organization_id, status], map: "idx_affiliate_commissions_org_status")
   @@index([status], map: "idx_affiliate_commissions_status")
   @@index([hubspot_invoice_snapshot_id], map: "idx_affiliate_commissions_invoice_snapshot")
 }
 
-// AffiliatePayoutRequest
-// A payout request submitted by an affiliate for one or more eligible commissions.
-// Lifecycle: requested → under_review → paid  (or rejected at any admin step).
-//            requested → approved → paid  (legacy path kept for backwards compat).
-// The set of commissions included is stored in AffiliatePayoutRequestCommission.
 model AffiliatePayoutRequest {
-  id                    String              @id @default(uuid())
+  id                    String                             @id @default(uuid())
   affiliate_id          String
   affiliate_profile_id  String
-  status                PayoutRequestStatus @default(requested)
-  requested_amount      Decimal             @db.Decimal(14, 2)
-  approved_amount       Decimal?            @db.Decimal(14, 2)
-  paid_amount           Decimal?            @db.Decimal(14, 2)
+  status                PayoutRequestStatus                @default(requested)
+  requested_amount      Decimal                            @db.Decimal(14, 2)
+  approved_amount       Decimal?                           @db.Decimal(14, 2)
   payment_method        PayoutMethod?
   payment_reference     String?
-  transaction_reference String?
-  payment_proof_notes   String?
   approved_by           String?
   approved_at           DateTime?
   paid_at               DateTime?
   rejection_reason      String?
-  reviewed_by           String?
+  createdAt             DateTime                           @default(now())
+  updatedAt             DateTime                           @updatedAt
+  paid_amount           Decimal?                           @db.Decimal(14, 2)
+  payment_proof_notes   String?
   reviewed_at           DateTime?
+  reviewed_by           String?
+  transaction_reference String?
   cancellation_reason   String?
-  cancelled_by          String?
   cancelled_at          DateTime?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  cancelled_by          String?
+  affiliate             USER                               @relation("AffiliatePayoutRequests", fields: [affiliate_id], references: [id])
+  affiliateProfile      AffiliateProfile                   @relation(fields: [affiliate_profile_id], references: [id])
+  approvedBy            USER?                              @relation("PayoutApprovedBy", fields: [approved_by], references: [id])
+  cancelledBy           USER?                              @relation("PayoutCancelledBy", fields: [cancelled_by], references: [id])
+  reviewedBy            USER?                              @relation("PayoutReviewedBy", fields: [reviewed_by], references: [id])
+  commissions           AffiliatePayoutRequestCommission[]
+  notes                 PayoutRequestNote[]
 
-  affiliate        USER                              @relation("AffiliatePayoutRequests", fields: [affiliate_id], references: [id])
-  // Back-relation to AffiliateProfile — enables AffiliateProfile.payoutRequests[]
-  affiliateProfile AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
-  approvedBy       USER?                             @relation("PayoutApprovedBy", fields: [approved_by], references: [id])
-  reviewedBy       USER?                             @relation("PayoutReviewedBy", fields: [reviewed_by], references: [id])
-  cancelledBy      USER?                             @relation("PayoutCancelledBy", fields: [cancelled_by], references: [id])
-  // Junction records linking this request to its selected commissions
-  commissions      AffiliatePayoutRequestCommission[]
-  // Admin + affiliate notes on this request
-  notes            PayoutRequestNote[]
-
-  // Scoped listing: affiliate's payout requests filtered by status
   @@index([affiliate_id, status], map: "idx_affiliate_payout_requests_affiliate_status")
   @@index([status], map: "idx_affiliate_payout_requests_status")
-  // Finance queries: find requests paid in a given period
   @@index([paid_at], map: "idx_affiliate_payout_requests_paid_at")
 }
 
-// PayoutRequestNote
-// Admin-to-admin (internal) or admin-to-affiliate (user) notes attached to a payout request.
 model PayoutRequestNote {
-  id                String            @id @default(uuid())
+  id                String                 @id @default(uuid())
   payout_request_id String
   author_user_id    String?
   type              PayoutNoteType
   content           String
-  createdAt         DateTime          @default(now())
-
-  payoutRequest AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
-  author        USER?                  @relation("PayoutRequestNoteAuthor", fields: [author_user_id], references: [id])
+  createdAt         DateTime               @default(now())
+  author            USER?                  @relation("PayoutRequestNoteAuthor", fields: [author_user_id], references: [id])
+  payoutRequest     AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
 
   @@index([payout_request_id], map: "idx_payout_request_notes_request_id")
 }
 
-// AffiliatePayoutRequestCommission
-// Junction table linking a payout request to the specific commissions it covers.
-// Replaces a simple String[] array to enforce referential integrity and allow JOINs.
-// Cascade delete: removing a payout request also removes its junction records.
 model AffiliatePayoutRequestCommission {
-  id                String   @id @default(uuid())
+  id                String                 @id @default(uuid())
   payout_request_id String
   commission_id     String
-  createdAt         DateTime @default(now())
+  createdAt         DateTime               @default(now())
+  commission        AffiliateCommission    @relation(fields: [commission_id], references: [id])
+  payoutRequest     AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
 
-  payoutRequest AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
-  commission    AffiliateCommission    @relation(fields: [commission_id], references: [id])
-
-  // A commission can only be linked once per payout request
   @@unique([payout_request_id, commission_id], name: "idx_payout_commission_unique")
   @@index([payout_request_id], map: "idx_prc_payout_request_id")
   @@index([commission_id], map: "idx_prc_commission_id")
 }
 
-// MedAllianceAuditLog
-// Append-only audit trail for all Med Alliance state transitions and decisions.
-// Never soft-delete or mutate records. entity_type + entity_id act as a polymorphic
-// reference since Prisma does not support native polymorphic FKs.
-// Required for: admin review queue (MA-006), timeline display, compliance traceability.
 model MedAllianceAuditLog {
   id            String                 @id @default(uuid())
   actor_user_id String?
@@ -891,43 +799,185 @@ model MedAllianceAuditLog {
   source        MedAllianceAuditSource @default(user)
   metadata      Json?
   createdAt     DateTime               @default(now())
+  actorUser     USER?                  @relation("MedAllianceAuditActor", fields: [actor_user_id], references: [id])
 
-  // Actor user relation — null when source is "sync"
-  actorUser USER? @relation("MedAllianceAuditActor", fields: [actor_user_id], references: [id])
-
-  // Composite index for timeline queries: "all events for entity X ordered by time"
   @@index([entity_type, entity_id, createdAt], map: "idx_med_alliance_audit_entity_timeline")
   @@index([actor_user_id], map: "idx_med_alliance_audit_actor")
   @@index([source], map: "idx_med_alliance_audit_source")
 }
 
-// MA-006 — Admin review queue for referrals that require manual intervention
 model MedAllianceAdminReviewCase {
   id              String                @id @default(uuid())
   organization_id String
   reason_code     AdminReviewReasonCode
   status          AdminReviewStatus     @default(open)
-
-  // Contextual payload stored at case-creation time (snapshot of trigger data)
   metadata        Json?
-
-  // Resolution fields — populated when admin closes the case
   resolved_by_id  String?
   resolved_at     DateTime?
-  resolution      String?               // free-form note by the admin
-
+  resolution      String?
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
-
-  // Relations
   organization    Organization          @relation(fields: [organization_id], references: [id])
   resolvedBy      USER?                 @relation("ReviewCaseResolvedBy", fields: [resolved_by_id], references: [id])
 
-  // Deduplication: at most one open case per (org + reason)
   @@unique([organization_id, reason_code, status], name: "uq_open_review_case")
   @@index([organization_id], map: "idx_review_cases_org")
   @@index([status], map: "idx_review_cases_status")
   @@index([reason_code], map: "idx_review_cases_reason_code")
+}
+
+model InvoiceConfiguration {
+  id                               String             @id @default(uuid())
+  organization_id                  String             @unique
+  hubstaff_id                      String?
+  hubspot_id                       String?
+  
+  // Determines whether invoices are issued before or after actual cycle close.
+  billing_mode                     BillingMode        @default(arrears)
+
+  // monthly / biweekly / weekly / custom
+  billing_frequency                BillingFrequency   @default(monthly)
+
+  // Currency for invoices
+  billing_currency                 String             @default("USD")
+
+  // Net terms used when generating due_date
+  payment_terms_days               Int                @default(7)
+
+  // Which day cycle starts for monthly billing (1..28 recommended)
+  cycle_anchor_day                 Int?
+
+  // Whether invoices auto-submit for review after generation
+  auto_submit_invoices            Boolean            @default(false)
+
+  // Whether invoices auto-publish after approval
+  auto_publish_invoices           Boolean            @default(false)
+
+  // Whether Stripe sync should happen on publish
+  auto_sync_to_stripe             Boolean            @default(true)
+
+  // ========================================================================
+  // PREBILLING / RECONCILIATION
+  // ========================================================================
+
+  // Whether reconciliation is required after each billed cycle
+  requires_reconciliation         Boolean            @default(false)
+
+  // How many days after cycle end reconciliation should run
+  reconciliation_delay_days       Int                @default(0)
+
+  // Open credit carried forward to future invoices
+  credit_balance                  Decimal            @db.Decimal(14,2) @default(0)
+
+  // Open debit carried forward to future invoices
+  debit_balance                   Decimal            @db.Decimal(14,2) @default(0)
+
+  // If true, apply available credit automatically to next invoice
+  auto_apply_credits              Boolean            @default(true)
+
+  // ========================================================================
+  // PRICING DEFAULTS
+  // ========================================================================
+
+  default_operations_cost         Decimal?           @db.Decimal(14,2)
+  default_medvirtual_fee          Decimal?           @db.Decimal(14,2)
+
+  // default hourly rate fallback when worker line has none
+  default_hourly_rate             Decimal?           @db.Decimal(14,2)
+
+  // ========================================================================
+  // PAYMENT / COLLECTIONS
+  // ========================================================================
+
+  // Stripe customer id
+  stripe_customer_id              String?            @unique
+
+  // If org can accumulate unpaid balances
+  allow_outstanding_balance       Boolean            @default(true)
+
+  // Pause publishing new invoices if unpaid debt exceeds threshold
+  credit_hold_threshold           Decimal?           @db.Decimal(14,2)
+
+  // ========================================================================
+  // OPERATIONS FLAGS
+  // ========================================================================
+
+  // Show fee components separately on rendered invoice
+  show_fee_breakdown_on_invoice   Boolean            @default(false)
+
+  // Require super admin approval before publish
+  require_super_admin_publish     Boolean            @default(false)
+
+  // ========================================================================
+  // AUDIT / STATUS
+  // ========================================================================
+
+  billing_notes                   String?
+
+  billing_activated_at            DateTime?
+  billing_paused_at               DateTime?
+  
+  createdAt                       DateTime           @default(now())
+  updatedAt                       DateTime           @updatedAt
+
+  organization                    Organization       @relation(fields: [organization_id], references: [id])
+
+  @@index([organization_id], map: "idx_invoice_configurations_org_id")
+  @@index([stripe_customer_id], map: "idx_invoice_configurations_stripe_id")
+}
+
+model Contact {
+  id               String        @id
+  user_id          String?       @unique
+  hubspot_id       String?       @unique
+  first_name       String?
+  last_name        String?
+  email            String?
+  phone            String?
+  job_title        String?
+  company_name     String?
+  business_unit    String?
+  account_type     String?
+  website_url      String?
+  type             String?
+  referral_source  String?
+  hubspot_owner_id String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime
+  organization_id  String?
+  Organization     Organization? @relation(fields: [organization_id], references: [id])
+  USER             USER?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([email], map: "idx_contacts_email")
+  @@index([hubspot_id], map: "idx_contacts_hubspot_id")
+  @@index([organization_id], map: "idx_contacts_organization_id")
+  @@index([user_id], map: "idx_contacts_user_id")
+}
+
+model HubspotAuditLog {
+  id                  String             @id
+  actor_user_id       String?
+  actor_label         String?
+  entity_type         HubspotEntityType
+  entity_id           String
+  hubspot_object_id   String?
+  hubspot_object_type String
+  action              HubspotAuditAction
+  source              HubspotAuditSource @default(user_action)
+  success             Boolean
+  payload             Json?
+  response            Json?
+  error_code          String?
+  error_message       String?
+  createdAt           DateTime           @default(now())
+  USER                USER?              @relation(fields: [actor_user_id], references: [id])
+
+  @@index([actor_user_id], map: "idx_hs_audit_actor")
+  @@index([actor_label], map: "idx_hs_audit_actor_label")
+  @@index([createdAt], map: "idx_hs_audit_created_at")
+  @@index([entity_type, entity_id, createdAt], map: "idx_hs_audit_entity_timeline")
+  @@index([source], map: "idx_hs_audit_source")
+  @@index([success], map: "idx_hs_audit_success")
 }
 
 enum Role {
@@ -1045,7 +1095,6 @@ enum Priority_new {
   URGENT
 }
 
-// ============== here I started with MED ALLIANCE enums ==========================
 enum AffiliateStatus {
   active
   inactive
@@ -1072,10 +1121,10 @@ enum CommissionStatus {
 
 enum PayoutRequestStatus {
   requested
-  under_review
   approved
   rejected
   paid
+  under_review
   cancelled
 }
 
@@ -1088,6 +1137,7 @@ enum MedAllianceAuditSource {
   user
   sync
   admin_action
+  cron
 }
 
 enum MedAllianceEntityType {
@@ -1096,23 +1146,67 @@ enum MedAllianceEntityType {
   payout_request
 }
 
-// Eligibility status within the Med Alliance affiliate program.
-// Only populated on Organization records that have referred_by_affiliate_id set.
-// Does NOT affect OrganizationStatus — these are independent concerns.
 enum MedAllianceReferralStatus {
   eligible
+  not_eligible_active_client
+  needs_admin_review
   not_eligible
 }
 
-// MA-006 — Reason why a review case was opened
 enum AdminReviewReasonCode {
-  multiple_hubspot_matches        // HubSpot returned 2+ company matches — admin must pick the correct one
-  reconciliation_invoice_changed  // A paid invoice was updated in HubSpot after commission was already detected
-  soft_duplicate_referral         // A referred org appears to match an existing referred org (name/email similarity)
+  multiple_hubspot_matches
+  reconciliation_invoice_changed
+  soft_duplicate_referral
 }
 
-// MA-006 — Lifecycle status of an admin review case
 enum AdminReviewStatus {
   open
   resolved
+}
+
+enum BillingMode {
+  arrears
+  prebill
+}
+
+enum BillingFrequency {
+  weekly
+  biweekly
+  monthly
+  custom
+}
+
+enum HubspotAuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  SYNC
+  BATCH_UPDATE
+}
+
+enum HubspotAuditSource {
+  user_action
+  cron
+  webhook
+  bulk_sync
+}
+
+enum HubspotEntityType {
+  candidate
+  hire_request
+  organization
+  contact
+  affiliate
+  deal
+  owner
+  invoice
+}
+
+enum ReferralStage {
+  referred
+  contacted
+  in_negotiation
+  contract_signed
+  deployed
+  churned
 }
