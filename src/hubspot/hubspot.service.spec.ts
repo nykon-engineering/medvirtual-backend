@@ -28,6 +28,7 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
+import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
 
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
@@ -50,6 +51,7 @@ import { CompanyDeleteService } from './delete/company';
 import { HandlerContactCreation } from './handlers/contactCreation';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
 import { HubspotAuditService } from './hubspot-audit.service';
+
 
 
 
@@ -181,6 +183,10 @@ const HandlerAffiliateCreationMock = {
 };
 
 const HandlerAffiliatePropertyChangeMock = {
+  execute: jest.fn(),
+};
+
+const HandlerAffiliateDeletionMock = {
   execute: jest.fn(),
 };
 
@@ -316,6 +322,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: CompanyDeleteService, useValue: companyDeleteServiceMock},
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
         {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
+        {provide: HandlerAffiliateDeletion, useValue: HandlerAffiliateDeletionMock},
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
         {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
         {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
@@ -402,6 +409,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: CompanyDeleteService, useValue: companyDeleteServiceMock},
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
         {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
+        {provide: HandlerAffiliateDeletion, useValue: HandlerAffiliateDeletionMock},
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
         {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
         {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},

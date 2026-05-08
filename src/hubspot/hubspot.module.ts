@@ -33,6 +33,7 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
+import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
 
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
@@ -63,11 +64,6 @@ import { HubspotAuditService } from './hubspot-audit.service';
 
 
 
-
-
-
-
-
 @Module({
   controllers: [HubspotController],
   providers: [HubspotService, 
@@ -92,6 +88,7 @@ import { HubspotAuditService } from './hubspot-audit.service';
     HandlerTicketDeletion,
     HandlerTicketPropertyChange,
     HandlerAffiliateCreation,
+    HandlerAffiliateDeletion,
     HandlerAffiliatePropertyChange,
     HireRequestCreationService,
     HireRequestUpdateService,

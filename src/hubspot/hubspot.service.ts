@@ -48,13 +48,14 @@ import { CompanyDeleteService } from './delete/company';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
+import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
 
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
 import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
 import { HandlerContactCreation } from './handlers/contactCreation';
-import { Handler } from 'aws-lambda';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+
 
 
 
@@ -105,6 +106,7 @@ export class HubspotService {
 
       private readonly affiliateCreation: HandlerAffiliateCreation,
       private readonly affiliatePropertyChange: HandlerAffiliatePropertyChange,
+      private readonly affiliateDeletion: HandlerAffiliateDeletion,
 
       private readonly invoiceCreation: HandlerInvoiceCreation,
       private readonly invoicePropertyChange: HandlerInvoicePropertyChange,
@@ -232,6 +234,8 @@ export class HubspotService {
                     case 'object.deletion':
                         if (event.objectTypeId ==="2-5922196") {
                             await this.objectDeletion.execute(event);
+                        }else if (event.objectTypeId === "2-54072002") {
+                            await this.affiliateDeletion.execute(event);
                         }
                         break;
 
