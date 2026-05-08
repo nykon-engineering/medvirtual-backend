@@ -322,7 +322,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
 
             ownerEmail = emailPool[Math.floor(Math.random() * emailPool.length)];
           }
-
+          //console.log('Selected HubSpot owner email:', ownerEmail);
           const ownerId = await this.getOwnerId(ownerEmail);
 
           const existingCandidate = await this.prisma.candidate.findUnique({
@@ -349,7 +349,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
                 ...(createDto.candidate_id ? { 
                   qualification_status: 'Demo Done',
                   candidate_selected: 'Yes',
-                  selected_candidate_information: `Candidate: ${selectedCandidateInfo}`,
+                  selected_candidate_information: selectedCandidateInfo,
                  } : {
                   qualification_status: 'New Leads Day 1',
                  }),
