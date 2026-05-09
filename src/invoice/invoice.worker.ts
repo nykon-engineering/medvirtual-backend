@@ -1,21 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Job } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { HubstaffService } from '../hubstaff/hubstaff.service';
 import { PusherService } from '../pusher/pusher.service';
 import { InvoiceJobStatus, InvoiceStatus, InvoiceVersionStatus, InvoiceLineType, InvoiceLineCategory, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
+@Processor('invoice')
 @Injectable()
-export class InvoiceWorker {
+export class InvoiceWorker extends WorkerHost {
   private readonly logger = new Logger(InvoiceWorker.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly hubstaff: HubstaffService,
     private readonly pusher: PusherService,
-  ) { }
+  ) {
+    super();
+  }
 
-  async execute(payload: any) {
+  async process(job: Job<any, any, string>): Promise<any> {
+    const payload = job.data;
     const { job_id, organization_id, billing_start_date, billing_end_date, created_by, is_prebill } = payload;
 
     try {

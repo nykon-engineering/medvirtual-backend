@@ -57,7 +57,7 @@ export const handler = async (event: SQSEvent) => {
         break;
       case 'GENERATE_INVOICE':
         console.log(`Generating invoice for org ${payload.organization_id} (Job: ${payload.job_id})`);
-        await invoiceWorker.execute(payload);
+        await invoiceWorker.process({ data: payload } as any);
         break;
       default:
         console.warn('Event not handled:', payload);

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -28,6 +28,7 @@ import { PositionRateConfigModule } from './position-rate-config/position-rate-c
 import { MedAllianceModule } from './med-alliance/med-alliance.module';
 import { SecretsModule } from './secrets/secrets.module';
 import { HubstaffModule } from './hubstaff/hubstaff.module';
+import { BullModule } from '@nestjs/bullmq';
 import { RedisModule } from './redis/redis.module';
 import { PusherModule } from './pusher/pusher.module';
 import { InvoiceModule } from './invoice/invoice.module';
@@ -36,6 +37,17 @@ import { InvoiceModule } from './invoice/invoice.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+          password: configService.get<string>('REDIS_PASSWORD'),
+          username: configService.get<string>('REDIS_USERNAME', 'basic'),
+        },
+      }),
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000, // 1 minute

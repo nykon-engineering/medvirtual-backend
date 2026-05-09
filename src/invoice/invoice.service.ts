@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SqsService } from '../sqs/sqs.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { CreateInvoiceDto, BulkCreateInvoiceDto } from './dto/create-invoice.dto';
 import { InvoiceJobStatus } from '@prisma/client';
@@ -9,15 +10,12 @@ import { v4 as uuidv4 } from 'uuid';
 @Injectable()
 export class InvoiceService {
   private readonly logger = new Logger(InvoiceService.name);
-  private readonly queueUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sqsService: SqsService,
+    @InjectQueue('invoice') private readonly invoiceQueue: Queue,
     private readonly configService: ConfigService,
-  ) {
-    this.queueUrl = this.configService.get<string>('SQS_INVOICE_QUEUE_URL') || '';
-  }
+  ) {}
 
   async createInvoice(dto: CreateInvoiceDto, userId: string) {
     // 1. Idempotency Check: Check if invoice already exists for this cycle
@@ -107,19 +105,15 @@ export class InvoiceService {
   }
 
   private async sendToQueue(message: any) {
-    if (!this.queueUrl) {
-      this.logger.error('SQS_INVOICE_QUEUE_URL is not defined in environment variables');
-      throw new Error('Queue configuration missing');
-    }
-
     try {
-      await this.sqsService.sendMessage({
-        QueueUrl: this.queueUrl,
-        MessageBody: { ...message, Type: 'GENERATE_INVOICE' },
+      await this.invoiceQueue.add('generate-invoice', message, {
+        jobId: message.idempotency_key, // Use idempotency key as job ID to prevent duplicates
+        removeOnComplete: true,
+        removeOnFail: false,
       });
-      this.logger.log(`Sent invoice task to queue for job ${message.job_id} / org ${message.organization_id}`);
+      this.logger.log(`Sent invoice task to BullMQ for job ${message.job_id} / org ${message.organization_id}`);
     } catch (error) {
-      this.logger.error(`Failed to send message to SQS: ${error.message}`);
+      this.logger.error(`Failed to send message to BullMQ: ${error.message}`);
       throw error;
     }
   }
