@@ -6,6 +6,7 @@ import { HubstaffService } from '../hubstaff/hubstaff.service';
 import { PusherService } from '../pusher/pusher.service';
 import { InvoiceJobStatus, InvoiceStatus, InvoiceVersionStatus, InvoiceLineType, InvoiceLineCategory, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import { DateTime } from 'luxon';
 
 @Processor('invoice')
 @Injectable()
@@ -18,6 +19,21 @@ export class InvoiceWorker extends WorkerHost {
     private readonly pusher: PusherService,
   ) {
     super();
+  }
+
+  private generateReference(date: Date = new Date(), customSuffix?: string): string {
+    const suffix = customSuffix || this.generateRandomString(5);
+    const dateVal = DateTime.fromJSDate(date).toFormat("yyyyLLdd-hh-mm");
+    return `${dateVal}-${suffix.toUpperCase()}`;
+  }
+
+  private generateRandomString(length: number): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
@@ -37,24 +53,7 @@ export class InvoiceWorker extends WorkerHost {
         timestamp: new Date().toISOString(),
       });
 
-      // 2. Concurrency / Idempotency Check (Double Check)
-      const existingInvoice = await this.prisma.invoice.findUnique({
-        where: {
-          uq_invoice_cycle: {
-            organization_id,
-            billing_start_date: new Date(billing_start_date),
-            billing_end_date: new Date(billing_end_date),
-          },
-        },
-      });
-
-      if (existingInvoice) {
-        this.logger.warn(`Invoice already exists for org ${organization_id} cycle ${billing_start_date} - ${billing_end_date}. Skipping.`);
-        await this.completeJob(job_id, created_by, [existingInvoice.id]);
-        return;
-      }
-
-      // 3. Fetch Organization & Configuration
+      // 2. Fetch Organization & Configuration
       const org = await this.prisma.organization.findUnique({
         where: { id: organization_id },
         include: { invoiceConfiguration: true },
@@ -105,12 +104,17 @@ export class InvoiceWorker extends WorkerHost {
     } = payload;
     const hubstaffId = org.invoiceConfiguration.hubstaff_id;
 
+    // Fetch project members to get names for snapshots
+    const members = await this.hubstaff.getProjectMembers(hubstaffId);
+    const memberMap = new Map<number, string>(
+      members.map((m: any) => [m.user_id, m.name])
+    );
+
     // Aggregate by user
     const userSummary = new Map<number, { tracked: number; overall: number }>();
 
     if (is_prebill) {
       // Pre-bill logic: Assume 8hrs per day for all project members
-      const members = await this.hubstaff.getProjectMembers(hubstaffId);
       const startDate = new Date(billing_start_date);
       const endDate = new Date(billing_end_date);
       const days = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
@@ -144,6 +148,11 @@ export class InvoiceWorker extends WorkerHost {
           tracked: current.tracked + act.total_time_logged,
           overall: current.overall + act.overall,
         });
+
+        // Use sideloaded user name if available to populate/update memberMap
+        if (act.user_name) {
+          memberMap.set(act.user_id, act.user_name);
+        }
       });
     }
 
@@ -156,6 +165,7 @@ export class InvoiceWorker extends WorkerHost {
           created_by,
           billing_start_date: new Date(billing_start_date),
           billing_end_date: new Date(billing_end_date),
+          reference: this.generateReference(),
         },
       });
 
@@ -186,14 +196,18 @@ export class InvoiceWorker extends WorkerHost {
         const hourlyRate = new Decimal(25); // Placeholder: Should fetch from Expert/Staff record
         const lineTotal = hours.mul(hourlyRate);
 
+        const memberName = memberMap.get(userId) || `Hubstaff User ${userId}`;
+
         await tx.invoiceLineItem.create({
           data: {
             invoice_version_id: version.id,
             worker_id: userId.toString(),
+            worker_name_snapshot: memberName,
             type: InvoiceLineType.primary,
             category: InvoiceLineCategory.hourly_service,
-            description: `Hourly services for Hubstaff User ${userId}`,
+            description: `Hourly services for ${memberName}`,
             effective_worked_hours: hours,
+            total_hours_worked: hours,
             total_hours_payable: hours,
             hourly_rate: hourlyRate,
             final_total: lineTotal,

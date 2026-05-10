@@ -28,6 +28,7 @@ export interface ActivityAttributes {
   screenshots: any[];
   total_time_logged: number;
   user_id: number;
+  user_name?: string;
   created_at?: Date;
   updated_at?: Date;
 }
@@ -401,12 +402,13 @@ export class HubstaffService implements OnModuleInit {
       >[] = [];
       let nextCursor: string | null = "yes";
       while (nextCursor) {
-        let q = `page_limit=500&date[start]=${start_date}&date[stop]=${end_date}`;
+        let q = `page_limit=500&include=users&date[start]=${start_date}&date[stop]=${end_date}`;
         if (nextCursor && nextCursor !== "yes") {
           q += `&page_start_id=${nextCursor}`;
         }
         const res = await this.hubstaffRequest<{
           daily_activities: IncomingActivityInterface[];
+          users?: { id: number; name: string }[];
           pagination: { next_page_start_id: string };
         }>(
           "get",
@@ -414,6 +416,9 @@ export class HubstaffService implements OnModuleInit {
         );
 
         const data = res.data;
+        const userMap = new Map<number, string>(
+          data.users?.map((u) => [u.id, u.name]) || []
+        );
 
         activities.push(
           ...data.daily_activities.map((activity) => ({
@@ -428,6 +433,7 @@ export class HubstaffService implements OnModuleInit {
             screenshots: [],
             total_time_logged: activity.tracked,
             user_id: activity.user_id,
+            user_name: userMap.get(activity.user_id),
           })),
         );
         if (data.pagination) {
