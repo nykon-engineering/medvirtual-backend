@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { InvoiceService } from './invoice.service';
 import { InvoiceController } from './invoice.controller';
 import { InvoiceWorker } from './invoice.worker';
+import { InvoiceStatsWorker } from './invoice-stats.worker';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PusherModule } from '../pusher/pusher.module';
 import { HubstaffModule } from '../hubstaff/hubstaff.module';
@@ -12,12 +13,13 @@ import { HubstaffModule } from '../hubstaff/hubstaff.module';
     PrismaModule,
     PusherModule,
     HubstaffModule,
-    BullModule.registerQueue({
-      name: 'invoice',
-    }),
+    BullModule.registerQueue(
+      { name: 'invoice' },
+      { name: 'invoice-stats' }
+    ),
   ],
   controllers: [InvoiceController],
-  providers: [InvoiceService, InvoiceWorker],
-  exports: [InvoiceService, InvoiceWorker],
+  providers: [InvoiceService, InvoiceWorker, InvoiceStatsWorker],
+  exports: [InvoiceService, InvoiceWorker, InvoiceStatsWorker],
 })
 export class InvoiceModule {}

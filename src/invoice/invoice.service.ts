@@ -4,9 +4,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { CreateInvoiceDto, BulkCreateInvoiceDto } from './dto/create-invoice.dto';
-import { InvoiceJobStatus, Prisma } from '@prisma/client';
+import { InvoiceJobStatus, InvoiceStatus, Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
+import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
+import { Decimal } from '@prisma/client/runtime/library';
 
 @Injectable()
 export class InvoiceService {
@@ -16,7 +18,7 @@ export class InvoiceService {
     private readonly prisma: PrismaService,
     @InjectQueue('invoice') private readonly invoiceQueue: Queue,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async createInvoice(dto: CreateInvoiceDto, userId: string) {
     // 1. Idempotency Check: Prevent duplicate jobs within 60 seconds
@@ -146,11 +148,21 @@ export class InvoiceService {
   }
 
   async findAll(query: ListInvoicesDto) {
-    const { status, search } = query;
+    const { status, search, organizationIds, billingMode } = query;
     const where: Prisma.InvoiceWhereInput = {};
 
     if (status) {
       where.status = status;
+    }
+
+    if (organizationIds && organizationIds.length > 0) {
+      where.organization_id = { in: organizationIds };
+    }
+
+    if (billingMode) {
+      where.currentVersion = {
+        is_prebill: billingMode === 'prebill',
+      };
     }
 
     if (search) {
@@ -173,6 +185,263 @@ export class InvoiceService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getStats(query: ListInvoicesDto) {
+    const { search, organizationIds, billingMode } = query;
+    const where: Prisma.InvoiceWhereInput = {};
+
+    if (organizationIds && organizationIds.length > 0) {
+      where.organization_id = { in: organizationIds };
+    }
+
+    if (billingMode) {
+      where.currentVersion = {
+        is_prebill: billingMode === 'prebill',
+      };
+    }
+
+    if (search) {
+      where.OR = [
+        { reference: { contains: search, mode: 'insensitive' } },
+        { invoice_number: { contains: search, mode: 'insensitive' } },
+        { organization: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    // Get counts per status
+    const counts = await this.prisma.invoice.groupBy({
+      by: ['status'],
+      where,
+      _count: {
+        id: true,
+      },
+    });
+
+    // Get total revenue (paid + partially_paid)
+    const revenueInvoices = await this.prisma.invoice.findMany({
+      where: {
+        ...where,
+        status: { in: [InvoiceStatus.paid, InvoiceStatus.partially_paid] },
+      },
+      select: {
+        currentVersion: {
+          select: {
+            total: true,
+          },
+        },
+      },
+    });
+
+    const totalRevenue = revenueInvoices.reduce((sum, inv) => {
+      const val = inv.currentVersion?.total || 0;
+      return sum.add(new Decimal(val.toString()));
+    }, new Decimal(0));
+
+    // Format counts into a nice object
+    const statusCounts = Object.values(InvoiceStatus).reduce((acc, status) => {
+      const match = counts.find((c) => c.status === status);
+      acc[status] = match ? match._count.id : 0;
+      return acc;
+    }, {} as Record<InvoiceStatus, number>);
+
+    return {
+      statusCounts,
+      totalRevenue: totalRevenue.toNumber(),
+    };
+  }
+
+  async updateStatus(id: string, status: InvoiceStatus, userId: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+    });
+
+    if (!invoice) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const oldStatus = invoice.status;
+    const dataToUpdate: Prisma.InvoiceUncheckedUpdateInput = {
+      status,
+    };
+
+    // Generate invoice number on approval if not already set
+    if (status === InvoiceStatus.approved && !invoice.invoice_number) {
+      const invoiceNumber = await this.generateNextInvoiceNumber();
+      dataToUpdate.invoice_number = invoiceNumber;
+
+      // Replace the 5 random characters at the end of the reference with the invoice number
+      if (invoice.reference && invoice.reference.length > 5) {
+        const baseRef = invoice.reference.substring(0, invoice.reference.length - 5);
+        dataToUpdate.reference = `${baseRef}${invoiceNumber}`;
+      }
+    }
+
+    if (status === InvoiceStatus.voided) {
+      dataToUpdate.voided_by = userId;
+      dataToUpdate.voidedAt = new Date();
+    }
+
+    // Placeholder for extra actions when publishing
+    if (status === InvoiceStatus.published) {
+      // TODO: Add logic for publishing (e.g., generate final invoice number, notify client)
+    }
+
+    const updatedInvoice = await this.prisma.invoice.update({
+      where: { id },
+      data: dataToUpdate,
+      include: {
+        currentVersion: true,
+        organization: true,
+      },
+    });
+
+    // Create Audit Log
+    await this.prisma.invoiceAuditLog.create({
+      data: {
+        invoice_id: id,
+        actor_id: userId,
+        event: 'status_updated',
+        old_value: { status: oldStatus } as any,
+        new_value: { ...dataToUpdate } as any,
+      },
+    });
+
+    return updatedInvoice;
+  }
+
+  private async generateNextInvoiceNumber(): Promise<string> {
+    try {
+      const result = await this.prisma.$queryRawUnsafe<{ nextval: bigint }[]>(
+        `SELECT nextval('invoice_number_seq')`,
+      );
+      return result[0].nextval.toString().padStart(5, '0');
+    } catch (error) {
+      // If sequence doesn't exist, create it and retry
+      if (error.message.includes('does not exist')) {
+        await this.prisma.$executeRawUnsafe(
+          `CREATE SEQUENCE invoice_number_seq START 1`,
+        );
+        const result = await this.prisma.$queryRawUnsafe<{ nextval: bigint }[]>(
+          `SELECT nextval('invoice_number_seq')`,
+        );
+        return result[0].nextval.toString().padStart(5, '0');
+      }
+      throw error;
+    }
+  }
+
+  async bulkUpdateStatus(ids: string[], status: InvoiceStatus, userId: string) {
+    const results = await Promise.all(
+      ids.map((id) =>
+        this.updateStatus(id, status, userId)
+          .then((inv) => ({ id, status: 'success', invoice: inv }))
+          .catch((err) => ({ id, status: 'error', message: err.message })),
+      ),
+    );
+
+    const success_count = results.filter((r) => r.status === 'success').length;
+
+    return {
+      total: ids.length,
+      success_count,
+      failed_count: ids.length - success_count,
+      results,
+    };
+  }
+
+  async createVersion(id: string, dto: UpdateInvoiceVersionDto, userId: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        currentVersion: true,
+      },
+    });
+
+    if (!invoice) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    // Get the latest version number
+    const latestVersion = await this.prisma.invoiceVersion.findFirst({
+      where: { invoice_id: id },
+      orderBy: { version_number: 'desc' },
+    });
+
+    const nextVersionNumber = (latestVersion?.version_number || 0) + 1;
+
+    // Create the new version
+    const newVersion = await this.prisma.invoiceVersion.create({
+      data: {
+        invoice_id: id,
+        version_number: nextVersionNumber,
+        status: invoice.currentVersion?.status || 'draft',
+        currency: dto.currency || invoice.currentVersion?.currency || 'USD',
+        subtotal: dto.subtotal,
+        tax_total: dto.tax_total,
+        total: dto.total,
+        notes: dto.notes,
+        created_by: userId,
+        // Inherit dates from current version if not provided
+        issue_date: invoice.currentVersion?.issue_date,
+        due_date: invoice.currentVersion?.due_date,
+        public_due_date: invoice.currentVersion?.public_due_date,
+        billing_start_date: invoice.currentVersion?.billing_start_date,
+        billing_end_date: invoice.currentVersion?.billing_end_date,
+        is_prebill: invoice.currentVersion?.is_prebill || false,
+      },
+    });
+
+    // Handle line items with parent mapping
+    // We use a mapping to translate the IDs sent from the client to the new database IDs
+    const idMapping = new Map<string, string>();
+
+    for (const itemDto of dto.line_items) {
+      const { id: clientSideId, parent_line_item_id, ...itemData } = itemDto;
+
+      const createdItem = await this.prisma.invoiceLineItem.create({
+        data: {
+          ...itemData,
+          invoice_version_id: newVersion.id,
+          parent_line_item_id,
+          created_by: userId,
+        },
+      });
+
+      // Map the client-side ID to the new database ID for potential children
+      if (clientSideId) {
+        idMapping.set(clientSideId, createdItem.id);
+      }
+    }
+
+    // Update the invoice to point to the new version
+    const updatedInvoice = await this.prisma.invoice.update({
+      where: { id },
+      data: {
+        current_version_id: newVersion.id,
+      },
+      include: {
+        currentVersion: {
+          include: {
+            line_items: true,
+          },
+        },
+        organization: true,
+      },
+    });
+
+    // Audit Log
+    await this.prisma.invoiceAuditLog.create({
+      data: {
+        invoice_id: id,
+        invoice_version_id: newVersion.id,
+        actor_id: userId,
+        event: 'version_updated',
+        new_value: { version_number: nextVersionNumber } as any,
+      },
+    });
+
+    return updatedInvoice;
   }
 
   async findOne(id: string) {

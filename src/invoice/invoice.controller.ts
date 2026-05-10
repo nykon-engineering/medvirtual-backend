@@ -1,8 +1,11 @@
-import { Controller, Post, Body, UseGuards, HttpCode, Get, Param, Query } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, Get, Param, Query, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto, BulkCreateInvoiceDto } from './dto/create-invoice.dto';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
+import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
+import { BulkUpdateInvoiceStatusDto } from './dto/bulk-update-invoice-status.dto';
+import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -40,6 +43,13 @@ export class InvoiceController {
     return await this.invoiceService.findAll(query);
   }
 
+  @Get('stats')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Get invoice statistics' })
+  async getStats(@Query() query: ListInvoicesDto) {
+    return await this.invoiceService.getStats(query);
+  }
+
   @Get(':id')
   @Roles('system_admin', 'system_super_admin')
   @ApiOperation({ summary: 'Fetch a single invoice by ID' })
@@ -52,5 +62,37 @@ export class InvoiceController {
   @ApiOperation({ summary: 'Fetch all versions of an invoice' })
   async findVersions(@Param('id') id: string) {
     return await this.invoiceService.findVersions(id);
+  }
+
+  @Patch(':id/status')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Update invoice status' })
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateInvoiceStatusDto,
+    @CurrentUser() user: USER,
+  ) {
+    return await this.invoiceService.updateStatus(id, dto.status, user.id);
+  }
+
+  @Patch('bulk-status')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Bulk update invoice statuses' })
+  async bulkUpdateStatus(
+    @Body() dto: BulkUpdateInvoiceStatusDto,
+    @CurrentUser() user: USER,
+  ) {
+    return await this.invoiceService.bulkUpdateStatus(dto.ids, dto.status, user.id);
+  }
+
+  @Post(':id/version')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Create a new version of an invoice' })
+  async createVersion(
+    @Param('id') id: string,
+    @Body() dto: UpdateInvoiceVersionDto,
+    @CurrentUser() user: USER,
+  ) {
+    return await this.invoiceService.createVersion(id, dto, user.id);
   }
 }
