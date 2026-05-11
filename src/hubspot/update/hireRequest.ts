@@ -161,9 +161,10 @@ export class HireRequestUpdateService {
                   data.hubspot_pairing_time
                 : undefined;
 
+              //if we dont have salry range, we shouldnt update the field on hubspot.
               hubspotProperties.va_pay_rate_range = data.salary_range_from && data.salary_range_to
               ? `${data.salary_range_from} - ${data.salary_range_to}`
-              : '';
+              : undefined;
             }
 
             //remove hubspot_pipeline and hubspot_pipeline_stage because we cannot update them using this endpoint, they are updated using the stage change endpoint
