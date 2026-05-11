@@ -493,6 +493,7 @@ export class ReferredCompaniesService {
       const { affiliateCommissions: _, _count: __, eligibility_start_at, ...rest } = org;
       return {
         ...rest,
+        eligibility_start_at,
         med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
         total_paid,
         total_pending,
