@@ -10,7 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AffiliatesService } from './affiliates.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
@@ -45,6 +45,7 @@ export class AffiliatesController {
   @HttpCode(201)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Create a new affiliate profile for an existing platform user' })
+  @ApiBody({ type: CreateAffiliateProfileDto })
   @ApiResponse({ status: 201, description: 'Affiliate profile created successfully' })
   @ApiResponse({ status: 400, description: 'Validation error or user already has an affiliate profile' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -61,6 +62,7 @@ export class AffiliatesController {
   @HttpCode(201)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Create a new platform user and their affiliate profile in a single step for manual enrollments' })
+  @ApiBody({ type: CreateUserAndAffiliateProfileDto })
   @ApiResponse({ status: 201, description: 'User and affiliate profile created successfully' })
   @ApiResponse({ status: 400, description: 'Validation error or email already in use' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -77,6 +79,7 @@ export class AffiliatesController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'List all affiliate profiles with filtering, search, and pagination' })
+  @ApiQuery({ type: ListAffiliatesDto })
   @ApiResponse({ status: 200, description: 'Affiliate profiles retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAll(@Query() query: ListAffiliatesDto) {
@@ -300,6 +303,7 @@ export class AffiliatesController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Invite a new user and link them to an existing affiliate profile that has no connected user' })
   @ApiParam({ name: 'id', description: 'Affiliate profile UUID' })
+  @ApiBody({ type: InviteUserForAffiliateDto })
   @ApiResponse({ status: 201, description: 'User invited and linked to affiliate successfully' })
   @ApiResponse({ status: 404, description: 'Affiliate profile not found' })
   @ApiResponse({ status: 400, description: 'Affiliate already has a linked user' })
@@ -375,6 +379,7 @@ export class AffiliatesController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Update an affiliate profile (admin full access including commission rate and status)' })
   @ApiParam({ name: 'id', description: 'Affiliate profile UUID' })
+  @ApiBody({ type: UpdateAffiliateProfileDto })
   @ApiResponse({ status: 200, description: 'Affiliate profile updated successfully' })
   @ApiResponse({ status: 404, description: 'Affiliate profile not found' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -392,6 +397,7 @@ export class AffiliatesController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Link an affiliate\'s associated user to a specific platform organization' })
   @ApiParam({ name: 'id', description: 'Affiliate profile UUID' })
+  @ApiBody({ type: LinkOrganizationDto })
   @ApiResponse({ status: 200, description: 'Organization linked successfully' })
   @ApiResponse({ status: 404, description: 'Affiliate profile or organization not found' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -412,6 +418,7 @@ export class AffiliatesController {
   @HttpCode(201)
   @Roles(...ORGANIZATION_ROLES)
   @ApiOperation({ summary: 'Self-enroll as an affiliate in the Med Alliance program (organization admins)' })
+  @ApiBody({ type: JoinProgramDto })
   @ApiResponse({ status: 201, description: 'Successfully enrolled in the affiliate program' })
   @ApiResponse({ status: 400, description: 'Already enrolled or not eligible' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -449,6 +456,7 @@ export class AffiliatesController {
   @HttpCode(200)
   @Roles(...ORGANIZATION_ROLES, ...AFFILIATE_ROLES)
   @ApiOperation({ summary: 'Update own payout preferences including payment method and banking details' })
+  @ApiBody({ type: UpdateAffiliatePayoutPreferencesDto })
   @ApiResponse({ status: 200, description: 'Payout preferences updated successfully' })
   @ApiResponse({ status: 404, description: 'Affiliate profile not found for current user' })
   async updateOwn(

@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ReviewCasesService } from './review-cases.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
@@ -31,6 +31,7 @@ export class ReviewCasesController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Get a paginated list of review cases that require admin attention' })
+  @ApiQuery({ type: ListReviewCasesDto })
   @ApiResponse({ status: 200, description: 'Review cases retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAll(@Query() query: ListReviewCasesDto) {
@@ -58,6 +59,7 @@ export class ReviewCasesController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Resolve a review case with a resolution note and optional corrective action' })
   @ApiParam({ name: 'id', description: 'Review case UUID' })
+  @ApiBody({ type: ResolveReviewCaseDto })
   @ApiResponse({ status: 200, description: 'Review case resolved successfully' })
   @ApiResponse({ status: 404, description: 'Review case not found' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })

@@ -21,7 +21,7 @@ import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('med-alliance')
 @ApiBearerAuth()
@@ -44,6 +44,7 @@ export class ReferredCompaniesController {
   // Any user can submit a referral, because the button on frontend only appears for the correct ones
   //@Roles(...AFFILIATE_ROLES, ...ADMIN_ROLES)
   @ApiOperation({ summary: 'Submit a new company referral to the Med Alliance program' })
+  @ApiBody({ type: CreateReferredCompanyDto })
   @ApiResponse({ status: 201, description: 'Referred company created successfully' })
   @ApiResponse({ status: 400, description: 'Validation error or duplicate referral' })
   async create(
@@ -59,6 +60,7 @@ export class ReferredCompaniesController {
   @HttpCode(200)
   @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
   @ApiOperation({ summary: 'List all company referrals submitted by the current affiliate' })
+  @ApiQuery({ type: ListReferredCompaniesDto })
   @ApiResponse({ status: 200, description: 'Referred companies retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAll(
@@ -91,6 +93,7 @@ export class ReferredCompaniesController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'List all referred companies across all affiliates for admin pipeline management' })
+  @ApiQuery({ type: ListReferredCompaniesDto })
   @ApiResponse({ status: 200, description: 'Referred companies retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAllAdmin(@Query() query: ListReferredCompaniesDto) {
@@ -118,6 +121,7 @@ export class ReferredCompaniesController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Move a referred company to a new referral pipeline stage' })
   @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
+  @ApiBody({ type: UpdateReferralStageDto })
   @ApiResponse({ status: 200, description: 'Pipeline stage updated successfully' })
   @ApiResponse({ status: 404, description: 'Referred company not found' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })

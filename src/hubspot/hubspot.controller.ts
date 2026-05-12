@@ -1,5 +1,5 @@
 import { Controller, Post, UseGuards, HttpCode, Body, Get, Query, Param } from '@nestjs/common';
-import { ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 import { HubspotService } from './hubspot.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -8,6 +8,7 @@ import { Roles } from '../auth/roles.decorator';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
 
 @ApiTags('hubspot')
+@ApiBearerAuth()
 @Controller('hubspot')
 export class HubspotController {
 

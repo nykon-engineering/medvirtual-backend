@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CommissionsService } from './commissions.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
@@ -35,6 +35,7 @@ export class CommissionsController {
   @HttpCode(200)
   @Roles(...AFFILIATE_ROLES, ...ORGANIZATION_ROLES)
   @ApiOperation({ summary: 'List commissions for the current affiliate with filtering and pagination' })
+  @ApiQuery({ type: ListCommissionsDto })
   @ApiResponse({ status: 200, description: 'Commissions retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAll(@Query() query: ListCommissionsDto, @CurrentUser() user: USER) {
@@ -65,6 +66,7 @@ export class CommissionsController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'List all commissions across all affiliates for admin review' })
+  @ApiQuery({ type: ListCommissionsDto })
   @ApiResponse({ status: 200, description: 'Commissions retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async findAllAdmin(@Query() query: ListCommissionsDto) {
@@ -92,6 +94,7 @@ export class CommissionsController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Approve or reject a commission pending admin confirmation' })
   @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiBody({ type: DecideCommissionDto })
   @ApiResponse({ status: 200, description: 'Commission decision recorded successfully' })
   @ApiResponse({ status: 404, description: 'Commission not found' })
   @ApiResponse({ status: 400, description: 'Commission is not in a decidable state' })
@@ -111,6 +114,7 @@ export class CommissionsController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Void a commission with a reason, removing it from payout eligibility' })
   @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiBody({ type: VoidCommissionDto })
   @ApiResponse({ status: 200, description: 'Commission voided successfully' })
   @ApiResponse({ status: 404, description: 'Commission not found' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -143,6 +147,7 @@ export class CommissionsController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Unvoid a voided commission and move it back to detected status' })
   @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiBody({ type: UnvoidCommissionDto })
   @ApiResponse({ status: 200, description: 'Commission unvoided to detected' })
   @ApiResponse({ status: 404, description: 'Commission not found' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -161,6 +166,7 @@ export class CommissionsController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Reinstate a rejected commission back to eligible status' })
   @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiBody({ type: ReinstateCommissionDto })
   @ApiResponse({ status: 200, description: 'Commission reinstated to eligible' })
   @ApiResponse({ status: 404, description: 'Commission not found' })
   @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
@@ -179,6 +185,7 @@ export class CommissionsController {
   @Roles(...ADMIN_ROLES)
   @ApiOperation({ summary: 'Update the base invoice amount for a detected commission before it is confirmed' })
   @ApiParam({ name: 'id', description: 'Commission UUID' })
+  @ApiBody({ type: UpdateBaseAmountDto })
   @ApiResponse({ status: 200, description: 'Commission base amount updated successfully' })
   @ApiResponse({ status: 404, description: 'Commission not found' })
   @ApiResponse({ status: 400, description: 'Commission must be in detected status to update base amount' })
