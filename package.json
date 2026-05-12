@@ -13,7 +13,7 @@
     "prisma:generate": "prisma generate",
     "prisma:clean": "rm -rf node_modules/.prisma",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "build:webpack": "node --max-old-space-size=8192 ./node_modules/.bin/webpack --config webpack.config.js",
+    "build:webpack": "node --max-old-space-size=3072 ./node_modules/.bin/webpack --config webpack.config.js",
     "build:esbuild": "node esbuild.config.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
