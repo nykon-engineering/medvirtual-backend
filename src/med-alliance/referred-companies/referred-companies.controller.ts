@@ -71,6 +71,17 @@ export class ReferredCompaniesController {
     return { status: 200, message: 'Referred companies retrieved successfully', ...result };
   }
 
+  // GET /med-alliance/referred-companies/check-contact-email — Pre-validate contact email against HubSpot.
+  @Get('referred-companies/check-contact-email')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Check if a contact email already exists in HubSpot before submitting a referral' })
+  @ApiQuery({ name: 'email', required: true, description: 'Contact email to check' })
+  @ApiResponse({ status: 200, description: 'Check completed' })
+  async checkContactEmail(@Query('email') email: string) {
+    const exists = await this.service.checkContactEmailInHubspot(email);
+    return { status: 200, message: 'OK', data: { exists } };
+  }
+
   // GET /med-alliance/referred-companies/:id — Get one (scoped to affiliate).
   @Get('referred-companies/:id')
   @HttpCode(200)

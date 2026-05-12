@@ -695,4 +695,28 @@ export class ReferredCompaniesService {
       throw new Error("Failed to find Referred To options");
     }
   }
+
+  async checkContactEmailInHubspot(email: string): Promise<boolean> {
+    if (!email) return false;
+    try {
+      const response = await axios.post(
+        'https://api.hubapi.com/crm/v3/objects/contacts/search',
+        {
+          filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ', value: email.toLowerCase() }] }],
+          limit: 1,
+          properties: ['email'],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      return (response.data?.total ?? 0) > 0;
+    } catch {
+      // HubSpot unavailable → never block the form
+      return false;
+    }
+  }
 }

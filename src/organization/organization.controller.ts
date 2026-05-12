@@ -181,6 +181,18 @@ export class OrganizationController {
     return await this.organizationService.getContactByOrgId(id);
   }
 
+  // GET /organization/check-name — Check if an organization name already exists in the DB.
+  @Get('check-name')
+  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Check if an organization name already exists before creating' })
+  @ApiQuery({ name: 'name', required: true, description: 'Organization name to check' })
+  @ApiResponse({ status: 200, description: 'Check completed' })
+  async checkName(@Query('name') name: string) {
+    const exists = await this.organizationService.checkOrganizationNameExists(name);
+    return { status: 200, message: 'OK', data: { exists } };
+  }
+
   @Get('/:id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(

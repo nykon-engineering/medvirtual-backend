@@ -2726,4 +2726,16 @@ export class OrganizationService {
       }
     };
 
+  async checkOrganizationNameExists(name: string): Promise<boolean> {
+    if (!name?.trim()) return false;
+    const found = await this.prisma.organization.findFirst({
+      where: {
+        name: { equals: name.trim(), mode: 'insensitive' },
+        status: { not: OrganizationStatus.deleted },
+      },
+      select: { id: true },
+    });
+    return found !== null;
+  }
+
 }
