@@ -9,7 +9,7 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "scripts": {
-    "build": "nest build",
+    "build": "node --max-old-space-size=3072 ./node_modules/.bin/nest build",
     "prisma:generate": "prisma generate",
     "prisma:clean": "rm -rf node_modules/.prisma",
     "prisma:seed": "ts-node prisma/seed.ts",
