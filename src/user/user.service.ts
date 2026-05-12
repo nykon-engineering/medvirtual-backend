@@ -496,10 +496,13 @@ export class UserService {
     }
   }
 
-  async update(id: string, userData: Prisma.USERUpdateInput): Promise<USER> {
+  async update(id: string, userData: Prisma.USERUpdateInput, actorUserId?: string): Promise<USER> {
     try {
       let user: Prisma.USERUpdateInput;
-      const currentUser = await this.findById(id);
+      const currentUser = await this.prisma.uSER.findUnique({
+        where: { id },
+        include: { contact: true },
+      });
       if (!currentUser) {
         throw new NotFoundException(`User not found`);
       }
@@ -514,14 +517,15 @@ export class UserService {
       } else {
         user = { ...userData };
       }
-      
 
-      //create contact in hubspot
-      const userForHubspot = {
-        ...user,
-        hubspot_contact_id: currentUser.hubspot_contact_id,
+      const hubspotContactId = currentUser.contact?.hubspot_id ?? null;
+      if (hubspotContactId) {
+        const userForHubspot = {
+          ...user,
+          hubspot_contact_id: hubspotContactId,
+        };
+        await this.hubspotService.updateContactInHubspot(userForHubspot, actorUserId);
       }
-      await this.hubspotService.updateContactInHubspot(userForHubspot);
 
       return await this.prisma.uSER.update({
         where: { id },
@@ -533,7 +537,7 @@ export class UserService {
     }
   }
 
-  async delete(id: string): Promise<USER> {
+  async delete(id: string, actorUserId?: string): Promise<USER> {
     try {
       const user = await this.findById(id);
       if (!user) {
@@ -576,7 +580,7 @@ export class UserService {
         ...user,
         hubspot_contact_id: user.hubspot_contact_id,
       }
-      await this.hubspotService.deleteContactInHubspot(userForHubspot);
+      await this.hubspotService.deleteContactInHubspot(userForHubspot, actorUserId);
 
       // Use a transaction to handle all deletions atomically
       return await this.prisma.$transaction(async (tx) => {
@@ -1011,6 +1015,18 @@ export class UserService {
         },
       });
 
+      // Link contact to the new user if contact_id was provided
+      if (inviteData.contact_id) {
+        try {
+          await this.prisma.contact.update({
+            where: { id: inviteData.contact_id },
+            data: { user_id: newUser.id },
+          });
+        } catch (err) {
+          console.error('Failed to link contact to new user:', err);
+        }
+      }
+
       // Generate invitation token
       const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
         expiresIn: '48h',
@@ -1068,7 +1084,7 @@ export class UserService {
             },
           }
 
-          await this.hubspotService.createContactInHubspot(newUserForHubspot);
+          await this.hubspotService.createContactInHubspot(newUserForHubspot, currentUser.id);
       }catch(err){
         console.error('Error creating contact in Hubspot:', err);
       }

@@ -47,6 +47,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { SqsService } from '../sqs/sqs.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import { ContactService } from '../contacts/contacts.service';
 
 @Injectable()
 export class OrganizationService {
@@ -61,8 +62,8 @@ export class OrganizationService {
     @Inject(forwardRef (() => NotificationsService))
     private readonly notifications: NotificationsService,
 
-    private readonly sqs: SqsService
-    
+    private readonly sqs: SqsService,
+    private readonly contactService: ContactService,
   ) {}
 
   async delay(ms: number) {
@@ -307,6 +308,7 @@ export class OrganizationService {
           owner: true,
           admin: true,
           users: true,
+          contacts: true,
         },
       });
     } catch {
@@ -497,7 +499,18 @@ export class OrganizationService {
               id: true,
               status: true,
             },
-          }
+          },
+          contacts: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+              user_id: true,
+              hubspot_id: true,
+            },
+          },
         },
       });
 
@@ -628,6 +641,14 @@ export class OrganizationService {
         userCount: org.userCount,
         staffCount: org.staffCount,
         source: org.source || undefined,
+        contacts: org.contacts.length > 0 ? org.contacts.map(contact => ({
+          id: contact.id,
+          first_name: contact.first_name,
+          last_name: contact.last_name,
+          email: contact.email,
+          phone: contact.phone,
+          user_id: contact.user_id || undefined,
+        })) : undefined,
       }));
 
       // Calculate pagination metadata
@@ -656,6 +677,20 @@ export class OrganizationService {
     //}
   }
 
+  async getContactByOrgId(orgId: string) {
+    return this.prisma.contact.findMany({
+      where: { organization_id: orgId },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        phone: true,
+      },
+    });
+  }
+
   async getById(id: string): Promise<Organization> {
     try {
       const organization = await this.prisma.organization.findUnique({
@@ -664,6 +699,7 @@ export class OrganizationService {
           owner: true,
           admin: true,
           users: true,
+          contacts: true,
         },
       });
 
@@ -791,6 +827,17 @@ export class OrganizationService {
         servicesArray = [];
       }
 
+      const existingOrganization = await this.prisma.organization.findFirst({
+        where: { 
+          contact_email: data.contact_email, // The email field was removed on the UI  
+          status: { not: OrganizationStatus.deleted } // Allow creating organization with same email if the previous one is deleted
+         },
+      });
+
+      if (existingOrganization) {
+        throw new BadRequestException(`The ${data.contact_email} is main contact of another organization. Please use another email or update the existing organization.`);
+      }
+
       const organization = await this.prisma.organization.create({
         data: {
           name: data.name,
@@ -823,12 +870,10 @@ export class OrganizationService {
           hubspot_id: data.hubspot_id || undefined,
           source: user ? 'MedVirtual app' : 'Hubspot',
           referred_by_affiliate_id: referred_by_affiliate_id || undefined,
-          ...((d: any) => ({
-            contact_first_name: d.contact_first_name || undefined,
-            contact_last_name: d.contact_last_name || undefined,
-            contact_email: data.email || undefined,
-            refer_to_user_id: d.refer_to_user_id || undefined,
-          }))(data),
+          contact_first_name: data.contact_first_name || undefined,
+          contact_last_name: data.contact_last_name || undefined,
+          contact_email: data.contact_email || undefined,
+          refer_to_user_id: data.refer_to_user_id || undefined,
         },
       });
 
@@ -862,9 +907,14 @@ export class OrganizationService {
       const newOrganization = await this.getById(organization.id);
 
       if (user){ //this rule avoid re-call on hubspot. If this flow came from hubspot, we dont have logged user and then we avoid send new organization for hubspot
-        await this.hubspot.createOrganizationInHubspot(newOrganization);
+        await this.hubspot.createOrganizationInHubspot(newOrganization, user?.id);
+        // Referred companies have their own contact creation flow (createForReferredCompany in Step 6)
+        if (!referred_by_affiliate_id) {
+          console.log('Creating contact for organization:', newOrganization.id);
+          await this.contactService.createForOrganization(newOrganization.id);
+        }
       }
-      
+
 
       return newOrganization;
     } catch (error) {
@@ -873,9 +923,10 @@ export class OrganizationService {
       }
       throw new BadRequestException('Failed to create organization:', error);
     }
+      
   }
 
-  async update(id: string, data: UpdateOrganizationDto): Promise<Organization> {
+  async update(id: string, data: UpdateOrganizationDto, actorUserId?: string): Promise<Organization> {
     try {
       const updateData: any = {};
 
@@ -967,7 +1018,7 @@ export class OrganizationService {
       });
 
       //updateOrganizationInHubspot
-      await this.hubspot.updateOrganizationInHubspot(res);
+      await this.hubspot.updateOrganizationInHubspot(res, actorUserId);
 
       return res;
     } catch (error) {
@@ -1079,7 +1130,7 @@ export class OrganizationService {
       //updateOrganizationInHubspot
       await this.hubspot.updateOrganizationInHubspot(res);
 
-      return res
+      return res;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -1986,7 +2037,7 @@ export class OrganizationService {
         return dbToStageDictionary[key] === 'Hired';
       })
       if (!pipelineStatus) throw new NotFoundException(`Pipeline status not found for Hired`);
-      await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, pipelineStatus);
+      await this.hubspot.updateOneCandidateFromHireRequest(candidate.hubspot_id, pipelineStatus, user.id);
 
       const pipelineStatusLosers = Object.keys(dbToStageDictionary).find(key => {
         return dbToStageDictionary[key] === 'Available Candidates';
@@ -2079,7 +2130,7 @@ export class OrganizationService {
                 where: { id: c.id },
                 data: { pipeline_status: pipeline_treated},
               });
-              await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+              await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated, user.id);
             }
             )
           );
@@ -2674,5 +2725,17 @@ export class OrganizationService {
         throw new Error("Failed to find Organization Type");
       }
     };
+
+  async checkOrganizationNameExists(name: string): Promise<boolean> {
+    if (!name?.trim()) return false;
+    const found = await this.prisma.organization.findFirst({
+      where: {
+        name: { equals: name.trim(), mode: 'insensitive' },
+        status: { not: OrganizationStatus.deleted },
+      },
+      select: { id: true },
+    });
+    return found !== null;
+  }
 
 }

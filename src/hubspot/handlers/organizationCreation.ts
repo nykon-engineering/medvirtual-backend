@@ -19,7 +19,6 @@ export class HandlerOrganizationCreation {
     ) {}
 
     async execute(event){
-
         const properties = Object.keys(organizationToDbDictionary).join(',');
         try{
             let owner;
@@ -79,7 +78,7 @@ export class HandlerOrganizationCreation {
 
 
             organizationData.status=OrganizationStatus.inactive; // => asked by Pauli on 10-13-2025 because She needs to active them manualy or when this organization has a deal/staff
-            organizationData.email = organizationData.email ?? undefined;
+            organizationData.email = organizationData.email ?? `emptyemail@${getObject.data.results[0].properties.name}.com`; //=> because the email is required on the database, but on HubSpot can be empty, so I need to put a fake email to create the organization and then update it when the email is filled on HubSpot
             organizationData.industry = organizationData.industry ? organizationIndustryToDbDictionary[organizationData.industry] ?? organizationData.industry : '';
 
             const organizationExists = await this.prisma.organization.findUnique({

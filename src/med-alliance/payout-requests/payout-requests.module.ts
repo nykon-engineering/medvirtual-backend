@@ -8,5 +8,6 @@ import { AffiliatesModule } from '../affiliates/affiliates.module';
   imports: [PrismaModule, AffiliatesModule],
   controllers: [PayoutRequestsController],
   providers: [PayoutRequestsService],
+  exports: [PayoutRequestsService],
 })
 export class PayoutRequestsModule {}

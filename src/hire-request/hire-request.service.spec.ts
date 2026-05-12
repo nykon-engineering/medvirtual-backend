@@ -288,14 +288,57 @@ describe('HireRequestService', () => {
       prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
       prismaMock.hireRequestSkill.createMany.mockResolvedValue({ count: 1 });
       prismaMock.candidatePanel.create.mockResolvedValue(null);
-  
+
       const dto = {
         ...baseDto,
         skills: [{ name: 'JS', level: 'advanced' }],
       };
-  
+
       await expect(service.create(dto as any, user))
         .rejects.toThrow(BadRequestException);
+    });
+
+    it('should create hire request without request_role (now optional)', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+      prismaMock.hireRequest.create.mockResolvedValue({ id: 'hr1' });
+      prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.findUnique.mockResolvedValue({ id: 'hr1', skills: [] });
+
+      const dto = { ...baseDto }; // no request_role
+
+      const result = await service.create(dto as any, user);
+
+      expect(result).toBeDefined();
+      expect(prismaMock.hireRequest.create).toHaveBeenCalled();
+    });
+
+    it('should persist background_requirements_of_candidate on create', async () => {
+      prismaMock.organization.findUnique.mockResolvedValue({ status: 'active' });
+      prismaMock.hireRequest.create.mockResolvedValue({
+        id: 'hr1',
+        background_requirements_of_candidate: 'Preferred: Athena | Mandatory: Prior Auth',
+      });
+      prismaMock.candidatePanel.create.mockResolvedValue({ id: 'panel1' });
+      prismaMock.hireRequest.findUnique.mockResolvedValue({
+        id: 'hr1',
+        skills: [],
+        background_requirements_of_candidate: 'Preferred: Athena | Mandatory: Prior Auth',
+      });
+
+      const dto = {
+        ...baseDto,
+        background_requirements_of_candidate: 'Preferred: Athena | Mandatory: Prior Auth',
+      };
+
+      await service.create(dto as any, user);
+
+      expect(prismaMock.hireRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            background_requirements_of_candidate: 'Preferred: Athena | Mandatory: Prior Auth',
+          }),
+        }),
+      );
     });
   });
 
@@ -553,6 +596,33 @@ describe('HireRequestService', () => {
       await expect(
         service.update('hr1', { skills: [{ name: 'JS', level: 'advanced' }] } as any, user)
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should persist background_requirements_of_candidate on update', async () => {
+      const mockUpdated = {
+        id: 'hr1',
+        background_requirements_of_candidate: 'Updated requirement',
+      };
+      prismaMock.hireRequest.update.mockResolvedValue(mockUpdated);
+      jest.spyOn(service['hubspot'], 'updateHireRequestInHubspot').mockResolvedValue(true);
+      jest.spyOn(service, 'findOne').mockResolvedValue(mockUpdated);
+
+      const dto = {
+        title: 'Updated Title',
+        availability: 'full-time',
+        expected_start_date: new Date(),
+        background_requirements_of_candidate: 'Updated requirement',
+      };
+
+      await service.update('hr1', dto as any, user);
+
+      expect(prismaMock.hireRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            background_requirements_of_candidate: 'Updated requirement',
+          }),
+        }),
+      );
     });
   });
   
@@ -935,7 +1005,8 @@ describe('HireRequestService', () => {
           expect.objectContaining({ id: 'cand1' }),
           expect.objectContaining({ id: 'cand2' }),
         ]),
-        expect.any(String)
+        expect.any(String),
+        expect.anything(),
       );
     });
   });

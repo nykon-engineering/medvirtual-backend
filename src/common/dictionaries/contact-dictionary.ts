@@ -1,4 +1,4 @@
-export const contactToDbDictionary : Record<string, string | string[]> = {
+export const contactToDbDictionary : Record<string, string | string> = {
 
     hs_object_id: 'hubspot_id',
     firstname: 'first_name',
@@ -6,6 +6,14 @@ export const contactToDbDictionary : Record<string, string | string[]> = {
     email: 'email',
     phone: 'phone',
     jobtitle: 'job_title',
+    company: 'company_name', //Company Name
+    business_unit: 'business_unit', // Business Unit (Med Virtual, Berry Virtual)
+    account_type: 'account_type', // Account type (Med Virtual, Berry Virtual)
+    website: 'website_url',
+    type: 'type', //type
+    referral_source: 'referral_source', //Referral Source Type
+    hubspot_owner_id: 'hubspot_owner_id', // Contact Owner
+
     
 }
 

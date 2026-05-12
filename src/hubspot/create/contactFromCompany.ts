@@ -1,12 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { HubspotAuditService } from "../hubspot-audit.service";
 
 @Injectable()
 
 export class ContactFromCompanyCreationService {
     constructor(
-      private readonly prisma: PrismaService
+      private readonly prisma: PrismaService,
+      private readonly audit: HubspotAuditService,
     ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
@@ -20,21 +23,22 @@ export class ContactFromCompanyCreationService {
           last_name: true,
           email: true,
       },
-          
+
       });
-      return user && user.hubspot_id ? user.hubspot_id : null; 
+      return user && user.hubspot_id ? user.hubspot_id : null;
     }
 
-    async execute(data: any): Promise<any> {
+    async execute(data: any, actorUserId?: string): Promise<any> {
       // In this case we will use majority datas from organizations to create the contact
       //console.log(data)
+      const source = actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron;
         try {
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/contacts",
             {
               properties: {
-                account_type: data.business_unit 
-                  ? data.business_unit === 'Med Virtual' 
+                account_type: data.business_unit
+                  ? data.business_unit === 'Med Virtual'
                     ? 'Med Virtual'
                     : 'Berry Virtual'
                   : "Med Virtual", //business_unit
@@ -66,7 +70,7 @@ export class ContactFromCompanyCreationService {
                 referrals_industry: data.business_unit === 'Med Virtual' ? 'Medical' : 'Non-Medical',
                 referred_to: data.referToUser?.id ? await this.getOwnerId(data.referToUser.id) : '',
               },
-              // 2 Associations: 
+              // 2 Associations:
               // contact → organization (if the org already exists in HubSpot)
               // contact → growth partner
               associations:  [
@@ -80,7 +84,7 @@ export class ContactFromCompanyCreationService {
                   ],
                 } : undefined,
                 data.referredByAffiliate.affiliateProfile && data.referredByAffiliate.affiliateProfile.hubspot_id ? {
-                  to: { id: data.referredByAffiliate.affiliateProfile.hubspot_id }, 
+                  to: { id: data.referredByAffiliate.affiliateProfile.hubspot_id },
                   types: [
                     {
                       associationCategory: "USER_DEFINED",
@@ -97,7 +101,20 @@ export class ContactFromCompanyCreationService {
               },
             }
           );
-         
+
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.contact,
+            entityId: data.id ?? data.hubspot_id ?? 'unknown',
+            hubspotObjectId: response.data?.id,
+            hubspotObjectType: 'contacts',
+            action: HubspotAuditAction.CREATE,
+            source,
+            success: true,
+            payload: { email: data.email ?? data.contact_email },
+            response: { id: response.data?.id },
+          });
+
           return response.data?.id ?? true;
         } catch (error) {
           if (error.response) {
@@ -105,8 +122,19 @@ export class ContactFromCompanyCreationService {
           } else {
             console.error("Connection error:", error.message);
           }
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.contact,
+            entityId: data.id ?? data.hubspot_id ?? 'unknown',
+            hubspotObjectType: 'contacts',
+            action: HubspotAuditAction.CREATE,
+            source,
+            success: false,
+            errorCode: error.response?.status?.toString() ?? error.code,
+            errorMessage: error.message,
+          });
           throw error;
         }
-        
+
     }
 }

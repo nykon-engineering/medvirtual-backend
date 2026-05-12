@@ -7,18 +7,27 @@ import * as fs from 'fs';
 
 // Mock OpenAI
 const mockChatCreate = jest.fn();
+const mockImagesEdit = jest.fn();
+
 jest.mock('openai', () => {
-  return class OpenAI {
-    chat = {
-      completions: {
-        create: mockChatCreate,
-      },
-    };
+  const MockOpenAI = class OpenAI {
+    chat = { completions: { create: mockChatCreate } };
+    images = { edit: mockImagesEdit };
+  };
+  return {
+    default: MockOpenAI,
+    toFile: jest.fn().mockResolvedValue({}),
+    __esModule: true,
   };
 });
 
-// Mock fs
-jest.mock('fs');
+// Mock fs — spread actual module so Prisma can still call existsSync etc.
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  readFileSync: jest.fn(),
+  createReadStream: jest.fn().mockReturnValue({}),
+  writeFileSync: jest.fn(),
+}));
 
 const mockMailService = {
   sendMail: jest.fn(),
@@ -80,7 +89,7 @@ describe('OpenaiService', () => {
 
       const result = await service.extractDataFromResumeImages(mockImagePaths);
 
-      expect(result).toEqual(mockExtractedData);
+      expect(result).toEqual({ data: mockExtractedData, cost: 0 });
       expect(fs.readFileSync).toHaveBeenCalledWith(mockImagePaths[0]);
       expect(mockChatCreate).toHaveBeenCalled();
     });
@@ -138,6 +147,125 @@ describe('OpenaiService', () => {
       await expect(service.extractDataFromResumeImages(mockImagePaths))
         .rejects
         .toThrow('Failed to extract data from resume images');
+    });
+  });
+
+  describe('organizeText', () => {
+    const mockText = 'Resume plain text content';
+    const mockCandidate = { name: 'John Doe', specialization: 'Medical Assistant' };
+
+    it('should throw BadRequestException if OPENAI_API_KEY is not set', async () => {
+      delete process.env.OPENAI_API_KEY;
+      await expect(service.organizeText(mockText, mockCandidate)).rejects.toThrow(
+        'OPENAI_API_KEY is not defined in environment variables',
+      );
+    });
+
+    it('should return organized text when OpenAI responds with valid JSON', async () => {
+      const mockData = { bio: 'Professional bio', experience: [], education: [] };
+      mockChatCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: JSON.stringify(mockData) } }],
+        usage: { prompt_tokens: 100, completion_tokens: 50 },
+      });
+
+      const result = await service.organizeText(mockText, mockCandidate);
+      const parsed = JSON.parse(result);
+
+      expect(parsed.bio).toBe('Professional bio');
+      expect(parsed.cost).toBeDefined();
+    });
+
+    it('should throw if OpenAI returns empty choices', async () => {
+      mockChatCreate.mockResolvedValueOnce({ choices: [] });
+      await expect(service.organizeText(mockText, mockCandidate)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw on insufficient_quota error', async () => {
+      mockChatCreate.mockRejectedValueOnce({ type: 'insufficient_quota' });
+      mockPrismaService.mail_Settings.findFirst.mockResolvedValueOnce(null);
+      mockMailService.sendMail.mockResolvedValueOnce(true);
+
+      await expect(service.organizeText(mockText, mockCandidate)).rejects.toThrow(
+        'You dont have credits. Check your plan/billing.',
+      );
+    });
+
+    it('should throw on rate_limit_error', async () => {
+      mockChatCreate.mockRejectedValueOnce({ type: 'rate_limit_error' });
+      await expect(service.organizeText(mockText, mockCandidate)).rejects.toThrow(
+        'Rate limit exceeded. Please try again later.',
+      );
+    });
+  });
+
+  describe('generateTextSummary', () => {
+    const mockDescription = 'Looking for a senior medical assistant for a busy clinic.';
+
+    it('should throw BadRequestException if OPENAI_API_KEY is not set', async () => {
+      delete process.env.OPENAI_API_KEY;
+      await expect(service.generateTextSummary(mockDescription)).rejects.toThrow(
+        'OPENAI_API_KEY is not defined in environment variables',
+      );
+    });
+
+    it('should return summary string when OpenAI responds with content', async () => {
+      mockChatCreate.mockResolvedValueOnce({
+        choices: [{ message: { content: 'Senior medical assistant role.' } }],
+      });
+
+      const result = await service.generateTextSummary(mockDescription);
+      expect(result).toBe('Senior medical assistant role.');
+    });
+
+    it('should throw on insufficient_quota error', async () => {
+      mockChatCreate.mockRejectedValueOnce({ type: 'insufficient_quota' });
+      await expect(service.generateTextSummary(mockDescription)).rejects.toThrow(
+        'You dont have credits. Check your plan/billing.',
+      );
+    });
+
+    it('should throw on rate_limit_error', async () => {
+      mockChatCreate.mockRejectedValueOnce({ type: 'rate_limit_error' });
+      await expect(service.generateTextSummary(mockDescription)).rejects.toThrow(
+        'Rate limit exceeded. Please try again later.',
+      );
+    });
+
+    it('should throw BadRequestException on unexpected error', async () => {
+      mockChatCreate.mockRejectedValueOnce(new Error('Network failure'));
+      await expect(service.generateTextSummary(mockDescription)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('generateAvatarWithScreenshoot', () => {
+    const mockCandidate = { id: 'cand-1' };
+
+    beforeEach(() => {
+      (fs.createReadStream as jest.Mock).mockReturnValue({});
+      (fs.writeFileSync as jest.Mock).mockReturnValue(undefined);
+    });
+
+    it('should generate avatar and return imagePath and cost', async () => {
+      mockImagesEdit.mockResolvedValueOnce({
+        data: [{ b64_json: 'aW1hZ2VkYXRh' }],
+      });
+
+      const result = await service.generateAvatarWithScreenshoot(
+        mockCandidate,
+        '/tmp/screenshot.png',
+      );
+
+      expect(result.cost).toBe(0.04);
+      expect(result.imagePath).toMatch(/avatarX\.png$/);
+      expect(fs.writeFileSync).toHaveBeenCalled();
+    });
+
+    it('should throw Error when result.data is empty or missing b64_json', async () => {
+      mockImagesEdit.mockResolvedValueOnce({ data: [] });
+
+      await expect(
+        service.generateAvatarWithScreenshoot(mockCandidate, '/tmp/screenshot.png'),
+      ).rejects.toThrow('A resposta da API OpenAI não contém os dados esperados.');
     });
   });
 });

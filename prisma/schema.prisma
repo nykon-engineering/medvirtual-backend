@@ -43,7 +43,7 @@ model USER {
   hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
   panelCandidatesCreated       PanelCandidate[]    @relation("PanelCandidateCreatedBy")
   adminOrganizations           Organization[]      @relation("OrganizationAdmin")
-  ownedOrganizations           Organization?       @relation("OrganizationOwner")
+  ownedOrganizations           Organization[]      @relation("OrganizationOwner")
   sessions                     Session[]
   tickets                      Ticket[]
   ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
@@ -53,6 +53,8 @@ model USER {
   organization                 Organization?       @relation(fields: [organization_id], references: [id])
   talentPoolLeads              TalentPoolLead[]
   PasswordResetTokens          PasswordResetToken[]
+
+  contact                      Contact?
 
   // --- Med Alliance relations ---
   // One-to-one affiliate profile storing commission settings and payout preferences
@@ -77,6 +79,8 @@ model USER {
   affiliateCommissions         AffiliateCommission[]      @relation("AffiliateCommissions")
   // Audit log entries where this user was the acting subject
   medAllianceAuditActorLogs    MedAllianceAuditLog[]      @relation("MedAllianceAuditActor")
+  // Hubspot audit log entries where this user triggered the API call
+  hubspotAuditLogs             HubspotAuditLog[]          @relation("HubspotAuditActor")
   // MA-006 review cases resolved by this admin user
   resolvedReviewCases          MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
 
@@ -123,13 +127,13 @@ model EmailInvitation {
 model Organization {
   id                      String                  @id @default(uuid())
   name                    String
-  email                   String?                 @unique
+  email                   String?                 
   hubspot_id              String?                 @unique
   createdAt               DateTime                @default(now())
   deletedAt               DateTime?
   admin_id                String?
   description             String?
-  owner_id                String?                 @unique
+  owner_id                String?                 
   date_became_client      DateTime?
   date_founded            DateTime?
   date_joined             DateTime?
@@ -174,6 +178,9 @@ model Organization {
   eligibility_start_at         DateTime?
   // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
   first_paid_invoice_at        DateTime?
+  // Pipeline stage tracking where this referral is in the sales-to-deployment lifecycle.
+  // 'deployed' starts the 30-day stabilization clock (eligibility_start_at); cron promotes to eligible after 30 days.
+  referral_stage               ReferralStage?              @default(referred)
 
   // HubSpot sync state — only relevant for referred organizations
   // 'pending' | 'synced' | 'no_match' | 'multiple_matches' | 'error'
@@ -199,6 +206,7 @@ model Organization {
   hubspotInvoiceSnapshots      HubspotInvoiceSnapshot[]
   // MA-006 admin review cases opened for this referred organization
   adminReviewCases             MedAllianceAdminReviewCase[]
+  contacts                     Contact[]
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -213,6 +221,8 @@ model Organization {
   @@index([referred_by_affiliate_id, status], map: "idx_organizations_affiliate_status")
   // Lookup organizations assigned to a specific staff member
   @@index([refer_to_user_id], map: "idx_organizations_refer_to_user")
+  // Med Alliance pipeline: find deployed companies ready for eligibility promotion
+  @@index([referral_stage, eligibility_start_at], map: "idx_organizations_referral_stage")
 }
 
 model Candidate {
@@ -229,6 +239,7 @@ model Candidate {
   processing_error           String?
   processed_at               DateTime?
   createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt @default(now())
   hourly_pay_rate            Decimal?
   organization_id            String?
   pipeline_status            String                  @default("available")
@@ -399,6 +410,7 @@ model HireRequest {
   hubspot_additional_training_requested String?
   hubspot_pairing_date              String? //String for avoid misunderstanding about timeZone
   hubspot_pairing_time              String?
+  background_requirements_of_candidate String?
   request_role                      String?
   assign_staffing_coordinator       String?
   client_signed_contract_ticket_submission String?
@@ -648,6 +660,35 @@ model TalentPoolLead {
   @@index([source], map: "idx_talent_pool_leads_source")
 }
 
+model Contact {
+  id               String    @id @default(uuid())
+  user_id          String?    @unique
+  hubspot_id       String?   @unique
+  organization_id  String?
+  first_name       String?
+  last_name        String?
+  email            String?
+  phone            String?
+  job_title        String?
+  company_name     String?
+  business_unit    String?
+  account_type     String?
+  website_url      String?
+  type             String?
+  referral_source  String?
+  hubspot_owner_id String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user             USER?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization     Organization? @relation(fields: [organization_id], references: [id])
+
+  @@index([user_id], map: "idx_contacts_user_id")
+  @@index([hubspot_id], map: "idx_contacts_hubspot_id")
+  @@index([email], map: "idx_contacts_email")
+  @@index([organization_id], map: "idx_contacts_organization_id")
+}
+
 model PasswordResetToken {
   id        String   @id @default(uuid())
   userId    String
@@ -684,7 +725,7 @@ model PositionRateConfig {
 
 model AffiliateProfile {
   id                          String          @id @default(uuid())
-  user_id                     String          @unique
+  user_id                     String?         @unique
   hubspot_id                  String?         @unique
   full_name                   String?
   hubspot_pipeline            String?
@@ -700,7 +741,7 @@ model AffiliateProfile {
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
 
-  user           USER                   @relation(fields: [user_id], references: [id])
+  user           USER?                  @relation(fields: [user_id], references: [id])
   commissions    AffiliateCommission[]
   payoutRequests AffiliatePayoutRequest[]
 
@@ -1046,6 +1087,17 @@ enum Priority_new {
 }
 
 // ============== here I started with MED ALLIANCE enums ==========================
+
+// Pipeline stage for referred companies — tracks where a referral is in the sales lifecycle.
+enum ReferralStage {
+  referred
+  contacted
+  in_negotiation
+  contract_signed
+  deployed
+  churned
+}
+
 enum AffiliateStatus {
   active
   inactive
@@ -1088,6 +1140,7 @@ enum MedAllianceAuditSource {
   user
   sync
   admin_action
+  cron
 }
 
 enum MedAllianceEntityType {
@@ -1115,4 +1168,63 @@ enum AdminReviewReasonCode {
 enum AdminReviewStatus {
   open
   resolved
+}
+
+// ============== Hubspot Audit Log ==========================
+
+enum HubspotEntityType {
+  candidate
+  hire_request
+  organization
+  contact
+  affiliate
+  deal
+  owner
+  invoice
+}
+
+enum HubspotAuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  SYNC
+  BATCH_UPDATE
+}
+
+enum HubspotAuditSource {
+  user_action
+  cron
+  webhook
+  bulk_sync
+}
+
+// Append-only audit trail for all Hubspot API interactions (outbound calls and inbound webhooks).
+// Never soft-delete or mutate records. entity_type + entity_id act as a polymorphic reference.
+// actor_user_id is set for human users; actor_label holds 'WebhookHubspot', 'CronJob',
+// or 'BulkSync' for non-human sources.
+model HubspotAuditLog {
+  id                  String             @id @default(uuid())
+  actor_user_id       String?
+  actor_label         String?
+  entity_type         HubspotEntityType
+  entity_id           String
+  hubspot_object_id   String?
+  hubspot_object_type String
+  action              HubspotAuditAction
+  source              HubspotAuditSource @default(user_action)
+  success             Boolean
+  payload             Json?
+  response            Json?
+  error_code          String?
+  error_message       String?
+  createdAt           DateTime           @default(now())
+
+  actorUser USER? @relation("HubspotAuditActor", fields: [actor_user_id], references: [id])
+
+  @@index([entity_type, entity_id, createdAt], map: "idx_hs_audit_entity_timeline")
+  @@index([actor_user_id],                      map: "idx_hs_audit_actor")
+  @@index([actor_label],                        map: "idx_hs_audit_actor_label")
+  @@index([source],                             map: "idx_hs_audit_source")
+  @@index([success],                            map: "idx_hs_audit_success")
+  @@index([createdAt],                          map: "idx_hs_audit_created_at")
 }

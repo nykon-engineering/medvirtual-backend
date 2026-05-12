@@ -84,7 +84,7 @@ export class CreateHireRequestDto {
     @IsOptional()
     skills: HireRequestSkillDTO[];
 
-    @ApiProperty({ type: String, description: 'Expected Tasks & Scope of Support', required: false })
+    @ApiProperty({ type: String, description: 'Job Description', required: false })
     @IsString()
     @IsOptional()
     hubspot_tasks: string
@@ -99,10 +99,15 @@ export class CreateHireRequestDto {
     @IsOptional()
     hubspot_va_shift_hours: string
 
-    @ApiProperty({ type: String, description: 'Tools Familiarization', required: false })
+    @ApiProperty({ type: String, description: 'Tools Used by Client', required: false })
     @IsString()
     @IsOptional()
     hubspot_tools_familiarization: string
+
+    @ApiProperty({ type: String, description: 'Background Requirements of Candidate', required: false })
+    @IsString()
+    @IsOptional()
+    background_requirements_of_candidate?: string
 
     @ApiProperty({ type: String, description: 'Training Request Notes', required: false })
     @IsString()
@@ -144,9 +149,10 @@ export class CreateHireRequestDto {
     @IsOptional()
     hubspot_pairing_request_type: string
 
-    @ApiProperty({ type: String, description: 'Requested Role', required: true })
+    @ApiProperty({ type: String, description: 'Requested Role', required: false })
     @IsString()
-    request_role: string
+    @IsOptional()
+    request_role?: string
     
     @ApiProperty({ type: String, description: 'Client Signed Contract Ticket Submission', required: false })
     @IsString()

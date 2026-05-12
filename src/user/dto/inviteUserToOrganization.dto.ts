@@ -31,4 +31,9 @@ export class InviteUserToOrganizationDto {
   })
   @IsEnum(['organization_admin', 'organization_super_admin'])
   role: string;
+
+  @ApiProperty({ required: false, description: 'Contact ID to associate with the new user' })
+  @IsOptional()
+  @IsString()
+  contact_id?: string;
 }

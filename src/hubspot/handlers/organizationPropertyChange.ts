@@ -24,7 +24,7 @@ export class HandlerOrganizationPropertyChange {
                 hubspot_id: String(event.objectId)
             }
         })
-
+        
         //Here I dont need to check if the organization is a client of MedVirtual, because inside the organizationCreation handler it already does that
         if(!organization ) return await this.organizationCreation.execute(event);
 

@@ -6,6 +6,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 // One year in milliseconds — used for the eligibility window and referral-age rule.
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
+// 30-day stabilization window: deployed companies must be deployed for this long before going eligible.
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class CommissionDetectionService {
   private readonly logger = new Logger(CommissionDetectionService.name);
@@ -21,14 +24,17 @@ export class CommissionDetectionService {
    *   - invoice_amount > 0
    *   - payment_status is null OR 'succeeded'
    *
-   * Eligibility lifecycle:
+   * Eligibility lifecycle (updated):
    *   1. Before first paid invoice       → not_eligible, no commissions created.
-   *   2. First paid invoice received     → transition to eligible, store anchor dates,
-   *                                        then create commissions.
-   *   3. Within one-year window          → eligible, commissions created normally.
-   *   4. One year after eligibility_start_at → expire: set not_eligible, skip commissions.
-   *   5. Referral older than one year with no first paid invoice → skip (referral-age rule).
-   *   6. Active-client block             → skip permanently (block_reason prefix check).
+   *   2. First paid invoice received     → markDeployed (referral_stage = deployed,
+   *                                        eligibility_start_at = now). Status stays not_eligible.
+   *                                        Cron promotes to eligible after 30 days.
+   *   3. Within 30-day stabilization     → not_eligible, commissions created as 'detected'.
+   *   4. After 30 days, within one year  → eligible (set by cron), new commissions as 'pending_admin_confirmation'.
+   *   5. One year after eligibility_start_at → expire: set not_eligible, skip commissions.
+   *   6. Referral older than one year with no first paid invoice → skip (referral-age rule).
+   *   7. Active-client block             → skip permanently (block_reason prefix check).
+   *   8. Churned                         → skip commission creation entirely.
    *
    * Idempotency: the idempotency_key is @unique in the DB.
    * If a commission already exists (Prisma P2002), the creation is silently skipped.
@@ -47,6 +53,7 @@ export class CommissionDetectionService {
         med_alliance_block_reason: true,
         eligibility_start_at: true,
         first_paid_invoice_at: true,
+        referral_stage: true,
         createdAt: true,
       },
     });
@@ -64,7 +71,7 @@ export class CommissionDetectionService {
 
     const now = new Date();
 
-    // Eligibility window expiry: eligible but anchor is older than one year.
+    // Eligibility window expiry: eligible but eligibility_start_at (deployment date) is older than one year.
     if (
       org.med_alliance_referral_status === 'eligible' &&
       org.eligibility_start_at &&
@@ -84,8 +91,9 @@ export class CommissionDetectionService {
       return { created: 0, skipped: 0 };
     }
 
-    // Window already expired in a prior run (first_paid_invoice_at set but status is not_eligible).
-    if (org.med_alliance_referral_status === 'not_eligible' && org.first_paid_invoice_at) {
+    // Window already expired in a prior run — block_reason signals expiry; first_paid_invoice_at is set.
+    if (org.med_alliance_referral_status === 'not_eligible' && org.first_paid_invoice_at &&
+        org.med_alliance_block_reason?.startsWith('eligibility_expired')) {
       this.logger.log(`Org ${organizationId} eligibility window expired — skipping commission detection`);
       return { created: 0, skipped: 0 };
     }
@@ -102,6 +110,13 @@ export class CommissionDetectionService {
       );
       return { created: 0, skipped: 0 };
     }
+    if (!profile.user_id) {
+      this.logger.warn(
+        `Active affiliate profile ${profile.id} has no connected user — skipping commission detection`,
+      );
+      return { created: 0, skipped: 0 };
+    }
+    const affiliateUserId: string = profile.user_id;
 
     // Fetch all candidate paid snapshots for this organization.
     const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
@@ -128,11 +143,33 @@ export class CommissionDetectionService {
       return { created: 0, skipped: 0 };
     }
 
-    // First qualifying event: no prior paid invoice — transition org to eligible.
-    if (org.med_alliance_referral_status === 'not_eligible' && !org.first_paid_invoice_at) {
+    // First qualifying event: transition org to deployed stage and start the 30-day clock.
+    // Skip if already deployed or churned (idempotent).
+    if (!org.first_paid_invoice_at && org.referral_stage !== 'deployed' && org.referral_stage !== 'churned') {
       const firstInvoiceDate = candidates[0].paid_at ?? now;
-      await this.activateEligibility(organizationId, firstInvoiceDate);
+      await this.markDeployed(organizationId, firstInvoiceDate);
+      // Update local org state so downstream logic sees the new values.
+      org.referral_stage = 'deployed';
+      org.eligibility_start_at = now;
+      org.first_paid_invoice_at = firstInvoiceDate;
     }
+
+    // Churned companies stop generating commissions.
+    if (org.referral_stage === 'churned') {
+      this.logger.log(`Org ${organizationId} is churned — skipping commission creation`);
+      return { created: 0, skipped: 0 };
+    }
+
+    // Determine commission status at creation time.
+    // New commissions go directly to pending_admin_confirmation if the company is already eligible
+    // (i.e. deployed > 30 days ago and within the one-year window).
+    const isEligibleNow =
+      org.med_alliance_referral_status === 'eligible' &&
+      org.eligibility_start_at != null &&
+      Date.now() - org.eligibility_start_at.getTime() >= THIRTY_DAYS_MS &&
+      Date.now() - org.eligibility_start_at.getTime() <= ONE_YEAR_MS;
+
+    const commissionStatus = isEligibleNow ? 'pending_admin_confirmation' : 'detected';
 
     // Create commissions for all candidate snapshots.
     let created = 0;
@@ -140,7 +177,7 @@ export class CommissionDetectionService {
 
     for (const snapshot of candidates) {
       const idempotencyKey = this.buildIdempotencyKey({
-        affiliateId: profile.user_id,
+        affiliateId: affiliateUserId,
         hubspotInvoiceId: snapshot.hubspot_id,
         paidAt: snapshot.paid_at,
         baseAmount: snapshot.invoice_amount.toString(),
@@ -155,14 +192,14 @@ export class CommissionDetectionService {
 
         await this.prisma.affiliateCommission.create({
           data: {
-            affiliate_id: profile.user_id,
+            affiliate_id: affiliateUserId,
             affiliate_profile_id: profile.id,
             organization_id: organizationId,
             hubspot_invoice_snapshot_id: snapshot.id,
             commission_percent_snapshot: profile.commission_percent_default,
             base_amount_snapshot: snapshot.invoice_amount,
             commission_amount: commissionAmount,
-            status: 'detected',
+            status: commissionStatus,
             idempotency_key: idempotencyKey,
           },
         });
@@ -171,9 +208,9 @@ export class CommissionDetectionService {
           data: {
             entity_type: 'commission',
             entity_id: idempotencyKey,
-            event: 'commission_detected',
+            event: isEligibleNow ? 'commission_pending_admin_confirmation' : 'commission_detected',
             old_status: null,
-            new_status: 'detected',
+            new_status: commissionStatus,
             reason: null,
             source: 'sync',
             actor_user_id: null,
@@ -208,21 +245,24 @@ export class CommissionDetectionService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Transitions an organization to eligible on its first paid invoice.
-   * Stores eligibility_start_at (anchor for the one-year window) and
-   * first_paid_invoice_at (permanent audit field, never cleared).
+   * Transitions a referred organization to the 'deployed' pipeline stage on its first paid invoice.
+   * Sets eligibility_start_at to NOW (deployment date — anchor for both 30-day and one-year windows)
+   * and first_paid_invoice_at to the actual invoice date (permanent audit field).
+   * med_alliance_referral_status stays 'not_eligible' — the cron promotes it to 'eligible' after 30 days.
    */
-  private async activateEligibility(
+  private async markDeployed(
     organizationId: string,
     firstInvoiceDate: Date,
   ): Promise<void> {
+    const now = new Date();
     await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
-        med_alliance_referral_status: 'eligible',
-        eligibility_start_at: firstInvoiceDate,
+        referral_stage: 'deployed',
+        eligibility_start_at: now,
         first_paid_invoice_at: firstInvoiceDate,
         med_alliance_block_reason: null,
+        // med_alliance_referral_status intentionally stays 'not_eligible'
       },
     });
 
@@ -230,32 +270,32 @@ export class CommissionDetectionService {
       data: {
         entity_type: 'referred_company',
         entity_id: organizationId,
-        event: 'eligibility_activated',
+        event: 'stage_changed',
         old_status: 'not_eligible',
-        new_status: 'eligible',
-        reason: 'First paid invoice received — eligibility window started',
+        new_status: 'not_eligible',
+        reason: 'First paid invoice — auto-transitioned to deployed stage; 30-day stabilization clock started',
         source: 'sync',
         actor_user_id: null,
-        metadata: { eligibility_start_at: firstInvoiceDate.toISOString() } as any,
+        metadata: { referral_stage: 'deployed', eligibility_start_at: now.toISOString() } as any,
       },
     });
 
     this.logger.log(
-      `Org ${organizationId} transitioned to eligible — eligibility_start_at=${firstInvoiceDate.toISOString()}`,
+      `Org ${organizationId} transitioned to deployed — eligibility_start_at=${now.toISOString()}`,
     );
   }
 
   /**
    * Expires eligibility when the one-year window has passed.
-   * Clears eligibility_start_at (so the stored status reflects reality)
-   * but preserves first_paid_invoice_at as a permanent audit record.
+   * Preserves eligibility_start_at as a permanent record of when the company was deployed.
+   * Sets med_alliance_block_reason to signal expiry for downstream guards.
    */
   private async expireEligibility(organizationId: string): Promise<void> {
     await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
         med_alliance_referral_status: 'not_eligible',
-        eligibility_start_at: null,
+        // eligibility_start_at is preserved — it is the deployment date, not an eligibility anchor
         med_alliance_block_reason: 'eligibility_expired: one-year window elapsed',
       },
     });

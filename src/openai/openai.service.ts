@@ -219,7 +219,7 @@ export class OpenaiService {
 
     }
 
-    async generateAvatarWithScreenshoot(candidate: any, imageDownloaded: any): Promise<any> {
+    async generateAvatarWithScreenshoot(candidate: any, imageDownloaded: any): Promise<{ imagePath: string; cost: number }> {
 
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -244,8 +244,8 @@ export class OpenaiService {
             prompt,
         });
 
-        //=> calculate the cost
-
+        // gpt-image-1 image edit pricing: $0.04 per 1024x1024 standard quality image
+        const cost = 0.04;
 
         if (!result.data || !result.data[0] || !result.data[0].b64_json) {
             throw new Error("A resposta da API OpenAI não contém os dados esperados.");
@@ -256,7 +256,7 @@ export class OpenaiService {
         console.log('Output path for avatar:', outputPath);
         fs.writeFileSync(outputPath, Buffer.from(imageBase64, "base64"));
 
-        return outputPath;
+        return { imagePath: outputPath, cost };
     }
 
 
@@ -308,7 +308,7 @@ export class OpenaiService {
         }
     }
 
-    async extractDataFromResumeImages(imagePaths: string[]): Promise<any> {
+    async extractDataFromResumeImages(imagePaths: string[]): Promise<{ data: any; cost: number }> {
         const apiKey = process.env.OPENAI_API_KEY_RESUME_EXTRACTION || process.env.OPENAI_API_KEY;
         if (!apiKey) {
             throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
@@ -391,7 +391,12 @@ export class OpenaiService {
             });
 
             const result = response.choices[0].message.content;
-            return JSON.parse(result || '{}');
+            const usage = response.usage;
+            let cost = 0;
+            if (usage) {
+                cost = (usage.prompt_tokens / 1000) * 0.00015 + (usage.completion_tokens / 1000) * 0.0006;
+            }
+            return { data: JSON.parse(result || '{}'), cost };
 
         } catch (error: any) {
 

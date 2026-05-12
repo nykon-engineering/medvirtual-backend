@@ -11,6 +11,8 @@ import { CreateTalentPoolLeadDto } from './dto/create-talent-pool-lead.dto';
 import { UpdateTalentPoolLeadDto } from './dto/update-talent-pool-lead.dto';
 import { QueryTalentPoolLeadsDto } from './dto/query-talent-pool-leads.dto';
 
+jest.mock('axios');
+
 const mockPrisma = {
   talentPoolLead: {
     count: jest.fn(),
@@ -25,9 +27,19 @@ const mockPrisma = {
   },
   organization: {
     findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
   },
   ticket: {
     create: jest.fn(),
+  },
+  contact: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  candidate: {
+    findUnique: jest.fn(),
   },
 };
 
@@ -52,6 +64,60 @@ describe('TalentPoolLeadsService', () => {
     prisma = module.get<PrismaService>(PrismaService);
 
     jest.clearAllMocks();
+  });
+
+  describe('getOwnerId', () => {
+    it('should return null when emailUser is empty', async () => {
+      const result = await service.getOwnerId('');
+      expect(result).toBeNull();
+      expect(mockPrisma.uSER.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should return hubspot_id when user exists and has hubspot_id', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue({
+        id: 'user-1',
+        hubspot_id: 'hs-123',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john@example.com',
+      });
+
+      const result = await service.getOwnerId('john@example.com');
+
+      expect(result).toBe('hs-123');
+      expect(mockPrisma.uSER.findUnique).toHaveBeenCalledWith({
+        where: { email: 'john@example.com' },
+        select: {
+          id: true,
+          hubspot_id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+        },
+      });
+    });
+
+    it('should return null when user exists but has no hubspot_id', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue({
+        id: 'user-1',
+        hubspot_id: null,
+        first_name: 'Jane',
+        last_name: 'Doe',
+        email: 'jane@example.com',
+      });
+
+      const result = await service.getOwnerId('jane@example.com');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when user does not exist', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+
+      const result = await service.getOwnerId('unknown@example.com');
+
+      expect(result).toBeNull();
+    });
   });
 
   describe('create', () => {
@@ -193,6 +259,54 @@ describe('TalentPoolLeadsService', () => {
           created_at: true,
         }),
       });
+    });
+
+    it('should execute full CRM integration flow when org does not exist', async () => {
+      const mockCreatedLead = {
+        id: 'lead-1',
+        name: 'John Doe',
+        first_name: 'John',
+        last_name: 'Doe',
+        email: 'john@healthcare.com',
+        organization: 'Healthcare Organization',
+        website_url: 'https://www.healthcare.com',
+        language_preference: 'yes',
+        status: 'new',
+        created_at: new Date(),
+      };
+      const mockCreatedOrg = { id: 'org-1', hubspot_id: null, name: 'Healthcare Organization' };
+      const mockCreatedContact = { id: 'contact-1', hubspot_id: null };
+
+      mockPrisma.talentPoolLead.count.mockResolvedValue(0);
+      mockPrisma.talentPoolLead.findFirst.mockResolvedValue(null);
+      mockPrisma.talentPoolLead.create.mockResolvedValue(mockCreatedLead);
+      mockPrisma.organization.findFirst.mockResolvedValue(null);
+      mockPrisma.organization.create.mockResolvedValue(mockCreatedOrg);
+      mockPrisma.organization.update.mockResolvedValue({ ...mockCreatedOrg, hubspot_id: 'hs-org-1' });
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+      mockPrisma.ticket.create.mockResolvedValue({
+        id: 'ticket-1',
+        type: 'interview',
+        title: 'Interview Request - Healthcare Organization',
+        user: null,
+        organization: null,
+      });
+      mockPrisma.contact.findFirst.mockResolvedValue(null);
+      mockPrisma.contact.create.mockResolvedValue(mockCreatedContact);
+      mockPrisma.contact.update.mockResolvedValue({ ...mockCreatedContact, hubspot_id: 'hs-c-1' });
+      mockPrisma.candidate.findUnique.mockResolvedValue(null);
+      const axiosMock = jest.requireMock('axios') as jest.Mocked<any>;
+      axiosMock.post
+        .mockResolvedValueOnce({ data: { id: 'hs-org-1' } }) // HubSpot org sync
+        .mockResolvedValueOnce({ data: { id: 'hs-c-1' } }); // HubSpot contact sync
+      mockNotificationsService.notifyTicketEvent.mockResolvedValue(true);
+
+      const result = await service.create(createDto);
+
+      expect(result).toEqual(mockCreatedLead);
+      expect(mockPrisma.organization.create).toHaveBeenCalled();
+      expect(mockPrisma.ticket.create).toHaveBeenCalled();
+      expect(mockPrisma.contact.create).toHaveBeenCalled();
     });
 
     it('should normalize email to lowercase and trim', async () => {

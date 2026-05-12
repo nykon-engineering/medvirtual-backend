@@ -6,7 +6,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 // Mocks
 // ---------------------------------------------------------------------------
 const mockPrisma = {
-  organization: { findUnique: jest.fn() },
+  organization: { findUnique: jest.fn(), update: jest.fn() },
   affiliateProfile: { findFirst: jest.fn() },
   hubspotInvoiceSnapshot: { findMany: jest.fn() },
   affiliateCommission: { create: jest.fn() },
@@ -16,13 +16,16 @@ const mockPrisma = {
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
+// Default: newly deployed org — not_eligible, commissions go to 'detected'.
+// Tests that need eligible+>30-day behavior override med_alliance_referral_status + eligibility_start_at.
 const makeOrg = (overrides: Partial<any> = {}) => ({
   id: 'org-1',
   referred_by_affiliate_id: 'user-1',
-  med_alliance_referral_status: 'eligible',
+  med_alliance_referral_status: 'not_eligible',
   med_alliance_block_reason: null,
-  eligibility_start_at: new Date('2026-01-01'),
-  first_paid_invoice_at: new Date('2026-01-01'),
+  eligibility_start_at: new Date('2026-01-15'),
+  first_paid_invoice_at: new Date('2026-01-15'),
+  referral_stage: 'deployed',
   createdAt: new Date('2025-01-01'),
   ...overrides,
 });
@@ -319,6 +322,219 @@ describe('CommissionDetectionService', () => {
 
       // One failed, one created
       expect(result.created).toBe(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 30-day deployment lifecycle
+  // -------------------------------------------------------------------------
+  describe('30-day deployment lifecycle', () => {
+    // -----------------------------------------------------------------------
+    // markDeployed: first invoice on a brand-new referral
+    // -----------------------------------------------------------------------
+    it('should call markDeployed (organization.update + audit log) on the first invoice', async () => {
+      const newOrg = makeOrg({
+        first_paid_invoice_at: null,
+        eligibility_start_at: null,
+        referral_stage: 'referred',
+        med_alliance_referral_status: 'not_eligible',
+        // Must be < 1 year old so the referral-age guard does not fire first
+        createdAt: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000),
+      });
+      mockPrisma.organization.findUnique.mockResolvedValue(newOrg);
+      mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.affiliateCommission.create.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.run('org-1');
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: expect.objectContaining({
+            referral_stage: 'deployed',
+            eligibility_start_at: expect.any(Date),
+            first_paid_invoice_at: expect.any(Date),
+            med_alliance_block_reason: null,
+          }),
+        }),
+      );
+    });
+
+    it('should NOT call markDeployed when org is already deployed', async () => {
+      // first_paid_invoice_at is set — idempotent guard fires
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ referral_stage: 'deployed' }),
+      );
+      mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
+      mockPrisma.affiliateCommission.create.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.run('org-1');
+
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    // -----------------------------------------------------------------------
+    // Churned guard
+    // -----------------------------------------------------------------------
+    it('should skip commission creation for churned org', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ referral_stage: 'churned' }),
+      );
+      mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
+
+      const result = await service.run('org-1');
+
+      expect(result).toEqual({ created: 0, skipped: 0 });
+      expect(mockPrisma.affiliateCommission.create).not.toHaveBeenCalled();
+    });
+
+    it('should skip commission creation for newly churned org (no prior invoices)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({
+          first_paid_invoice_at: null,
+          eligibility_start_at: null,
+          referral_stage: 'churned',
+        }),
+      );
+      mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
+
+      const result = await service.run('org-1');
+
+      expect(result).toEqual({ created: 0, skipped: 0 });
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    // -----------------------------------------------------------------------
+    // Dynamic commission status
+    // -----------------------------------------------------------------------
+    it('should create commission as "pending_admin_confirmation" when org is eligible and deployed > 30 days', async () => {
+      const eligibleOrg = makeOrg({
+        med_alliance_referral_status: 'eligible',
+        // 40 days ago — past the 30-day stabilization window and well within 1 year
+        eligibility_start_at: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
+      });
+      mockPrisma.organization.findUnique.mockResolvedValue(eligibleOrg);
+      mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
+      mockPrisma.affiliateCommission.create.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.run('org-1');
+
+      expect(mockPrisma.affiliateCommission.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'pending_admin_confirmation' }),
+        }),
+      );
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            event: 'commission_pending_admin_confirmation',
+            new_status: 'pending_admin_confirmation',
+          }),
+        }),
+      );
+    });
+
+    it('should create commission as "detected" when org is eligible but deployed < 30 days', async () => {
+      const recentlyDeployedOrg = makeOrg({
+        med_alliance_referral_status: 'eligible',
+        // 10 days ago — still inside the 30-day stabilization window
+        eligibility_start_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      });
+      mockPrisma.organization.findUnique.mockResolvedValue(recentlyDeployedOrg);
+      mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
+      mockPrisma.affiliateCommission.create.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.run('org-1');
+
+      expect(mockPrisma.affiliateCommission.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'detected' }),
+        }),
+      );
+    });
+
+    it('should create commission as "detected" for not_eligible org (standard deployed state)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
+      mockPrisma.affiliateCommission.create.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.run('org-1');
+
+      expect(mockPrisma.affiliateCommission.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'detected' }),
+        }),
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // Eligibility expiry
+    // -----------------------------------------------------------------------
+    it('should expire eligibility when one-year window has elapsed and return zeros', async () => {
+      const expiredOrg = makeOrg({
+        med_alliance_referral_status: 'eligible',
+        eligibility_start_at: new Date('2024-01-01'), // > 1 year ago
+      });
+      mockPrisma.organization.findUnique.mockResolvedValue(expiredOrg);
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.run('org-1');
+
+      expect(result).toEqual({ created: 0, skipped: 0 });
+      expect(mockPrisma.affiliateCommission.create).not.toHaveBeenCalled();
+    });
+
+    it('should expire eligibility WITHOUT nulling eligibility_start_at', async () => {
+      const expiredOrg = makeOrg({
+        med_alliance_referral_status: 'eligible',
+        eligibility_start_at: new Date('2024-01-01'),
+      });
+      mockPrisma.organization.findUnique.mockResolvedValue(expiredOrg);
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.run('org-1');
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            med_alliance_referral_status: 'not_eligible',
+            med_alliance_block_reason: 'eligibility_expired: one-year window elapsed',
+          }),
+        }),
+      );
+      // eligibility_start_at must NOT be set to null/undefined — it's the permanent deployment date
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData).not.toHaveProperty('eligibility_start_at');
+    });
+
+    it('should skip org with eligibility_expired block_reason (window expired in a prior run)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({
+          med_alliance_referral_status: 'not_eligible',
+          med_alliance_block_reason: 'eligibility_expired: one-year window elapsed',
+          first_paid_invoice_at: new Date('2024-06-01'),
+        }),
+      );
+
+      const result = await service.run('org-1');
+
+      expect(result).toEqual({ created: 0, skipped: 0 });
+      expect(mockPrisma.affiliateProfile.findFirst).not.toHaveBeenCalled();
     });
   });
 });

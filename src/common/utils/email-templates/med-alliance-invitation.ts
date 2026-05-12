@@ -110,13 +110,20 @@ export function MedAllianceInvitation(firstName: string, theme?: EmailTheme): st
         <div class="greeting">Hello, ${firstName}!</div>
 
         <div class="main-message">
-          You have been invited to join the Med Alliance Program by ${companyName}. As a Med Alliance partner,
-          you'll have access to exclusive benefits and commission opportunities.
+          <p>Great news — you have been added to the <strong>Med Alliance Program</strong> by ${companyName}.</p>
+          <p>As a Med Alliance Partner, your dashboard is ready. Here's what you now have access to:</p>
+          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
+            <li>Commission earnings on every successful referral</li>
+            <li>A dedicated partner dashboard with real-time tracking</li>
+            <li>Transparent payout history and on-demand payout requests</li>
+            <li>Full visibility into the organizations you've referred</li>
+          </ul>
+          <p>Your partner profile is active. Log in to start tracking your referrals and commissions.</p>
         </div>
 
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">
-            Access Med Alliance
+            Go to My Partner Dashboard
           </a>
         </div>
 

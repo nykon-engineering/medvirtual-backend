@@ -6,6 +6,7 @@ import { ownerToDbDictionary } from "../dictionaries/owner-dictionary";
 import { dealToDbDictionary } from "../dictionaries/deal-dictionary";
 import { hrTicketToDbDictionary } from "../dictionaries/HRTicket-dicionary";
 import { invoiceToDbDictionary } from "../dictionaries/invoice-dictionary";
+import { contactToDbDictionary } from "../dictionaries/contact-dictionary";
 
 interface candidateData {
     [key: string]: any;
@@ -16,6 +17,10 @@ interface organizationData {
 }
 
 interface ownerData {
+    [key: string]: any;
+}
+
+interface contactData {
     [key: string]: any;
 }
 
@@ -118,6 +123,19 @@ export function mapOwnerToDb(hubspotData: ownerData): any {
     const result: Partial<any> = {};
 
     for (const [hubspotKey, dbKey] of Object.entries(ownerToDbDictionary)) {
+        
+        if (hubspotData[hubspotKey] !== undefined) {
+          result[dbKey] = hubspotData[hubspotKey];
+        }
+        
+      }
+    return result as any;
+}
+
+export function mapContactToDb(hubspotData: contactData): any {
+    const result: Partial<any> = {};
+
+    for (const [hubspotKey, dbKey] of Object.entries(contactToDbDictionary)) {
         
         if (hubspotData[hubspotKey] !== undefined) {
           result[dbKey] = hubspotData[hubspotKey];

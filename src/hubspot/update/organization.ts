@@ -1,15 +1,17 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
-import { dbToHrTicketDictionary } from "../../common/dictionaries/HRTicket-dicionary";
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OwnerCreationService } from "../create/Owner";
+import { HubspotAuditService } from "../hubspot-audit.service";
 
 @Injectable()
 
 export class OrganizationUpdateService {
     constructor(
       private readonly prisma: PrismaService,
-      private readonly ownerCreationService: OwnerCreationService
+      private readonly ownerCreationService: OwnerCreationService,
+      private readonly audit: HubspotAuditService,
      ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
@@ -23,7 +25,7 @@ export class OrganizationUpdateService {
           last_name: true,
           email: true,
         },
-          
+
       });
 
       /* => Commented because we cannot create owners using hubspot API
@@ -32,16 +34,16 @@ export class OrganizationUpdateService {
       }
       */
 
-      return user && user.hubspot_id ? user.hubspot_id : null; 
+      return user && user.hubspot_id ? user.hubspot_id : null;
     }
 
-    async execute(data: any): Promise<any> {
+    async execute(data: any, actorUserId?: string): Promise<any> {
+        const source = actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron;
         try {
             const hubspotProperties: Record<string, any> = {};
             //We are using just hubspot_owner_id because it's the only field that we need to update in hire request for now
             hubspotProperties.hubspot_owner_id = data.admin.id ? await this.getOwnerId(data.admin.id) : undefined;
-            
-            
+
             //console.log(hubspotProperties)
             const response = await axios.patch(
             `https://api.hubapi.com/crm/v3/objects/companies/${Number(data.hubspot_id)}`,
@@ -55,7 +57,19 @@ export class OrganizationUpdateService {
               },
             }
         );
-          
+
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.organization,
+            entityId: data.id ?? data.hubspot_id,
+            hubspotObjectId: data.hubspot_id,
+            hubspotObjectType: 'companies',
+            action: HubspotAuditAction.UPDATE,
+            source,
+            success: true,
+            payload: { fields: Object.keys(hubspotProperties) },
+          });
+
           return true;
         } catch (error) {
           if (error.response) {
@@ -63,7 +77,19 @@ export class OrganizationUpdateService {
           } else {
             console.error("Connection error:", error.message);
           }
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.organization,
+            entityId: data.id ?? data.hubspot_id,
+            hubspotObjectId: data.hubspot_id,
+            hubspotObjectType: 'companies',
+            action: HubspotAuditAction.UPDATE,
+            source,
+            success: false,
+            errorCode: error.response?.status?.toString() ?? error.code,
+            errorMessage: error.message,
+          });
         }
-        
+
     }
 }

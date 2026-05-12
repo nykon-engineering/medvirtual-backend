@@ -820,4 +820,861 @@ describe('PayoutRequestsService', () => {
       expect((result as any).id).toBe('payout-1');
     });
   });
+
+  // -------------------------------------------------------------------------
+  // createForAdmin
+  // -------------------------------------------------------------------------
+  describe('createForAdmin', () => {
+    const adminCreateDto = {
+      affiliate_profile_id: 'profile-1',
+      commission_ids: ['commission-1'],
+    } as any;
+
+    beforeEach(() => {
+      // findOneForAdmin is called at the end; mock affiliatePayoutRequest.findUnique
+      // for both the internal profile lookup and the final findOneForAdmin call.
+    });
+
+    it('should throw NotFoundException when affiliate profile is not found', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue(null),
+      };
+
+      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw BadRequestException when profile has no linked user', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: null, payout_preference_method: 'ach' }),
+      };
+
+      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw BadRequestException when a commission ID is not found', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([]);
+
+      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
+        new BadRequestException('One or more commission IDs were not found'),
+      );
+    });
+
+    it('should throw BadRequestException when commission belongs to a different affiliate', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({ affiliate_id: 'some-other-user' }),
+      ]);
+
+      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
+        new BadRequestException('One or more commissions do not belong to this affiliate'),
+      );
+    });
+
+    it('should throw BadRequestException when commission is not eligible', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({ status: 'detected' }),
+      ]);
+
+      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should create payout request in transaction and return admin-shaped result', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([makeCommission()]);
+
+      const txMock = {
+        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-1' }) },
+        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      // findOneForAdmin calls findUnique with ADMIN_SELECT
+      const adminRequest = {
+        ...makePayoutRequest(),
+        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliateProfile: { id: 'profile-1', payout_details: null, payout_preference_method: 'ach', payout_preference_reference: null, payout_preference_notes: null, createdAt: new Date() },
+        approvedBy: null,
+        reviewedBy: null,
+      };
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(adminRequest);
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.createForAdmin(adminCreateDto, mockAdminUser);
+
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(txMock.affiliatePayoutRequest.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'requested', affiliate_id: 'affiliate-1' }),
+        }),
+      );
+      // Audit log: 1 for payout request + 1 per commission
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledTimes(2);
+      expect(result).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // createFromCron
+  // -------------------------------------------------------------------------
+  describe('createFromCron', () => {
+    it('should throw NotFoundException when affiliate profile is not found', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue(null),
+      };
+
+      await expect(service.createFromCron('profile-99', ['commission-1'])).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw BadRequestException when profile has no connected user', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: null, payout_preference_method: null }),
+      };
+
+      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw BadRequestException when a commission ID is not found', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([]);
+
+      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
+        new BadRequestException('One or more commission IDs were not found'),
+      );
+    });
+
+    it('should throw BadRequestException when commission belongs to a different affiliate', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({ affiliate_id: 'other-user' }),
+      ]);
+
+      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw BadRequestException when commission is not eligible', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({ status: 'pending_admin_confirmation' }),
+      ]);
+
+      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should create payout request and return id + requested_amount', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({ commission_amount: '200.00' }),
+      ]);
+
+      const txMock = {
+        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-cron-1' }) },
+        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.createFromCron('profile-1', ['commission-1']);
+
+      expect(result.id).toBe('payout-cron-1');
+      expect(result.requested_amount.toString()).toBe('200');
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // findAllForAffiliate — amount filters (lines 543-545)
+  // -------------------------------------------------------------------------
+  describe('findAllForAffiliate — amount filters', () => {
+    it('should apply amount_min filter', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[makePayoutRequest()], 1]);
+
+      const result = await service.findAllForAffiliate(
+        { amount_min: 100 } as any,
+        mockAffiliateUser,
+      );
+
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should apply amount_max filter', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      const result = await service.findAllForAffiliate(
+        { amount_max: 50 } as any,
+        mockAffiliateUser,
+      );
+
+      expect(result.data).toHaveLength(0);
+    });
+
+    it('should apply both amount_min and amount_max', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[makePayoutRequest()], 1]);
+
+      const result = await service.findAllForAffiliate(
+        { amount_min: 100, amount_max: 500 } as any,
+        mockAffiliateUser,
+      );
+
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should apply payment_method filter', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[makePayoutRequest()], 1]);
+
+      const result = await service.findAllForAffiliate(
+        { payment_method: 'ach' } as any,
+        mockAffiliateUser,
+      );
+
+      expect(result.data).toHaveLength(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // findAllForAdmin — date range, amount, search filters (lines 606-618)
+  // -------------------------------------------------------------------------
+  describe('findAllForAdmin — additional filters', () => {
+    const adminRequest = () => ({
+      ...makePayoutRequest(),
+      affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+      affiliateProfile: null,
+      approvedBy: null,
+      reviewedBy: null,
+      createdAt: new Date('2026-03-01'),
+    });
+
+    it('should apply created_from and created_to date filters', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[adminRequest()], 1]);
+
+      const result = await service.findAllForAdmin({
+        created_from: '2026-01-01',
+        created_to: '2026-12-31',
+      });
+
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should apply amount_min filter', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[adminRequest()], 1]);
+
+      const result = await service.findAllForAdmin({ amount_min: 100 });
+
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should apply amount_max filter', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      const result = await service.findAllForAdmin({ amount_max: 10 });
+
+      expect(result.data).toHaveLength(0);
+    });
+
+    it('should apply search filter on affiliate name/email', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[adminRequest()], 1]);
+
+      const result = await service.findAllForAdmin({ search: 'Jane' });
+
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should post-filter by risk_flag=duplicate and update total', async () => {
+      // Two rows with same affiliate_id to trigger duplicate risk
+      const rows = [
+        { ...adminRequest(), affiliate_id: 'affiliate-1', createdAt: new Date('2026-03-01') },
+        { ...adminRequest(), affiliate_id: 'affiliate-1', createdAt: new Date('2026-03-02') },
+      ];
+      mockPrisma.$transaction.mockResolvedValue([rows, 2]);
+
+      const result = await service.findAllForAdmin({ risk_flag: 'duplicate' } as any);
+
+      expect(result.pagination.total).toBe(result.data.length);
+    });
+
+    it('should post-filter by risk_flag=missing_banking', async () => {
+      const row = {
+        ...adminRequest(),
+        affiliateProfile: { banking_complete: false },
+      };
+      mockPrisma.$transaction.mockResolvedValue([[row], 1]);
+
+      const result = await service.findAllForAdmin({ risk_flag: 'missing_banking' } as any);
+
+      expect(result.pagination.total).toBe(result.data.length);
+    });
+
+    it('should post-filter by risk_flag=aging for old requests', async () => {
+      const oldRow = {
+        ...adminRequest(),
+        createdAt: new Date('2020-01-01'), // definitely older than 14 days
+      };
+      mockPrisma.$transaction.mockResolvedValue([[oldRow], 1]);
+
+      const result = await service.findAllForAdmin({ risk_flag: 'aging' } as any);
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].is_aging).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // startReview (lines 670-700)
+  // -------------------------------------------------------------------------
+  describe('startReview', () => {
+    it('should throw NotFoundException when payout request does not exist', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.startReview('payout-99', mockAdminUser)).rejects.toThrow(
+        new NotFoundException('Payout request not found'),
+      );
+    });
+
+    it('should throw BadRequestException when status is not "requested"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+        status: 'approved',
+      });
+
+      await expect(service.startReview('payout-1', mockAdminUser)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should update status to "under_review" and return admin-shaped result', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({ id: 'payout-1', status: 'requested' })
+        .mockResolvedValueOnce({
+          ...makePayoutRequest({ status: 'under_review' }),
+          affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+          affiliateProfile: null,
+          approvedBy: null,
+          reviewedBy: null,
+        });
+      mockPrisma.affiliatePayoutRequest.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.startReview('payout-1', mockAdminUser);
+
+      expect(mockPrisma.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'under_review', reviewed_by: 'admin-1' }),
+        }),
+      );
+      expect(result).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // reopen (lines 953-1010)
+  // -------------------------------------------------------------------------
+  describe('reopen', () => {
+    it('should throw NotFoundException when payout request does not exist', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.reopen('payout-99', 'requested', mockAdminUser),
+      ).rejects.toThrow(new NotFoundException('Payout request not found'));
+    });
+
+    it('should throw BadRequestException for invalid transition (requested → requested)', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+        status: 'requested',
+        commissions: [],
+      });
+
+      await expect(
+        service.reopen('payout-1', 'requested', mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for invalid transition (approved → requested)', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+        status: 'approved',
+        commissions: [],
+      });
+
+      await expect(
+        service.reopen('payout-1', 'requested', mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reopen from "under_review" to "requested" and clear reviewed fields', async () => {
+      const adminRequest = {
+        ...makePayoutRequest({ status: 'requested' }),
+        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliateProfile: null,
+        approvedBy: null,
+        reviewedBy: null,
+      };
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({ id: 'payout-1', status: 'under_review', commissions: [] })
+        .mockResolvedValueOnce(adminRequest);
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.reopen('payout-1', 'requested', mockAdminUser);
+
+      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'requested', reviewed_by: null, reviewed_at: null }),
+        }),
+      );
+    });
+
+    it('should reopen from "rejected" to "requested" and revert commissions', async () => {
+      const adminRequest = {
+        ...makePayoutRequest({ status: 'requested' }),
+        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliateProfile: null,
+        approvedBy: null,
+        reviewedBy: null,
+      };
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({ id: 'payout-1', status: 'rejected', commissions: [{ commission_id: 'commission-1' }] })
+        .mockResolvedValueOnce(adminRequest);
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.reopen('payout-1', 'requested', mockAdminUser);
+
+      expect(txMock.affiliateCommission.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['commission-1'] } },
+        data: { status: 'requested' },
+      });
+      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'requested', rejection_reason: null }),
+        }),
+      );
+    });
+
+    it('should reopen from "rejected" to "under_review"', async () => {
+      const adminRequest = {
+        ...makePayoutRequest({ status: 'under_review' }),
+        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliateProfile: null,
+        approvedBy: null,
+        reviewedBy: null,
+      };
+      mockPrisma.affiliatePayoutRequest.findUnique
+        .mockResolvedValueOnce({ id: 'payout-1', status: 'rejected', commissions: [] })
+        .mockResolvedValueOnce(adminRequest);
+
+      const txMock = {
+        affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
+        affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.reopen('payout-1', 'under_review', mockAdminUser);
+
+      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'under_review' }),
+        }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // addNote (lines 1015-1047)
+  // -------------------------------------------------------------------------
+  describe('addNote', () => {
+    const noteDto = { type: 'internal', content: 'This looks suspicious' } as any;
+
+    it('should throw NotFoundException when payout request does not exist', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.addNote('payout-99', noteDto, mockAdminUser)).rejects.toThrow(
+        new NotFoundException('Payout request not found'),
+      );
+    });
+
+    it('should create and return the note with author name', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn().mockResolvedValue({
+          id: 'note-1',
+          type: 'internal',
+          content: 'This looks suspicious',
+          createdAt: new Date('2026-03-01'),
+          author: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
+        }),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      };
+
+      const result = await service.addNote('payout-1', noteDto, mockAdminUser);
+
+      expect((mockPrisma as any).payoutRequestNote.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            payout_request_id: 'payout-1',
+            author_user_id: 'admin-1',
+            type: 'internal',
+            content: 'This looks suspicious',
+          }),
+        }),
+      );
+      expect(result.author).toBe('Admin User');
+      expect(result.created_at).toBeDefined();
+    });
+
+    it('should fall back to "Admin" when author is null', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn().mockResolvedValue({
+          id: 'note-1',
+          type: 'internal',
+          content: 'Note content',
+          createdAt: new Date('2026-03-01'),
+          author: null,
+        }),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      };
+
+      const result = await service.addNote('payout-1', noteDto, mockAdminUser);
+
+      expect(result.author).toBe('Admin');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getNotes (lines 1052-1082)
+  // -------------------------------------------------------------------------
+  describe('getNotes', () => {
+    it('should throw NotFoundException when payout request does not exist', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.getNotes('payout-99')).rejects.toThrow(
+        new NotFoundException('Payout request not found'),
+      );
+    });
+
+    it('should return all notes with author names', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'note-1',
+            type: 'internal',
+            content: 'First note',
+            createdAt: new Date('2026-03-01'),
+            author: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
+          },
+          {
+            id: 'note-2',
+            type: 'user',
+            content: 'Second note',
+            createdAt: new Date('2026-03-02'),
+            author: null,
+          },
+        ]),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      };
+
+      const result = await service.getNotes('payout-1');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].author).toBe('Admin User');
+      expect(result[1].author).toBe('Admin');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getNotesForAffiliates (lines 1087-1117)
+  // -------------------------------------------------------------------------
+  describe('getNotesForAffiliates', () => {
+    it('should throw NotFoundException when payout request does not exist', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.getNotesForAffiliates('payout-99')).rejects.toThrow(
+        new NotFoundException('Payout request not found'),
+      );
+    });
+
+    it('should return only user-type notes', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'note-1',
+            type: 'user',
+            content: 'User-visible note',
+            createdAt: new Date('2026-03-01'),
+            author: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
+          },
+        ]),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      };
+
+      const result = await service.getNotesForAffiliates('payout-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe('user');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // updateNote (lines 1122-1149)
+  // -------------------------------------------------------------------------
+  describe('updateNote', () => {
+    it('should throw NotFoundException when note is not found', async () => {
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+        delete: jest.fn(),
+      };
+
+      await expect(
+        service.updateNote('payout-1', 'note-99', { content: 'Updated' } as any),
+      ).rejects.toThrow(new NotFoundException('Note not found'));
+    });
+
+    it('should update and return the note with author name', async () => {
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: 'note-1', payout_request_id: 'payout-1' }),
+        update: jest.fn().mockResolvedValue({
+          id: 'note-1',
+          type: 'internal',
+          content: 'Updated content',
+          createdAt: new Date('2026-03-01'),
+          author: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
+        }),
+        delete: jest.fn(),
+      };
+
+      const result = await service.updateNote('payout-1', 'note-1', { content: 'Updated content' } as any);
+
+      expect((mockPrisma as any).payoutRequestNote.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'note-1' },
+          data: { content: 'Updated content' },
+        }),
+      );
+      expect(result.author).toBe('Admin User');
+      expect(result.created_at).toBeDefined();
+    });
+
+    it('should fall back to "Admin" when updated note author is null', async () => {
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: 'note-1' }),
+        update: jest.fn().mockResolvedValue({
+          id: 'note-1',
+          type: 'internal',
+          content: 'Updated',
+          createdAt: new Date(),
+          author: null,
+        }),
+        delete: jest.fn(),
+      };
+
+      const result = await service.updateNote('payout-1', 'note-1', { content: 'Updated' } as any);
+
+      expect(result.author).toBe('Admin');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // deleteNote (lines 1154-1161)
+  // -------------------------------------------------------------------------
+  describe('deleteNote', () => {
+    it('should throw NotFoundException when note is not found', async () => {
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+        delete: jest.fn(),
+      };
+
+      await expect(
+        service.deleteNote('payout-1', 'note-99'),
+      ).rejects.toThrow(new NotFoundException('Note not found'));
+    });
+
+    it('should delete the note when found', async () => {
+      (mockPrisma as any).payoutRequestNote = {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue({ id: 'note-1', payout_request_id: 'payout-1' }),
+        update: jest.fn(),
+        delete: jest.fn().mockResolvedValue({}),
+      };
+
+      await service.deleteNote('payout-1', 'note-1');
+
+      expect((mockPrisma as any).payoutRequestNote.delete).toHaveBeenCalledWith({
+        where: { id: 'note-1' },
+      });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getStatusCounts (lines 1206-1224)
+  // -------------------------------------------------------------------------
+  describe('getStatusCounts', () => {
+    it('should return zero counts when no payout requests exist', async () => {
+      (mockPrisma.affiliatePayoutRequest as any).groupBy = jest.fn().mockResolvedValue([]);
+
+      const result = await service.getStatusCounts();
+
+      expect(result).toEqual({
+        requested: 0,
+        under_review: 0,
+        approved: 0,
+        paid: 0,
+        rejected: 0,
+        cancelled: 0,
+      });
+    });
+
+    it('should populate counts from groupBy results', async () => {
+      (mockPrisma.affiliatePayoutRequest as any).groupBy = jest.fn().mockResolvedValue([
+        { status: 'requested', _count: { id: 5 } },
+        { status: 'under_review', _count: { id: 2 } },
+        { status: 'approved', _count: { id: 3 } },
+        { status: 'paid', _count: { id: 10 } },
+      ]);
+
+      const result = await service.getStatusCounts();
+
+      expect(result.requested).toBe(5);
+      expect(result.under_review).toBe(2);
+      expect(result.approved).toBe(3);
+      expect(result.paid).toBe(10);
+      expect(result.rejected).toBe(0);
+      expect(result.cancelled).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // mapCommissionStatus (lines 160, 164-168) — covered via shapeAdminRequest
+  // -------------------------------------------------------------------------
+  describe('mapCommissionStatus (via findOneForAdmin / findAllForAdmin)', () => {
+    const makeAdminRaw = (commissionStatus: string) => ({
+      ...makePayoutRequest(),
+      affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+      affiliateProfile: null,
+      approvedBy: null,
+      reviewedBy: null,
+      commissions: [
+        {
+          commission: {
+            id: 'c-1',
+            commission_amount: '150.00',
+            base_amount_snapshot: '1000.00',
+            commission_percent_snapshot: '15',
+            status: commissionStatus,
+            admin_decision_reason: null,
+            organization: { id: 'org-1', name: 'Acme' },
+            hubspotInvoiceSnapshot: null,
+          },
+        },
+      ],
+    });
+
+    it('should map "paid" commission status to "approved_for_payout"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('paid'));
+
+      const result = await service.findOneForAdmin('payout-1');
+
+      expect((result as any).commissions[0].decision).toBe('approved_for_payout');
+    });
+
+    it('should map "requested" commission status to "pending_review"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('requested'));
+
+      const result = await service.findOneForAdmin('payout-1');
+
+      expect((result as any).commissions[0].decision).toBe('pending_review');
+    });
+
+    it('should map "eligible" commission status to "pending_review"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('eligible'));
+
+      const result = await service.findOneForAdmin('payout-1');
+
+      expect((result as any).commissions[0].decision).toBe('pending_review');
+    });
+
+    it('should map "rejected" commission status to "rejected_for_payout"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('rejected'));
+
+      const result = await service.findOneForAdmin('payout-1');
+
+      expect((result as any).commissions[0].decision).toBe('rejected_for_payout');
+    });
+
+    it('should map unknown commission status to "pending_review"', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('detected'));
+
+      const result = await service.findOneForAdmin('payout-1');
+
+      expect((result as any).commissions[0].decision).toBe('pending_review');
+    });
+  });
 });

@@ -11,6 +11,7 @@ import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCre
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SqsService } from '../sqs/sqs.service';
+import { ContactService } from '../contacts/contacts.service';
 
 
 const userfake = { 
@@ -90,6 +91,10 @@ describe('OrganizationService', () => {
     sendMessage: jest.fn(),
   }
 
+  const mockContactService = {
+    createForOrganization: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -104,6 +109,7 @@ describe('OrganizationService', () => {
         { provide: HandlerDealCreation , useValue: handlerDealCreationMock },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: SqsService, useValue: mockSqsService },
+        { provide: ContactService, useValue: mockContactService },
       ],
     }).compile();
 
@@ -217,7 +223,8 @@ describe('OrganizationService', () => {
         name: 'Org 1', 
         phone: '123', 
         email: 'org1@example.com', 
-        owner_email: 'admin@admin.com' 
+        owner_email: 'admin@admin.com',
+        contact_email: 'contato@org1.com'
       }, userfake)).rejects.toThrow(BadRequestException);
     });
   });

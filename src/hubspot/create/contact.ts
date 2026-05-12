@@ -1,12 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { HubspotAuditService } from "../hubspot-audit.service";
 
 @Injectable()
 
 export class ContactCreationService {
     constructor(
-      private readonly prisma: PrismaService
+      private readonly prisma: PrismaService,
+      private readonly audit: HubspotAuditService,
     ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
@@ -20,7 +23,7 @@ export class ContactCreationService {
           last_name: true,
           email: true,
       },
-          
+
       });
 
       /* => Commented because we cannot create owners using hubspot API
@@ -29,17 +32,18 @@ export class ContactCreationService {
       }
       */
 
-      return user && user.hubspot_id ? user.hubspot_id : null; 
+      return user && user.hubspot_id ? user.hubspot_id : null;
     }
 
-    async execute(data: any): Promise<any> {
+    async execute(data: any, actorUserId?: string): Promise<any> {
+        const source = actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron;
         try {
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/contacts",
             {
               properties: {
-                account_type: data.organization.business_unit 
-                  ? data.organization.business_unit === 'MedVirtual' 
+                account_type: data.organization.business_unit
+                  ? data.organization.business_unit === 'MedVirtual'
                     ? 'Med Virtual'
                     : data.organization.business_unit
                   : "Not Specified", //business_unit
@@ -57,7 +61,7 @@ export class ContactCreationService {
               },
               associations: data.organization.hubspot_id ? [
                 {
-                  to: { id: data.organization.hubspot_id }, 
+                  to: { id: data.organization.hubspot_id },
                   types: [
                     {
                       associationCategory: "HUBSPOT_DEFINED",
@@ -79,7 +83,20 @@ export class ContactCreationService {
             where: { id: data.id },
             data: { hubspot_contact_id: response.data.id },
           });
-          
+
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.contact,
+            entityId: data.id,
+            hubspotObjectId: response.data.id,
+            hubspotObjectType: 'contacts',
+            action: HubspotAuditAction.CREATE,
+            source,
+            success: true,
+            payload: { email: data.email },
+            response: { id: response.data.id },
+          });
+
           return true;
         } catch (error) {
           if (error.response) {
@@ -87,7 +104,18 @@ export class ContactCreationService {
           } else {
             console.error("Connection error:", error.message);
           }
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.contact,
+            entityId: data.id,
+            hubspotObjectType: 'contacts',
+            action: HubspotAuditAction.CREATE,
+            source,
+            success: false,
+            errorCode: error.response?.status?.toString() ?? error.code,
+            errorMessage: error.message,
+          });
         }
-        
+
     }
 }

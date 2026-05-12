@@ -5,6 +5,8 @@ import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
+jest.mock('axios');
+
 const mockPrisma = {
   staff: {
     create: jest.fn(),
@@ -18,6 +20,9 @@ const mockPrisma = {
     findUnique: jest.fn(),
   },
   uSER: {
+    findUnique: jest.fn(),
+  },
+  candidate: {
     findUnique: jest.fn(),
   },
   bonus: {
@@ -654,6 +659,287 @@ describe('StaffService', () => {
         data: { status: 'active' },
       });
       expect(result).toEqual(mockFindOneResult);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // searchStaff
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('searchStaff', () => {
+    beforeEach(() => {
+      mockPrisma.staff.findMany.mockResolvedValue([]);
+    });
+
+    it('should return empty array when no staff found', async () => {
+      const result = await service.searchStaff({});
+      expect(result).toEqual([]);
+      expect(mockPrisma.staff.findMany).toHaveBeenCalled();
+    });
+
+    it('should filter by status when provided', async () => {
+      await service.searchStaff({ status: 'active' });
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.status).toBe('active');
+    });
+
+    it('should filter by organization_id when provided', async () => {
+      await service.searchStaff({ organization_id: 'org-1' });
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.organization_id).toBe('org-1');
+    });
+
+    it('should add OR search filter when search is provided', async () => {
+      await service.searchStaff({ search: 'John' });
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.OR).toEqual(
+        expect.arrayContaining([
+          { candidate: { first_name: { contains: 'John', mode: 'insensitive' } } },
+          { candidate: { last_name: { contains: 'John', mode: 'insensitive' } } },
+        ]),
+      );
+    });
+
+    it('should apply take limit when limit is provided', async () => {
+      await service.searchStaff({ limit: 5 });
+      const queryArg = mockPrisma.staff.findMany.mock.calls[0][0];
+      expect(queryArg.take).toBe(5);
+    });
+
+    it('should map avatar_url to avatar in returned staff', async () => {
+      process.env.AVATAR_URL = 'https://cdn.example.com/';
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-1', candidate: { avatar_url: 'photo.png' } },
+      ]);
+
+      const result: any = await service.searchStaff({});
+      expect(result[0].candidate.avatar).toBe('https://cdn.example.com/photo.png');
+      delete process.env.AVATAR_URL;
+    });
+
+    it('should set avatar to null when candidate has no avatar_url', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-1', candidate: { avatar_url: null } },
+      ]);
+
+      const result: any = await service.searchStaff({});
+      expect(result[0].candidate.avatar).toBeNull();
+    });
+
+    it('should set candidate to null when staff has no candidate', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-1', candidate: null },
+      ]);
+
+      const result: any = await service.searchStaff({});
+      expect(result[0].candidate).toBeNull();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // findByOrganization — search branch
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('findByOrganization (search branch)', () => {
+    it('should override OR with search conditions when search is provided', async () => {
+      const systemUser = { id: 'u1', role: 'system_admin' } as any;
+      mockPrisma.staff.findMany.mockResolvedValue([]);
+      mockPrisma.staff.count.mockResolvedValue(0);
+      mockPrisma.$transaction.mockImplementation((arr: any[]) => Promise.all(arr));
+
+      await service.findByOrganization(systemUser, 'org-1', 1, 10, 'Jane', null as any, null as any);
+
+      const whereArg = mockPrisma.staff.findMany.mock.calls[0][0].where;
+      expect(whereArg.OR).toEqual(
+        expect.arrayContaining([
+          { candidate: { first_name: { contains: 'Jane', mode: 'insensitive' } } },
+          { candidate: { last_name: { contains: 'Jane', mode: 'insensitive' } } },
+        ]),
+      );
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // syncOrganizationIds
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('syncOrganizationIds', () => {
+    it('should return early message when no staff records without org', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([]);
+
+      const result = await service.syncOrganizationIds();
+
+      expect(result.updated).toBe(0);
+      expect(result.skipped).toBe(0);
+      expect(result.errors).toEqual([]);
+      expect(result.message).toContain('No staff records to sync');
+    });
+
+    it('should update staff organization_id when org is found directly', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-1', hubspot_organization_id: 'hs-org-1' },
+      ]);
+      mockPrisma.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+      mockPrisma.staff.update.mockResolvedValue({});
+
+      const result = await service.syncOrganizationIds();
+
+      expect(mockPrisma.staff.update).toHaveBeenCalledWith({
+        where: { id: 'staff-1' },
+        data: { organization_id: 'org-1' },
+      });
+      expect(result.updated).toBe(1);
+      expect(result.skipped).toBe(0);
+    });
+
+    it('should create org via organizationCreation when not found, then update', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-1', hubspot_organization_id: 'hs-org-2' },
+      ]);
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce(null)       // not found initially
+        .mockResolvedValueOnce({ id: 'org-2' }); // found after creation
+      HandlerOrganizationCreationMock.execute.mockResolvedValue({});
+      mockPrisma.staff.update.mockResolvedValue({});
+
+      const result = await service.syncOrganizationIds();
+
+      expect(HandlerOrganizationCreationMock.execute).toHaveBeenCalledWith({ objectId: 'hs-org-2' });
+      expect(result.updated).toBe(1);
+    });
+
+    it('should record error and skip when organizationCreation.execute throws', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-1', hubspot_organization_id: 'hs-org-fail' },
+      ]);
+      mockPrisma.organization.findUnique.mockResolvedValue(null);
+      HandlerOrganizationCreationMock.execute.mockRejectedValue(new Error('HubSpot error'));
+
+      const result = await service.syncOrganizationIds();
+
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].staffId).toBe('staff-1');
+      expect(result.updated).toBe(0);
+    });
+
+    it('should skip when org still not found after creation attempt', async () => {
+      mockPrisma.staff.findMany.mockResolvedValue([
+        { id: 'staff-1', hubspot_organization_id: 'hs-org-3' },
+      ]);
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce(null)  // not found initially
+        .mockResolvedValueOnce(null); // still not found after creation
+      HandlerOrganizationCreationMock.execute.mockResolvedValue({});
+
+      const result = await service.syncOrganizationIds();
+
+      expect(result.skipped).toBe(1);
+      expect(result.updated).toBe(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // populateDbFromHubspot
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('populateDbFromHubspot', () => {
+    let axiosMock: jest.Mocked<any>;
+
+    beforeEach(() => {
+      axiosMock = jest.requireMock('axios') as jest.Mocked<any>;
+      jest.clearAllMocks();
+    });
+
+    it('should return success message with 0 deals when no deals are fetched', async () => {
+      axiosMock.post.mockResolvedValueOnce({ data: { results: [], paging: null } });
+
+      const result = await service.populateDbFromHubspot();
+      expect(result).toContain('0 deals');
+      expect(mockPrisma.staff.createMany).not.toHaveBeenCalled();
+    });
+
+    it('should process deal with candidate found in DB and company association', async () => {
+      const deal = { id: 'deal-hs-1', properties: { hs_object_id: 'deal-hs-1' } };
+
+      // 1. fetch deals
+      axiosMock.post
+        .mockResolvedValueOnce({ data: { results: [deal], paging: null } })
+        // 2. VA associations batch
+        .mockResolvedValueOnce({
+          data: {
+            results: [{ from: { id: 'deal-hs-1' }, to: [{ id: 'cand-hs-1' }] }],
+          },
+        })
+        // 3. company associations batch
+        .mockResolvedValueOnce({
+          data: {
+            results: [{ from: { id: 'deal-hs-1' }, to: [{ id: 'org-hs-1' }] }],
+          },
+        });
+
+      mockPrisma.candidate.findUnique.mockResolvedValue({ id: 'cand-db-1' });
+      mockPrisma.organization.findUnique.mockResolvedValue({ id: 'org-db-1' });
+      mockPrisma.staff.createMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.populateDbFromHubspot();
+
+      expect(mockPrisma.candidate.findUnique).toHaveBeenCalled();
+      expect(mockPrisma.staff.createMany).toHaveBeenCalled();
+      expect(result).toContain('1 deals');
+    });
+
+    it('should create candidate via objectCreation when not found, then associate', async () => {
+      const deal = { id: 'deal-hs-2', properties: { hs_object_id: 'deal-hs-2' } };
+
+      axiosMock.post
+        .mockResolvedValueOnce({ data: { results: [deal], paging: null } })
+        .mockResolvedValueOnce({
+          data: {
+            results: [{ from: { id: 'deal-hs-2' }, to: [{ id: 'cand-hs-2' }] }],
+          },
+        })
+        .mockResolvedValueOnce({ data: { results: [] } });
+
+      mockPrisma.candidate.findUnique
+        .mockResolvedValueOnce(null)           // not found initially
+        .mockResolvedValueOnce({ id: 'cand-db-2' }); // found after creation
+      HandlerObjectCreationMock.execute.mockResolvedValue({});
+      mockPrisma.staff.createMany.mockResolvedValue({ count: 1 });
+
+      await service.populateDbFromHubspot();
+
+      expect(HandlerObjectCreationMock.execute).toHaveBeenCalledWith({ objectId: 'cand-hs-2' });
+      expect(mockPrisma.staff.createMany).toHaveBeenCalled();
+    });
+
+    it('should handle pagination by following paging.next.after', async () => {
+      const deal1 = { id: 'deal-1', properties: { hs_object_id: 'deal-1' } };
+      const deal2 = { id: 'deal-2', properties: { hs_object_id: 'deal-2' } };
+
+      axiosMock.post
+        // first page with paging.next.after
+        .mockResolvedValueOnce({ data: { results: [deal1], paging: { next: { after: 'cursor-1' } } } })
+        // second page, no more paging
+        .mockResolvedValueOnce({ data: { results: [deal2], paging: null } })
+        // VA associations for batch of 2
+        .mockResolvedValueOnce({ data: { results: [] } })
+        // company associations for batch of 2
+        .mockResolvedValueOnce({ data: { results: [] } });
+
+      mockPrisma.staff.createMany.mockResolvedValue({ count: 2 });
+
+      const result = await service.populateDbFromHubspot();
+
+      expect(result).toContain('2 deals');
+    });
+
+    it('should handle error thrown during association batch lookup and continue', async () => {
+      const deal = { id: 'deal-err', properties: { hs_object_id: 'deal-err' } };
+
+      axiosMock.post
+        .mockResolvedValueOnce({ data: { results: [deal], paging: null } })
+        .mockRejectedValueOnce(new Error('Association error'))
+        .mockResolvedValueOnce({ data: { results: [] } });
+
+      const result = await service.populateDbFromHubspot();
+
+      expect(result).toContain('0 deals');
     });
   });
 });

@@ -1,16 +1,19 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from "@prisma/client";
 import { dbToHrTicketDictionary } from "../../common/dictionaries/HRTicket-dicionary";
 import { PrismaService } from "../../prisma/prisma.service";
 import { OwnerCreationService } from "../create/Owner";
 import { formatDateForCA } from "../../common/utils/formatDate";
+import { HubspotAuditService } from "../hubspot-audit.service";
 
 @Injectable()
 
 export class HireRequestUpdateService {
     constructor(
       private readonly prisma: PrismaService,
-      private readonly ownerCreationService: OwnerCreationService
+      private readonly ownerCreationService: OwnerCreationService,
+      private readonly audit: HubspotAuditService,
      ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
@@ -25,7 +28,7 @@ export class HireRequestUpdateService {
           last_name: true,
           email: true,
         },
-          
+
       });
       //console.log('User found for owner ID:', user);
       /* => Commented because we cannot create owners using hubspot API
@@ -34,12 +37,14 @@ export class HireRequestUpdateService {
       }
       */
 
-      return user && user.hubspot_id ? user.hubspot_id : null; 
+      return user && user.hubspot_id ? user.hubspot_id : null;
     }
 
-    async execute(data: any, specificField?: string): Promise<any> {
+    async execute(data: any, specificField?: string, actorUserId?: string): Promise<any> {
+        const source = actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron;
+        const entityId: string = data.id ?? data.hubspot_ticket_id ?? 'unknown';
         try {
-            
+
             //console.log("Starting update of Hubspot Ticket with data:", data, "and specificField:", specificField);
             const hubspotProperties: Record<string, any> = {};
 
@@ -51,7 +56,7 @@ export class HireRequestUpdateService {
                   // If it's an array of objects (from log: [{id, first_name...}, ...])
                   if (Array.isArray(data.assign_user_id)) {
                       //console.log('length: ', data.assign_user_id.length);
-                      
+
                       // Loop through all users and assign the first one that has a hubspot_id
                       // (HubSpot only allows 1 owner per ticket)
                       let hubspotOwnerId;
@@ -59,7 +64,7 @@ export class HireRequestUpdateService {
                           // user.id exists in the object
                           if (user && user.id) {
                               hubspotOwnerId = await this.getOwnerId(user.id);
-                              if (hubspotOwnerId) break; 
+                              if (hubspotOwnerId) break;
                           }
                       }
                       hubspotProperties.hubspot_owner_id = hubspotOwnerId;
@@ -85,7 +90,7 @@ export class HireRequestUpdateService {
                   hubspotProperties.staffing_coordinator = data.assign_staffing_coordinator ? await this.getOwnerId(data.assign_staffing_coordinator) : undefined;
                 break;
 
-                case 'closed_date': 
+                case 'closed_date':
                 hubspotProperties.closed_date = formatDateForCA(new Date(), 'America/Los_Angeles');
                 break;
 
@@ -98,7 +103,7 @@ export class HireRequestUpdateService {
                   hubspotProperties.ticket_cancel_date = '';
                 break;
               }
-              
+
             }else{
 
               //verify fields outside the dictionary
@@ -125,12 +130,12 @@ export class HireRequestUpdateService {
                 }
               }
 
-              hubspotProperties.va_deployment_type = 
+              hubspotProperties.va_deployment_type =
                   data.availability ?
                     data.availability === "part-time" ? "Part-Time" : "Full-Time"
                   : undefined;
                   //find key by value in HRTicketStatus
-              hubspotProperties.hs_ticket_priority = 
+              hubspotProperties.hs_ticket_priority =
                 data.priority ?
                   data.priority.toUpperCase()
                 : undefined;
@@ -141,12 +146,12 @@ export class HireRequestUpdateService {
                   : undefined;
 
               hubspotProperties.cancel_reason =
-                  data.cancel_reason 
+                  data.cancel_reason
                   ? data.cancel_reason
                   : undefined;
-                  
+
               //used to allow update datas on hubspot when the user schedule an interview on our side
-              hubspotProperties.pairing_date = 
+              hubspotProperties.pairing_date =
                 data.hubspot_pairing_date ?
                   data.hubspot_pairing_date
                 : undefined;
@@ -155,10 +160,11 @@ export class HireRequestUpdateService {
                 data.hubspot_pairing_time ?
                   data.hubspot_pairing_time
                 : undefined;
-              
-              hubspotProperties.va_pay_rate_range = data.salary_range_from && data.salary_range_to 
+
+              //if we dont have salry range, we shouldnt update the field on hubspot.
+              hubspotProperties.va_pay_rate_range = data.salary_range_from && data.salary_range_to
               ? `${data.salary_range_from} - ${data.salary_range_to}`
-              : '';
+              : undefined;
             }
 
             //remove hubspot_pipeline and hubspot_pipeline_stage because we cannot update them using this endpoint, they are updated using the stage change endpoint
@@ -171,8 +177,8 @@ export class HireRequestUpdateService {
             delete hubspotProperties.company_url;
             delete hubspotProperties.hs_ticket_priority;
             delete hubspotProperties.cancel_reason;
-            
-            
+
+
             const response = await axios.patch(
             `https://api.hubapi.com/crm/v3/objects/tickets/${Number(data.hubspot_ticket_id)}`,
             {
@@ -185,9 +191,21 @@ export class HireRequestUpdateService {
               },
             }
         );
-      
+
           //console.log("Hubspot Response:", response.data);
-          
+
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.hire_request,
+            entityId,
+            hubspotObjectId: data.hubspot_ticket_id,
+            hubspotObjectType: 'tickets',
+            action: HubspotAuditAction.UPDATE,
+            source,
+            success: true,
+            payload: specificField ? { specificField } : { fields: Object.keys(hubspotProperties) },
+          });
+
           return true;
         } catch (error) {
           if (error.response) {
@@ -195,7 +213,19 @@ export class HireRequestUpdateService {
           } else {
             console.error("Connection error:", error.message);
           }
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.hire_request,
+            entityId,
+            hubspotObjectId: data.hubspot_ticket_id,
+            hubspotObjectType: 'tickets',
+            action: HubspotAuditAction.UPDATE,
+            source,
+            success: false,
+            errorCode: error.response?.status?.toString() ?? error.code,
+            errorMessage: error.message,
+          });
         }
-        
+
     }
 }

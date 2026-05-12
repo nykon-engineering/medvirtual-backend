@@ -934,4 +934,1269 @@ describe('NotificationsService', () => {
         .rejects.toThrow('Database error');
     });
   });
+
+  // ─── NEW TESTS ────────────────────────────────────────────────────────────
+
+  describe('notifyInterviewScheduled', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Senior VA',
+      description: 'Description',
+      status: 'interview_scheduled',
+      priority: 'high',
+      salary_range_from: 4000,
+      salary_range_to: 6000,
+      expected_start_date: new Date('2024-03-01'),
+      hubspot_role_type: 'Medical Assistant',
+      availability: 'full-time',
+      assign_user_id: 'user1',
+      organization: { id: 'org1', name: 'Test Org', business_unit: 'MedVirtual' },
+      panels: [
+        {
+          id: 'panel1',
+          interviews: [{ id: 'int1', scheduled_date: new Date('2024-03-15'), link: 'https://meet.example.com/abc' }],
+          panelCandidates: [{ candidate: { id: 'c1', first_name: 'Jane', last_name: 'Doe', name: 'Jane Doe', email: 'jane@example.com' } }],
+        },
+      ],
+    };
+
+    it('should send interview notification successfully with link', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: expect.stringContaining('Interview Invite'),
+          html: expect.stringContaining('https://meet.example.com/abc'),
+        }),
+      );
+    });
+
+    it('should send interview notification without link when no link provided', async () => {
+      const hrWithoutLink = {
+        ...mockHireRequest,
+        panels: [
+          {
+            id: 'panel1',
+            interviews: [{ id: 'int1', scheduled_date: new Date('2024-03-15'), link: null }],
+            panelCandidates: [],
+          },
+        ],
+      };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrWithoutLink);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyInterviewScheduled('hr1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when no assignee users', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValueOnce([]);
+
+      await expect(service.notifyInterviewScheduled('hr1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle hire request with no expected_start_date', async () => {
+      const hrNoDate = { ...mockHireRequest, expected_start_date: null };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoDate);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ html: expect.stringContaining('Not specified') }),
+      );
+    });
+  });
+
+  describe('notifyHireRequestSourcingAssignee', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Sourcing Job',
+      description: 'Description',
+      priority: 'high',
+      assigned_sourcing: { id: 'sourcing1', email: 'sourcing@example.com', first_name: 'Jane', last_name: 'Smith' },
+      organization: { name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should send sourcing assignee notification successfully', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestSourcingAssignee('hr1', 'sourcing');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['sourcing@example.com'],
+          subject: expect.stringContaining('Sourcing Job'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyHireRequestSourcingAssignee('hr1', 'sourcing')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when no sourcing assignee email', async () => {
+      const hrNoEmail = { ...mockHireRequest, assigned_sourcing: { id: 'sourcing1', email: null, first_name: 'Jane', last_name: 'Smith' } };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoEmail);
+
+      await expect(service.notifyHireRequestSourcingAssignee('hr1', 'sourcing')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle missing description', async () => {
+      const hrNoDesc = { ...mockHireRequest, description: null };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoDesc);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestSourcingAssignee('hr1', 'sourcing');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ html: expect.stringContaining('No description provided') }),
+      );
+    });
+  });
+
+  describe('notifyHireRequestConciergeAssigned', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Concierge Job',
+      description: 'Description',
+      priority: 'high',
+      assign_user_id: 'user1',
+      organization: { name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should send concierge notification successfully', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'user@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestConciergeAssigned('hr1', 'for_review');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'Hire Request For Review: Concierge Job',
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyHireRequestConciergeAssigned('hr1', 'for_review')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when no assignee users', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
+
+      await expect(service.notifyHireRequestConciergeAssigned('hr1', 'for_review')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('notifyHireRequestCreated - type branches', () => {
+    const baseHireRequest = {
+      id: 'hr1',
+      title: 'VA Role',
+      description: 'Description',
+      status: 'new',
+      priority: 'high',
+      salary_range_from: 3000,
+      salary_range_to: 5000,
+      expected_start_date: new Date('2024-04-01'),
+      availability: 'part-time',
+      assign_user_id: 'user1',
+      assigned_sourcing: { id: 'sourcing1', email: 'sourcing@example.com', first_name: 'Jane', last_name: 'Smith' },
+      assigned_staffing: { id: 'staffing1', email: 'staffing@example.com', first_name: 'Bob', last_name: 'Jones' },
+      organization: { name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should notify sourcing assignee when type is sourcing', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(baseHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'sourcing1', email: 'sourcing@example.com', first_name: 'Jane', last_name: 'Smith' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestCreated('hr1', 'sourcing');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Sourcing Assignment to a Hire Request'),
+        }),
+      );
+    });
+
+    it('should notify staffing coordinator when type is staffing_coordinator', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(baseHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'staffing1', email: 'staffing@example.com', first_name: 'Bob', last_name: 'Jones' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestCreated('hr1', 'staffing_coordinator');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Staffing Coordinator Assignment to a Hire Request'),
+        }),
+      );
+    });
+
+    it('should throw BadRequestException when type=sourcing but no sourcing email', async () => {
+      const hrNoSourcing = { ...baseHireRequest, assigned_sourcing: null };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoSourcing);
+
+      await expect(service.notifyHireRequestCreated('hr1', 'sourcing')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when type=staffing_coordinator but no staffing email', async () => {
+      const hrNoStaffing = { ...baseHireRequest, assigned_staffing: null };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoStaffing);
+
+      await expect(service.notifyHireRequestCreated('hr1', 'staffing_coordinator')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should include panel_request_flow note when from=panel_request_flow', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(baseHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'user@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestCreated('hr1', undefined, 'panel_request_flow');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Panel Request Flow'),
+        }),
+      );
+    });
+  });
+
+  describe('notifyHireRequestBackToSourcing', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Back to Sourcing',
+      description: 'Description',
+      status: 'sourcing',
+      priority: 'medium',
+      salary_range_from: 4000,
+      salary_range_to: 7000,
+      expected_start_date: new Date('2024-05-01'),
+      availability: 'full-time',
+      assign_user_id: 'user1',
+      assigned_sourcing: { id: 'sourcing1', email: 'sourcing@example.com', first_name: 'Jane', last_name: 'Smith' },
+      organization: { name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should send back to sourcing notification successfully', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestBackToSourcing('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['sourcing@example.com'],
+          subject: 'Hire Request Assigned: Back to Sourcing',
+          html: expect.stringContaining('back to sourcing'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyHireRequestBackToSourcing('hr1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when sourcing assignee has no email', async () => {
+      const hrNoEmail = { ...mockHireRequest, assigned_sourcing: { id: 'sourcing1', email: null, first_name: 'Jane', last_name: 'Smith' } };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoEmail);
+
+      await expect(service.notifyHireRequestBackToSourcing('hr1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle null salary range and start date', async () => {
+      const hrNoSalary = { ...mockHireRequest, salary_range_from: null, salary_range_to: null, expected_start_date: null };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoSalary);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestBackToSourcing('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ html: expect.stringContaining('Not specified') }),
+      );
+    });
+  });
+
+  describe('notifyClientPanelReady', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Panel Ready Job',
+      description: 'Description',
+      status: 'panel_ready',
+      priority: 'high',
+      salary_range_from: 3000,
+      salary_range_to: 5000,
+      expected_start_date: new Date('2024-04-15'),
+      availability: 'full-time',
+      organization: { id: 'org1', name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should send panel ready notification to org users', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { email: 'orgadmin@example.com' },
+        { email: 'orgowner@example.com' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyClientPanelReady('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: expect.arrayContaining(['orgadmin@example.com', 'orgowner@example.com']),
+          subject: 'Your candidate panel is ready: Panel Ready Job',
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyClientPanelReady('hr1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when no active org users', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
+
+      await expect(service.notifyClientPanelReady('hr1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle null salary range', async () => {
+      const hrNoSalary = { ...mockHireRequest, salary_range_from: null, salary_range_to: null };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoSalary);
+      mockPrismaService.uSER.findMany.mockResolvedValue([{ email: 'orgadmin@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyClientPanelReady('hr1');
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('notifyHireRequestPanelReady', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Panel Reviewed Job',
+      description: 'Description',
+      status: 'panel_ready',
+      priority: 'high',
+      salary_range_from: 4000,
+      salary_range_to: 6000,
+      expected_start_date: new Date('2024-05-01'),
+      availability: 'full-time',
+      assign_user_id: 'user1',
+      assigned_sourcing: { id: 'sourcing1', email: 'sourcing@example.com', first_name: 'Jane', last_name: 'Smith' },
+      organization: { name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should send panel ready notification to sourcing assignee', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestPanelReady('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['sourcing@example.com'],
+          subject: 'Panel Reviewed and Ready: Panel Reviewed Job',
+          html: expect.stringContaining('Panel Ready'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyHireRequestPanelReady('hr1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when sourcing assignee has no email', async () => {
+      const hrNoEmail = { ...mockHireRequest, assigned_sourcing: null };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoEmail);
+
+      await expect(service.notifyHireRequestPanelReady('hr1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('notifyEndorseCandidates', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Endorse Job',
+      description: 'Description',
+      priority: 'high',
+      assign_user_id: 'user1',
+      organization: { name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should send endorse candidates notification', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'user@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyEndorseCandidates('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'New candidates in Hire Request: Endorse Job',
+          html: expect.stringContaining('new candidates'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyEndorseCandidates('hr1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when no assignee users', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
+
+      await expect(service.notifyEndorseCandidates('hr1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('notifyHireRequestSelectWinner - no admins branch', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Winner Job',
+      description: 'Description',
+      status: 'placement_completed',
+      priority: 'high',
+      salary_range_from: 5000,
+      salary_range_to: 8000,
+      expected_start_date: new Date('2024-06-01'),
+      hubspot_role_type: 'Medical Assistant',
+      availability: 'full-time',
+      organization: {
+        id: 'org1',
+        name: 'Test Org',
+        business_unit: 'MedVirtual',
+        admin: null,
+        owner: null,
+      },
+      panels: [
+        {
+          id: 'panel1',
+          panelCandidates: [],
+        },
+      ],
+    };
+
+    it('should throw BadRequestException when no organization admins', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
+
+      await expect(service.notifyHireRequestSelectWinner('hr1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should send notification when admins exist and no winner candidate', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestSelectWinner('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Not specified'),
+        }),
+      );
+    });
+
+    it('should include winner name when winner candidate exists', async () => {
+      const hrWithWinner = {
+        ...mockHireRequest,
+        panels: [
+          {
+            id: 'panel1',
+            panelCandidates: [
+              { candidate: { id: 'c1', first_name: 'Jane', last_name: 'Doe', name: 'Jane Doe' } },
+            ],
+          },
+        ],
+      };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrWithWinner);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestSelectWinner('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Jane Doe'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyHireRequestSelectWinner('hr1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should deduplicate admin and owner when both have the same email', async () => {
+      const hrWithAdminOwner = {
+        ...mockHireRequest,
+        organization: {
+          ...mockHireRequest.organization,
+          admin: { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User' },
+          owner: { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User' },
+        },
+      };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrWithAdminOwner);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestSelectWinner('hr1');
+
+      expect(result).toBe(true);
+      // Only one unique email — sendMail called once
+      expect(mockMailService.sendMail).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('notifyHireRequestAwaitingDecision - no admins branch', () => {
+    const mockHireRequest = {
+      id: 'hr1',
+      title: 'Awaiting Job',
+      hubspot_role_type: 'Medical Assistant',
+      availability: 'full-time',
+      status: 'awaiting_decision',
+      panels: [{ id: 'panel1', status: 'decision_pending', scheduled_date: new Date('2024-06-15') }],
+      organization: { id: 'org1', name: 'Test Org', business_unit: 'MedVirtual' },
+    };
+
+    it('should throw BadRequestException when no organization admins', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([]);
+
+      await expect(service.notifyHireRequestAwaitingDecision('hr1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should send notification when no scheduled date', async () => {
+      const hrNoDate = { ...mockHireRequest, panels: [{ id: 'panel1', status: 'decision_pending', scheduled_date: null }] };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoDate);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'admin1', email: 'admin@example.com', first_name: 'Admin', last_name: 'User', role: 'organization_admin' },
+      ]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyHireRequestAwaitingDecision('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Not specified'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when hire request not found', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyHireRequestAwaitingDecision('hr1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('notifyTicketStatusChangeToCreator', () => {
+    const mockTicket = {
+      id: 'ticket1',
+      title: 'Status Change Ticket',
+      description: 'Description',
+      status: 'in_progress',
+      type: 'support',
+      createdAt: new Date('2024-01-15'),
+      created_by: 'creator1',
+      organization: { name: 'Test Company' },
+    };
+
+    it('should send status change notification to creator (system admin)', async () => {
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'system_admin',
+      });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketStatusChangeToCreator(mockTicket, 'in_progress');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['creator@example.com'],
+          subject: expect.stringContaining('IN PROGRESS'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when ticket is null', async () => {
+      await expect(service.notifyTicketStatusChangeToCreator(null, 'resolved')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when creator has no email', async () => {
+      mockPrismaService.uSER.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyTicketStatusChangeToCreator(mockTicket, 'resolved')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return false when creator is client and ticket is not support', async () => {
+      const nonSupportTicket = { ...mockTicket, type: 'general' };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'organization_admin',
+      });
+
+      const result = await service.notifyTicketStatusChangeToCreator(nonSupportTicket, 'resolved');
+
+      expect(result).toBe(false);
+      expect(mockMailService.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('should send notification when creator is client and ticket is support', async () => {
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'organization_admin',
+      });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketStatusChangeToCreator(mockTicket, 'resolved');
+
+      expect(result).toBe(true);
+    });
+
+    it('should use ticket.id fallback to fetch created_by when created_by is missing', async () => {
+      const ticketNoCreatedBy = { ...mockTicket, created_by: null };
+      mockPrismaService.ticket.findUnique.mockResolvedValue({ created_by: 'creator1' });
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketStatusChangeToCreator(ticketNoCreatedBy, 'closed');
+
+      expect(result).toBe(true);
+    });
+
+    it('should send notification with referral ticket type', async () => {
+      const referralTicket = {
+        ...mockTicket,
+        type: 'referral',
+        description: 'Name: John Doe\nEmail: john@example.com\nMessage: Test message',
+      };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'system_admin',
+      });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketStatusChangeToCreator(referralTicket, 'resolved');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('John Doe'),
+        }),
+      );
+    });
+  });
+
+  describe('notifyTicketReopened', () => {
+    const mockTicket = {
+      id: 'ticket1',
+      title: 'Reopened Ticket',
+      description: 'Description',
+      type: 'support',
+      createdAt: new Date('2024-01-15'),
+      created_by: 'creator1',
+      organization: { name: 'Test Company' },
+    };
+
+    it('should send reopened notification to creator (system admin)', async () => {
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'system_admin',
+      });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketReopened(mockTicket);
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['creator@example.com'],
+          subject: 'Your ticket has been reopened: Reopened Ticket',
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when ticket is null', async () => {
+      await expect(service.notifyTicketReopened(null)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when creator has no email', async () => {
+      mockPrismaService.uSER.findUnique.mockResolvedValue(null);
+
+      await expect(service.notifyTicketReopened(mockTicket)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return false when creator is client and ticket is not support', async () => {
+      const nonSupportTicket = { ...mockTicket, type: 'general' };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'organization_admin',
+      });
+
+      const result = await service.notifyTicketReopened(nonSupportTicket);
+
+      expect(result).toBe(false);
+    });
+
+    it('should use ticket.id fallback when created_by is missing', async () => {
+      const ticketNoCreatedBy = { ...mockTicket, created_by: null };
+      mockPrismaService.ticket.findUnique.mockResolvedValue({ created_by: 'creator1' });
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketReopened(ticketNoCreatedBy);
+
+      expect(result).toBe(true);
+    });
+
+    it('should send notification with referral ticket type', async () => {
+      const referralTicket = {
+        ...mockTicket,
+        type: 'referral',
+        description: 'Name: Jane Smith\nEmail: jane@example.com\nMessage: Referral message',
+      };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'system_admin',
+      });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketReopened(referralTicket);
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Jane Smith'),
+        }),
+      );
+    });
+  });
+
+  describe('notifyTicketNoteAddedToAssignee', () => {
+    const mockTicket = {
+      id: 'ticket1',
+      title: 'Note Ticket',
+      organization: { name: 'Test Company' },
+      user_id: 'assignee1',
+      user: { id: 'assignee1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+    };
+
+    it('should send note added notification to assignee', async () => {
+      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ role: 'system_admin' });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketNoteAddedToAssignee('ticket1', {
+        content: 'This is a response.',
+        author: { id: 'author1', first_name: 'Admin', last_name: 'User' },
+      });
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['assignee@example.com'],
+          subject: 'You received a response on your ticket: Note Ticket',
+          html: expect.stringContaining('This is a response.'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when ticket not found', async () => {
+      mockPrismaService.ticket.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.notifyTicketNoteAddedToAssignee('ticket1', { content: 'note' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when ticket has no assigned user', async () => {
+      const ticketNoUser = { ...mockTicket, user_id: null, user: null };
+      mockPrismaService.ticket.findUnique.mockResolvedValue(ticketNoUser);
+
+      await expect(
+        service.notifyTicketNoteAddedToAssignee('ticket1', { content: 'note' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should use fallback author name when author is not provided', async () => {
+      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ role: 'system_admin' });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketNoteAddedToAssignee('ticket1', { content: 'note content' });
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('A user'),
+        }),
+      );
+    });
+  });
+
+  describe('notifyTicketNoteAddedToCreator', () => {
+    const mockTicket = {
+      id: 'ticket1',
+      title: 'Creator Note Ticket',
+      organization: { name: 'Test Company' },
+      created_by: 'creator1',
+    };
+
+    it('should send note added notification to creator', async () => {
+      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', first_name: 'Bob', last_name: 'Smith', role: 'system_admin' })
+        .mockResolvedValueOnce({ id: 'creator1', role: 'system_admin' });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketNoteAddedToCreator('ticket1', {
+        content: 'Creator response here.',
+        author: { id: 'author1', first_name: 'Admin', last_name: 'User' },
+      });
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: ['creator@example.com'],
+          subject: 'You received a response on your ticket: Creator Note Ticket',
+          html: expect.stringContaining('Creator response here.'),
+        }),
+      );
+    });
+
+    it('should throw NotFoundException when ticket not found', async () => {
+      mockPrismaService.ticket.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.notifyTicketNoteAddedToCreator('ticket1', { content: 'note' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when ticket has no creator', async () => {
+      const ticketNoCreator = { ...mockTicket, created_by: null };
+      mockPrismaService.ticket.findUnique.mockResolvedValue(ticketNoCreator);
+
+      await expect(
+        service.notifyTicketNoteAddedToCreator('ticket1', { content: 'note' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when creator has no email', async () => {
+      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.uSER.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.notifyTicketNoteAddedToCreator('ticket1', { content: 'note' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('formatReferralDescription (via notifyTicketStatusChangeToCreator)', () => {
+    it('should parse Name, Email, and Message fields correctly', async () => {
+      const referralTicket = {
+        id: 'ticket1',
+        title: 'Referral Ticket',
+        description: 'Name: Alice Johnson\nEmail: alice@example.com\nMessage: Looking for a VA',
+        type: 'referral',
+        createdAt: new Date('2024-01-15'),
+        created_by: 'creator1',
+        organization: { name: 'Test Company' },
+      };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'system_admin',
+      });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketStatusChangeToCreator(referralTicket, 'resolved');
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Alice Johnson'),
+        }),
+      );
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('alice@example.com'),
+        }),
+      );
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Looking for a VA'),
+        }),
+      );
+    });
+
+    it('should handle multi-line message in referral description', async () => {
+      const referralTicket = {
+        id: 'ticket1',
+        title: 'Referral Multi',
+        description: 'Name: Bob\nEmail: bob@example.com\nMessage: Line one\nLine two\nLine three',
+        type: 'referral',
+        createdAt: new Date('2024-01-15'),
+        created_by: 'creator1',
+        organization: { name: 'Test Company' },
+      };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({
+        id: 'creator1',
+        email: 'creator@example.com',
+        role: 'system_admin',
+      });
+      mockPrismaService.organization.findMany.mockResolvedValue([]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketStatusChangeToCreator(referralTicket, 'in_progress');
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          html: expect.stringContaining('Line one'),
+        }),
+      );
+    });
+  });
+
+  describe('notifyTicketEvent - additional branches', () => {
+    const mockTicket = {
+      id: 'ticket1',
+      title: 'Event Ticket',
+      description: 'Description',
+      status: 'new',
+      priority: 'high',
+      type: 'support',
+      createdAt: new Date('2024-01-15'),
+      created_by: 'creator1',
+      user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
+      organization: { name: 'Test Company' },
+      staff: null,
+      candidate: null,
+    };
+
+    it('should throw BadRequestException when all recipients are clients on resolved non-support ticket', async () => {
+      const nonSupportTicket = {
+        ...mockTicket,
+        type: 'general',
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'organization_admin' },
+      };
+      mockPrismaService.uSER.findUnique.mockResolvedValue({ id: 'creator1', email: 'creator@example.com', role: 'organization_admin' });
+
+      // All recipients are non-system-admins, filtered out for resolved non-support ticket → BadRequestException
+      await expect(service.notifyTicketEvent(nonSupportTicket, 'resolved')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should add pauli@regenta.ai as fixed recipient for support tickets', async () => {
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketEvent(mockTicket, 'created');
+
+      const calls = mockMailService.sendMail.mock.calls.map((c: any[]) => c[0].to).flat();
+      expect(calls).toContain('pauli@regenta.ai');
+    });
+
+    it('should send notification for resolved event on support ticket to clients', async () => {
+      const clientTicket = {
+        ...mockTicket,
+        type: 'support',
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'organization_admin' },
+      };
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'organization_admin' })
+        .mockResolvedValueOnce({ role: 'organization_admin' })
+        .mockResolvedValueOnce({ role: 'organization_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketEvent(clientTicket, 'resolved');
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('getTicketDetailUrl', () => {
+    it('should return /profile URL for organization_admin role', () => {
+      const url = (service as any).getTicketDetailUrl('ticket1', 'organization_admin');
+      expect(url).toBe('https://test.example.com/profile?ticket=ticket1');
+    });
+
+    it('should return /profile URL for organization_super_admin role', () => {
+      const url = (service as any).getTicketDetailUrl('ticket1', 'organization_super_admin');
+      expect(url).toBe('https://test.example.com/profile?ticket=ticket1');
+    });
+
+    it('should return /tickets URL for system_admin role', () => {
+      const url = (service as any).getTicketDetailUrl('ticket1', 'system_admin');
+      expect(url).toBe('https://test.example.com/tickets?ticket=ticket1');
+    });
+
+    it('should return /tickets URL when role is undefined', () => {
+      const url = (service as any).getTicketDetailUrl('ticket1', undefined);
+      expect(url).toBe('https://test.example.com/tickets?ticket=ticket1');
+    });
+  });
+
+  describe('decodeHtmlEntities', () => {
+    it('should decode all supported HTML entities', () => {
+      const input = '&amp;&lt;&gt;&quot;&#39;&nbsp;&#x27;&#x2F;&#x2f;&#47;';
+      const result = (service as any).decodeHtmlEntities(input);
+      expect(result).toBe("&<>\"' '///");
+    });
+
+    it('should return empty string for falsy input', () => {
+      expect((service as any).decodeHtmlEntities('')).toBe('');
+      expect((service as any).decodeHtmlEntities(null)).toBe('');
+      expect((service as any).decodeHtmlEntities(undefined)).toBe('');
+    });
+  });
+
+  describe('notifyTicketEvent - Bonus ticket title branches', () => {
+    const bonusTicketWithOrg = {
+      id: 'ticket1',
+      title: 'Bonus Ticket',
+      description: 'Bonus description',
+      status: 'new',
+      priority: 'high',
+      type: 'bonus',
+      createdAt: new Date('2024-01-15'),
+      created_by: 'creator1',
+      user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
+      organization: { name: 'Test Company' },
+      staff: { candidate: { name: 'Staff Member' } },
+      candidate: null,
+    };
+
+    it('should use org name in subject for Bonus ticket with org and staff', async () => {
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketEvent(bonusTicketWithOrg, 'created');
+
+      const calls = mockMailService.sendMail.mock.calls as any[][];
+      const subjectWithOrg = calls.some(c => c[0].subject === 'Bonus Ticket Created for Test Company');
+      expect(subjectWithOrg).toBe(true);
+    });
+
+    it('should use staff name in subject for Bonus ticket with staff but no org', async () => {
+      const bonusTicketNoOrg = { ...bonusTicketWithOrg, organization: null };
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketEvent(bonusTicketNoOrg, 'created');
+
+      const calls = mockMailService.sendMail.mock.calls as any[][];
+      const subjectWithStaff = calls.some(c => c[0].subject === 'Bonus Ticket Created for Staff Member');
+      expect(subjectWithStaff).toBe(true);
+    });
+
+    it('should use generic subject for ticket with no org and no staff', async () => {
+      const genericTicket = {
+        ...bonusTicketWithOrg,
+        type: 'general',
+        organization: null,
+        staff: null,
+      };
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.notifyTicketEvent(genericTicket, 'created');
+
+      const calls = mockMailService.sendMail.mock.calls as any[][];
+      const subjectGeneric = calls.some(c => (c[0].subject as string).includes('Ticket Created') && !(c[0].subject as string).includes('for'));
+      expect(subjectGeneric).toBe(true);
+    });
+  });
+
+  describe('notifyTicketEvent - fallback creator lookup in event handler', () => {
+    it('should use ticket.id fallback to find creator in notifyTicketEvent when created_by is absent', async () => {
+      const ticketNoCreatedBy = {
+        id: 'ticket1',
+        title: 'Fallback Ticket',
+        description: 'Description',
+        type: 'support',
+        createdAt: new Date('2024-01-15'),
+        created_by: null,
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
+        organization: { name: 'Test Company' },
+        staff: null,
+        candidate: null,
+      };
+
+      mockPrismaService.ticket.findUnique.mockResolvedValue({ created_by: 'creator1', user_id: 'assignee1' });
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketEvent(ticketNoCreatedBy, 'created');
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('notifyTicketEvent - referral ticket in standard path', () => {
+    it('should render referral description in standard format for non-system-admin', async () => {
+      const referralTicket = {
+        id: 'ticket1',
+        title: 'Referral',
+        description: 'Name: Bob\nEmail: bob@test.com\nMessage: Hello',
+        type: 'referral',
+        createdAt: new Date('2024-01-15'),
+        created_by: 'creator1',
+        user: { id: 'assignee1', email: 'assignee@example.com', role: 'system_admin' },
+        organization: { name: 'Test Org' },
+        staff: null,
+        candidate: null,
+      };
+
+      mockPrismaService.uSER.findUnique
+        .mockResolvedValueOnce({ id: 'creator1', email: 'creator@example.com', role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' })
+        .mockResolvedValueOnce({ role: 'system_admin' });
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      const result = await service.notifyTicketEvent(referralTicket, 'assigned');
+
+      expect(result).toBe(true);
+      const calls = mockMailService.sendMail.mock.calls as any[][];
+      const bodyWithBob = calls.some(c => (c[0].html as string).includes('Bob'));
+      expect(bodyWithBob).toBe(true);
+    });
+  });
+
+  describe('notifyHireRequestPlacementCompleted - no recipients branch', () => {
+    it('should throw BadRequestException when all recipient emails are empty', async () => {
+      const hrNoRecipients = {
+        id: 'hr1',
+        title: 'No Recipients Job',
+        description: 'Description',
+        status: 'placement_completed',
+        priority: 'high',
+        specialization: 'Frontend',
+        salary_range_from: null,
+        salary_range_to: null,
+        expected_start_date: null,
+        assign_user_id: 'user1',
+        assigned_sourcing: null,
+        createdBy: null,
+        organization: { name: 'Test Company', business_unit: 'MedVirtual' },
+        panels: [],
+      };
+
+      // All users returned have null emails
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrNoRecipients);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: null, first_name: 'John', last_name: 'Doe' },
+      ]);
+
+      await expect(service.notifyHireRequestPlacementCompleted('hr1')).rejects.toThrow(BadRequestException);
+    });
+  });
 });

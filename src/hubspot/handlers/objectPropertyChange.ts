@@ -33,7 +33,7 @@ export class HandlerObjectPropertyChange {
         ) {
             return false; // test candidate, ignore
         }
-
+        
 
         const candidate = await this.prisma.candidate.findUnique({
             where: {
@@ -158,6 +158,7 @@ export class HandlerObjectPropertyChange {
 
             // Re-run the resume pipeline if this change is related to the resume
                 if (process.env.ENVIRONMENT === 'PROD') {
+                    
                     if(event.propertyName === 'resume_link') {
                         await this.candidateService.processData(candidate.id);
                     }

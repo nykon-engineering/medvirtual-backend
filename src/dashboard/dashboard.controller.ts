@@ -3,9 +3,11 @@ import { DashboardService } from './dashboard.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Role, USER } from '@prisma/client';
 import { AuthGuard } from '../auth/auth.guard';
-import { ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 
+@ApiTags('dashboard')
+@ApiBearerAuth()
 @Controller('dashboard')
 export class DashboardController {
 
@@ -15,7 +17,7 @@ export class DashboardController {
 
     @Get()
     @UseGuards(AuthGuard)
-    @ApiOperation({ description: 'Get dashboard data with optional pagination for hire requests' })
+    @ApiOperation({ summary: 'Get dashboard data with hire request summary and pagination' })
     @ApiQuery({ name: 'page', required: false, description: 'Page number for hire requests pagination' })
     @ApiQuery({ name: 'perPage', required: false, description: 'Number of hire requests per page' })
     @ApiResponse({ status: 200, description: 'Dashboard data retrieved successfully' })
@@ -39,7 +41,7 @@ export class DashboardController {
     @Get('/:interviewId')
     @UseGuards(AuthGuard)
     @Roles(Role.organization_admin, Role.organization_super_admin)
-    @ApiOperation({ description: 'Dont show the alert again' })
+    @ApiOperation({ summary: 'Hide the interview alert for the current user so it does not appear again' })
     @ApiParam({ name: 'interviewId', description: 'ID of the interview to hide alert for' })
     @ApiResponse({ status: 200, description: 'Alert hidden successfully' })
     @ApiResponse({ status: 400, description: 'Interview ID is required' })

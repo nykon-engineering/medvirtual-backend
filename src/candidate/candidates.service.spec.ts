@@ -792,7 +792,7 @@ describe('CandidatesService', () => {
 
       // Mock OpenAI service specific method for this test
       // Note: We need to cast to any because extractDataFromResumeImages is not in the initial mock definition at top of file
-      (service['openai'] as any).extractDataFromResumeImages = jest.fn().mockResolvedValue(mockExtractedData);
+      (service['openai'] as any).extractDataFromResumeImages = jest.fn().mockResolvedValue({ data: mockExtractedData, cost: 0 });
 
       // We need to mock updateFromJson or let it run. Since it uses prisma calls, we can let it run and verify prisma calls.
       // But updateFromJson is private/internal. We are testing processData which calls it.

@@ -33,6 +33,7 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
+import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
 
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
@@ -47,17 +48,19 @@ import { OrganizationCreationService } from './create/Organization';
 import { HandlerObjectMerge } from './handlers/objectMerge';
 import { OwnerCreationService } from './create/Owner';
 import { AffiliateCreationService } from './create/affiliate';
+import { AffiliateUpdateService } from './update/affiliate';
 
 import { OrganizationUpdateService } from './update/organization';
 import { ContactCreationService } from './create/contact';
 import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
+import { HandlerContactCreation } from './handlers/contactCreation';
+import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+
 import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
-
-
-
+import { HubspotAuditService } from './hubspot-audit.service';
 
 
 
@@ -85,6 +88,7 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     HandlerTicketDeletion,
     HandlerTicketPropertyChange,
     HandlerAffiliateCreation,
+    HandlerAffiliateDeletion,
     HandlerAffiliatePropertyChange,
     HireRequestCreationService,
     HireRequestUpdateService,
@@ -96,12 +100,15 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     AffiliateCreationService,
     ContactUpdateService,
     ContactDeleteService,
+    HandlerContactCreation,
+    HandlerContactPropertyChange,
     CompanyDeleteService,
     HandlerInvoiceCreation,
     HandlerInvoicePropertyChange,
     HandlerInvoiceAssociationChange,
     HandlerComissionCreation,
-    
+    AffiliateUpdateService,
+    HubspotAuditService,
   ],
   imports: [PrismaModule, 
     GoogledriveModule, 
@@ -116,6 +123,8 @@ import { ContactFromCompanyCreationService } from './create/contactFromCompany';
     HireRequestCreationService,
     HireRequestUpdateService,
     AffiliateCreationService,
+    AffiliateUpdateService,
+    HubspotAuditService,
   ],
 })
 export class HubspotModule {}

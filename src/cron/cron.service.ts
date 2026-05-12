@@ -8,10 +8,18 @@ import systemReport from '../common/utils/email-templates/system-report';
 import clientUsersDeactivationReport from '../common/utils/email-templates/client-users-deactivation-report';
 import cronJobErrorReport from '../common/utils/email-templates/cron-job-error-report';
 import newPositionsAlert from '../common/utils/email-templates/new-positions-alert';
+import quarterlyPayoutReport, {
+  PayoutReportEntry,
+  PayoutReportFailure,
+} from '../common/utils/email-templates/quarterly-payout-report';
+import medAllianceDeployedCompaniesReport, {
+  PromotedCompanyEntry,
+} from '../common/utils/email-templates/med-alliance-deployed-companies-report';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 
 type Event = {
     objectId?: string;
@@ -27,6 +35,7 @@ export class CronService {
         private readonly mailService: MailService,
         private readonly hireRequestService: HireRequestService,
         private readonly positionRateConfigService: PositionRateConfigService,
+        private readonly payoutRequestsService: PayoutRequestsService,
     ){}
 
     
@@ -494,6 +503,194 @@ export class CronService {
             console.error('Error in syncPositionsFromHubspot:', error);
             return false;
         }
+    }
+
+    async createQuarterlyPayoutRequests(): Promise<{
+        created: number;
+        failed: number;
+        total_amount: string;
+    }> {
+        const runAt = new Date();
+        console.log('Starting createQuarterlyPayoutRequests cron job...');
+
+        const affiliates = await this.prisma.affiliateProfile.findMany({
+            where: { commissions: { some: { status: 'eligible' } } },
+            select: {
+                id: true,
+                full_name: true,
+                user: { select: { email: true, first_name: true, last_name: true } },
+                commissions: {
+                    where: { status: 'eligible' },
+                    select: { id: true, commission_amount: true },
+                },
+            },
+        });
+
+        console.log(`createQuarterlyPayoutRequests: found ${affiliates.length} affiliate(s) with eligible commissions.`);
+
+        const successes: PayoutReportEntry[] = [];
+        const failures: PayoutReportFailure[] = [];
+
+        for (const affiliate of affiliates) {
+            const affiliateName =
+                affiliate.full_name ??
+                (affiliate.user
+                    ? `${affiliate.user.first_name} ${affiliate.user.last_name}`.trim()
+                    : affiliate.id);
+            const affiliateEmail = affiliate.user?.email ?? '';
+            const commissionIds = affiliate.commissions.map((c) => c.id);
+
+            try {
+                const result = await this.payoutRequestsService.createFromCron(
+                    affiliate.id,
+                    commissionIds,
+                );
+
+                successes.push({
+                    affiliateName,
+                    affiliateEmail,
+                    commissionCount: commissionIds.length,
+                    totalAmount: result.requested_amount.toString(),
+                    payoutRequestId: result.id,
+                });
+
+                console.log(`createQuarterlyPayoutRequests: created payout request ${result.id} for affiliate ${affiliate.id}`);
+            } catch (error) {
+                const errorMessage =
+                    error instanceof Error ? error.message : String(error);
+
+                failures.push({ affiliateName, affiliateEmail, error: errorMessage });
+                console.error(
+                    `createQuarterlyPayoutRequests: failed for affiliate ${affiliate.id} — ${errorMessage}`,
+                );
+            }
+        }
+
+        const totalAmount = successes
+            .reduce((sum, s) => sum + parseFloat(s.totalAmount), 0)
+            .toFixed(2);
+
+        await this.mailService.sendMail({
+            from: 'MedVirtual <noreply@medvirtual.ai>',
+            to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+            subject: `Quarterly Payout Report — ${runAt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
+            html: quarterlyPayoutReport(successes, failures, runAt),
+        });
+
+        console.log(
+            `createQuarterlyPayoutRequests: done. Created=${successes.length}, Failed=${failures.length}, Total=$${totalAmount}`,
+        );
+
+        return { created: successes.length, failed: failures.length, total_amount: totalAmount };
+    }
+
+    /**
+     * Daily cron: promotes referred companies from 'deployed' to 'eligible' after 30 days,
+     * and promotes their 'detected' commissions to 'pending_admin_confirmation'.
+     * Safe to re-run — already-eligible companies are excluded by the where clause.
+     */
+    async promoteDeployedCompanies(): Promise<{ companiesPromoted: number; commissionsPromoted: number; errors: string[] }> {
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
+        const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
+
+        const orgs = await this.prisma.organization.findMany({
+            where: {
+                referral_stage: 'deployed' as any,
+                eligibility_start_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+                med_alliance_referral_status: 'not_eligible',
+            },
+            select: { id: true, name: true, eligibility_start_at: true },
+        });
+
+        let companiesPromoted = 0;
+        let commissionsPromoted = 0;
+        const errors: string[] = [];
+        const promotedEntries: PromotedCompanyEntry[] = [];
+
+        for (const org of orgs) {
+            try {
+                await this.prisma.organization.update({
+                    where: { id: org.id },
+                    data: { med_alliance_referral_status: 'eligible', med_alliance_block_reason: null },
+                });
+                await this.prisma.medAllianceAuditLog.create({
+                    data: {
+                        entity_type: 'referred_company',
+                        entity_id: org.id,
+                        event: 'eligibility_activated',
+                        old_status: 'not_eligible',
+                        new_status: 'eligible',
+                        reason: '30-day deployment window elapsed',
+                        source: 'cron',
+                        actor_user_id: null,
+                        metadata: { eligibility_start_at: org.eligibility_start_at?.toISOString() } as any,
+                    },
+                });
+                companiesPromoted++;
+
+                const detected = await this.prisma.affiliateCommission.findMany({
+                    where: { organization_id: org.id, status: 'detected' },
+                    select: { id: true },
+                });
+                for (const commission of detected) {
+                    await this.prisma.affiliateCommission.update({
+                        where: { id: commission.id },
+                        data: { status: 'pending_admin_confirmation' },
+                    });
+                    await this.prisma.medAllianceAuditLog.create({
+                        data: {
+                            entity_type: 'commission',
+                            entity_id: commission.id,
+                            event: 'status_changed',
+                            old_status: 'detected',
+                            new_status: 'pending_admin_confirmation',
+                            reason: '30-day deployment window elapsed — promoted for admin review',
+                            source: 'cron',
+                            actor_user_id: null,
+                            metadata: { organization_id: org.id } as any,
+                        },
+                    });
+                    commissionsPromoted++;
+                }
+
+                promotedEntries.push({
+                    orgId: org.id,
+                    orgName: org.name ?? org.id,
+                    eligibilityStartAt: org.eligibility_start_at
+                        ? org.eligibility_start_at.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+                        : 'N/A',
+                    commissionsPromoted: detected.length,
+                });
+            } catch (err: any) {
+                const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
+                console.error(msg);
+                errors.push(msg);
+            }
+        }
+
+        console.log(
+            `promoteDeployedCompanies: companies=${companiesPromoted}, commissions=${commissionsPromoted}, errors=${errors.length}`,
+        );
+
+        if (companiesPromoted > 0) {
+            try {
+                
+                await this.mailService.sendMail({
+                    from: 'MedVirtual <noreply@medvirtual.ai>',
+                    to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+                    subject: `Med Alliance — Deployed Companies Report (${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
+                    html: medAllianceDeployedCompaniesReport(promotedEntries, errors, now),
+                });
+                
+            } catch (mailError) {
+                console.error('promoteDeployedCompanies: failed to send report email:', mailError);
+            }
+        }
+
+        return { companiesPromoted, commissionsPromoted, errors };
     }
 
 }

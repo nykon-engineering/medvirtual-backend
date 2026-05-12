@@ -110,12 +110,20 @@ export function MedAllianceInvitationForOrgUsers(firstName: string, theme?: Emai
         <div class="greeting">Hello, ${firstName}!</div>
 
         <div class="main-message">
-          Thank you for joining the Med Alliance Program with ${companyName}. We're excited to have you as a partner and offer you access to exclusive benefits and commission opportunities.
+          <p>Your Med Alliance Partner profile is now active.</p>
+          <p>By joining the Med Alliance Program with ${companyName}, you've unlocked a new revenue stream directly from your existing network. Here's what's available to you right now:</p>
+          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
+            <li>Commission earnings on every successful referral you make</li>
+            <li>A dedicated partner dashboard with real-time referral tracking</li>
+            <li>Transparent payout history and on-demand payout requests</li>
+            <li>Full visibility into the organizations you've referred</li>
+          </ul>
+          <p>Your dashboard is live — head over to review your partner profile and start sharing your referral link.</p>
         </div>
 
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">
-            Access Med Alliance
+            View My Partner Dashboard
           </a>
         </div>
 

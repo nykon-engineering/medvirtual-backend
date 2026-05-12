@@ -16,6 +16,8 @@ import {
   ApiParam,
   ApiQuery,
   ApiResponse,
+  ApiTags,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 
 import { TicketService } from './ticket.service';
@@ -30,6 +32,8 @@ import { USER } from '@prisma/client';
 import { CreateTicketNoteDto } from './dto/create-ticket-note.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 
+@ApiTags('tickets')
+@ApiBearerAuth()
 @Controller('tickets')
 export class TicketController {
   constructor(private readonly ticketService: TicketService) {}
@@ -124,8 +128,10 @@ export class TicketController {
 
   @Get(':ticketId/notes')
   @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'List notes for a ticket' })
+  @ApiOperation({ summary: 'List all notes for a specific ticket' })
   @ApiParam({ name: 'ticketId', type: String })
+  @ApiResponse({ status: 200, description: 'Notes retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async listNotes(
     @Param('ticketId') ticketId: string,
     @CurrentUser() user: USER,

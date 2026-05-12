@@ -1,13 +1,16 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from "@prisma/client";
 import { dbToContactDictionary } from "../../common/dictionaries/contact-dictionary";
+import { HubspotAuditService } from "../hubspot-audit.service";
 
 @Injectable()
 
 export class ContactUpdateService {
-    constructor(){}
+    constructor(private readonly audit: HubspotAuditService) {}
 
-    async execute(data: any): Promise<any> {
+    async execute(data: any, actorUserId?: string): Promise<any> {
+      const source = actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron;
       try {
           const hubspotProperties: Record<string, any> = {};
           for (const [dbKey, hubspotKey] of Object.entries(dbToContactDictionary)) {
@@ -29,6 +32,19 @@ export class ContactUpdateService {
             },
           }
       );
+
+        void this.audit.log({
+          actorUserId,
+          entityType: HubspotEntityType.contact,
+          entityId: data.id ?? data.hubspot_contact_id,
+          hubspotObjectId: data.hubspot_contact_id,
+          hubspotObjectType: 'contacts',
+          action: HubspotAuditAction.UPDATE,
+          source,
+          success: true,
+          payload: { fields: Object.keys(hubspotProperties) },
+        });
+
         return true;
       } catch (error) {
         if (error.response) {
@@ -36,7 +52,19 @@ export class ContactUpdateService {
         } else {
           console.error("Connection error:", error.message);
         }
+        void this.audit.log({
+          actorUserId,
+          entityType: HubspotEntityType.contact,
+          entityId: data.id ?? data.hubspot_contact_id,
+          hubspotObjectId: data.hubspot_contact_id,
+          hubspotObjectType: 'contacts',
+          action: HubspotAuditAction.UPDATE,
+          source,
+          success: false,
+          errorCode: error.response?.status?.toString() ?? error.code,
+          errorMessage: error.message,
+        });
       }
-        
+
     }
 }

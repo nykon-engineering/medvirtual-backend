@@ -1,12 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from "@prisma/client";
 import { PrismaService } from "../../prisma/prisma.service";
+import { HubspotAuditService } from "../hubspot-audit.service";
 
 @Injectable()
 
 export class OrganizationCreationService {
     constructor(
-      private readonly prisma: PrismaService
+      private readonly prisma: PrismaService,
+      private readonly audit: HubspotAuditService,
     ){}
 
     async getOwnerId(userId: string): Promise<string | null> {
@@ -20,7 +23,7 @@ export class OrganizationCreationService {
           last_name: true,
           email: true,
       },
-          
+
       });
 
       /* => Commented because we cannot create owners using hubspot API
@@ -29,7 +32,7 @@ export class OrganizationCreationService {
       }
       */
 
-      return user && user.hubspot_id ? user.hubspot_id : null; 
+      return user && user.hubspot_id ? user.hubspot_id : null;
     }
 
     async getAfiliateId(affiliateId: string): Promise<string | null> {
@@ -40,11 +43,12 @@ export class OrganizationCreationService {
           hubspot_id: true,
         },
       });
-      return affiliate && affiliate.hubspot_id ? affiliate.hubspot_id : null; 
+      return affiliate && affiliate.hubspot_id ? affiliate.hubspot_id : null;
     }
 
-    async execute(data: any): Promise<any> {
-       try {
+    async execute(data: any, actorUserId?: string): Promise<any> {
+      const source = actorUserId ? HubspotAuditSource.user_action : HubspotAuditSource.cron;
+      try {
 
           const response = await axios.post(
             "https://api.hubapi.com/crm/v3/objects/companies",
@@ -69,7 +73,7 @@ export class OrganizationCreationService {
               },
               associations: data.referred_by_affiliate_id ? [
                 {
-                  to: { id: await this.getAfiliateId(data.referred_by_affiliate_id) }, 
+                  to: { id: await this.getAfiliateId(data.referred_by_affiliate_id) },
                   types: [
                     {
                       associationCategory: "USER_DEFINED",
@@ -87,23 +91,46 @@ export class OrganizationCreationService {
               },
             }
           );
-      
-          //onsole.log(' Response: ',response.data);
-          //update hireRequest with the hubspot_ticket_id
+
+          //update organization with the hubspot_id
           await this.prisma.organization.update({
             where: { id: data.id },
             data: { hubspot_id: response.data.id },
           });
-          
+
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.organization,
+            entityId: data.id,
+            hubspotObjectId: response.data.id,
+            hubspotObjectType: 'companies',
+            action: HubspotAuditAction.CREATE,
+            source,
+            success: true,
+            payload: { name: data.name },
+            response: { id: response.data.id },
+          });
+
           return true;
-        
+
         } catch (error) {
           if (error.response) {
             console.error("Error to created organization:", error.response.data);
           } else {
             console.error("Connection error:", error.message);
           }
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.organization,
+            entityId: data.id,
+            hubspotObjectType: 'companies',
+            action: HubspotAuditAction.CREATE,
+            source,
+            success: false,
+            errorCode: error.response?.status?.toString() ?? error.code,
+            errorMessage: error.message,
+          });
         }
-        
+
     }
 }

@@ -373,7 +373,7 @@ export class HireRequestService {
     const hireRequestWithSkills = await this.findOne(newHireRequest.id, user, 'hubspot');    
     //send request for the hubspot to create the ticket
     try {
-      await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills);
+      await this.hubspot.createHireRequestInHubspot(hireRequestWithSkills, user?.id);
     } catch (err) {
       console.warn('[hubspot] createHireRequestTicket failed', err?.message || err);
     }
@@ -1318,7 +1318,7 @@ export class HireRequestService {
       hubspot_pipeline_stage,
       ...hubspotData
     } = newHr;
-    await this.hubspot.updateHireRequestInHubspot(hubspotData);
+    await this.hubspot.updateHireRequestInHubspot(hubspotData, undefined, user?.id);
     
     // Notify assignee via email when hire request is edited (non-blocking)
     try {
@@ -1421,7 +1421,7 @@ export class HireRequestService {
                 where: { id: c.candidate.id },
                 data: { pipeline_status: pipeline_treated},
               });
-              await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+              await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated, user?.id);
             }
             
           }
@@ -1480,11 +1480,11 @@ export class HireRequestService {
           //client_signed_contract: data.client_signed_contract || undefined,
           client_signed_contract_closing_ticket: data.client_signed_contract_closing_ticket || undefined,
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
 
 
         //Update cancel_date in hubspot
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'cancel_date');
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'cancel_date', user?.id);
 
         
       } catch (err) {
@@ -1528,7 +1528,7 @@ export class HireRequestService {
               where: { id: c.candidate.id },
               data: { pipeline_status: pipeline_treated},
             });
-            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated);
+            await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipeline_treated, user?.id);
           }
           )
         );
@@ -1545,9 +1545,9 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'New Agent Request'), //=> New
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
 
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'reopen_as_new'); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'reopen_as_new', user?.id); 
         console.log('Hubspot hire request updated to New status');
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
@@ -1580,7 +1580,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Sourcing Candidates'),
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
@@ -1603,7 +1603,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Sourcing Candidates'),
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
       }
@@ -1632,7 +1632,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Sourcing Candidates'),
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot to Cancelled failed', err?.message || err);
       }
@@ -1679,7 +1679,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
       }
@@ -1713,7 +1713,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'For Onboarding (Paired)'),
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Awaiting decision failed', err?.message || err);
       }
@@ -1763,7 +1763,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
       }
@@ -1774,7 +1774,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
       }
@@ -1811,7 +1811,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
       }
@@ -1870,7 +1870,7 @@ export class HireRequestService {
         });
 
         const candidatesForHubspot = panelCandidates.map(pc => pc.candidate);
-        const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesForHubspot, pipelineStatus);
+        const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesForHubspot, pipelineStatus, user?.id);
         if (!updateHubspot) throw new NotFoundException(`Candidates not updated on the hubspot`);
       }
 
@@ -1916,7 +1916,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Candidates Interview Booked'),
         }
-        await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
       }
@@ -1953,7 +1953,7 @@ export class HireRequestService {
           hubspot_pipeline_stage: Object.keys(HRTicketStatus)
           .find(key => HRTicketStatus[key] === 'Interview Done (For Follow-up)'),
         }
-        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+        const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
       } catch (err) {
         console.warn('[hubspot] updateHireRequestInHubspot in Awaiting decision failed', err?.message || err);
       }
@@ -1997,7 +1997,7 @@ export class HireRequestService {
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
     const newHr = await this.findOne(id, user);
-    await this.hubspot.updateHireRequestInHubspot(newHr, type === 'concierge' ? 'assign_user_id' : type === 'staffing_coordinator' ? 'assign_staffing_coordinator' : 'assign_sourcing_id');
+    await this.hubspot.updateHireRequestInHubspot(newHr, type === 'concierge' ? 'assign_user_id' : type === 'staffing_coordinator' ? 'assign_staffing_coordinator' : 'assign_sourcing_id', user?.id);
 
     // Notificação (não bloqueante)
     if (data.user_id) {
@@ -2302,7 +2302,7 @@ export class HireRequestService {
 
 
     //comunicate with hubspot to update status
-    const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidates, pipelineStatus);
+    const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidates, pipelineStatus, user?.id);
     if (!updateHubspot) throw new NotFoundException(`Loser candidates not updated on the hubspot`);
 
     return true;
@@ -2484,7 +2484,7 @@ export class HireRequestService {
         where: { id: c.id },
         data: { pipeline_status: c.pipeline_status_origin || c.pipeline_status},
       });
-      await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status);
+      await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, c.pipeline_status_origin || c.pipeline_status, user?.id);
     })
 
     try {  
@@ -2493,7 +2493,7 @@ export class HireRequestService {
         hubspot_pipeline_stage: Object.keys(HRTicketStatus)
         .find(key => HRTicketStatus[key] === 'Candidates Endorsed'),
       }
-      await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
     } catch (err) {
       console.warn('[hubspot] updateHireRequestInHubspot in Panel ready failed', err?.message || err);
     }
@@ -2942,7 +2942,7 @@ export class HireRequestService {
         hubspot_pipeline_stage: Object.keys(HRTicketStatus)
         .find(key => HRTicketStatus[key] === 'Candidates Interview Booked'),
       }
-      await this.hubspot.updateHireRequestInHubspot(updateDateTime);
+      await this.hubspot.updateHireRequestInHubspot(updateDateTime, undefined, user?.id);
 
     }catch(err){
       console.error('[hubspot] updateHireRequestInHubspot failed', err?.message || err);
@@ -3024,7 +3024,7 @@ export class HireRequestService {
         pairing_date:updatedDate.toISOString().split("T")[0],
         pairing_time:updatedDate.toTimeString().split(" ")[0],
       }
-      await this.hubspot.updateHireRequestInHubspot(updateDateTime);
+      await this.hubspot.updateHireRequestInHubspot(updateDateTime, undefined, user?.id);
     }catch(err){
       console.error('[hubspot] updateHireRequestInHubspot failed', err?.message || err);
     }
@@ -3127,7 +3127,8 @@ export class HireRequestService {
 
     const hubspotUpdated = await this.hubspot.updateManyCandidatesFromHireRequest(
       candidates,
-      pipelineStatus
+      pipelineStatus,
+      user?.id
     );
 
     try {  
@@ -3136,7 +3137,7 @@ export class HireRequestService {
         hubspot_pipeline_stage: Object.keys(HRTicketStatus)
         .find(key => HRTicketStatus[key] === 'Interview Done (For Follow-up)'),
       }
-      const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+      const hrTicket = await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
     } catch (err) {
       console.warn('[hubspot] updateHireRequestInHubspot in Awaiting decision failed', err?.message || err);
     }
@@ -3342,7 +3343,7 @@ export class HireRequestService {
             where: { id: c.id },
             data: { pipeline_status: pipeline_treated},
           });
-          await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated);
+          await this.hubspot.updateOneCandidateFromHireRequest(c.hubspot_id, pipeline_treated, user?.id);
         })
       );
     }
@@ -3354,7 +3355,7 @@ export class HireRequestService {
             where: { id: c.candidate_id },
             data: { pipeline_status: pipelineStatus},
           });
-          await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipelineStatus);
+          await this.hubspot.updateOneCandidateFromHireRequest(c.candidate.hubspot_id, pipelineStatus, user?.id);
         }
         )
       );
@@ -3376,7 +3377,7 @@ export class HireRequestService {
     
     try{
       //communication with hubspot to update status hired can be added here
-      await this.hubspot.updateOneCandidateFromHireRequest(candidateUpdated.hubspot_id, pipelineStatus);
+      await this.hubspot.updateOneCandidateFromHireRequest(candidateUpdated.hubspot_id, pipelineStatus, user?.id);
     
     }catch (error) {
       console.error('Error updating candidate in HubSpot:', error);
@@ -3390,10 +3391,10 @@ export class HireRequestService {
       hubspot_pipeline_stage: Object.keys(HRTicketStatus)
       .find(key => HRTicketStatus[key] === 'For Onboarding (Paired)'),
     }
-    await this.hubspot.updateHireRequestInHubspot(dataForHubspot); 
+    await this.hubspot.updateHireRequestInHubspot(dataForHubspot, undefined, user?.id); 
 
     //Update closed_date in hubspot
-    await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'closed_date');
+    await this.hubspot.updateHireRequestInHubspot(dataForHubspot, 'closed_date', user?.id);
     
     // Fire placement completed notification (non-blocking)
     try {

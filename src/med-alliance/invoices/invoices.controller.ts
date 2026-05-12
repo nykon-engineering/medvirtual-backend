@@ -6,6 +6,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { InvoicesService } from './invoices.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
@@ -15,6 +16,8 @@ import { USER } from '@prisma/client';
 import { ADMIN_ROLES } from '../constants';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 
+@ApiTags('med-alliance')
+@ApiBearerAuth()
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
 export class InvoicesController {
@@ -30,6 +33,12 @@ export class InvoicesController {
   @Get('referred-companies/:id/invoices')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Get HubSpot invoice snapshots for a referred company scoped to the current affiliate' })
+  @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
+  @ApiQuery({ type: ListInvoicesDto })
+  @ApiResponse({ status: 200, description: 'Invoice snapshots retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Referred company not found or access denied' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async getForAffiliate(
     @Param('id') organizationId: string,
     @Query() query: ListInvoicesDto,
@@ -56,6 +65,12 @@ export class InvoicesController {
   @Get('admin/referred-companies/:id/invoices')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'Get all HubSpot invoice snapshots for a referred company (admin, no affiliate scoping)' })
+  @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
+  @ApiQuery({ type: ListInvoicesDto })
+  @ApiResponse({ status: 200, description: 'Invoice snapshots retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Referred company not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async getForAdmin(
     @Param('id') organizationId: string,
     @Query() query: ListInvoicesDto,
@@ -73,6 +88,10 @@ export class InvoicesController {
   @Get('admin/invoices')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'List all HubSpot invoice snapshots across all organizations with full filtering' })
+  @ApiQuery({ type: ListInvoicesDto })
+  @ApiResponse({ status: 200, description: 'Invoice snapshots retrieved successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
   async listAllForAdmin(@Query() query: ListInvoicesDto) {
     const result = await this.invoicesService.listAllForAdmin(query);
     return {
