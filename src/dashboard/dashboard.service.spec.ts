@@ -93,4 +93,29 @@ describe('DashboardService', () => {
 
     await expect(service.getDashboardData(user)).rejects.toThrow(BadRequestException);
   });
+
+  describe('closeAlert', () => {
+    it('should throw BadRequestException if interviewId is falsy', async () => {
+      await expect(service.closeAlert('')).rejects.toThrow(BadRequestException);
+      expect(prismaMock.interview.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException if interview update returns null', async () => {
+      prismaMock.interview.update.mockResolvedValueOnce(null);
+      await expect(service.closeAlert('interview-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should close alert and return updated interview', async () => {
+      const mockInterview = { id: 'interview-1', alert_closed: true };
+      prismaMock.interview.update.mockResolvedValueOnce(mockInterview);
+
+      const result = await service.closeAlert('interview-1');
+
+      expect(result).toEqual(mockInterview);
+      expect(prismaMock.interview.update).toHaveBeenCalledWith({
+        where: { id: 'interview-1' },
+        data: { alert_closed: true },
+      });
+    });
+  });
 });

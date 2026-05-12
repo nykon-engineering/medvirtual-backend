@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReferredCompaniesService } from './referred-companies.service';
+
+jest.mock('axios');
 import { EligibilityCheckService } from './eligibility-check.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
@@ -734,6 +736,203 @@ describe('ReferredCompaniesService', () => {
           data: expect.objectContaining({ reason: 'Reached out via email' }),
         }),
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // findAllForAffiliate — commission aggregation
+  // -------------------------------------------------------------------------
+  describe('findAllForAffiliate — commission status aggregation', () => {
+    const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+
+    it('should set commission_status to "paid" when any commission is paid', async () => {
+      const orgWithPaid = {
+        ...mockOrg,
+        eligibility_start_at: fortyDaysAgo,
+        affiliateCommissions: [{ status: 'paid', commission_amount: '500.00' }],
+      };
+      mockPrisma.$transaction.mockResolvedValue([[orgWithPaid], 1]);
+
+      const result = await service.findAllForAffiliate({}, mockCurrentUser);
+
+      expect((result.data[0] as any).commission_status).toBe('paid');
+      expect((result.data[0] as any).my_commissions).toBe(500);
+    });
+
+    it('should set commission_status to "eligible" when any commission is eligible', async () => {
+      const orgWithEligible = {
+        ...mockOrg,
+        eligibility_start_at: fortyDaysAgo,
+        affiliateCommissions: [{ status: 'eligible', commission_amount: '300.00' }],
+      };
+      mockPrisma.$transaction.mockResolvedValue([[orgWithEligible], 1]);
+
+      const result = await service.findAllForAffiliate({}, mockCurrentUser);
+
+      expect((result.data[0] as any).commission_status).toBe('eligible');
+    });
+
+    it('should set commission_status to "pending" when only detected commissions exist', async () => {
+      const orgWithPending = {
+        ...mockOrg,
+        eligibility_start_at: fortyDaysAgo,
+        affiliateCommissions: [{ status: 'detected', commission_amount: '200.00' }],
+      };
+      mockPrisma.$transaction.mockResolvedValue([[orgWithPending], 1]);
+
+      const result = await service.findAllForAffiliate({}, mockCurrentUser);
+
+      expect((result.data[0] as any).commission_status).toBe('pending');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // findAllForAdmin — commission aggregation
+  // -------------------------------------------------------------------------
+  describe('findAllForAdmin — commission aggregation', () => {
+    it('should aggregate total_paid and total_pending from affiliateCommissions', async () => {
+      const orgWithCommissions = {
+        ...mockOrg,
+        eligibility_start_at: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
+        affiliateCommissions: [
+          { status: 'paid', commission_amount: '400.00' },
+          { status: 'eligible', commission_amount: '150.00' },
+          { status: 'requested', commission_amount: '50.00' },
+        ],
+        _count: { adminReviewCases: 0 },
+        referredByAffiliate: { id: 'user-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+      };
+      mockPrisma.$transaction.mockResolvedValue([[orgWithCommissions], 1]);
+
+      const result = await service.findAllForAdmin({});
+
+      expect((result.data[0] as any).total_paid).toBe(400);
+      expect((result.data[0] as any).total_pending).toBe(200);
+      expect((result.data[0] as any).has_open_review).toBe(false);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getReferredToOptions
+  // -------------------------------------------------------------------------
+  describe('getReferredToOptions', () => {
+    it('should return available owners matching HubSpot property options', async () => {
+      const axiosMock = jest.requireMock('axios') as jest.Mocked<any>;
+      axiosMock.get.mockResolvedValue({
+        data: {
+          results: [
+            {
+              name: 'referred_to',
+              options: [{ value: 'hs-1' }, { value: 'hs-2' }],
+            },
+          ],
+        },
+      });
+      mockPrisma.uSER.findMany.mockResolvedValue([
+        { id: 'u1', first_name: 'Alice', last_name: 'Smith', email: 'alice@example.com', hubspot_id: 'hs-1' },
+      ]);
+
+      const result = await service.getReferredToOptions();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].hubspot_id).toBe('hs-1');
+    });
+
+    it('should return empty array when referred_to property is not found', async () => {
+      const axiosMock = jest.requireMock('axios') as jest.Mocked<any>;
+      axiosMock.get.mockResolvedValue({
+        data: { results: [{ name: 'other_property', options: [] }] },
+      });
+
+      const result = await service.getReferredToOptions();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should throw Error when axios.get rejects', async () => {
+      const axiosMock = jest.requireMock('axios') as jest.Mocked<any>;
+      axiosMock.get.mockRejectedValue(new Error('Network error'));
+
+      await expect(service.getReferredToOptions()).rejects.toThrow(
+        'Failed to find Referred To options',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // create — soft duplicate warning path
+  // -------------------------------------------------------------------------
+  describe('create — soft duplicate warning', () => {
+    it('should return org with warning when a soft duplicate exists', async () => {
+      const createDto = {
+        name: 'Acme Corp',
+        email: 'contact@acme.com',
+        website_url: 'https://acme.com',
+        contact_first_name: 'John',
+        contact_last_name: 'Doe',
+        contact_email: 'contato@org1.com',
+        location: 'New York',
+        industry: 'Healthcare',
+      };
+
+      const createdOrg = { ...mockOrg, id: 'org-new', hubspot_id: null };
+      const updatedOrg = { ...createdOrg, med_alliance_referral_status: 'eligible' };
+      const duplicateOrg = { id: 'org-old', name: 'Acme Corp' };
+
+      mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
+      mockOrganizationService.create.mockResolvedValue(createdOrg);
+      mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockReferralSyncService.run.mockResolvedValue(undefined);
+      mockPrisma.organization.findFirst.mockResolvedValue(duplicateOrg); // soft duplicate found
+      mockPrisma.organization.findUnique.mockResolvedValue(updatedOrg); // final reload
+      mockReviewCasesService.openOrSkip.mockResolvedValue(undefined);
+      mockContactService.createForReferredCompany.mockResolvedValue({ contact: null, hubspotId: null });
+
+      const result = await service.create(createDto, mockCurrentUser);
+
+      expect((result as any).warning).toContain('duplicate');
+      expect(mockReviewCasesService.openOrSkip).toHaveBeenCalledWith(
+        'org-new',
+        'soft_duplicate_referral',
+        expect.objectContaining({ matched_organization_id: 'org-old' }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // create — rollback on contact CONFLICT error (covers cleanupStack execution)
+  // -------------------------------------------------------------------------
+  describe('create — rollback on contact CONFLICT error', () => {
+    it('should execute rollback and throw BadRequestException on HubSpot CONFLICT', async () => {
+      const createDto = {
+        name: 'Rollback Corp',
+        email: 'rollback@corp.com',
+        website_url: 'https://rollback.com',
+        contact_first_name: 'Rob',
+        contact_last_name: 'Back',
+        contact_email: 'rob@rollback.com',
+      };
+
+      const createdOrg = { ...mockOrg, id: 'org-rollback', hubspot_id: 'hs-org-1' };
+      const conflictError: any = new Error('Contact exists');
+      conflictError.response = { data: { category: 'CONFLICT', message: 'Contact already exists' } };
+
+      mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
+      mockOrganizationService.create.mockResolvedValue(createdOrg);
+      mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockReferralSyncService.run.mockResolvedValue(undefined);
+      mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce(createdOrg) // inside cleanupStack closure
+        .mockResolvedValueOnce({ ...createdOrg, hubspot_id: 'hs-org-1' }); // final reload
+      mockContactService.createForReferredCompany.mockRejectedValue(conflictError);
+      mockHubspotService.deleteCompanyInHubspot.mockResolvedValue(undefined);
+      mockPrisma.$transaction.mockResolvedValue([]);
+      mockPrisma.medAllianceAuditLog.deleteMany.mockResolvedValue({ count: 0 });
+      mockPrisma.organization.delete.mockResolvedValue({});
+
+      await expect(service.create(createDto, mockCurrentUser)).rejects.toThrow(BadRequestException);
+      expect(mockHubspotService.deleteCompanyInHubspot).toHaveBeenCalled();
     });
   });
 });

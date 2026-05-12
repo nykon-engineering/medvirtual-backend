@@ -9,6 +9,8 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 
+jest.mock('axios');
+
 describe('CronService', () => {
   let service: CronService;
   let prismaServiceMock: any;
@@ -369,4 +371,579 @@ describe('CronService', () => {
   });
 
   */
+
+  // ---------------------------------------------------------------------------
+  // reRunPipeline
+  // ---------------------------------------------------------------------------
+  describe('reRunPipeline', () => {
+    const dto: reRunPipelineDto = { status: 'processing_extractData' as any };
+
+    it('should return true and not call processData when environment is not PROD', async () => {
+      const originalEnv = process.env.ENVIRONMENT;
+      process.env.ENVIRONMENT = 'DEV';
+
+      prismaServiceMock.candidate.findMany.mockResolvedValue([
+        { id: 'c-1', first_name: 'John', last_name: 'Doe' },
+      ]);
+
+      const result = await service.reRunPipeline(dto);
+
+      expect(result).toBe(true);
+      expect(candidatesServiceMock.processData).not.toHaveBeenCalled();
+
+      process.env.ENVIRONMENT = originalEnv;
+    });
+
+    it('should process candidates in PROD and return true', async () => {
+      const originalEnv = process.env.ENVIRONMENT;
+      process.env.ENVIRONMENT = 'PROD';
+
+      prismaServiceMock.candidate.findMany.mockResolvedValue([
+        { id: 'c-1', first_name: 'Alice', last_name: 'Smith' },
+        { id: 'c-2', first_name: 'Bob', last_name: 'Jones' },
+      ]);
+      candidatesServiceMock.processData.mockResolvedValue(undefined);
+
+      const result = await service.reRunPipeline(dto);
+
+      expect(result).toBe(true);
+      expect(candidatesServiceMock.processData).toHaveBeenCalledTimes(2);
+      expect(candidatesServiceMock.processData).toHaveBeenCalledWith('c-1');
+      expect(candidatesServiceMock.processData).toHaveBeenCalledWith('c-2');
+
+      process.env.ENVIRONMENT = originalEnv;
+    });
+
+    it('should mark candidate as failed and continue when processData throws in PROD', async () => {
+      const originalEnv = process.env.ENVIRONMENT;
+      process.env.ENVIRONMENT = 'PROD';
+
+      prismaServiceMock.candidate = {
+        ...prismaServiceMock.candidate,
+        update: jest.fn().mockResolvedValue({}),
+      };
+
+      prismaServiceMock.candidate.findMany.mockResolvedValue([
+        { id: 'c-bad', first_name: 'Fail', last_name: 'Candidate' },
+        { id: 'c-good', first_name: 'OK', last_name: 'Candidate' },
+      ]);
+      candidatesServiceMock.processData
+        .mockRejectedValueOnce(new Error('pipeline error'))
+        .mockResolvedValueOnce(undefined);
+
+      const result = await service.reRunPipeline(dto);
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.candidate.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-bad' },
+          data: { processing_status: 'failed' },
+        }),
+      );
+
+      process.env.ENVIRONMENT = originalEnv;
+    });
+
+    it('should query with NOT completed when status is "failed"', async () => {
+      prismaServiceMock.candidate.findMany.mockResolvedValue([]);
+
+      await service.reRunPipeline({ status: 'failed' as any });
+
+      expect(prismaServiceMock.candidate.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            processing_status: { not: 'completed' },
+          }),
+        }),
+      );
+    });
+
+    it('should return true when no candidates are found', async () => {
+      prismaServiceMock.candidate.findMany.mockResolvedValue([]);
+
+      const result = await service.reRunPipeline(dto);
+
+      expect(result).toBe(true);
+      expect(candidatesServiceMock.processData).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // systemReport
+  // ---------------------------------------------------------------------------
+  describe('systemReport', () => {
+    beforeEach(() => {
+      prismaServiceMock.candidate = {
+        ...prismaServiceMock.candidate,
+        count: jest.fn(),
+      };
+    });
+
+    it('should return true and send system report email on success', async () => {
+      prismaServiceMock.candidate.count
+        .mockResolvedValueOnce(10) // availableCandidates
+        .mockResolvedValueOnce(5)  // endorsedCandidates
+        .mockResolvedValueOnce(3); // withoutResume
+      prismaServiceMock.candidate.findMany
+        .mockResolvedValueOnce([{ id: 'c-1', first_name: 'A', last_name: 'B', name: 'AB', hubspot_id: 'hs-1', processing_error: null }]) // failedResumeParsing
+        .mockResolvedValueOnce([{ id: 'c-2', first_name: 'C', last_name: 'D', name: 'CD', hubspot_id: 'hs-2' }]); // withoutHeadshot
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.systemReport();
+
+      expect(result).toBe(true);
+      expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ subject: 'System Report' }),
+      );
+    });
+
+    it('should return true even when mailSent is falsy', async () => {
+      prismaServiceMock.candidate.count.mockResolvedValue(0);
+      prismaServiceMock.candidate.findMany.mockResolvedValue([]);
+      mailServiceMock.sendMail.mockResolvedValue(null);
+
+      const result = await service.systemReport();
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false when an error is thrown', async () => {
+      prismaServiceMock.candidate.count.mockRejectedValue(new Error('DB error'));
+
+      const result = await service.systemReport();
+
+      expect(result).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // syncClientsWithActiveStaffs
+  // ---------------------------------------------------------------------------
+  describe('syncClientsWithActiveStaffs', () => {
+    it('should update inactive clients that have active staffs to active', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Clinic A', staff: [{ id: 's-1', hubspot_id: 'hs-1', hub_deal_name: 'deal', hubspot_dealstage: '16981840' }] },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+
+      const result = await service.syncClientsWithActiveStaffs();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: { status: 'active' },
+        }),
+      );
+    });
+
+    it('should return true when no inactive clients have active staffs', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([]);
+
+      const result = await service.syncClientsWithActiveStaffs();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.organization.update).not.toHaveBeenCalled();
+    });
+
+    it('should return false when an error is thrown', async () => {
+      prismaServiceMock.organization.findMany.mockRejectedValue(new Error('DB failure'));
+
+      const result = await service.syncClientsWithActiveStaffs();
+
+      expect(result).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // deactivateClientUsersWithNoStaff
+  // ---------------------------------------------------------------------------
+  describe('deactivateClientUsersWithNoStaff', () => {
+    beforeEach(() => {
+      prismaServiceMock.uSER = {
+        findMany: jest.fn(),
+        updateMany: jest.fn(),
+      };
+      prismaServiceMock.$transaction = jest.fn();
+    });
+
+    it('should return true immediately when no clients have no staff', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([]);
+
+      const result = await service.deactivateClientUsersWithNoStaff();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.uSER.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should deactivate active users and delete invited users, then send report', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Clinic A' },
+      ]);
+      prismaServiceMock.uSER.findMany
+        .mockResolvedValueOnce([
+          { id: 'u-active', email: 'active@test.com', first_name: 'Active', last_name: 'User', organization_id: 'org-1' },
+        ])
+        .mockResolvedValueOnce([
+          { id: 'u-invited', email: 'invited@test.com', first_name: 'Invited', last_name: 'User', organization_id: 'org-1' },
+        ]);
+      prismaServiceMock.uSER.updateMany = jest.fn().mockResolvedValue({});
+
+      const txMock = {
+        emailVerification: { deleteMany: jest.fn().mockResolvedValue({}) },
+        emailInvitation: { deleteMany: jest.fn().mockResolvedValue({}) },
+        uSER: { delete: jest.fn().mockResolvedValue({}) },
+      };
+      prismaServiceMock.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.deactivateClientUsersWithNoStaff();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.uSER.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: 'inactive', status_before_deactivation: 'active' },
+        }),
+      );
+      expect(txMock.uSER.delete).toHaveBeenCalledWith({ where: { id: 'u-invited' } });
+      expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ subject: 'Client Users Deactivation Report' }),
+      );
+    });
+
+    it('should handle no active or invited users gracefully and send report', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Clinic A' },
+      ]);
+      prismaServiceMock.uSER.findMany
+        .mockResolvedValueOnce([]) // no active users
+        .mockResolvedValueOnce([]); // no invited users
+      prismaServiceMock.uSER.updateMany = jest.fn().mockResolvedValue({});
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.deactivateClientUsersWithNoStaff();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should return false and send error email when an error is thrown', async () => {
+      prismaServiceMock.organization.findMany.mockRejectedValue(new Error('DB down'));
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.deactivateClientUsersWithNoStaff();
+
+      expect(result).toBe(false);
+      expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ subject: '[ERROR] Client Users Deactivation Cron Job Failed' }),
+      );
+    });
+
+    it('should return false and swallow mail error when both main and mail throw', async () => {
+      prismaServiceMock.organization.findMany.mockRejectedValue(new Error('DB down'));
+      mailServiceMock.sendMail.mockRejectedValue(new Error('mail error'));
+
+      const result = await service.deactivateClientUsersWithNoStaff();
+
+      expect(result).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // syncStaffHubspotDealStages
+  // ---------------------------------------------------------------------------
+  describe('syncStaffHubspotDealStages', () => {
+    let axiosMock: jest.Mocked<typeof import('axios').default>;
+
+    beforeEach(() => {
+      prismaServiceMock.staff = {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      };
+      axiosMock = jest.requireMock('axios');
+      axiosMock.get = jest.fn();
+    });
+
+    it('should return true when no staffs match criteria', async () => {
+      prismaServiceMock.staff.findMany.mockResolvedValue([]);
+
+      const result = await service.syncStaffHubspotDealStages();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.staff.update).not.toHaveBeenCalled();
+    });
+
+    it('should update staff dealstage for each staff and return true', async () => {
+      prismaServiceMock.staff.findMany.mockResolvedValue([
+        { id: 's-1', hubspot_id: 'hs-100' },
+        { id: 's-2', hubspot_id: 'hs-200' },
+      ]);
+      prismaServiceMock.staff.update.mockResolvedValue({});
+      axiosMock.get.mockResolvedValue({
+        data: { properties: { dealstage: '16981840' } },
+      });
+
+      const result = await service.syncStaffHubspotDealStages();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.staff.update).toHaveBeenCalledTimes(2);
+      expect(prismaServiceMock.staff.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 's-1' },
+          data: expect.objectContaining({ hubspot_dealstage: '16981840' }),
+        }),
+      );
+    });
+
+    it('should continue processing remaining staffs when one axios call fails', async () => {
+      prismaServiceMock.staff.findMany.mockResolvedValue([
+        { id: 's-fail', hubspot_id: 'hs-bad' },
+        { id: 's-ok', hubspot_id: 'hs-good' },
+      ]);
+      prismaServiceMock.staff.update.mockResolvedValue({});
+      axiosMock.get
+        .mockRejectedValueOnce(new Error('network error'))
+        .mockResolvedValueOnce({ data: { properties: { dealstage: '148234581' } } }); // inactive stage
+
+      const result = await service.syncStaffHubspotDealStages();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.staff.update).toHaveBeenCalledTimes(1);
+      expect(prismaServiceMock.staff.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 's-ok' },
+          data: expect.objectContaining({ status: 'inactive' }),
+        }),
+      );
+    });
+
+    it('should return false when prisma.staff.findMany throws', async () => {
+      prismaServiceMock.staff.findMany.mockRejectedValue(new Error('DB down'));
+
+      const result = await service.syncStaffHubspotDealStages();
+
+      expect(result).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getCandidateId
+  // ---------------------------------------------------------------------------
+  describe('getCandidateId', () => {
+    let axiosMock: jest.Mocked<typeof import('axios').default>;
+
+    beforeEach(() => {
+      prismaServiceMock.staff = {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      };
+      prismaServiceMock.sync = {
+        create: jest.fn().mockResolvedValue({}),
+      };
+      prismaServiceMock.candidate = {
+        ...prismaServiceMock.candidate,
+        findUnique: jest.fn(),
+      };
+      axiosMock = jest.requireMock('axios');
+      axiosMock.get = jest.fn();
+    });
+
+    it('should return true and create a sync record when no staffs need updating', async () => {
+      prismaServiceMock.staff.findMany.mockResolvedValue([]);
+
+      const result = await service.getCandidateId();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.sync.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ role: 'get-candidate-id' }) }),
+      );
+    });
+
+    it('should link existing candidate to staff when candidate already exists in DB', async () => {
+      prismaServiceMock.staff.findMany.mockResolvedValue([
+        { id: 's-1', hubspot_id: 'deal-123' },
+      ]);
+      prismaServiceMock.staff.update.mockResolvedValue({});
+      prismaServiceMock.candidate.findUnique.mockResolvedValue({ id: 'cand-99' });
+      axiosMock.get.mockResolvedValue({
+        data: { results: [{ id: 'hs-obj-1' }] },
+      });
+
+      const result = await service.getCandidateId();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.staff.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 's-1' },
+          data: expect.objectContaining({ candidate_id: 'cand-99' }),
+        }),
+      );
+      expect(handlerObjectCreationMock.execute).not.toHaveBeenCalled();
+    });
+
+    it('should call objectCreation.execute when candidate does not exist and then re-query', async () => {
+      prismaServiceMock.staff.findMany.mockResolvedValue([
+        { id: 's-1', hubspot_id: 'deal-123' },
+      ]);
+      prismaServiceMock.staff.update.mockResolvedValue({});
+      prismaServiceMock.candidate.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'cand-new' });
+      handlerObjectCreationMock.execute.mockResolvedValue(undefined);
+      axiosMock.get.mockResolvedValue({
+        data: { results: [{ id: 'hs-obj-1' }] },
+      });
+
+      const result = await service.getCandidateId();
+
+      expect(result).toBe(true);
+      expect(handlerObjectCreationMock.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ objectId: 'hs-obj-1' }),
+      );
+      expect(prismaServiceMock.staff.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ candidate_id: 'cand-new' }),
+        }),
+      );
+    });
+
+    it('should set candidate_id to null when staff has no associated VA object', async () => {
+      prismaServiceMock.staff.findMany.mockResolvedValue([
+        { id: 's-1', hubspot_id: 'deal-123' },
+      ]);
+      axiosMock.get.mockResolvedValue({
+        data: { results: [] },
+      });
+
+      const result = await service.getCandidateId();
+
+      expect(result).toBe(true);
+      expect(prismaServiceMock.staff.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // createQuarterlyPayoutRequests
+  // ---------------------------------------------------------------------------
+  describe('createQuarterlyPayoutRequests', () => {
+    beforeEach(() => {
+      prismaServiceMock.affiliateProfile = {
+        findMany: jest.fn(),
+      };
+    });
+
+    it('should return created=0 and failed=0 when no affiliates have eligible commissions', async () => {
+      prismaServiceMock.affiliateProfile.findMany.mockResolvedValue([]);
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.createQuarterlyPayoutRequests();
+
+      expect(result).toEqual({ created: 0, failed: 0, total_amount: '0.00' });
+      expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ subject: expect.stringContaining('Quarterly Payout Report') }),
+      );
+    });
+
+    it('should create payout requests for each affiliate and report successes', async () => {
+      prismaServiceMock.affiliateProfile.findMany.mockResolvedValue([
+        {
+          id: 'aff-1',
+          full_name: 'Affiliate One',
+          user: { email: 'aff1@test.com', first_name: 'Aff', last_name: 'One' },
+          commissions: [
+            { id: 'comm-1', commission_amount: 100 },
+            { id: 'comm-2', commission_amount: 200 },
+          ],
+        },
+      ]);
+      payoutRequestsServiceMock.createFromCron.mockResolvedValue({
+        id: 'payout-req-1',
+        requested_amount: 300,
+      });
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.createQuarterlyPayoutRequests();
+
+      expect(result.created).toBe(1);
+      expect(result.failed).toBe(0);
+      expect(result.total_amount).toBe('300.00');
+      expect(payoutRequestsServiceMock.createFromCron).toHaveBeenCalledWith('aff-1', ['comm-1', 'comm-2']);
+    });
+
+    it('should record failures when createFromCron throws and still send report', async () => {
+      prismaServiceMock.affiliateProfile.findMany.mockResolvedValue([
+        {
+          id: 'aff-2',
+          full_name: null,
+          user: { email: 'aff2@test.com', first_name: 'Fail', last_name: 'Aff' },
+          commissions: [{ id: 'comm-3', commission_amount: 50 }],
+        },
+      ]);
+      payoutRequestsServiceMock.createFromCron.mockRejectedValue(new Error('payout error'));
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.createQuarterlyPayoutRequests();
+
+      expect(result.created).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.total_amount).toBe('0.00');
+      expect(mailServiceMock.sendMail).toHaveBeenCalled();
+    });
+
+    it('should derive affiliate name from user when full_name is null', async () => {
+      prismaServiceMock.affiliateProfile.findMany.mockResolvedValue([
+        {
+          id: 'aff-3',
+          full_name: null,
+          user: { email: 'aff3@test.com', first_name: 'Jane', last_name: 'Smith' },
+          commissions: [{ id: 'comm-4', commission_amount: 75 }],
+        },
+      ]);
+      payoutRequestsServiceMock.createFromCron.mockResolvedValue({ id: 'pr-2', requested_amount: 75 });
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.createQuarterlyPayoutRequests();
+
+      expect(result.created).toBe(1);
+      expect(result.total_amount).toBe('75.00');
+    });
+
+    it('should use affiliate id as name when full_name and user are both null', async () => {
+      prismaServiceMock.affiliateProfile.findMany.mockResolvedValue([
+        {
+          id: 'aff-4',
+          full_name: null,
+          user: null,
+          commissions: [{ id: 'comm-5', commission_amount: 25 }],
+        },
+      ]);
+      payoutRequestsServiceMock.createFromCron.mockResolvedValue({ id: 'pr-3', requested_amount: 25 });
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.createQuarterlyPayoutRequests();
+
+      expect(result.created).toBe(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // promoteDeployedCompanies — mail error catch branch (line 689)
+  // ---------------------------------------------------------------------------
+  describe('promoteDeployedCompanies — mail error branch', () => {
+    it('should swallow mail error when sendMail throws after companies are promoted', async () => {
+      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Clinic', eligibility_start_at: deployedAt },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
+      mailServiceMock.sendMail.mockRejectedValue(new Error('mail server down'));
+
+      const result = await service.promoteDeployedCompanies();
+
+      expect(result.companiesPromoted).toBe(1);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
 });
