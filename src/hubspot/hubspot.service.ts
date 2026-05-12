@@ -970,9 +970,7 @@ export class HubspotService {
 
                 console.log('-------------------------');
             }
-
             return true;
-
         
     }
 
