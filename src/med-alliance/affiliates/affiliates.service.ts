@@ -409,7 +409,7 @@ export class AffiliatesService {
       }),
       this.prisma.affiliateProfile.count({ where }),
     ]);
-
+    
     return { data, pagination: { page, limit, total } };
   }
 

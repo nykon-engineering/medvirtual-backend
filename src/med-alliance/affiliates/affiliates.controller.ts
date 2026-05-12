@@ -108,7 +108,7 @@ export class AffiliatesController {
         hubspot_pipeline: profile.hubspot_pipeline ?? null,
         hubspot_pipeline_stage: profile.hubspot_pipeline_stage ?? null,
         business_unit: profile.business_unit ?? null,
-        user_role: user?.role ?? null,
+        user_role: user?.role ?? 'affiliate',
         associated_contact_id: user?.contact?.id ?? null,
         associated_contact_name:
           [user?.contact?.first_name, user?.contact?.last_name].filter(Boolean).join(' ') || null,
