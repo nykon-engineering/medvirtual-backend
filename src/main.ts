@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
-  
+
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
 
@@ -18,9 +18,11 @@ async function bootstrap() {
       'http://localhost:3000',
       'http://localhost:9000',
       'https://med-alliance.d2odvfjc5yqdaj.amplifyapp.com',
-      'https://med-alliance-improved.d2odvfjc5yqdaj.amplifyapp.com'
-    ], 
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', 
+      'https://med-alliance-improved.d2odvfjc5yqdaj.amplifyapp.com',
+      'https://mv.staging.nykon.cloud',
+      'https://mv-api.staging.nykon.cloud'
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true
   });
 
