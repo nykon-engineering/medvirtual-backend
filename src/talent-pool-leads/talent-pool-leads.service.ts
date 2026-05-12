@@ -150,22 +150,29 @@ export class TalentPoolLeadsService {
       },
     });
 
+    const businessUnit =
+      createDto.source === 'berry-talent-pool-page' ? 'Berry Virtual' : 'MedVirtual';
+    const normalizedEmail = createDto.email.toLowerCase().trim();
+
+    const preExistingOrg = await this.prisma.organization.findFirst({
+      where: {
+        OR: [
+          { email: normalizedEmail },
+          { name: { equals: sanitizedOrganization, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    const preExistingContact = preExistingOrg
+      ? await this.prisma.contact.findFirst({
+          where: { email: normalizedEmail, organization_id: preExistingOrg.id },
+        })
+      : null;
+
     // Create ticket + CRM integration (non-blocking — errors here never fail the HTTP response)
     try {
-      const businessUnit =
-        createDto.source === 'berry-talent-pool-page' ? 'Berry Virtual' : 'MedVirtual';
-      const normalizedEmail = createDto.email.toLowerCase().trim();
-
-      // 1. Find or create Organization in DB
-      let org = await this.prisma.organization.findFirst({
-        where: {
-          OR: [
-            { email: normalizedEmail },
-            { name: { equals: sanitizedOrganization, mode: 'insensitive' } },
-          ],
-        },
-      });
-
+      // 1. Org — use pre-existing or create new
+      let org = preExistingOrg;
       if (!org) {
         org = await this.prisma.organization.create({
           data: {
@@ -271,18 +278,27 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
             data: { hubspot_id: orgHubspotId },
           });
         } catch (err) {
-          console.warn(
-            `[talent-pool-lead] HubSpot org sync failed for lead ${lead.id}:`,
-            err?.response?.data || err?.message || err,
-          );
+          const errData = err?.response?.data;
+          if (errData?.category === 'CONFLICT') {
+            const match = errData.message?.match(/Existing ID:\s*(\d+)/);
+            if (match?.[1]) {
+              orgHubspotId = match[1];
+              await this.prisma.organization.update({
+                where: { id: org.id },
+                data: { hubspot_id: match[1] },
+              });
+            }
+          } else {
+            console.warn(
+              `[talent-pool-lead] HubSpot org sync failed for lead ${lead.id}:`,
+              errData || err?.message || err,
+            );
+          }
         }
       }
 
-      // 6. Find or create Contact in DB
-      let contact = await this.prisma.contact.findFirst({
-        where: { email: normalizedEmail, organization_id: org.id },
-      });
-
+      // 6. Contact — use pre-existing or create new
+      let contact = preExistingContact;
       if (!contact) {
         contact = await this.prisma.contact.create({
           data: {
@@ -381,10 +397,35 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
             data: { hubspot_id: hubspotContactRes.data.id as string },
           });
         } catch (err) {
-          console.warn(
-            `[talent-pool-lead] HubSpot contact sync failed for lead ${lead.id}:`,
-            err?.response?.data || err?.message || err,
-          );
+          const errData = err?.response?.data;
+          if (errData?.category === 'CONFLICT') {
+            const match = errData.message?.match(/Existing ID:\s*(\d+)/);
+            if (match?.[1]) {
+              await this.prisma.contact.update({
+                where: { id: contact.id },
+                data: { hubspot_id: match[1] },
+              });
+              if (orgHubspotId) {
+                try {
+                  await axios.put(
+                    `https://api.hubapi.com/crm/v3/objects/contacts/${match[1]}/associations/companies/${orgHubspotId}/279`,
+                    {},
+                    {
+                      headers: {
+                        Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                        'Content-Type': 'application/json',
+                      },
+                    },
+                  );
+                } catch { /* association is best-effort */ }
+              }
+            }
+          } else {
+            console.warn(
+              `[talent-pool-lead] HubSpot contact sync failed for lead ${lead.id}:`,
+              errData || err?.message || err,
+            );
+          }
         }
       }
     } catch (error) {
