@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { USER } from '@prisma/client';
+import { CommissionStatus, USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
 import {
@@ -692,6 +692,7 @@ export class CommissionsService {
           .div(100)
           .toDecimalPlaces(2);
 
+
         const commission = await this.prisma.affiliateCommission.create({
           data: {
             affiliate_id: profile.user_id,
@@ -701,7 +702,7 @@ export class CommissionsService {
             commission_percent_snapshot: profile.commission_percent_default,
             base_amount_snapshot: snapshot.invoice_amount,
             commission_amount: commissionAmount,
-            status: 'pending_admin_confirmation',
+            status: CommissionStatus.eligible,
             idempotency_key: idempotencyKey,
           },
           select: { id: true },
