@@ -166,10 +166,30 @@ export class UserController {
   @Roles('system_super_admin', 'system_admin')
   @ApiOperation({ summary: 'Search organization admin and super admin users' })
   @ApiResponse({ status: 200, description: 'Users found successfully.' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search term for name, email, or job title' })
-  @ApiQuery({ name: 'status', required: false, type: String, description: 'Filter by user status' })
-  @ApiQuery({ name: 'organization_id', required: false, type: String, description: 'Filter by organization ID' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of results to return' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for name, email, or job title',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description: 'Filter by user status',
+  })
+  @ApiQuery({
+    name: 'organization_id',
+    required: false,
+    type: String,
+    description: 'Filter by organization ID',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of results to return',
+  })
   async searchOrganizationUsers(@Query() query: SearchUsersDto) {
     return this.userService.searchOrganizationUsers(query);
   }
@@ -197,7 +217,7 @@ export class UserController {
   ) {
     return this.userService.findByOrganizationId(organizationId);
   }
-  
+
   @Get('organization/:organizationId/paginated')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
@@ -250,13 +270,15 @@ export class UserController {
     name: 'date_created_from',
     required: false,
     type: String,
-    description: 'Filter by creation date from (ISO date string, e.g., 2025-01-01)',
+    description:
+      'Filter by creation date from (ISO date string, e.g., 2025-01-01)',
   })
   @ApiQuery({
     name: 'date_created_to',
     required: false,
     type: String,
-    description: 'Filter by creation date to (ISO date string, e.g., 2025-10-09)',
+    description:
+      'Filter by creation date to (ISO date string, e.g., 2025-10-09)',
   })
   async getOrganizationUsersPaginated(
     @Param('organizationId') organizationId: string,
@@ -340,8 +362,12 @@ export class UserController {
   @Roles('system_super_admin')
   @ApiOperation({ summary: 'Get all system users' })
   @ApiResponse({ status: 200, description: 'System users found successfully.' })
-  @ApiQuery({name: 'search', required: false, type: String, description: 'Search term for name or email'})
-  
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term for name or email',
+  })
   async getAllSystemUsers(
     @Query('search') search?: string,
     @Query('page') page?: number,
@@ -349,7 +375,6 @@ export class UserController {
   ) {
     return this.userService.getAllSystemUsers(search, page, perPage);
   }
-
 
   @Patch(':id')
   @ApiBody({ type: UpdateUserDto })
@@ -426,26 +451,28 @@ export class UserController {
 
   @Delete(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Delete user',
-    description: 'Permanently deletes a user and all related data. Handles foreign key constraints by cleaning up related records first. Cannot delete system super admins or users who are the only admin/owner of an organization.'
+    description:
+      'Permanently deletes a user and all related data. Handles foreign key constraints by cleaning up related records first. Cannot delete system super admins or users who are the only admin/owner of an organization.',
   })
   @Roles('system_super_admin', 'organization_super_admin')
-  @ApiResponse({ 
-    status: 200, 
-    description: 'User deleted successfully.'
+  @ApiResponse({
+    status: 200,
+    description: 'User deleted successfully.',
   })
-  @ApiResponse({ 
-    status: 400, 
-    description: 'Failed to delete user - may be due to foreign key constraints, security restrictions, or business rules'
+  @ApiResponse({
+    status: 400,
+    description:
+      'Failed to delete user - may be due to foreign key constraints, security restrictions, or business rules',
   })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'User not found'
+  @ApiResponse({
+    status: 404,
+    description: 'User not found',
   })
-  @ApiResponse({ 
-    status: 403, 
-    description: 'Insufficient permissions'
+  @ApiResponse({
+    status: 403,
+    description: 'Insufficient permissions',
   })
   async deleteUser(@Param('id') id: string, @CurrentUser() currentUser: USER) {
     return this.userService.delete(id, currentUser.id);

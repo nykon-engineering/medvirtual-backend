@@ -39,7 +39,9 @@ export interface CandidateRates {
 // ─── Private helpers ───────────────────────────────────────────────────────────
 
 /** Converts a Prisma Decimal, plain number, or null → number | null. */
-function toNum(v: { toNumber(): number } | number | null | undefined): number | null {
+function toNum(
+  v: { toNumber(): number } | number | null | undefined,
+): number | null {
   if (v == null) return null;
   return typeof v === 'number' ? v : v.toNumber();
 }
@@ -50,9 +52,13 @@ function floorPriceKey(
   isBerry: boolean,
 ): keyof PositionRateConfigLike {
   if (isBilingual) {
-    return isBerry ? 'berryVirtual_floor_price_bilingual' : 'medVirtual_floor_price_bilingual';
+    return isBerry
+      ? 'berryVirtual_floor_price_bilingual'
+      : 'medVirtual_floor_price_bilingual';
   }
-  return isBerry ? 'berryVirtual_floor_price_english' : 'medVirtual_floor_price_english';
+  return isBerry
+    ? 'berryVirtual_floor_price_english'
+    : 'medVirtual_floor_price_english';
 }
 
 /**
@@ -86,12 +92,11 @@ function findMinFloorConfig(
  * Builds an O(1) lookup map from position name → PositionRateConfig row.
  * Use this once per request/method before a .map() call.
  */
-export function buildConfigMap<T extends PositionRateConfigLike & { position: string }>(
-  configs: T[],
-): Map<string, T> {
+export function buildConfigMap<
+  T extends PositionRateConfigLike & { position: string },
+>(configs: T[]): Map<string, T> {
   return new Map(configs.map((c) => [c.position, c]));
 }
-
 
 export function computeCandidateRates(
   candidate: CandidateLike,
@@ -99,19 +104,28 @@ export function computeCandidateRates(
 ): CandidateRates {
   const positions = candidate.approved_positions_pairing ?? [];
   const isBilingual = (candidate.languages?.length ?? 0) > 1;
-  const isBerry = candidate.business_unit?.toLowerCase().includes('berry') ?? false;
+  const isBerry =
+    candidate.business_unit?.toLowerCase().includes('berry') ?? false;
   const agreed = toNum(candidate.hourly_pay_rate) ?? 0;
   const key = floorPriceKey(isBilingual, isBerry);
-  const marginKey = isBerry ? 'berryVirtual_margin_per_hour' : 'medVirtual_margin_per_hour';
+  const marginKey = isBerry
+    ? 'berryVirtual_margin_per_hour'
+    : 'medVirtual_margin_per_hour';
 
   let bestBillH = 0;
 
   if (positions.length > 0) {
     for (const rawPosition of positions) {
       const label = getApprovedPositionLabel(rawPosition);
-      const config = configMap.get(label) ?? findMinFloorConfig(configMap, isBilingual, isBerry);
-      const minH = toNum(config?.[key] as { toNumber(): number } | number | null);
-      const margin = toNum(config?.[marginKey] as { toNumber(): number } | number | null) || Number(process.env.CANDIDATE_COST_PER_HOUR);
+      const config =
+        configMap.get(label) ??
+        findMinFloorConfig(configMap, isBilingual, isBerry);
+      const minH = toNum(
+        config?.[key] as { toNumber(): number } | number | null,
+      );
+      const margin =
+        toNum(config?.[marginKey] as { toNumber(): number } | number | null) ||
+        Number(process.env.CANDIDATE_COST_PER_HOUR);
       const billH = findBillRateHourly(agreed, minH, margin);
       if (billH > bestBillH) {
         bestBillH = billH;
@@ -121,7 +135,9 @@ export function computeCandidateRates(
     // No positions — use fallback config
     const config = findMinFloorConfig(configMap, isBilingual, isBerry);
     const minH = toNum(config?.[key] as { toNumber(): number } | number | null);
-    const margin = toNum(config?.[marginKey] as { toNumber(): number } | number | null) || Number(process.env.CANDIDATE_COST_PER_HOUR);
+    const margin =
+      toNum(config?.[marginKey] as { toNumber(): number } | number | null) ||
+      Number(process.env.CANDIDATE_COST_PER_HOUR);
     bestBillH = findBillRateHourly(agreed, minH, margin);
   }
 
@@ -158,7 +174,7 @@ export function findPayRateMonthly(
  * effective_base = max(agreed_hourly, minimum_hourly ?? 0)
  * bill_hourly = effective_base + (margin_per_hour ?? 0)
  */
-export function findBillRateHourly( 
+export function findBillRateHourly(
   agreed_hourly: number,
   minimum_hourly: number | null,
   margin_per_hour: number | null,
@@ -185,5 +201,8 @@ export function findBillRateMonthly(
 // ─── Legacy functions (still in use, kept for compatibility) ──────────────────
 
 export function findHourlyPerRate(salary: number): number {
-  return salary / Number(process.env.CANDIDATE_HOUR_PER_MONTH) - Number(process.env.CANDIDATE_COST_PER_HOUR);
+  return (
+    salary / Number(process.env.CANDIDATE_HOUR_PER_MONTH) -
+    Number(process.env.CANDIDATE_COST_PER_HOUR)
+  );
 }

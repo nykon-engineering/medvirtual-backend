@@ -11,7 +11,15 @@ import { OrganizationModule } from '../../organization/organization.module';
 import { ContactModule } from '../../contacts/contacts.module';
 
 @Module({
-  imports: [PrismaModule, AffiliatesModule, SyncModule, HubspotModule, ReviewCasesModule, OrganizationModule, ContactModule],
+  imports: [
+    PrismaModule,
+    AffiliatesModule,
+    SyncModule,
+    HubspotModule,
+    ReviewCasesModule,
+    OrganizationModule,
+    ContactModule,
+  ],
   controllers: [ReferredCompaniesController],
   providers: [ReferredCompaniesService, EligibilityCheckService],
 })

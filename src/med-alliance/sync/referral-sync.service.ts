@@ -59,7 +59,10 @@ export class ReferralSyncService {
     };
 
     // Multiple matches or hard error — halt pipeline
-    if (matchResult.outcome === 'multiple_matches' || matchResult.outcome === 'error') {
+    if (
+      matchResult.outcome === 'multiple_matches' ||
+      matchResult.outcome === 'error'
+    ) {
       this.logger.warn(
         `Sync halted for org ${organizationId} — Phase A outcome: ${matchResult.outcome}`,
       );
@@ -96,10 +99,19 @@ export class ReferralSyncService {
       this.logger.log(
         `Phase B skipped for org ${organizationId} — no hubspot_id (no_match outcome)`,
       );
-      return { ...result, phaseB: { invoices: { created: 0, updated: 0, skipped: 0 }, commissions: { created: 0, skipped: 0 } } };
+      return {
+        ...result,
+        phaseB: {
+          invoices: { created: 0, updated: 0, skipped: 0 },
+          commissions: { created: 0, skipped: 0 },
+        },
+      };
     }
 
-    const invoiceStats = await this.invoiceIngestion.run(organizationId, org.hubspot_id);
+    const invoiceStats = await this.invoiceIngestion.run(
+      organizationId,
+      org.hubspot_id,
+    );
     const commissionStats = await this.commissionDetection.run(organizationId);
 
     result.phaseB = {

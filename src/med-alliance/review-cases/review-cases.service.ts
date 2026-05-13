@@ -143,7 +143,9 @@ export class ReviewCasesService {
     }
 
     // --- Side-effect: reconciliation — invoice changed after commission was detected ---
-    if (item.reason_code === AdminReviewReasonCode.reconciliation_invoice_changed) {
+    if (
+      item.reason_code === AdminReviewReasonCode.reconciliation_invoice_changed
+    ) {
       if (dto.action === 'void_and_recreate') {
         await this.handleVoidAndRecreate(item);
       }
@@ -173,7 +175,11 @@ export class ReviewCasesService {
    *
    * Expected metadata shape: { commission_id, snapshot_id, hubspot_invoice_id }
    */
-  private async handleVoidAndRecreate(item: { id: string; organization_id: string; metadata: any }) {
+  private async handleVoidAndRecreate(item: {
+    id: string;
+    organization_id: string;
+    metadata: any;
+  }) {
     const meta = item.metadata as {
       commission_id?: string;
       snapshot_id?: string;
@@ -193,7 +199,10 @@ export class ReviewCasesService {
           old_status: 'eligible',
           new_status: 'void',
           source: 'admin_action',
-          metadata: { review_case_id: item.id, organization_id: item.organization_id },
+          metadata: {
+            review_case_id: item.id,
+            organization_id: item.organization_id,
+          },
         },
       });
 

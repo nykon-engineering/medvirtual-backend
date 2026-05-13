@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Contact } from '@prisma/client';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
@@ -50,17 +54,17 @@ export class ContactService {
     const accountType =
       org.business_unit === 'MedVirtual'
         ? 'Med Virtual'
-        : org.business_unit ?? 'Not Specified';
+        : (org.business_unit ?? 'Not Specified');
 
     let contact: Contact;
     try {
       contact = await this.prisma.contact.create({
         data: {
           organization_id: orgId,
-          first_name: org.contact_first_name ,
+          first_name: org.contact_first_name,
           last_name: org.contact_last_name,
           email: org.contact_email,
-          phone: org.phone ,
+          phone: org.phone,
           job_title: '',
           company_name: org.name,
           business_unit: org.business_unit,
@@ -84,11 +88,15 @@ export class ContactService {
             email: org.contact_email,
             phone: org.phone ?? '',
             jobtitle: '',
-            business_unit: org.business_unit === 'Med Virtual' ? 'MedVirtual' : org.business_unit ?? '',
+            business_unit:
+              org.business_unit === 'Med Virtual'
+                ? 'MedVirtual'
+                : (org.business_unit ?? ''),
             company: org.name ?? '',
             hubspot_owner_id: hubspotOwnerId ?? undefined,
             demo_owner: hubspotOwnerId ?? undefined,
-            title: `${org.contact_first_name || ''} ${org.contact_last_name || ''}`.trim(),
+            title:
+              `${org.contact_first_name || ''} ${org.contact_last_name || ''}`.trim(),
           },
           // ⚠️ ASSOCIATION: only contact → organization (without growth partner)
           associations: org.hubspot_id
@@ -122,18 +130,25 @@ export class ContactService {
     } catch (error) {
       const errData = error.response?.data;
       //console.error('[ContactService.createForOrganization] HubSpot sync error:', errData ?? error.message);
-      if (errData?.category === 'CONFLICT') { //Get existing hubspot_id from error message and update contact, then create association if org.hubspot_id is available
+      if (errData?.category === 'CONFLICT') {
+        //Get existing hubspot_id from error message and update contact, then create association if org.hubspot_id is available
         const match = errData.message?.match(/Existing ID:\s*(\d+)/);
-        console.log('[ContactService.createForOrganization] Extracted HubSpot ID from error message:', match?.[1] ?? 'No match found');
+        console.log(
+          '[ContactService.createForOrganization] Extracted HubSpot ID from error message:',
+          match?.[1] ?? 'No match found',
+        );
         const existingHubspotId = match?.[1] ?? null;
-        console.log('[ContactService.createForOrganization] Existing HubSpot ID:', existingHubspotId);
+        console.log(
+          '[ContactService.createForOrganization] Existing HubSpot ID:',
+          existingHubspotId,
+        );
         if (existingHubspotId) {
           await this.prisma.contact.update({
             where: { id: contact.id },
             data: { hubspot_id: existingHubspotId },
           });
           //send associate post to hubspot
-            await axios.put(
+          await axios.put(
             `https://api.hubapi.com/crm/v3/objects/contacts/${existingHubspotId}/associations/companies/${org.hubspot_id}/279`,
             {},
             {
@@ -141,7 +156,7 @@ export class ContactService {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
                 'Content-Type': 'application/json',
               },
-            }
+            },
           );
           return { ...contact, hubspot_id: existingHubspotId };
         }
@@ -201,7 +216,10 @@ export class ContactService {
         ? {
             to: { id: org.hubspot_id },
             types: [
-              { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 279 },
+              {
+                associationCategory: 'HUBSPOT_DEFINED',
+                associationTypeId: 279,
+              },
             ],
           }
         : undefined,
@@ -235,14 +253,20 @@ export class ContactService {
             qualification_status: 'Referral',
             latest_lead_source: 'Referral',
             account_name: org.referredByAffiliate?.affiliateProfile?.full_name,
-            account_number: org.referredByAffiliate?.affiliateProfile?.hubspot_id,
+            account_number:
+              org.referredByAffiliate?.affiliateProfile?.hubspot_id,
             alliance_commission:
-              org.referredByAffiliate?.affiliateProfile?.commission_percent_default ?? 7,
-            growth_partner_company_name: org.referredByAffiliate?.organization?.name,
-            growth_partner_email_address: org.referredByAffiliate?.organization?.email,
+              org.referredByAffiliate?.affiliateProfile
+                ?.commission_percent_default ?? 7,
+            growth_partner_company_name:
+              org.referredByAffiliate?.organization?.name,
+            growth_partner_email_address:
+              org.referredByAffiliate?.organization?.email,
             preferred_payment_method:
-              org.referredByAffiliate?.affiliateProfile?.payout_preference_method,
-            referral_partner: org.referredByAffiliate?.affiliateProfile?.full_name,
+              org.referredByAffiliate?.affiliateProfile
+                ?.payout_preference_method,
+            referral_partner:
+              org.referredByAffiliate?.affiliateProfile?.full_name,
             referral_partners_email: org.referredByAffiliate?.email,
             referral_source: 'Referral - Partner',
             referrals_industry:

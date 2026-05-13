@@ -22,7 +22,10 @@ export default function medAllianceDeployedCompaniesReport(
     timeZoneName: 'short',
   });
 
-  const totalCommissions = promoted.reduce((sum, p) => sum + p.commissionsPromoted, 0);
+  const totalCommissions = promoted.reduce(
+    (sum, p) => sum + p.commissionsPromoted,
+    0,
+  );
   const nothingToDo = promoted.length === 0 && errors.length === 0;
 
   const promotedRows = promoted

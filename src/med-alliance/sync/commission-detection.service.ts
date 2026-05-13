@@ -59,13 +59,17 @@ export class CommissionDetectionService {
     });
 
     if (!org?.referred_by_affiliate_id) {
-      this.logger.warn(`Org ${organizationId} has no affiliate — skipping commission detection`);
+      this.logger.warn(
+        `Org ${organizationId} has no affiliate — skipping commission detection`,
+      );
       return { created: 0, skipped: 0 };
     }
 
     // Permanent block: organization matched as an active MedVirtual client.
     if (org.med_alliance_block_reason?.startsWith('active_client_block')) {
-      this.logger.log(`Org ${organizationId} has active-client block — skipping commission detection`);
+      this.logger.log(
+        `Org ${organizationId} has active-client block — skipping commission detection`,
+      );
       return { created: 0, skipped: 0 };
     }
 
@@ -87,14 +91,21 @@ export class CommissionDetectionService {
       !org.first_paid_invoice_at &&
       now.getTime() - org.createdAt.getTime() > ONE_YEAR_MS
     ) {
-      this.logger.log(`Org ${organizationId} referred > 1 year ago with no paid invoice — skipping`);
+      this.logger.log(
+        `Org ${organizationId} referred > 1 year ago with no paid invoice — skipping`,
+      );
       return { created: 0, skipped: 0 };
     }
 
     // Window already expired in a prior run — block_reason signals expiry; first_paid_invoice_at is set.
-    if (org.med_alliance_referral_status === 'not_eligible' && org.first_paid_invoice_at &&
-        org.med_alliance_block_reason?.startsWith('eligibility_expired')) {
-      this.logger.log(`Org ${organizationId} eligibility window expired — skipping commission detection`);
+    if (
+      org.med_alliance_referral_status === 'not_eligible' &&
+      org.first_paid_invoice_at &&
+      org.med_alliance_block_reason?.startsWith('eligibility_expired')
+    ) {
+      this.logger.log(
+        `Org ${organizationId} eligibility window expired — skipping commission detection`,
+      );
       return { created: 0, skipped: 0 };
     }
 
@@ -145,7 +156,11 @@ export class CommissionDetectionService {
 
     // First qualifying event: transition org to deployed stage and start the 30-day clock.
     // Skip if already deployed or churned (idempotent).
-    if (!org.first_paid_invoice_at && org.referral_stage !== 'deployed' && org.referral_stage !== 'churned') {
+    if (
+      !org.first_paid_invoice_at &&
+      org.referral_stage !== 'deployed' &&
+      org.referral_stage !== 'churned'
+    ) {
       const firstInvoiceDate = candidates[0].paid_at ?? now;
       await this.markDeployed(organizationId, firstInvoiceDate);
       // Update local org state so downstream logic sees the new values.
@@ -156,7 +171,9 @@ export class CommissionDetectionService {
 
     // Churned companies stop generating commissions.
     if (org.referral_stage === 'churned') {
-      this.logger.log(`Org ${organizationId} is churned — skipping commission creation`);
+      this.logger.log(
+        `Org ${organizationId} is churned — skipping commission creation`,
+      );
       return { created: 0, skipped: 0 };
     }
 
@@ -169,7 +186,9 @@ export class CommissionDetectionService {
       Date.now() - org.eligibility_start_at.getTime() >= THIRTY_DAYS_MS &&
       Date.now() - org.eligibility_start_at.getTime() <= ONE_YEAR_MS;
 
-    const commissionStatus = isEligibleNow ? 'pending_admin_confirmation' : 'detected';
+    const commissionStatus = isEligibleNow
+      ? 'pending_admin_confirmation'
+      : 'detected';
 
     // Create commissions for all candidate snapshots.
     let created = 0;
@@ -208,7 +227,9 @@ export class CommissionDetectionService {
           data: {
             entity_type: 'commission',
             entity_id: idempotencyKey,
-            event: isEligibleNow ? 'commission_pending_admin_confirmation' : 'commission_detected',
+            event: isEligibleNow
+              ? 'commission_pending_admin_confirmation'
+              : 'commission_detected',
             old_status: null,
             new_status: commissionStatus,
             reason: null,
@@ -273,10 +294,14 @@ export class CommissionDetectionService {
         event: 'stage_changed',
         old_status: 'not_eligible',
         new_status: 'not_eligible',
-        reason: 'First paid invoice — auto-transitioned to deployed stage; 30-day stabilization clock started',
+        reason:
+          'First paid invoice — auto-transitioned to deployed stage; 30-day stabilization clock started',
         source: 'sync',
         actor_user_id: null,
-        metadata: { referral_stage: 'deployed', eligibility_start_at: now.toISOString() } as any,
+        metadata: {
+          referral_stage: 'deployed',
+          eligibility_start_at: now.toISOString(),
+        } as any,
       },
     });
 
@@ -296,7 +321,8 @@ export class CommissionDetectionService {
       data: {
         med_alliance_referral_status: 'not_eligible',
         // eligibility_start_at is preserved — it is the deployment date, not an eligibility anchor
-        med_alliance_block_reason: 'eligibility_expired: one-year window elapsed',
+        med_alliance_block_reason:
+          'eligibility_expired: one-year window elapsed',
       },
     });
 
@@ -314,7 +340,9 @@ export class CommissionDetectionService {
       },
     });
 
-    this.logger.log(`Org ${organizationId} eligibility window expired — status set to not_eligible`);
+    this.logger.log(
+      `Org ${organizationId} eligibility window expired — status set to not_eligible`,
+    );
   }
 
   /**

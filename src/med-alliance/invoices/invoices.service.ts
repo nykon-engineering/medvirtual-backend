@@ -103,10 +103,7 @@ export class InvoicesService {
 
     // Primary sort is always paid_at DESC to ensure sync retries reflect the
     // latest consistent state (hubspot_id is unique — one snapshot per invoice).
-    const orderBy: any[] = [
-      { [sortBy]: sortOrder },
-      { createdAt: 'desc' },
-    ];
+    const orderBy: any[] = [{ [sortBy]: sortOrder }, { createdAt: 'desc' }];
 
     const [snapshots, total] = await this.prisma.$transaction([
       this.prisma.hubspotInvoiceSnapshot.findMany({

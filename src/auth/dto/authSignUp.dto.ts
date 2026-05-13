@@ -3,12 +3,10 @@ import { IsString, MinLength } from 'class-validator';
 import { AuthInviteUserDto } from './authInviteUser.dto';
 
 export class AuthSignUpDto extends AuthInviteUserDto {
-
-
   @ApiProperty({ required: true, description: 'User first name' })
   @IsString()
   firstName: string;
-  
+
   @ApiProperty({ required: true, description: 'User last name' })
   @IsString()
   lastName: string;
@@ -20,6 +18,4 @@ export class AuthSignUpDto extends AuthInviteUserDto {
   @ApiProperty({ required: false, description: 'User job title' })
   @IsString()
   jobTitle: string;
-
-  
 }

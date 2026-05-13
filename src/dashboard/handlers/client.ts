@@ -13,9 +13,16 @@ export class HandlerClient {
     private readonly hireRequestService: HireRequestService,
   ) {}
 
-  async execute(user: any, page: number = 1, perPage: number = 10): Promise<object> {
+  async execute(
+    user: any,
+    page: number = 1,
+    perPage: number = 10,
+  ): Promise<object> {
     const result: any = {};
-    if (!user || user.role.includes("organization") && !user.organization_id) {
+    if (
+      !user ||
+      (user.role.includes('organization') && !user.organization_id)
+    ) {
       throw new Error('User or organization not found!!');
     }
 

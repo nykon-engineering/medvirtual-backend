@@ -49,7 +49,7 @@ export class AffiliatesService {
     private readonly affiliateCreationService: AffiliateCreationService,
     private readonly affiliateUpdateService: AffiliateUpdateService,
   ) {}
-  
+
   // Shared helper: ensure a user has an active AffiliateProfile.
   // Used by other services (commissions, payout-requests).
   async requireActiveProfile(userId: string) {
@@ -70,7 +70,6 @@ export class AffiliatesService {
     return isProduction ? from : `[DEV] ${from}`;
   }
 
-  
   async create(dto: CreateAffiliateProfileDto, adminUser: USER) {
     const user = await this.prisma.uSER.findUnique({
       where: { id: dto.user_id },
@@ -104,13 +103,19 @@ export class AffiliatesService {
     const newAffiliateData = await this.findOne(profile.id);
 
     // => Create Growth Partner in Hubspot
-    try{
+    try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log('[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:', profile.id);
-    }catch(error){
+      console.log(
+        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
+        profile.id,
+      );
+    } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
       console.error('Failed to create Growth Partner in Hubspot:', error);
-      throw new BadRequestException(error.message || 'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.');
+      throw new BadRequestException(
+        error.message ||
+          'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
+      );
     }
 
     // Send invitation email to the new affiliate.
@@ -124,77 +129,88 @@ export class AffiliatesService {
       });
     } catch (emailError) {
       // Do not fail the whole request if the email could not be delivered.
-      console.error('Failed to send Med Alliance invitation email:', emailError);
+      console.error(
+        'Failed to send Med Alliance invitation email:',
+        emailError,
+      );
     }
 
-  
     return newAffiliateData;
   }
 
-
-  async createUserandAffiliate(dto: CreateUserAndAffiliateProfileDto, adminUser: USER) {
+  async createUserandAffiliate(
+    dto: CreateUserAndAffiliateProfileDto,
+    adminUser: USER,
+  ) {
     //1. Create user
-      const user = await this.prisma.uSER.create({
-          data: {
-              email: dto.email,
-              first_name: dto.first_name,
-              last_name: dto.last_name,
-              phone: dto.phone_number ?? '',
-              avatar: '',
-              organization_name: '',
-              role: dto.role,
-              job_title: '',
-              workos_id: '',
-              password: '',
-              authentication_method: 'OwnSign',
-              status: 'invited'
-          }
-      });
+    const user = await this.prisma.uSER.create({
+      data: {
+        email: dto.email,
+        first_name: dto.first_name,
+        last_name: dto.last_name,
+        phone: dto.phone_number ?? '',
+        avatar: '',
+        organization_name: '',
+        role: dto.role,
+        job_title: '',
+        workos_id: '',
+        password: '',
+        authentication_method: 'OwnSign',
+        status: 'invited',
+      },
+    });
 
-      // Generate invitation token
-      const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+    // Generate invitation token
+    const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
       expiresIn: '48h',
-      });
+    });
 
-      // Theme is resolved from the admin's org since the new user has no org yet
-      const emailTheme = await getUserEmailTheme(this.prisma, adminUser.id);
-      
-      // Send signup link via email
-      const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-      const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
-      ? `${baseInviteLink}&company=berry` 
-      : baseInviteLink;
-      const emailBody = MedAllianceInviteSignup(inviteLink, emailTheme || undefined, dto.first_name);
-      const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+    // Theme is resolved from the admin's org since the new user has no org yet
+    const emailTheme = await getUserEmailTheme(this.prisma, adminUser.id);
+
+    // Send signup link via email
+    const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
+    const emailBody = MedAllianceInviteSignup(
+      inviteLink,
+      emailTheme || undefined,
+      dto.first_name,
+    );
+    const mailSent = await this.mailService.sendMail({
+      from: this.buildFromWithPrefix(
+        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      ),
       to: dto.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
       html: emailBody,
       headers: {
-          'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
-          'X-Priority': '3',
-          'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
-          'X-Entity-Ref-ID': `invite-${user.id}`,
+        'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
+        'X-Priority': '3',
+        'List-Unsubscribe': '<mailto:unsubscribe@medvirtual.ai>',
+        'X-Entity-Ref-ID': `invite-${user.id}`,
       },
-      });
+    });
 
-      if (!mailSent) {
-          throw new BadRequestException('Failed to send invitation email');
-      }
+    if (!mailSent) {
+      throw new BadRequestException('Failed to send invitation email');
+    }
 
-      // Store the verification code in the database with an expiration time
-      const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours - same time as JWT
-      const storeCode = await this.prisma.emailInvitation.create({
+    // Store the verification code in the database with an expiration time
+    const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours - same time as JWT
+    const storeCode = await this.prisma.emailInvitation.create({
       data: {
-          userId: user.id,
-          email_from: dto.email,
-          code: code,
-          expiresAt: codeExpiresAt,
+        userId: user.id,
+        email_from: dto.email,
+        code: code,
+        expiresAt: codeExpiresAt,
       },
-      });
-      if (!storeCode) {
-          throw new BadRequestException('Failed to store invite code');
-      }
+    });
+    if (!storeCode) {
+      throw new BadRequestException('Failed to store invite code');
+    }
     // End Create user
 
     // Prevent duplicate profile — give a clear message before hitting DB constraint.
@@ -220,43 +236,62 @@ export class AffiliatesService {
     });
 
     // Create a DB Contact record for the affiliate so phone/company are stored and linked
-    await this.prisma.contact.create({
-      data: {
-        user_id: user.id,
-        first_name: dto.first_name,
-        last_name: dto.last_name,
-        email: dto.email,
-        phone: dto.phone_number ?? null,
-        company_name: dto.company_name ?? null,
-        referral_source: 'Referral - Partner',
-      },
-    }).catch(() => {}); // silently skip if a contact already exists for this user
+    await this.prisma.contact
+      .create({
+        data: {
+          user_id: user.id,
+          first_name: dto.first_name,
+          last_name: dto.last_name,
+          email: dto.email,
+          phone: dto.phone_number ?? null,
+          company_name: dto.company_name ?? null,
+          referral_source: 'Referral - Partner',
+        },
+      })
+      .catch(() => {}); // silently skip if a contact already exists for this user
 
     const newAffiliateData = await this.findOne(profile.id);
 
     // => Create Growth Partner in Hubspot
-    try{
+    try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log('[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:', profile.id);
-    }catch(error){
+      console.log(
+        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
+        profile.id,
+      );
+    } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
       console.error('Failed to create Growth Partner in Hubspot:', error);
-      throw new BadRequestException(error.message || 'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.');
+      throw new BadRequestException(
+        error.message ||
+          'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
+      );
     }
 
     return newAffiliateData;
   }
 
-
   // Admin: invite a new user and link them to an existing affiliate that has no connected user.
   // Used when a growth partner was created in HubSpot without an associated contact.
-  async inviteUserForAffiliate(id: string, dto: InviteUserForAffiliateDto, adminUserId: string) {
-    const affiliate = await this.prisma.affiliateProfile.findUnique({ where: { id } });
+  async inviteUserForAffiliate(
+    id: string,
+    dto: InviteUserForAffiliateDto,
+    adminUserId: string,
+  ) {
+    const affiliate = await this.prisma.affiliateProfile.findUnique({
+      where: { id },
+    });
     if (!affiliate) throw new NotFoundException('Affiliate profile not found');
-    if (affiliate.user_id) throw new BadRequestException('This affiliate already has a connected user');
+    if (affiliate.user_id)
+      throw new BadRequestException(
+        'This affiliate already has a connected user',
+      );
 
-    const emailInUse = await this.prisma.uSER.findUnique({ where: { email: dto.email } });
-    if (emailInUse) throw new ConflictException('A user with this email already exists');
+    const emailInUse = await this.prisma.uSER.findUnique({
+      where: { email: dto.email },
+    });
+    if (emailInUse)
+      throw new ConflictException('A user with this email already exists');
 
     // 1. Create USER with status 'invited'
     const user = await this.prisma.uSER.create({
@@ -277,40 +312,57 @@ export class AffiliatesService {
     });
 
     // 2. Generate JWT invite token and send email
-    const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '48h' });
+    const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: '48h',
+    });
     // Theme is resolved from the admin's org since the new user has no org yet
     const emailTheme = await getUserEmailTheme(this.prisma, adminUserId);
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual'
-      ? `${baseInviteLink}&company=berry`
-      : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
 
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+      from: this.buildFromWithPrefix(
+        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      ),
       to: dto.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
-      html: MedAllianceInviteSignup(inviteLink, emailTheme || undefined, dto.first_name),
+      html: MedAllianceInviteSignup(
+        inviteLink,
+        emailTheme || undefined,
+        dto.first_name,
+      ),
     });
-    if (!mailSent) throw new BadRequestException('Failed to send invitation email');
+    if (!mailSent)
+      throw new BadRequestException('Failed to send invitation email');
 
     const codeExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     await this.prisma.emailInvitation.create({
-      data: { userId: user.id, email_from: dto.email, code, expiresAt: codeExpiresAt },
+      data: {
+        userId: user.id,
+        email_from: dto.email,
+        code,
+        expiresAt: codeExpiresAt,
+      },
     });
 
     // 3. Create Contact in DB
-    await this.prisma.contact.create({
-      data: {
-        user_id: user.id,
-        first_name: dto.first_name,
-        last_name: dto.last_name,
-        email: dto.email,
-        phone: dto.phone_number ?? null,
-        job_title: dto.job_title ?? null,
-        company_name: dto.company_name ?? null,
-        referral_source: 'Referral - Partner',
-      },
-    }).catch(() => {}); // skip silently if contact constraint is violated
+    await this.prisma.contact
+      .create({
+        data: {
+          user_id: user.id,
+          first_name: dto.first_name,
+          last_name: dto.last_name,
+          email: dto.email,
+          phone: dto.phone_number ?? null,
+          job_title: dto.job_title ?? null,
+          company_name: dto.company_name ?? null,
+          referral_source: 'Referral - Partner',
+        },
+      })
+      .catch(() => {}); // skip silently if contact constraint is violated
 
     // 4. Link user to the affiliate profile
     await this.prisma.affiliateProfile.update({
@@ -319,15 +371,22 @@ export class AffiliatesService {
     });
 
     // 5. Create HubSpot contact and link to existing Growth Partner (non-blocking)
-    this.affiliateCreationService.createContactAndLinkToGrowthPartner(
-      user.id,
-      dto.first_name,
-      dto.last_name,
-      dto.email,
-      affiliate.hubspot_id ?? null,
-      dto.phone_number,
-      dto.company_name,
-    ).catch((err) => console.error('[HubSpot] invite-user-for-affiliate background task failed:', err));
+    this.affiliateCreationService
+      .createContactAndLinkToGrowthPartner(
+        user.id,
+        dto.first_name,
+        dto.last_name,
+        dto.email,
+        affiliate.hubspot_id ?? null,
+        dto.phone_number,
+        dto.company_name,
+      )
+      .catch((err) =>
+        console.error(
+          '[HubSpot] invite-user-for-affiliate background task failed:',
+          err,
+        ),
+      );
 
     return this.findOneEnriched(id);
   }
@@ -351,7 +410,15 @@ export class AffiliatesService {
   }
 
   async findAll(dto: ListAffiliatesDto) {
-    const { page = 1, limit = 20, search, status, banking, organization, sortOrder = 'desc' } = dto;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      status,
+      banking,
+      organization,
+      sortOrder = 'desc',
+    } = dto;
     const skip = (page - 1) * limit;
 
     // Build where clause — search applies to the linked user's name/email.
@@ -362,12 +429,24 @@ export class AffiliatesService {
     if (banking === 'complete') {
       where.AND = [
         { payout_details: { not: null } },
-        { NOT: { payout_details: { path: ['method'], equals: 'will_be_provided_later' } } },
+        {
+          NOT: {
+            payout_details: {
+              path: ['method'],
+              equals: 'will_be_provided_later',
+            },
+          },
+        },
       ];
     } else if (banking === 'incomplete') {
       where.OR = [
         { payout_details: null },
-        { payout_details: { path: ['method'], equals: 'will_be_provided_later' } },
+        {
+          payout_details: {
+            path: ['method'],
+            equals: 'will_be_provided_later',
+          },
+        },
       ];
     }
 
@@ -402,14 +481,22 @@ export class AffiliatesService {
               ...USER_SELECT,
               organization: { select: { id: true, name: true } },
               _count: { select: { referredOrganizations: true } },
-              contact: { select: { id: true, first_name: true, last_name: true, email: true, job_title: true } },
+              contact: {
+                select: {
+                  id: true,
+                  first_name: true,
+                  last_name: true,
+                  email: true,
+                  job_title: true,
+                },
+              },
             },
           },
         },
       }),
       this.prisma.affiliateProfile.count({ where }),
     ]);
-    
+
     return { data, pagination: { page, limit, total } };
   }
 
@@ -424,7 +511,9 @@ export class AffiliatesService {
       payoutGroups,
       requestedGroups,
     ] = await Promise.all([
-      this.prisma.affiliatePayoutRequest.count({ where: { status: 'requested' } }),
+      this.prisma.affiliatePayoutRequest.count({
+        where: { status: 'requested' },
+      }),
       this.prisma.affiliatePayoutRequest.aggregate({
         _sum: { requested_amount: true },
         where: { status: 'under_review' },
@@ -439,7 +528,9 @@ export class AffiliatesService {
       this.prisma.affiliatePayoutRequest.groupBy({
         by: ['status'],
         _count: { id: true },
-        where: { status: { in: ['requested', 'under_review', 'paid', 'rejected'] } },
+        where: {
+          status: { in: ['requested', 'under_review', 'paid', 'rejected'] },
+        },
       }),
       // Fetch all affiliate groups with 'requested' payouts — filter for >1 in JS
       this.prisma.affiliatePayoutRequest.groupBy({
@@ -454,7 +545,9 @@ export class AffiliatesService {
       payoutSummaryMap[row.status] = row._count.id;
     }
 
-    const duplicateRiskFlags = requestedGroups.filter((r) => r._count.id > 1).length;
+    const duplicateRiskFlags = requestedGroups.filter(
+      (r) => r._count.id > 1,
+    ).length;
 
     return {
       open_payout_requests: openPayouts,
@@ -500,10 +593,10 @@ export class AffiliatesService {
           select: { paid_amount: true, paid_at: true },
         }),
         this.prisma.affiliateCommission.findMany({
-          where: { 
+          where: {
             affiliate_id: currentUser.id,
-            status: { in: AFFILIATE_VISIBLE_STATUSES as CommissionStatus[] }
-           },
+            status: { in: AFFILIATE_VISIBLE_STATUSES as CommissionStatus[] },
+          },
           orderBy: { createdAt: 'desc' },
           take: 5,
           include: { organization: { select: { id: true, name: true } } },
@@ -562,7 +655,7 @@ export class AffiliatesService {
                 name: true,
                 business_unit: true,
                 hubspot_id: true,
-              }
+              },
             },
           },
         },
@@ -623,7 +716,11 @@ export class AffiliatesService {
 
       if (dto.payout_details !== undefined) {
         const details = dto.payout_details as Record<string, unknown> | null;
-        if (details?.method === 'bill_com' && details.account_name && details.account_number) {
+        if (
+          details?.method === 'bill_com' &&
+          details.account_name &&
+          details.account_number
+        ) {
           try {
             await this.affiliateUpdateService.updateBankingData(
               existing.hubspot_id,
@@ -635,7 +732,9 @@ export class AffiliatesService {
           }
         } else if (details?.method === 'will_be_provided_later') {
           try {
-            await this.affiliateUpdateService.clearBankingData(existing.hubspot_id);
+            await this.affiliateUpdateService.clearBankingData(
+              existing.hubspot_id,
+            );
           } catch (err) {
             console.error('[HubSpot] Failed to clear banking data:', err);
           }
@@ -657,53 +756,70 @@ export class AffiliatesService {
 
   // Self-enrollment: organization admin joins the Med Alliance Program.
   async joinProgram(currentUser: USER, dto: JoinProgramDto = {}) {
-      if (!['organization_admin', 'organization_super_admin'].includes(currentUser.role)) {
-        throw new ForbiddenException('Only organization admins can join the Med Alliance Program');
-      }
+    if (
+      !['organization_admin', 'organization_super_admin'].includes(
+        currentUser.role,
+      )
+    ) {
+      throw new ForbiddenException(
+        'Only organization admins can join the Med Alliance Program',
+      );
+    }
 
-      const existing = await this.prisma.affiliateProfile.findUnique({
-        where: { user_id: currentUser.id },
+    const existing = await this.prisma.affiliateProfile.findUnique({
+      where: { user_id: currentUser.id },
+    });
+    if (existing) {
+      throw new ConflictException('You already have an affiliate profile');
+    }
+
+    const profile = await this.prisma.affiliateProfile.create({
+      data: {
+        full_name: `${currentUser.first_name} ${currentUser.last_name}`,
+        user_id: currentUser.id,
+        commission_percent_default: 7,
+        status: 'active',
+        created_by: currentUser.id,
+        payout_details: dto.payout_details ?? undefined,
+      },
+    });
+
+    const newAffiliateData = await this.findOne(profile.id);
+
+    // => Create Growth Partner in Hubspot
+    try {
+      await this.affiliateCreationService.execute(newAffiliateData);
+      console.log(
+        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
+        profile.id,
+      );
+    } catch (error) {
+      await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
+      throw new BadRequestException(
+        error.message ||
+          'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
+      );
+    }
+
+    try {
+      const theme = await getUserEmailTheme(this.prisma, currentUser.id);
+      await this.mailService.sendMail({
+        from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
+        to: currentUser.email,
+        subject: `Welcome to the Med Alliance Program, ${currentUser.first_name}`,
+        html: MedAllianceInvitationForOrgUsers(
+          currentUser.first_name,
+          theme ?? undefined,
+        ),
       });
-      if (existing) {
-        throw new ConflictException('You already have an affiliate profile');
-      }
+    } catch (emailError) {
+      console.error(
+        'Failed to send Med Alliance invitation email:',
+        emailError,
+      );
+    }
 
-      const profile = await this.prisma.affiliateProfile.create({
-        data: {
-          full_name: `${currentUser.first_name} ${currentUser.last_name}`,
-          user_id: currentUser.id,
-          commission_percent_default: 7,
-          status: 'active',
-          created_by: currentUser.id,
-          payout_details: dto.payout_details ?? undefined,
-        },
-      });
-
-      const newAffiliateData = await this.findOne(profile.id);
-
-      // => Create Growth Partner in Hubspot
-      try{
-        await this.affiliateCreationService.execute(newAffiliateData);
-        console.log('[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:', profile.id);
-      }catch(error){
-        await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
-        throw new BadRequestException(error.message || 'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.');
-      }
-
-
-      try {
-        const theme = await getUserEmailTheme(this.prisma, currentUser.id);
-        await this.mailService.sendMail({
-          from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
-          to: currentUser.email,
-          subject: `Welcome to the Med Alliance Program, ${currentUser.first_name}`,
-          html: MedAllianceInvitationForOrgUsers(currentUser.first_name, theme ?? undefined),
-        });
-      } catch (emailError) {
-        console.error('Failed to send Med Alliance invitation email:', emailError);
-      }
-
-      return  newAffiliateData;
+    return newAffiliateData;
   }
 
   // Admin: search for platform users that don't have an affiliate profile yet.
@@ -714,7 +830,13 @@ export class AffiliatesService {
         email: { contains: email, mode: 'insensitive' },
         //affiliateProfile: null,
       },
-      select: { id: true, first_name: true, last_name: true, email: true, role: true },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        role: true,
+      },
       take: 10,
     });
   }
@@ -739,7 +861,13 @@ export class AffiliatesService {
 
     return this.prisma.uSER.findMany({
       where,
-      select: { id: true, first_name: true, last_name: true, email: true, role: true },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        role: true,
+      },
       orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
       //take: 100,
     });
@@ -763,35 +891,52 @@ export class AffiliatesService {
       };
     }
 
-    const [pendingAgg, lifetimeAgg, payoutHistory, commsByOrg] = await Promise.all([
-      this.prisma.affiliatePayoutRequest.aggregate({
-        _sum: { requested_amount: true },
-        where: { affiliate_id: userId, status: { in: ['requested', 'under_review'] } },
-      }),
-      this.prisma.affiliateCommission.aggregate({
-        _sum: { commission_amount: true },
-        where: { affiliate_id: userId, status: { notIn: ['void', 'rejected'] } },
-      }),
-      this.prisma.affiliatePayoutRequest.findMany({
-        where: { affiliate_id: userId, status: 'paid' },
-        orderBy: { paid_at: 'desc' },
-        take: 20,
-        select: {
-          id: true,
-          paid_amount: true,
-          paid_at: true,
-          payment_method: true,
-          transaction_reference: true,
-          requested_amount: true,
-        },
-      }),
-      this.prisma.affiliateCommission.groupBy({
-        by: ['organization_id'],
-        where: { affiliate_id: userId, status: { notIn: ['void', 'rejected'] } },
-        _sum: { commission_amount: true },
-      }),
-    ]);
-    return { profile, pendingAgg, lifetimeAgg, payoutHistory, commsByOrg, user };
+    const [pendingAgg, lifetimeAgg, payoutHistory, commsByOrg] =
+      await Promise.all([
+        this.prisma.affiliatePayoutRequest.aggregate({
+          _sum: { requested_amount: true },
+          where: {
+            affiliate_id: userId,
+            status: { in: ['requested', 'under_review'] },
+          },
+        }),
+        this.prisma.affiliateCommission.aggregate({
+          _sum: { commission_amount: true },
+          where: {
+            affiliate_id: userId,
+            status: { notIn: ['void', 'rejected'] },
+          },
+        }),
+        this.prisma.affiliatePayoutRequest.findMany({
+          where: { affiliate_id: userId, status: 'paid' },
+          orderBy: { paid_at: 'desc' },
+          take: 20,
+          select: {
+            id: true,
+            paid_amount: true,
+            paid_at: true,
+            payment_method: true,
+            transaction_reference: true,
+            requested_amount: true,
+          },
+        }),
+        this.prisma.affiliateCommission.groupBy({
+          by: ['organization_id'],
+          where: {
+            affiliate_id: userId,
+            status: { notIn: ['void', 'rejected'] },
+          },
+          _sum: { commission_amount: true },
+        }),
+      ]);
+    return {
+      profile,
+      pendingAgg,
+      lifetimeAgg,
+      payoutHistory,
+      commsByOrg,
+      user,
+    };
   }
 
   // Admin: deactivate an affiliate profile (and optionally the user account).
@@ -849,7 +994,9 @@ export class AffiliatesService {
     const user = profile.user as any;
 
     if (profile.status !== 'inactive') {
-      throw new BadRequestException('Only inactive affiliates can be reactivated');
+      throw new BadRequestException(
+        'Only inactive affiliates can be reactivated',
+      );
     }
 
     // Always reactivate the affiliate profile
@@ -877,7 +1024,8 @@ export class AffiliatesService {
   // Admin: link the affiliate's connected user to an existing organization.
   async linkOrganization(id: string, dto: LinkOrganizationDto) {
     const profile = await this.findOne(id); // ensures profile exists
-    if (!profile.user_id) throw new BadRequestException('Affiliate has no connected user');
+    if (!profile.user_id)
+      throw new BadRequestException('Affiliate has no connected user');
 
     const org = await this.prisma.organization.findUnique({
       where: { id: dto.organization_id },
@@ -891,6 +1039,39 @@ export class AffiliatesService {
     });
 
     return this.findOne(id);
+  }
+
+  // Admin: associate an existing organization as a referral for this affiliate.
+  async associateCompany(affiliateId: string, organizationId: string) {
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateId },
+      select: { id: true, user_id: true, status: true },
+    });
+    if (!profile) throw new NotFoundException('Affiliate profile not found');
+    
+    /*
+    if (profile.status !== 'active')
+      throw new ForbiddenException('Affiliate profile is not active');
+    if (!profile.user_id)
+      throw new BadRequestException('Affiliate has no connected user');
+    */
+   
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true, referred_by_affiliate_id: true },
+    });
+    if (!org) throw new NotFoundException('Organization not found');
+    if (org.referred_by_affiliate_id !== null)
+      throw new BadRequestException(
+        'This company already has an affiliate referral',
+      );
+
+    await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: { referred_by_affiliate_id: profile.user_id },
+    });
+
+    return this.findOne(affiliateId);
   }
 
   // Affiliate: update only payout preferences on own profile.
@@ -920,7 +1101,9 @@ export class AffiliatesService {
       const details = dto.payout_details as Record<string, unknown> | null;
       if (details?.method === 'will_be_provided_later') {
         try {
-          await this.affiliateUpdateService.clearBankingData(profile.hubspot_id);
+          await this.affiliateUpdateService.clearBankingData(
+            profile.hubspot_id,
+          );
         } catch (err) {
           console.error('[HubSpot] Failed to clear banking data:', err);
         }

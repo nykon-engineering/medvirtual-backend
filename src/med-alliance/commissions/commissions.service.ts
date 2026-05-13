@@ -7,7 +7,12 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
-import { DecideCommissionDto, VoidCommissionDto, ReinstateCommissionDto, UpdateBaseAmountDto } from './dto/decide-commission.dto';
+import {
+  DecideCommissionDto,
+  VoidCommissionDto,
+  ReinstateCommissionDto,
+  UpdateBaseAmountDto,
+} from './dto/decide-commission.dto';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 
 // Terminal statuses — transitions out of these are not allowed.
@@ -125,8 +130,6 @@ export class CommissionsService {
     } = dto;
     const skip = (page - 1) * limit;
 
-    
-
     const where: any = { affiliate_id: currentUser.id };
     if (status && AFFILIATE_VISIBLE_STATUSES.includes(status)) {
       where.status = status;
@@ -228,7 +231,7 @@ export class CommissionsService {
       where: { id },
       select: {
         ...COMMISSION_SELECT,
-          ...PAYOUT_LINKAGE_SELECT,
+        ...PAYOUT_LINKAGE_SELECT,
         affiliate: {
           select: { id: true, first_name: true, last_name: true, email: true },
         },
@@ -470,14 +473,25 @@ export class CommissionsService {
   // ---------------------------------------------------------------------------
   // Admin: update base_amount_snapshot on a detected commission.
   // ---------------------------------------------------------------------------
-  async updateBaseAmount(id: string, dto: UpdateBaseAmountDto, adminUser: USER) {
+  async updateBaseAmount(
+    id: string,
+    dto: UpdateBaseAmountDto,
+    adminUser: USER,
+  ) {
     const commission = await this.prisma.affiliateCommission.findUnique({
       where: { id },
-      select: { id: true, status: true, base_amount_snapshot: true, commission_percent_snapshot: true },
+      select: {
+        id: true,
+        status: true,
+        base_amount_snapshot: true,
+        commission_percent_snapshot: true,
+      },
     });
     if (!commission) throw new NotFoundException('Commission not found');
 
-    if (!['detected', 'pending_admin_confirmation'].includes(commission.status)) {
+    if (
+      !['detected', 'pending_admin_confirmation'].includes(commission.status)
+    ) {
       throw new BadRequestException(
         `Base amount can only be updated on "detected" or "pending" commissions. Current: "${commission.status}".`,
       );

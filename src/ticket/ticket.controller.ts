@@ -146,13 +146,21 @@ export class TicketController {
 
   @Get(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
+  @Roles(
+    'system_super_admin',
+    'system_admin',
+    'organization_super_admin',
+    'organization_admin',
+  )
   @ApiOperation({ summary: 'Get a ticket by ID' })
   @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
   @ApiResponse({ status: 200, description: 'Ticket retrieved successfully.' })
   @ApiResponse({ status: 400, description: 'Ticket not found.' })
   @ApiResponse({ status: 403, description: 'Access denied.' })
-  async findOne(@Param('id') id: string, @CurrentUser() user: USER): Promise<object> {
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() user: USER,
+  ): Promise<object> {
     const result = await this.ticketService.findOne(id, user);
     return {
       status: 200,
@@ -247,12 +255,20 @@ export class TicketController {
 
   @Patch(':id')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin', 'organization_super_admin', 'organization_admin')
+  @Roles(
+    'system_super_admin',
+    'system_admin',
+    'organization_super_admin',
+    'organization_admin',
+  )
   @ApiOperation({ summary: 'Edit a ticket (title, description, priority)' })
   @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
   @ApiBody({ type: UpdateTicketDto })
   @ApiResponse({ status: 200, description: 'Ticket updated successfully.' })
-  @ApiResponse({ status: 400, description: 'Ticket not found or invalid input.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Ticket not found or invalid input.',
+  })
   @ApiResponse({ status: 403, description: 'Access denied.' })
   async patch(
     @Param('id') id: string,

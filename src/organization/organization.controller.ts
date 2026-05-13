@@ -48,7 +48,10 @@ export class OrganizationController {
 
   @Get('hubspot')
   @ApiOperation({ summary: 'Fetch all organizations from HubSpot CRM' })
-  @ApiResponse({ status: 200, description: 'Organizations retrieved from HubSpot successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Organizations retrieved from HubSpot successfully',
+  })
   async getfromHubspot() {
     return await this.organizationService.getAllFromHubspot();
   }
@@ -137,13 +140,20 @@ export class OrganizationController {
     name: 'admin',
     required: false,
     type: String,
-    description:
-      'Filter by admin ID (only available for system_super_admin)',
+    description: 'Filter by admin ID (only available for system_super_admin)',
   })
   @ApiQuery({
     name: 'sortBy',
     required: false,
-    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees', 'userCount', 'activeStaffCount'],
+    enum: [
+      'name',
+      'email',
+      'createdAt',
+      'updatedAt',
+      'number_of_employees',
+      'userCount',
+      'activeStaffCount',
+    ],
     description: 'Sort field (default: createdAt)',
   })
   @ApiQuery({
@@ -156,13 +166,22 @@ export class OrganizationController {
     name: 'hasUser',
     required: false,
     type: Boolean,
-    description: 'Filter to show only organizations with at least one active user (userCount > 0)',
+    description:
+      'Filter to show only organizations with at least one active user (userCount > 0)',
   })
   @ApiQuery({
     name: 'hasStaff',
     required: false,
     type: Boolean,
-    description: 'Filter to show only organizations with at least one active staff (staffCount > 0)',
+    description:
+      'Filter to show only organizations with at least one active staff (staffCount > 0)',
+  })
+  @ApiQuery({
+    name: 'without_referral',
+    required: false,
+    type: Boolean,
+    description:
+      'When true, only return organizations with no affiliate referral (referred_by_affiliate_id is null)',
   })
   async getAllPaginated(
     @CurrentUser() user: USER,
@@ -173,9 +192,16 @@ export class OrganizationController {
 
   @Get(':id/contact')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_admin', 'system_super_admin', 'organization_admin', 'organization_super_admin')
+  @Roles(
+    'system_admin',
+    'system_super_admin',
+    'organization_admin',
+    'organization_super_admin',
+  )
   @HttpCode(200)
-  @ApiOperation({ summary: 'Get the main contact associated with an organization' })
+  @ApiOperation({
+    summary: 'Get the main contact associated with an organization',
+  })
   @ApiResponse({ status: 200, description: 'Contact retrieved successfully' })
   async getContactByOrgId(@Param('id') id: string) {
     return await this.organizationService.getContactByOrgId(id);
@@ -185,11 +211,18 @@ export class OrganizationController {
   @Get('check-name')
   @UseGuards(AuthGuard)
   @HttpCode(200)
-  @ApiOperation({ summary: 'Check if an organization name already exists before creating' })
-  @ApiQuery({ name: 'name', required: true, description: 'Organization name to check' })
+  @ApiOperation({
+    summary: 'Check if an organization name already exists before creating',
+  })
+  @ApiQuery({
+    name: 'name',
+    required: true,
+    description: 'Organization name to check',
+  })
   @ApiResponse({ status: 200, description: 'Check completed' })
   async checkName(@Query('name') name: string) {
-    const exists = await this.organizationService.checkOrganizationNameExists(name);
+    const exists =
+      await this.organizationService.checkOrganizationNameExists(name);
     return { status: 200, message: 'OK', data: { exists } };
   }
 
@@ -245,7 +278,11 @@ export class OrganizationController {
     status: 200,
     description: 'Organization updated successfully',
   })
-  async update(@Param('id') id: string, @Body() data: UpdateOrganizationDto, @CurrentUser() user: USER) {
+  async update(
+    @Param('id') id: string,
+    @Body() data: UpdateOrganizationDto,
+    @CurrentUser() user: USER,
+  ) {
     const org = await this.organizationService.update(id, data, user?.id);
     return {
       status: 200,
@@ -624,15 +661,26 @@ export class OrganizationController {
   }
 
   @Get('populate-db/from-hubspot')
-  @ApiOperation({ summary: 'Populate the database with organizations imported from HubSpot' })
-  @ApiResponse({ status: 200, description: 'Organizations populated successfully' })
+  @ApiOperation({
+    summary: 'Populate the database with organizations imported from HubSpot',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Organizations populated successfully',
+  })
   async populateDbFromHubspot() {
     return await this.organizationService.populateDbFromHubspot();
   }
 
   @Get('desactive-all/without-staff')
-  @ApiOperation({ summary: 'Deactivate all organization records that have no associated staff members' })
-  @ApiResponse({ status: 200, description: 'Organizations deactivated successfully' })
+  @ApiOperation({
+    summary:
+      'Deactivate all organization records that have no associated staff members',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Organizations deactivated successfully',
+  })
   async desactiveWithoutStaff() {
     return await this.organizationService.desactiveWithoutStaff();
   }
@@ -640,8 +688,13 @@ export class OrganizationController {
   @Get('sync-all/organizations-with-deals')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Sync all organizations with their associated deals in HubSpot' })
-  @ApiResponse({ status: 200, description: 'Organizations synced with deals successfully' })
+  @ApiOperation({
+    summary: 'Sync all organizations with their associated deals in HubSpot',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Organizations synced with deals successfully',
+  })
   async syncAllOrganizationsWithDeals() {
     return await this.organizationService.syncOrganizationsWithDeals();
   }
@@ -649,8 +702,14 @@ export class OrganizationController {
   @Get('get-organization/industry-types')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Get available industry type options from HubSpot for organization forms' })
-  @ApiResponse({ status: 200, description: 'Industry types retrieved successfully' })
+  @ApiOperation({
+    summary:
+      'Get available industry type options from HubSpot for organization forms',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Industry types retrieved successfully',
+  })
   async getOrganizationIndustryTypes() {
     return await this.organizationService.getOrganizationIndustryTypes();
   }
@@ -658,10 +717,15 @@ export class OrganizationController {
   @Get('get-organization-types/all')
   @UseGuards(AuthGuard)
   @Roles('system_super_admin', 'system_admin')
-  @ApiOperation({ summary: 'Get available organization type options from HubSpot for organization forms' })
-  @ApiResponse({ status: 200, description: 'Organization types retrieved successfully' })
+  @ApiOperation({
+    summary:
+      'Get available organization type options from HubSpot for organization forms',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization types retrieved successfully',
+  })
   async getOrganizationTypes() {
     return await this.organizationService.getOrganizationTypes();
   }
-
 }

@@ -13,7 +13,8 @@ export class GoogledriveService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mailService: MailService) {
+    private readonly mailService: MailService,
+  ) {
     this.oauth2Client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
@@ -35,7 +36,8 @@ export class GoogledriveService {
     const { tokens } = await this.oauth2Client.getToken(code);
     this.oauth2Client.setCredentials(tokens);
 
-    if (!tokens) throw new BadRequestException('Failed to retrieve tokens from Google.');
+    if (!tokens)
+      throw new BadRequestException('Failed to retrieve tokens from Google.');
 
     const saved = await this.prisma.googleToken.create({
       data: {
@@ -43,11 +45,14 @@ export class GoogledriveService {
         refreshToken: tokens.refresh_token || 'undefined',
         scope: tokens.scope,
         tokenType: tokens.token_type,
-        expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date).getTime() : null,
+        expiryDate: tokens.expiry_date
+          ? new Date(tokens.expiry_date).getTime()
+          : null,
       },
     });
 
-    if (!saved) throw new BadRequestException('Failed to save tokens to the database.');
+    if (!saved)
+      throw new BadRequestException('Failed to save tokens to the database.');
     return tokens;
   }
 
@@ -61,50 +66,57 @@ export class GoogledriveService {
   }
 
   async getValidAccessToken(): Promise<string> {
-    try{
-      const token = await this.prisma.googleToken.findFirst({ orderBy: { createdAt: 'desc' } });
+    try {
+      const token = await this.prisma.googleToken.findFirst({
+        orderBy: { createdAt: 'desc' },
+      });
       if (!token || !token.accessToken || !token.expiryDate)
-        throw new BadRequestException('Google tokens not found. Please authenticate first.');
-  
+        throw new BadRequestException(
+          'Google tokens not found. Please authenticate first.',
+        );
+
       const now = Date.now();
       if (now < Number(token.expiryDate) - 60 * 1000) return token.accessToken;
-  
+
       const newTokens = await this.refreshAccessToken(token.refreshToken || '');
       if (!newTokens || !newTokens.access_token)
         throw new BadRequestException('Failed to refresh access token.');
-  
+
       await this.prisma.googleToken.update({
         where: { id: token.id },
         data: {
           accessToken: newTokens.access_token,
-          expiryDate: newTokens.expiry_date ? new Date(newTokens.expiry_date).getTime() : null,
+          expiryDate: newTokens.expiry_date
+            ? new Date(newTokens.expiry_date).getTime()
+            : null,
         },
       });
-  
+
       return newTokens.access_token;
-    }catch(error:any){
+    } catch (error: any) {
       // Send google token expired via email
       const emailBody = googleTokenExpired();
       const mailSent = await this.mailService.sendMail({
-      from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: 'paulo@regenta.ai',
-      cc: 'paulo@regenta.ai',
-      subject: 'Google Token Expired',
-      html: emailBody,
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: 'paulo@regenta.ai',
+        cc: 'paulo@regenta.ai',
+        subject: 'Google Token Expired',
+        html: emailBody,
       });
       if (!mailSent) {
-          console.log('Failed to send google token expired email notification.');
+        console.log('Failed to send google token expired email notification.');
       }
       //Here I save in the database that I sent the email
       await this.prisma.mail_Settings.create({
-          data: {
-            title: 'google_token_expired',
-          },
+        data: {
+          title: 'google_token_expired',
+        },
       });
-      throw new BadRequestException(`Error getting valid access token: ${error.message}`);
-    }   
+      throw new BadRequestException(
+        `Error getting valid access token: ${error.message}`,
+      );
+    }
   }
-
 
   async listFilesInFolder(folderId: string) {
     const accessToken = await this.getValidAccessToken();
@@ -121,10 +133,11 @@ export class GoogledriveService {
       });
       return res.data.files;
     } catch (error: any) {
-      throw new BadRequestException(`Failed to list files in folder: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to list files in folder: ${error.message}`,
+      );
     }
   }
-
 
   async downloadFile(fileId: string, filename: string, downloadDir: string) {
     const accessToken = await this.getValidAccessToken();
@@ -133,7 +146,6 @@ export class GoogledriveService {
     const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
 
     try {
-
       const { data: metadata } = await drive.files.get({
         fileId,
         fields: 'name,mimeType',
@@ -143,19 +155,17 @@ export class GoogledriveService {
       const destPath = path.resolve(downloadDir, filename);
       const exportableTypes: Record<string, string> = {
         'application/vnd.google-apps.document': 'application/pdf',
-        'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.google-apps.spreadsheet':
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/vnd.google-apps.presentation': 'application/pdf',
       };
-
 
       if (exportableTypes[metadata.mimeType!]) {
         const mimeType = exportableTypes[metadata.mimeType!];
         const dest = fs.createWriteStream(destPath);
 
         await drive.files.export(
-          { fileId,
-            mimeType,
-          },
+          { fileId, mimeType },
           { responseType: 'stream' },
           (err, res: any) => {
             if (err) throw err;
@@ -166,13 +176,15 @@ export class GoogledriveService {
           },
         );
       } else {
-
         const dest = fs.createWriteStream(destPath);
-        const res = await drive.files.get({
-          fileId,
-          alt: 'media',
-          supportsAllDrives: true,
-        }, { responseType: 'stream' });
+        const res = await drive.files.get(
+          {
+            fileId,
+            alt: 'media',
+            supportsAllDrives: true,
+          },
+          { responseType: 'stream' },
+        );
 
         await new Promise<void>((resolve, reject) => {
           res.data
@@ -188,8 +200,10 @@ export class GoogledriveService {
       //return true;
       return 'Download successful';
     } catch (error: any) {
-      
-      console.log(`Failed to download file: ${error.message}`, `Code: ${error.code}`);
+      console.log(
+        `Failed to download file: ${error.message}`,
+        `Code: ${error.code}`,
+      );
       return error.message;
       //return false;
     }
@@ -198,32 +212,31 @@ export class GoogledriveService {
   async downloadImage(fileId: string, filename: string, downloadDir: string) {
     const accessToken = await this.getValidAccessToken();
     this.oauth2Client.setCredentials({ access_token: accessToken });
-  
+
     const drive = google.drive({ version: 'v3', auth: this.oauth2Client });
-  
+
     try {
-      
       const { data: metadata } = await drive.files.get({
         fileId,
         fields: 'name,mimeType',
         supportsAllDrives: true,
       });
-      
-      const destPath = path.resolve(downloadDir, filename);    
+
+      const destPath = path.resolve(downloadDir, filename);
 
       const dest = fs.createWriteStream(destPath);
-      
+
       const exportableTypes: Record<string, string> = {
         'application/vnd.google-apps.document': 'application/pdf',
-        'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.google-apps.spreadsheet':
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/vnd.google-apps.presentation': 'application/pdf',
       };
-  
+
       if (exportableTypes[metadata.mimeType!]) {
-       
         const mimeType = exportableTypes[metadata.mimeType!];
         //const dest = fs.createWriteStream(destPath);
-  
+
         await new Promise<void>((resolve, reject) => {
           drive.files.export(
             { fileId, mimeType },
@@ -237,22 +250,21 @@ export class GoogledriveService {
                 })
                 .on('error', (err: any) => reject(err))
                 .pipe(dest);
-            }
+            },
           );
         });
-  
       } else {
         //const dest = fs.createWriteStream(destPath);
-  
+
         const res = await drive.files.get(
           {
             fileId,
             alt: 'media',
             supportsAllDrives: true,
           },
-          { responseType: 'stream' }
+          { responseType: 'stream' },
         );
-  
+
         await new Promise<void>((resolve, reject) => {
           res.data
             .on('end', () => {
@@ -263,12 +275,14 @@ export class GoogledriveService {
             .pipe(dest);
         });
       }
-  
+
       return destPath; // return the complet path
     } catch (error: any) {
-      console.error(`Falha ao baixar arquivo: ${error.message}`, `Code: ${error.code}`);
+      console.error(
+        `Falha ao baixar arquivo: ${error.message}`,
+        `Code: ${error.code}`,
+      );
       throw new Error(error.message);
     }
   }
-  
 }

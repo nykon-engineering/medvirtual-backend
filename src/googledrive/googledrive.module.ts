@@ -8,6 +8,6 @@ import { MailModule } from '../mail/mail.module';
   controllers: [GoogledriveController],
   providers: [GoogledriveService],
   imports: [PrismaModule, MailModule],
-  exports: [GoogledriveService]
+  exports: [GoogledriveService],
 })
 export class GoogledriveModule {}

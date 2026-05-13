@@ -12,8 +12,6 @@ import {
 } from 'class-validator';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
-
-
 export class CreateOrganizationDto {
   @ApiProperty({ required: true, description: 'Name of the organization' })
   @IsString()
@@ -74,7 +72,7 @@ export class CreateOrganizationDto {
   @IsOptional()
   @IsString()
   zip?: string;
-  
+
   @ApiProperty({
     required: false,
     description: 'Location/country of the organization',
@@ -233,12 +231,18 @@ export class CreateOrganizationDto {
   @IsUUID()
   refer_to_user_id?: string;
 
-  @ApiProperty({ required: false, description: 'First name of the main contact' })
+  @ApiProperty({
+    required: false,
+    description: 'First name of the main contact',
+  })
   @IsOptional()
   @IsString()
   contact_first_name?: string;
 
-  @ApiProperty({ required: false, description: 'Last name of the main contact' })
+  @ApiProperty({
+    required: false,
+    description: 'Last name of the main contact',
+  })
   @IsOptional()
   @IsString()
   contact_last_name?: string;

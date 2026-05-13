@@ -14,8 +14,17 @@ import { PositionRateConfigModule } from '../position-rate-config/position-rate-
 @Module({
   controllers: [CandidatesController],
   providers: [CandidatesService],
-  imports: [forwardRef(() => HubspotModule),
-    PrismaModule, GoogledriveModule, S3Module, OpenaiModule, MailModule, HireRequestModule, NotificationsModule, PositionRateConfigModule],
+  imports: [
+    forwardRef(() => HubspotModule),
+    PrismaModule,
+    GoogledriveModule,
+    S3Module,
+    OpenaiModule,
+    MailModule,
+    HireRequestModule,
+    NotificationsModule,
+    PositionRateConfigModule,
+  ],
   exports: [CandidatesService],
 })
 export class CandidatesModule {}

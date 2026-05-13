@@ -32,10 +32,12 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ThrottlerModule.forRoot([{
-      ttl: 60000, // 1 minute
-      limit: 100, // 100 requests per minute (global default, can be overridden per endpoint)
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute
+        limit: 100, // 100 requests per minute (global default, can be overridden per endpoint)
+      },
+    ]),
     UserModule,
     PrismaModule,
     AuthModule,
@@ -61,7 +63,7 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
   ],
   controllers: [AppController],
   providers: [
-    AppService, 
+    AppService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
@@ -69,4 +71,3 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
   ],
 })
 export class AppModule {}
-

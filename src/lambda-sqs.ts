@@ -27,7 +27,6 @@ export const handler = async (event: SQSEvent) => {
 
     const type = payload.Type?.trim();
 
-
     switch (type) {
       case 'CREATE_DEAL_STAFF':
         console.log(`Creating staff for deal ${payload.objectId}`);
@@ -41,7 +40,7 @@ export const handler = async (event: SQSEvent) => {
         await prisma.staff.update({
           where: { hubspot_id: String(payload.objectId) },
           data: { status: 'terminated' },
-        })
+        });
         break;
 
       case 'REACTIVATE_STAFF':
@@ -50,14 +49,11 @@ export const handler = async (event: SQSEvent) => {
         await prisma.staff.update({
           where: { hubspot_id: String(payload.objectId) },
           data: { status: 'active' },
-        })
+        });
         break;
       default:
         console.warn('Event not handled:', payload);
         break;
-      
     }
-    
-    
   }
 };

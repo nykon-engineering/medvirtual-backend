@@ -39,7 +39,10 @@ export class AuthInviteUserDto {
   @IsString()
   phone?: string;
 
-  @ApiProperty({ required: false, description: 'ID of the admin user creating this invitation' })
+  @ApiProperty({
+    required: false,
+    description: 'ID of the admin user creating this invitation',
+  })
   @IsOptional()
   @IsString()
   createdByUserId?: string;

@@ -1,7 +1,11 @@
 import { getEmailFooter } from './components';
 import { EmailTheme } from './theme';
 
-export function MedAllianceInviteSignup(inviteLink: string, theme?: EmailTheme, firstName?: string): string {
+export function MedAllianceInviteSignup(
+  inviteLink: string,
+  theme?: EmailTheme,
+  firstName?: string,
+): string {
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';

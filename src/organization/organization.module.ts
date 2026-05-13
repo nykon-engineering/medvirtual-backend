@@ -11,12 +11,14 @@ import { ContactModule } from '../contacts/contacts.module';
 @Module({
   controllers: [OrganizationController],
   providers: [OrganizationService],
-  imports: [PrismaModule,
-    forwardRef(() =>AuthModule),
+  imports: [
+    PrismaModule,
+    forwardRef(() => AuthModule),
     forwardRef(() => HubspotModule),
     NotificationsModule,
     SqsModule,
-    ContactModule],
+    ContactModule,
+  ],
   exports: [OrganizationService],
 })
 export class OrganizationModule {}

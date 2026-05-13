@@ -37,11 +37,12 @@ export class SearchUsersDto {
 
   @ApiProperty({
     required: false,
-    description: 'Number of results to return (no maximum limit). If not provided, returns all results.',
+    description:
+      'Number of results to return (no maximum limit). If not provided, returns all results.',
     minimum: 1,
   })
   @IsOptional()
-  @Transform(({ value }) => value ? parseInt(value) : undefined)
+  @Transform(({ value }) => (value ? parseInt(value) : undefined))
   @IsInt()
   @Min(1)
   limit?: number;

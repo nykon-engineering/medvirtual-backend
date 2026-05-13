@@ -1,34 +1,44 @@
 import { EmailHeader, EmailFooter } from './components';
 
 type ReportUser = {
-    email: string;
-    first_name: string;
-    last_name: string;
-    organization_name: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  organization_name: string;
 };
 
 export default function clientUsersDeactivationReport(
-    deactivatedUsers: ReportUser[],
-    deletedUsers: ReportUser[],
-    runAt: Date,
+  deactivatedUsers: ReportUser[],
+  deletedUsers: ReportUser[],
+  runAt: Date,
 ) {
-    const formatDate = (d: Date) =>
-        d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const formatDate = (d: Date) =>
+    d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
-    const buildRows = (users: ReportUser[]) => {
-        if (users.length === 0) {
-            return `<tr><td colspan="3" style="border:1px solid #ccc;padding:12px;text-align:center;color:#888;">No records</td></tr>`;
-        }
-        return users.map(u => `
+  const buildRows = (users: ReportUser[]) => {
+    if (users.length === 0) {
+      return `<tr><td colspan="3" style="border:1px solid #ccc;padding:12px;text-align:center;color:#888;">No records</td></tr>`;
+    }
+    return users
+      .map(
+        (u) => `
             <tr>
                 <td style="border:1px solid #ccc;padding:8px;">${u.first_name} ${u.last_name}</td>
                 <td style="border:1px solid #ccc;padding:8px;">${u.email}</td>
                 <td style="border:1px solid #ccc;padding:8px;">${u.organization_name}</td>
             </tr>
-        `).join('');
-    };
+        `,
+      )
+      .join('');
+  };
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />

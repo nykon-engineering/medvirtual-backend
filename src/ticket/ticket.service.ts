@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ForbiddenException,
+} from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -105,17 +109,27 @@ export class TicketService {
 
     // Access control: Organization admins can only see tickets they created
     if (user) {
-      const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+      const isOrganizationAdmin =
+        user.role === 'organization_admin' ||
+        user.role === 'organization_super_admin';
       if (isOrganizationAdmin) {
         // For organization_super_admin, allow tickets from their organization
         // For organization_admin, only allow tickets they created
-        if (user.role === 'organization_admin' && ticket.created_by !== user.id) {
+        if (
+          user.role === 'organization_admin' &&
+          ticket.created_by !== user.id
+        ) {
           throw new ForbiddenException('You can only view tickets you created');
         }
         if (user.role === 'organization_super_admin') {
           // Allow if ticket belongs to their organization OR if they created it
-          if (ticket.organization?.id !== user.organization_id && ticket.created_by !== user.id) {
-            throw new ForbiddenException('You can only view tickets from your organization or tickets you created');
+          if (
+            ticket.organization?.id !== user.organization_id &&
+            ticket.created_by !== user.id
+          ) {
+            throw new ForbiddenException(
+              'You can only view tickets from your organization or tickets you created',
+            );
           }
         }
       }
@@ -147,7 +161,7 @@ export class TicketService {
     }
 
     if (
-      (createTicketDto.type === 'hire_request_cancellation' ) &&
+      createTicketDto.type === 'hire_request_cancellation' &&
       !createTicketDto.hireRequest_id
     ) {
       throw new BadRequestException(
@@ -203,14 +217,22 @@ export class TicketService {
 
     let assignedValidatedUser;
     let assignedValidatedOrg;
-    
+
     // For support and hire request cancellation tickets, organization is optional
-    if (createTicketDto.type === 'Support' || createTicketDto.type === 'hire_request_cancellation') {
-      assignedValidatedUser = Array.isArray(createTicketDto.assigned_user_id) ? createTicketDto.assigned_user_id[0] : createTicketDto.assigned_user_id;
+    if (
+      createTicketDto.type === 'Support' ||
+      createTicketDto.type === 'hire_request_cancellation'
+    ) {
+      assignedValidatedUser = Array.isArray(createTicketDto.assigned_user_id)
+        ? createTicketDto.assigned_user_id[0]
+        : createTicketDto.assigned_user_id;
       assignedValidatedOrg = createTicketDto.client_id;
     } else {
       // For other ticket types, organization is required
-      if (!user || (user.role.includes('organization') && !user.organization_id))
+      if (
+        !user ||
+        (user.role.includes('organization') && !user.organization_id)
+      )
         throw new BadRequestException('User organization not found');
       if (user.role.includes('organization')) {
         //get the concierge client as assigned user
@@ -225,7 +247,9 @@ export class TicketService {
         assignedValidatedUser = org.admin_id;
         assignedValidatedOrg = org.id;
       } else {
-        assignedValidatedUser = Array.isArray(createTicketDto.assigned_user_id) ? createTicketDto.assigned_user_id[0] : createTicketDto.assigned_user_id;
+        assignedValidatedUser = Array.isArray(createTicketDto.assigned_user_id)
+          ? createTicketDto.assigned_user_id[0]
+          : createTicketDto.assigned_user_id;
         assignedValidatedOrg = createTicketDto.client_id;
       }
     }
@@ -235,7 +259,9 @@ export class TicketService {
       where: { id: user.id },
     });
     if (!creatorUser) {
-      throw new BadRequestException(`User with ID ${user.id} not found. Cannot create ticket.`);
+      throw new BadRequestException(
+        `User with ID ${user.id} not found. Cannot create ticket.`,
+      );
     }
 
     // Validate that the assigned user exists (if provided)
@@ -244,7 +270,9 @@ export class TicketService {
         where: { id: assignedValidatedUser },
       });
       if (!assignedUser) {
-        throw new BadRequestException(`Assigned user with ID ${assignedValidatedUser} not found.`);
+        throw new BadRequestException(
+          `Assigned user with ID ${assignedValidatedUser} not found.`,
+        );
       }
     }
 
@@ -290,7 +318,10 @@ export class TicketService {
       try {
         await this.notifications.notifyTicketEvent(ticketFull, 'created');
       } catch (err) {
-        console.warn('[notifications] ticket-created email failed', err?.message || err);
+        console.warn(
+          '[notifications] ticket-created email failed',
+          err?.message || err,
+        );
       }
 
       return ticketFull;
@@ -314,27 +345,44 @@ export class TicketService {
       const tickets = await this.prisma.ticket.findMany({
         where: {
           type: type ? type : undefined,
-          priority: priority ? priority as Priority : undefined,
-          ...(user.role === 'system_super_admin' ? {} : 
-              user.role === 'system_admin' ? {
+          priority: priority ? (priority as Priority) : undefined,
+          ...(user.role === 'system_super_admin'
+            ? {}
+            : user.role === 'system_admin'
+              ? {
+                  OR: [
+                    { user: { is: { id: user.id } } },
+                    { created_by: user.id },
+                  ],
+                }
+              : user.role === 'organization_super_admin'
+                ? {
+                    organization: user.organization_id
+                      ? { id: user.organization_id }
+                      : undefined,
+                  }
+                : user.role === 'organization_admin'
+                  ? {
+                      created_by: user.id,
+                    }
+                  : user.role === 'affiliate'
+                    ? {
+                        created_by: user.id,
+                      }
+                    : { user: { is: { id: user.id } } }),
+          ...(search
+            ? {
                 OR: [
-                  { user: { is: { id: user.id } } },
-                  { created_by: user.id }
-                ]
-              } : user.role === 'organization_super_admin' ? {
-                organization: user.organization_id ? { id: user.organization_id } : undefined
-              } : user.role === 'organization_admin' ? {
-                created_by: user.id
-              } : user.role === 'affiliate' ? {
-                created_by: user.id
-              } : { user: { is: { id: user.id } } }),
-          ...(search ? {
-            OR: [
-              { organization: { name: { contains: search, mode: 'insensitive' } } },
-              { title: { contains: search, mode: 'insensitive' } }
-            ]
-          } : {}),
-          
+                  {
+                    organization: {
+                      name: { contains: search, mode: 'insensitive' },
+                    },
+                  },
+                  { title: { contains: search, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+
           // Exclude tickets that are closed and were last updated more than 30 days ago
           NOT: {
             AND: [{ status: 'closed' }, { updatedAt: { lt: thirtyDaysAgo } }],
@@ -348,7 +396,7 @@ export class TicketService {
           status: true,
           priority: true,
           createdAt: true,
-          created_by: true, 
+          created_by: true,
           organization: {
             select: {
               id: true,
@@ -419,18 +467,28 @@ export class TicketService {
 
       const filteredTickets = tickets.map((ticket: any) => ({
         ...ticket,
-        candidate: ticket.candidate ? {
-          ...ticket.candidate,
-          avatar: ticket.candidate.avatar_url ? `${process.env.AVATAR_URL}${ticket.candidate.avatar_url}` :  null,
-        }: null,
-        staff: ticket.staff ? {
-          ...ticket.staff,
-          candidate: ticket.staff.candidate ? {
-            ...ticket.staff.candidate,
-            avatar: ticket.staff.candidate.avatar_url ? `${process.env.AVATAR_URL}${ticket.staff.candidate.avatar_url}` :  null,
-          } : null,
-        } : null,
-      }))
+        candidate: ticket.candidate
+          ? {
+              ...ticket.candidate,
+              avatar: ticket.candidate.avatar_url
+                ? `${process.env.AVATAR_URL}${ticket.candidate.avatar_url}`
+                : null,
+            }
+          : null,
+        staff: ticket.staff
+          ? {
+              ...ticket.staff,
+              candidate: ticket.staff.candidate
+                ? {
+                    ...ticket.staff.candidate,
+                    avatar: ticket.staff.candidate.avatar_url
+                      ? `${process.env.AVATAR_URL}${ticket.staff.candidate.avatar_url}`
+                      : null,
+                  }
+                : null,
+            }
+          : null,
+      }));
 
       return filteredTickets;
     } catch (error) {
@@ -471,7 +529,10 @@ export class TicketService {
       try {
         await this.notifications.notifyTicketEvent(ticket, 'assigned');
       } catch (err) {
-        console.warn('[notifications] ticket-assigned email failed', err?.message || err);
+        console.warn(
+          '[notifications] ticket-assigned email failed',
+          err?.message || err,
+        );
       }
 
       return ticket;
@@ -554,14 +615,24 @@ export class TicketService {
 
       // Notify creator on status change to in_progress, resolved, or closed (non-blocking)
       try {
-        if (data.status === 'in_progress' || data.status === 'resolved' || data.status === 'closed') {
-          await this.notifications.notifyTicketStatusChangeToCreator(ticket, data.status as 'in_progress' | 'resolved' | 'closed');
+        if (
+          data.status === 'in_progress' ||
+          data.status === 'resolved' ||
+          data.status === 'closed'
+        ) {
+          await this.notifications.notifyTicketStatusChangeToCreator(
+            ticket,
+            data.status,
+          );
         } else if (oldStatus === 'closed' && data.status === 'new') {
           // Notify when ticket is reopened from closed to new
           await this.notifications.notifyTicketReopened(ticket);
         }
       } catch (err) {
-        console.warn('[notifications] ticket-status-change email failed', err?.message || err);
+        console.warn(
+          '[notifications] ticket-status-change email failed',
+          err?.message || err,
+        );
       }
 
       return ticket;
@@ -617,34 +688,60 @@ export class TicketService {
     }
   }
 
-  async update(id: string, data: { title?: string; description?: string; priority?: Priority; type?: string; client_id?: string; assigned_user_id?: string }, user: USER): Promise<object> {
+  async update(
+    id: string,
+    data: {
+      title?: string;
+      description?: string;
+      priority?: Priority;
+      type?: string;
+      client_id?: string;
+      assigned_user_id?: string;
+    },
+    user: USER,
+  ): Promise<object> {
     const currentTicket = await this.prisma.ticket.findUnique({
       where: { id },
-      select: { id: true, created_by: true, organization: { select: { id: true } } },
+      select: {
+        id: true,
+        created_by: true,
+        organization: { select: { id: true } },
+      },
     });
     if (!currentTicket) throw new BadRequestException('Ticket not found');
 
     // Access control: Organization admins can only update tickets they created
-    const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+    const isOrganizationAdmin =
+      user.role === 'organization_admin' ||
+      user.role === 'organization_super_admin';
     if (isOrganizationAdmin) {
-      if (user.role === 'organization_admin' && currentTicket.created_by !== user.id) {
+      if (
+        user.role === 'organization_admin' &&
+        currentTicket.created_by !== user.id
+      ) {
         throw new ForbiddenException('You can only update tickets you created');
       }
       if (user.role === 'organization_super_admin') {
         // Allow if ticket belongs to their organization OR if they created it
-        if (currentTicket.organization?.id !== user.organization_id && currentTicket.created_by !== user.id) {
-          throw new ForbiddenException('You can only update tickets from your organization or tickets you created');
+        if (
+          currentTicket.organization?.id !== user.organization_id &&
+          currentTicket.created_by !== user.id
+        ) {
+          throw new ForbiddenException(
+            'You can only update tickets from your organization or tickets you created',
+          );
         }
       }
     }
 
     const payload: any = {};
     const isSystemAdmin = this.isSystemAdmin(user);
-    
+
     // All users can update title, description, and priority
     if (typeof data.title === 'string') payload.title = data.title;
-    if (typeof data.description === 'string') payload.description = data.description;
-    if (typeof data.priority === 'string') payload.priority = data.priority as Priority;
+    if (typeof data.description === 'string')
+      payload.description = data.description;
+    if (typeof data.priority === 'string') payload.priority = data.priority;
 
     // Only system admins can update type, client_id, or assigned_user_id
     if (isSystemAdmin) {
@@ -657,14 +754,22 @@ export class TicketService {
       }
 
       if (typeof data.client_id === 'string' && data.client_id.trim() !== '') {
-        const org = await this.prisma.organization.findUnique({ where: { id: data.client_id } });
+        const org = await this.prisma.organization.findUnique({
+          where: { id: data.client_id },
+        });
         if (!org) throw new BadRequestException('Organization not found');
         payload.organization = { connect: { id: data.client_id } };
       }
 
-      if (typeof data.assigned_user_id === 'string' && data.assigned_user_id.trim() !== '') {
-        const assignee = await this.prisma.uSER.findUnique({ where: { id: data.assigned_user_id } });
-        if (!assignee) throw new BadRequestException('User to assign not found');
+      if (
+        typeof data.assigned_user_id === 'string' &&
+        data.assigned_user_id.trim() !== ''
+      ) {
+        const assignee = await this.prisma.uSER.findUnique({
+          where: { id: data.assigned_user_id },
+        });
+        if (!assignee)
+          throw new BadRequestException('User to assign not found');
         payload.user = { connect: { id: data.assigned_user_id } };
       }
     }
@@ -683,12 +788,16 @@ export class TicketService {
       if (!updated) throw new BadRequestException('Failed to update ticket');
 
       const ticket = await this.findOne(id);
-      if (!ticket) throw new BadRequestException('Failed to fetch updated ticket');
+      if (!ticket)
+        throw new BadRequestException('Failed to fetch updated ticket');
       // Notify on generic updates (non-blocking)
       try {
         await this.notifications.notifyTicketEvent(ticket, 'updated');
       } catch (err) {
-        console.warn('[notifications] ticket-updated email failed', err?.message || err);
+        console.warn(
+          '[notifications] ticket-updated email failed',
+          err?.message || err,
+        );
       }
       return ticket;
     } catch (error) {
@@ -696,31 +805,50 @@ export class TicketService {
     }
   }
 
-  async addNote(ticketId: string, dto: { content: string; is_internal?: boolean }, user: USER) {
-    const ticket = await this.prisma.ticket.findUnique({ 
+  async addNote(
+    ticketId: string,
+    dto: { content: string; is_internal?: boolean },
+    user: USER,
+  ) {
+    const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { id: true, created_by: true, organization: { select: { id: true } } },
+      select: {
+        id: true,
+        created_by: true,
+        organization: { select: { id: true } },
+      },
     });
     if (!ticket) {
       throw new BadRequestException('Ticket not found');
     }
 
     // Access control: Organization admins can only add notes to tickets they created
-    const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+    const isOrganizationAdmin =
+      user.role === 'organization_admin' ||
+      user.role === 'organization_super_admin';
     if (isOrganizationAdmin) {
       if (user.role === 'organization_admin' && ticket.created_by !== user.id) {
-        throw new ForbiddenException('You can only add notes to tickets you created');
+        throw new ForbiddenException(
+          'You can only add notes to tickets you created',
+        );
       }
       if (user.role === 'organization_super_admin') {
         // Allow if ticket belongs to their organization OR if they created it
-        if (ticket.organization?.id !== user.organization_id && ticket.created_by !== user.id) {
-          throw new ForbiddenException('You can only add notes to tickets from your organization or tickets you created');
+        if (
+          ticket.organization?.id !== user.organization_id &&
+          ticket.created_by !== user.id
+        ) {
+          throw new ForbiddenException(
+            'You can only add notes to tickets from your organization or tickets you created',
+          );
         }
       }
     }
 
     if ((dto.is_internal ?? false) && !this.isSystemAdmin(user)) {
-      throw new ForbiddenException('Only system admins can create internal notes');
+      throw new ForbiddenException(
+        'Only system admins can create internal notes',
+      );
     }
 
     const prismaAny = this.prisma as any;
@@ -735,7 +863,15 @@ export class TicketService {
           is_internal: dto.is_internal ?? false,
         },
         include: {
-          USER: { select: { id: true, first_name: true, last_name: true, email: true, role: true } },
+          USER: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              role: true,
+            },
+          },
         },
       });
     } else {
@@ -797,7 +933,10 @@ export class TicketService {
           });
         }
       } catch (err) {
-        console.warn('[notifications] ticket-note email failed', err?.message || err);
+        console.warn(
+          '[notifications] ticket-note email failed',
+          err?.message || err,
+        );
       }
     }
 
@@ -805,24 +944,37 @@ export class TicketService {
   }
 
   async listNotes(ticketId: string, user: USER) {
-    const ticket = await this.prisma.ticket.findUnique({ 
+    const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { id: true, created_by: true, organization: { select: { id: true } } },
+      select: {
+        id: true,
+        created_by: true,
+        organization: { select: { id: true } },
+      },
     });
     if (!ticket) {
       throw new BadRequestException('Ticket not found');
     }
 
     // Access control: Organization admins can only view notes for tickets they created
-    const isOrganizationAdmin = user.role === 'organization_admin' || user.role === 'organization_super_admin';
+    const isOrganizationAdmin =
+      user.role === 'organization_admin' ||
+      user.role === 'organization_super_admin';
     if (isOrganizationAdmin) {
       if (user.role === 'organization_admin' && ticket.created_by !== user.id) {
-        throw new ForbiddenException('You can only view notes for tickets you created');
+        throw new ForbiddenException(
+          'You can only view notes for tickets you created',
+        );
       }
       if (user.role === 'organization_super_admin') {
         // Allow if ticket belongs to their organization OR if they created it
-        if (ticket.organization?.id !== user.organization_id && ticket.created_by !== user.id) {
-          throw new ForbiddenException('You can only view notes for tickets from your organization or tickets you created');
+        if (
+          ticket.organization?.id !== user.organization_id &&
+          ticket.created_by !== user.id
+        ) {
+          throw new ForbiddenException(
+            'You can only view notes for tickets from your organization or tickets you created',
+          );
         }
       }
     }
@@ -839,7 +991,15 @@ export class TicketService {
         },
         orderBy: { created_at: 'asc' },
         include: {
-          USER: { select: { id: true, first_name: true, last_name: true, email: true, role: true } },
+          USER: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              role: true,
+            },
+          },
         },
       });
     } else {
@@ -865,7 +1025,8 @@ export class TicketService {
 
     return notes.map((n) => ({
       ...n,
-      author_name: `${n.USER?.first_name ?? ''} ${n.USER?.last_name ?? ''}`.trim(),
+      author_name:
+        `${n.USER?.first_name ?? ''} ${n.USER?.last_name ?? ''}`.trim(),
       author_role: n.USER?.role ?? null,
     }));
   }

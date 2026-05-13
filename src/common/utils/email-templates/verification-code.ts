@@ -1,6 +1,11 @@
 import { EmailTheme } from './theme';
 
-export default function getVerificationCodeTemplate(verificationCode: string, theme?: EmailTheme, isBerryVirtual?: boolean, verificationUrl?: string) {
+export default function getVerificationCodeTemplate(
+  verificationCode: string,
+  theme?: EmailTheme,
+  isBerryVirtual?: boolean,
+  verificationUrl?: string,
+) {
   const primaryColor = theme?.primaryColor || '#01546B';
   const companyName = theme?.companyName || 'MedVirtual';
 
@@ -154,11 +159,15 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
         Here is your verification code. Just enter the code below to easily and securely verify your account :)
       </div>
 
-      ${isBerryVirtual ? `
+      ${
+        isBerryVirtual
+          ? `
       <div style="background-color: #FD7171; color: white; padding: 12px; border-radius: 8px; margin: 20px 0; text-align: center; font-weight: 600; font-size: 14px;">
         <strong>Berry virtual account</strong>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
 
       <div class="code-box">
         <div class="code-label">
@@ -169,13 +178,17 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
         </p>
       </div>
       
-      ${verificationUrl ? `
+      ${
+        verificationUrl
+          ? `
       <div style="text-align: left; margin: 30px 0;">
         <a href="${verificationUrl}" class="cta-button">
           Verify Account
         </a>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
       
         <strong>⏰ Important:</strong> This code will expire in 10 minutes for security reasons.
       

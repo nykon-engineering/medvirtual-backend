@@ -17,17 +17,34 @@ export class ListReviewCasesDto {
   @Min(1)
   limit?: number;
 
-  @ApiPropertyOptional({ description: 'Filter by review case status', enum: ['open', 'resolved'] })
+  @ApiPropertyOptional({
+    description: 'Filter by review case status',
+    enum: ['open', 'resolved'],
+  })
   @IsOptional()
   @IsIn(['open', 'resolved'])
   status?: 'open' | 'resolved';
 
-  @ApiPropertyOptional({ description: 'Filter by reason code', enum: ['multiple_hubspot_matches', 'reconciliation_invoice_changed', 'soft_duplicate_referral'] })
+  @ApiPropertyOptional({
+    description: 'Filter by reason code',
+    enum: [
+      'multiple_hubspot_matches',
+      'reconciliation_invoice_changed',
+      'soft_duplicate_referral',
+    ],
+  })
   @IsOptional()
-  @IsIn(['multiple_hubspot_matches', 'reconciliation_invoice_changed', 'soft_duplicate_referral'])
+  @IsIn([
+    'multiple_hubspot_matches',
+    'reconciliation_invoice_changed',
+    'soft_duplicate_referral',
+  ])
   reason_code?: string;
 
-  @ApiPropertyOptional({ description: 'Search by company name or other relevant text', example: 'Acme' })
+  @ApiPropertyOptional({
+    description: 'Search by company name or other relevant text',
+    example: 'Acme',
+  })
   @IsOptional()
   @IsString()
   search?: string;

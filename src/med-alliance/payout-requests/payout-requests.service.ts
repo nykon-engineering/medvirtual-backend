@@ -7,7 +7,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { AffiliatesService } from '../affiliates/affiliates.service';
-import { AdminCreatePayoutRequestDto, CreatePayoutRequestDto } from './dto/create-payout-request.dto';
+import {
+  AdminCreatePayoutRequestDto,
+  CreatePayoutRequestDto,
+} from './dto/create-payout-request.dto';
 import {
   AddPayoutNoteDto,
   CancelPayoutRequestDto,
@@ -109,7 +112,11 @@ function computeRiskFlags(
     affiliate_id: string;
   },
   allRequestedIds: Set<string>,
-): { has_duplicate_risk: boolean; has_missing_banking: boolean; is_aging: boolean } {
+): {
+  has_duplicate_risk: boolean;
+  has_missing_banking: boolean;
+  is_aging: boolean;
+} {
   const ageMs = Date.now() - new Date(request.createdAt).getTime();
   const ageDays = ageMs / (1000 * 60 * 60 * 24);
 
@@ -137,16 +144,23 @@ function shapeAdminRequest(raw: any, allRequestedIds?: Set<string>) {
       organization_id: c.commission.organization?.id ?? null,
       organization_name: c.commission.organization?.name ?? null,
       base_amount: parseFloat(c.commission.base_amount_snapshot ?? '0'),
-      commission_percentage: parseFloat(c.commission.commission_percent_snapshot ?? '0'),
+      commission_percentage: parseFloat(
+        c.commission.commission_percent_snapshot ?? '0',
+      ),
       commission_amount: parseFloat(c.commission.commission_amount ?? '0'),
       decision: mapCommissionStatus(c.commission.status),
       rejection_reason: c.commission.admin_decision_reason ?? null,
-      invoice_status: c.commission.hubspotInvoiceSnapshot?.invoice_status ?? null,
-      invoice_amount: parseFloat(String(c.commission.hubspotInvoiceSnapshot?.invoice_amount ?? '0')),
+      invoice_status:
+        c.commission.hubspotInvoiceSnapshot?.invoice_status ?? null,
+      invoice_amount: parseFloat(
+        String(c.commission.hubspotInvoiceSnapshot?.invoice_amount ?? '0'),
+      ),
       created_at: c.commission.createdAt ?? null,
     })),
     requested_amount: parseFloat(raw.requested_amount ?? '0'),
-    approved_amount: raw.approved_amount ? parseFloat(raw.approved_amount) : null,
+    approved_amount: raw.approved_amount
+      ? parseFloat(raw.approved_amount)
+      : null,
     paid_amount: raw.paid_amount ? parseFloat(raw.paid_amount) : null,
     requested_at: raw.createdAt,
     updated_at: raw.updatedAt,
@@ -210,7 +224,9 @@ export class PayoutRequestsService {
   // Affiliate: submit a new payout request.
   // ---------------------------------------------------------------------------
   async create(dto: CreatePayoutRequestDto, currentUser: USER) {
-    const profile = await this.affiliatesService.requireActiveProfile(currentUser.id);
+    const profile = await this.affiliatesService.requireActiveProfile(
+      currentUser.id,
+    );
 
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: dto.commission_ids } },
@@ -223,12 +239,18 @@ export class PayoutRequestsService {
     });
 
     if (commissions.length !== dto.commission_ids.length) {
-      throw new BadRequestException('One or more commission IDs were not found');
+      throw new BadRequestException(
+        'One or more commission IDs were not found',
+      );
     }
 
-    const foreignCommission = commissions.find((c) => c.affiliate_id !== currentUser.id);
+    const foreignCommission = commissions.find(
+      (c) => c.affiliate_id !== currentUser.id,
+    );
     if (foreignCommission) {
-      throw new BadRequestException('One or more commissions do not belong to your account');
+      throw new BadRequestException(
+        'One or more commissions do not belong to your account',
+      );
     }
 
     const nonEligible = commissions.find((c) => c.status !== 'eligible');
@@ -243,7 +265,8 @@ export class PayoutRequestsService {
       new Decimal(0),
     );
 
-    const paymentMethod = dto.payment_method ?? profile.payout_preference_method ?? null;
+    const paymentMethod =
+      dto.payment_method ?? profile.payout_preference_method ?? null;
 
     const payoutRequest = await this.prisma.$transaction(async (tx) => {
       const request = await tx.affiliatePayoutRequest.create({
@@ -326,11 +349,18 @@ export class PayoutRequestsService {
     // 2. Validate commissions exist, belong to that affiliate, and are eligible
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: dto.commission_ids } },
-      select: { id: true, affiliate_id: true, status: true, commission_amount: true },
+      select: {
+        id: true,
+        affiliate_id: true,
+        status: true,
+        commission_amount: true,
+      },
     });
 
     if (commissions.length !== dto.commission_ids.length) {
-      throw new BadRequestException('One or more commission IDs were not found');
+      throw new BadRequestException(
+        'One or more commission IDs were not found',
+      );
     }
 
     const foreignCommission = commissions.find(
@@ -426,7 +456,9 @@ export class PayoutRequestsService {
       select: { id: true, user_id: true, payout_preference_method: true },
     });
     if (!profile) {
-      throw new NotFoundException(`Affiliate profile not found: ${affiliateProfileId}`);
+      throw new NotFoundException(
+        `Affiliate profile not found: ${affiliateProfileId}`,
+      );
     }
     if (!profile.user_id) {
       throw new BadRequestException(
@@ -437,14 +469,23 @@ export class PayoutRequestsService {
 
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: commissionIds } },
-      select: { id: true, affiliate_id: true, status: true, commission_amount: true },
+      select: {
+        id: true,
+        affiliate_id: true,
+        status: true,
+        commission_amount: true,
+      },
     });
 
     if (commissions.length !== commissionIds.length) {
-      throw new BadRequestException('One or more commission IDs were not found');
+      throw new BadRequestException(
+        'One or more commission IDs were not found',
+      );
     }
 
-    const foreignCommission = commissions.find((c) => c.affiliate_id !== affiliateUserId);
+    const foreignCommission = commissions.find(
+      (c) => c.affiliate_id !== affiliateUserId,
+    );
     if (foreignCommission) {
       throw new BadRequestException(
         'One or more commissions do not belong to this affiliate',
@@ -610,8 +651,10 @@ export class PayoutRequestsService {
     // B6: amount range filter
     if (amount_min !== undefined || amount_max !== undefined) {
       where.requested_amount = {};
-      if (amount_min !== undefined) where.requested_amount.gte = new Decimal(amount_min);
-      if (amount_max !== undefined) where.requested_amount.lte = new Decimal(amount_max);
+      if (amount_min !== undefined)
+        where.requested_amount.gte = new Decimal(amount_min);
+      if (amount_max !== undefined)
+        where.requested_amount.lte = new Decimal(amount_max);
     }
     // B6: full-text search on affiliate name / email
     if (search) {
@@ -638,17 +681,24 @@ export class PayoutRequestsService {
     // B4: build set of affiliate_ids with multiple active requested requests (duplicate risk)
     const affiliateIds = rows.map((r: any) => r.affiliate_id);
     const duplicateSet = new Set(
-      affiliateIds.filter((id: string, i: number) => affiliateIds.indexOf(id) !== i),
+      affiliateIds.filter(
+        (id: string, i: number) => affiliateIds.indexOf(id) !== i,
+      ),
     );
 
     let data = rows.map((r: any) => shapeAdminRequest(r, duplicateSet));
 
     // B6: post-filter risk_flag (computed field — can't filter in SQL)
-    if (risk_flag === 'duplicate') data = data.filter((r: any) => r.has_duplicate_risk);
-    if (risk_flag === 'missing_banking') data = data.filter((r: any) => r.has_missing_banking);
+    if (risk_flag === 'duplicate')
+      data = data.filter((r: any) => r.has_duplicate_risk);
+    if (risk_flag === 'missing_banking')
+      data = data.filter((r: any) => r.has_missing_banking);
     if (risk_flag === 'aging') data = data.filter((r: any) => r.is_aging);
 
-    return { data, pagination: { page, limit, total: risk_flag ? data.length : total } };
+    return {
+      data,
+      pagination: { page, limit, total: risk_flag ? data.length : total },
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -733,7 +783,7 @@ export class PayoutRequestsService {
           status: newStatus,
           approved_amount:
             dto.decision === 'approved'
-              ? dto.approved_amount ?? request.requested_amount
+              ? (dto.approved_amount ?? request.requested_amount)
               : null,
           approved_by: adminUser.id,
           approved_at: new Date(),
@@ -808,7 +858,9 @@ export class PayoutRequestsService {
     const paidAt = dto.paid_at ? new Date(dto.paid_at) : new Date();
     const paidAmount =
       dto.paid_amount ??
-      parseFloat(String(request.approved_amount ?? request.requested_amount ?? 0));
+      parseFloat(
+        String(request.approved_amount ?? request.requested_amount ?? 0),
+      );
     const txRef = dto.transaction_reference ?? dto.payment_reference ?? null;
     const commissionIds = request.commissions.map((c) => c.commission_id);
 
@@ -823,8 +875,10 @@ export class PayoutRequestsService {
           transaction_reference: txRef,
           payment_proof_notes: dto.payment_proof_notes ?? null,
           // Ensure approved fields are set if coming from under_review directly
-          approved_by: request.status === 'under_review' ? adminUser.id : undefined,
-          approved_at: request.status === 'under_review' ? new Date() : undefined,
+          approved_by:
+            request.status === 'under_review' ? adminUser.id : undefined,
+          approved_at:
+            request.status === 'under_review' ? new Date() : undefined,
         },
       });
 
@@ -868,7 +922,11 @@ export class PayoutRequestsService {
   // Reverts linked commissions from "requested" → "eligible".
   // Idempotent: if already cancelled, returns the request without error.
   // ---------------------------------------------------------------------------
-  async cancelPayoutRequest(id: string, dto: CancelPayoutRequestDto, adminUser: USER) {
+  async cancelPayoutRequest(
+    id: string,
+    dto: CancelPayoutRequestDto,
+    adminUser: USER,
+  ) {
     const request = await this.prisma.affiliatePayoutRequest.findUnique({
       where: { id },
       select: {
@@ -949,7 +1007,11 @@ export class PayoutRequestsService {
   //   rejected     → under_review
   // When reopening from "rejected", linked commissions are reverted to "requested".
   // ---------------------------------------------------------------------------
-  async reopen(id: string, targetStatus: 'requested' | 'under_review', adminUser: USER) {
+  async reopen(
+    id: string,
+    targetStatus: 'requested' | 'under_review',
+    adminUser: USER,
+  ) {
     const request = await this.prisma.affiliatePayoutRequest.findUnique({
       where: { id },
       select: {
@@ -1119,7 +1181,11 @@ export class PayoutRequestsService {
   // ---------------------------------------------------------------------------
   // Admin: update the content of a payout request note.
   // ---------------------------------------------------------------------------
-  async updateNote(payoutRequestId: string, noteId: string, dto: UpdatePayoutNoteDto) {
+  async updateNote(
+    payoutRequestId: string,
+    noteId: string,
+    dto: UpdatePayoutNoteDto,
+  ) {
     const note = await this.prisma.payoutRequestNote.findFirst({
       where: { id: noteId, payout_request_id: payoutRequestId },
     });
