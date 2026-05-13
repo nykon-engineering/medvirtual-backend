@@ -1052,10 +1052,11 @@ export class AffiliatesService {
     /*
     if (profile.status !== 'active')
       throw new ForbiddenException('Affiliate profile is not active');
-    if (!profile.user_id)
-      throw new BadRequestException('Affiliate has no connected user');
     */
-   
+    if (!profile.user_id)
+      throw new BadRequestException('Affiliate has no connected user. Please invite this Partner as user first before associating referred companies.');
+    
+
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
       select: { id: true, referred_by_affiliate_id: true },
