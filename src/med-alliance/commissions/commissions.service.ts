@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
 import {
   DecideCommissionDto,
@@ -14,6 +16,7 @@ import {
   UpdateBaseAmountDto,
 } from './dto/decide-commission.dto';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
+import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
 
 // Terminal statuses — transitions out of these are not allowed.
 const TERMINAL_STATUSES = ['paid', 'void', 'rejected'];
@@ -85,6 +88,8 @@ const PAYOUT_LINKAGE_SELECT = {
 
 @Injectable()
 export class CommissionsService {
+  private readonly logger = new Logger(CommissionsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ---------------------------------------------------------------------------
@@ -528,6 +533,212 @@ export class CommissionsService {
     });
 
     return updated;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: manually create commissions from selected paid HubSpot invoices.
+  // Applies the same business guards as CommissionDetectionService.run() but
+  // always sets status to 'pending_admin_confirmation' since the admin is
+  // explicitly initiating the creation (no 30-day hold needed).
+  // ---------------------------------------------------------------------------
+  async createFromInvoices(
+    affiliateProfileId: string,
+    invoiceIds: string[],
+    adminUser: USER,
+  ): Promise<{ created: number; skipped: number }> {
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateProfileId },
+      select: { id: true, user_id: true, status: true, commission_percent_default: true },
+    });
+    if (!profile) throw new NotFoundException('Affiliate profile not found');
+    if (profile.status !== 'active')
+      throw new ForbiddenException('Affiliate profile is not active');
+    if (!profile.user_id)
+      throw new ForbiddenException('Affiliate has no connected user');
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const invoiceId of invoiceIds) {
+      const snapshot = await this.prisma.hubspotInvoiceSnapshot.findUnique({
+        where: { id: invoiceId },
+        select: {
+          id: true,
+          hubspot_id: true,
+          organization_id: true,
+          invoice_status: true,
+          invoice_amount: true,
+          payment_status: true,
+          paid_at: true,
+        },
+      });
+
+      if (!snapshot) {
+        this.logger.warn(`Invoice snapshot ${invoiceId} not found — skipping`);
+        skipped++;
+        continue;
+      }
+
+      // Re-validate invoice eligibility.
+      const isEligibleInvoice =
+        snapshot.invoice_status === 'paid' &&
+        new Decimal(snapshot.invoice_amount).gt(0) &&
+        (snapshot.payment_status === null || snapshot.payment_status === 'succeeded');
+
+      if (!isEligibleInvoice) {
+        this.logger.warn(`Invoice snapshot ${invoiceId} failed eligibility check — skipping`);
+        skipped++;
+        continue;
+      }
+
+      // Load the related organization and apply business guards.
+      const org = await this.prisma.organization.findUnique({
+        where: { id: snapshot.organization_id },
+        select: {
+          id: true,
+          referred_by_affiliate_id: true,
+          med_alliance_block_reason: true,
+          med_alliance_referral_status: true,
+          eligibility_start_at: true,
+          first_paid_invoice_at: true,
+          referral_stage: true,
+          createdAt: true,
+        },
+      });
+
+      if (!org || org.referred_by_affiliate_id !== profile.user_id) {
+        this.logger.warn(`Invoice ${invoiceId}: org not found or not referred by this affiliate — skipping`);
+        skipped++;
+        continue;
+      }
+
+      if (org.med_alliance_block_reason?.startsWith('active_client_block')) {
+        skipped++;
+        continue;
+      }
+
+      if (
+        org.med_alliance_referral_status === 'not_eligible' &&
+        org.first_paid_invoice_at &&
+        org.med_alliance_block_reason?.startsWith('eligibility_expired')
+      ) {
+        skipped++;
+        continue;
+      }
+
+      if (
+        org.med_alliance_referral_status === 'eligible' &&
+        org.eligibility_start_at &&
+        Date.now() - org.eligibility_start_at.getTime() > ONE_YEAR_MS
+      ) {
+        // Expire the eligibility window as a side-effect.
+        await this.prisma.organization.update({
+          where: { id: org.id },
+          data: {
+            med_alliance_referral_status: 'not_eligible',
+            med_alliance_block_reason: 'eligibility_expired: one-year window elapsed',
+          },
+        });
+        skipped++;
+        continue;
+      }
+
+      if (org.referral_stage === 'churned') {
+        skipped++;
+        continue;
+      }
+
+      // Transition to deployed on first paid invoice (idempotent).
+      if (!org.first_paid_invoice_at && org.referral_stage !== 'deployed') {
+        const firstInvoiceDate = snapshot.paid_at ?? new Date();
+        const now = new Date();
+        await this.prisma.organization.update({
+          where: { id: org.id },
+          data: {
+            referral_stage: 'deployed',
+            eligibility_start_at: now,
+            first_paid_invoice_at: firstInvoiceDate,
+            med_alliance_block_reason: null,
+          },
+        });
+        await this.prisma.medAllianceAuditLog.create({
+          data: {
+            entity_type: 'referred_company',
+            entity_id: org.id,
+            event: 'stage_changed',
+            old_status: 'not_eligible',
+            new_status: 'not_eligible',
+            reason: 'First paid invoice — transitioned to deployed stage via manual commission creation',
+            source: 'admin_action',
+            actor_user_id: adminUser.id,
+            metadata: { referral_stage: 'deployed', eligibility_start_at: now.toISOString() } as any,
+          },
+        });
+      }
+
+      const idempotencyKey = buildCommissionIdempotencyKey({
+        affiliateId: profile.user_id,
+        hubspotInvoiceId: snapshot.hubspot_id,
+        paidAt: snapshot.paid_at,
+        baseAmount: snapshot.invoice_amount.toString(),
+        commissionPercent: profile.commission_percent_default.toString(),
+      });
+
+      try {
+        const commissionAmount = new Decimal(snapshot.invoice_amount)
+          .mul(profile.commission_percent_default)
+          .div(100)
+          .toDecimalPlaces(2);
+
+        const commission = await this.prisma.affiliateCommission.create({
+          data: {
+            affiliate_id: profile.user_id,
+            affiliate_profile_id: profile.id,
+            organization_id: snapshot.organization_id,
+            hubspot_invoice_snapshot_id: snapshot.id,
+            commission_percent_snapshot: profile.commission_percent_default,
+            base_amount_snapshot: snapshot.invoice_amount,
+            commission_amount: commissionAmount,
+            status: 'pending_admin_confirmation',
+            idempotency_key: idempotencyKey,
+          },
+          select: { id: true },
+        });
+
+        await this.writeAuditLog({
+          actorUserId: adminUser.id,
+          entityId: commission.id,
+          event: 'manual_commission_created',
+          oldStatus: null,
+          newStatus: 'pending_admin_confirmation',
+          source: 'admin_action',
+          metadata: {
+            organization_id: snapshot.organization_id,
+            hubspot_invoice_id: snapshot.hubspot_id,
+            created_by_admin: adminUser.id,
+          },
+        });
+
+        created++;
+      } catch (err: any) {
+        if (err?.code === 'P2002') {
+          skipped++;
+          continue;
+        }
+        this.logger.error(
+          `Failed to create commission for invoice ${invoiceId}: ${err?.message ?? err}`,
+        );
+        skipped++;
+      }
+    }
+
+    this.logger.log(
+      `Manual commission creation for affiliate ${affiliateProfileId}: created=${created} skipped=${skipped}`,
+    );
+
+    return { created, skipped };
   }
 
   // ---------------------------------------------------------------------------

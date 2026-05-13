@@ -5,6 +5,7 @@ import {
   HttpCode,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CommissionsService } from './commissions.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { AuthGuard } from '../../auth/auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { Roles } from '../../auth/roles.decorator';
@@ -32,13 +34,17 @@ import {
   UnvoidCommissionDto,
   UpdateBaseAmountDto,
 } from './dto/decide-commission.dto';
+import { CreateFromInvoicesDto } from './dto/create-from-invoices.dto';
 
 @ApiTags('med-alliance')
 @ApiBearerAuth()
 @Controller('med-alliance')
 @UseGuards(AuthGuard, RolesGuard)
 export class CommissionsController {
-  constructor(private readonly commissionsService: CommissionsService) {}
+  constructor(
+    private readonly commissionsService: CommissionsService,
+    private readonly invoicesService: InvoicesService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Affiliate routes
@@ -307,6 +313,49 @@ export class CommissionsController {
       status: 200,
       message: 'Commission base amount updated successfully',
       data,
+    };
+  }
+
+  // GET /med-alliance/admin/affiliates/:affiliateId/eligible-invoices
+  // Returns paid HubSpot invoices without commissions for this affiliate.
+  @Get('admin/affiliates/:affiliateId/eligible-invoices')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary: 'List paid invoices without commissions for an affiliate (manual commission creation)',
+  })
+  @ApiParam({ name: 'affiliateId', description: 'AffiliateProfile UUID' })
+  @ApiResponse({ status: 200, description: 'Eligible invoices retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Affiliate profile not found' })
+  @ApiResponse({ status: 403, description: 'Access denied or affiliate is not active' })
+  async getEligibleInvoices(@Param('affiliateId') affiliateId: string) {
+    const data = await this.invoicesService.getEligibleInvoicesForAffiliate(affiliateId);
+    return { status: 200, message: 'Eligible invoices retrieved successfully', data };
+  }
+
+  // POST /med-alliance/admin/affiliates/:affiliateId/commissions/from-invoices
+  // Creates commissions for the selected invoice IDs.
+  @Post('admin/affiliates/:affiliateId/commissions/from-invoices')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary: 'Manually create commissions for an affiliate from selected paid HubSpot invoices',
+  })
+  @ApiParam({ name: 'affiliateId', description: 'AffiliateProfile UUID' })
+  @ApiBody({ type: CreateFromInvoicesDto })
+  @ApiResponse({ status: 200, description: 'Commissions created successfully' })
+  @ApiResponse({ status: 404, description: 'Affiliate profile not found' })
+  @ApiResponse({ status: 403, description: 'Access denied or affiliate is not active' })
+  async createFromInvoices(
+    @Param('affiliateId') affiliateId: string,
+    @Body() dto: CreateFromInvoicesDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const result = await this.commissionsService.createFromInvoices(affiliateId, dto.invoice_ids, admin);
+    return {
+      status: 200,
+      message: `${result.created} commission(s) created, ${result.skipped} skipped`,
+      data: result,
     };
   }
 

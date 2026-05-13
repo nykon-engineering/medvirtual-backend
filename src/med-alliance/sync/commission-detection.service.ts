@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createHash } from 'crypto';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../prisma/prisma.service';
+import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
 
 // One year in milliseconds — used for the eligibility window and referral-age rule.
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
@@ -195,7 +195,7 @@ export class CommissionDetectionService {
     let skipped = 0;
 
     for (const snapshot of candidates) {
-      const idempotencyKey = this.buildIdempotencyKey({
+      const idempotencyKey = buildCommissionIdempotencyKey({
         affiliateId: affiliateUserId,
         hubspotInvoiceId: snapshot.hubspot_id,
         paidAt: snapshot.paid_at,
@@ -345,25 +345,4 @@ export class CommissionDetectionService {
     );
   }
 
-  /**
-   * Builds the SHA-256 idempotency key for a commission.
-   * Composed of: affiliate_id | hubspot_invoice_id | paid_at | base_amount | commission_percent
-   */
-  private buildIdempotencyKey(params: {
-    affiliateId: string;
-    hubspotInvoiceId: string;
-    paidAt: Date | null;
-    baseAmount: string;
-    commissionPercent: string;
-  }): string {
-    const payload = [
-      params.affiliateId,
-      params.hubspotInvoiceId,
-      params.paidAt ? params.paidAt.toISOString() : '',
-      params.baseAmount,
-      params.commissionPercent,
-    ].join('|');
-
-    return createHash('sha256').update(payload).digest('hex');
-  }
 }
