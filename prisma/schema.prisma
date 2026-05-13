@@ -727,6 +727,7 @@ model AffiliateProfile {
   id                          String          @id @default(uuid())
   user_id                     String?         @unique
   hubspot_id                  String?         @unique
+  hubspot_id_before_deletion  String?
   full_name                   String?
   hubspot_pipeline            String?
   hubspot_pipeline_stage      String?

@@ -1017,7 +1017,20 @@ export class AffiliatesService {
     }
 
     if (profile.hubspot_id) {
+      // Growth Partner still exists in HubSpot (deactivated via app) — just update the stage.
       await this.affiliateUpdateService.reactivate(profile.hubspot_id);
+    } else {
+      // Growth Partner was deleted in HubSpot — recreate it with all associations.
+      // Fetch again so execute() receives status='active' for the correct pipeline stage.
+      const updatedProfile = await this.findOne(id);
+      try {
+        await this.affiliateCreationService.execute(updatedProfile);
+      } catch (error) {
+        console.error(
+          '[HubSpot] Failed to recreate Growth Partner on reactivation:',
+          error,
+        );
+      }
     }
   }
 

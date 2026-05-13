@@ -25,6 +25,8 @@ export class HandlerAffiliateDeletion {
           },
           data: {
             status: AffiliateStatus.inactive,
+            hubspot_id_before_deletion: affiliateExists.hubspot_id,
+            hubspot_id: null,
           },
         });
 
@@ -43,9 +45,12 @@ export class HandlerAffiliateDeletion {
           },
           data: {
             status: AffiliateStatus.inactive,
+            hubspot_id_before_deletion: affiliateExists.hubspot_id,
+            hubspot_id: null,
           },
         });
       }
+      
     } catch (error) {
       throw new BadRequestException('Error deleting affiliate', error);
     }
