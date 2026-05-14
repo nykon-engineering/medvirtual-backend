@@ -18,6 +18,6 @@ import { ReviewCasesModule } from '../review-cases/review-cases.module';
     // EligibilityCheckService is used by HubspotMatchingService after a match is resolved
     EligibilityCheckService,
   ],
-  exports: [ReferralSyncService],
+  exports: [ReferralSyncService, InvoiceIngestionService],
 })
 export class SyncModule {}

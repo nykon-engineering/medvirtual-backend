@@ -630,6 +630,18 @@ export class HubspotService {
     return await this.organizationUpdateService.execute(data, actorUserId);
   }
 
+  async setCompanyAffiliateReferral(
+    organizationId: string,
+    affiliateUserId: string,
+    actorUserId?: string,
+  ): Promise<void> {
+    return this.organizationUpdateService.setAffiliateReferral(
+      organizationId,
+      affiliateUserId,
+      actorUserId,
+    );
+  }
+
   async createContactInHubspot(data: any, actorUserId?: string): Promise<any> {
     return await this.contactCreationService.execute(data, actorUserId);
   }

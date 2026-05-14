@@ -652,10 +652,12 @@ export class AffiliatesController {
   async associateCompany(
     @Param('id') id: string,
     @Body() dto: AssociateCompanyDto,
+    @CurrentUser() admin: USER,
   ) {
     const data = await this.affiliatesService.associateCompany(
       id,
       dto.organization_id,
+      admin,
     );
     return { status: 200, message: 'Company associated successfully', data };
   }

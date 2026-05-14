@@ -48,6 +48,15 @@ export class OrganizationCreationService {
     return affiliate && affiliate.hubspot_id ? affiliate.hubspot_id : null;
   }
 
+  async getAffiliateEmail(affiliateUserId: string): Promise<string | null> {
+    if (!affiliateUserId) return null;
+    const user = await this.prisma.uSER.findUnique({
+      where: { id: affiliateUserId },
+      select: { email: true },
+    });
+    return user?.email ?? null;
+  }
+
   async execute(data: any, actorUserId?: string): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -77,6 +86,12 @@ export class OrganizationCreationService {
                 : data.business_unit || '',
             hubspot_owner_id: data.admin_id
               ? await this.getOwnerId(data.admin_id)
+              : undefined,
+            referral_source: data.referred_by_affiliate_id
+              ? 'Referral - Partner'
+              : undefined,
+            referral_partners_email: data.referred_by_affiliate_id
+              ? await this.getAffiliateEmail(data.referred_by_affiliate_id)
               : undefined,
           },
           associations: data.referred_by_affiliate_id
