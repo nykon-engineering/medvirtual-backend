@@ -162,7 +162,7 @@ async function testSyncInvoiceHubspot() {
   }
 
   try {
-    let after: string | undefined = '2400';
+    let after: string | undefined = '0';
     let totalProcessed = 0;
     let totalCreated = 0;
     let totalExisting = 0;
@@ -321,7 +321,7 @@ async function testSyncInvoiceHubspot() {
         const updateBatchSize = 10;
         for (let j = 0; j < configsToUpdate.length; j += updateBatchSize) {
           const updateChunk = configsToUpdate.slice(j, j + updateBatchSize);
-          await Promise.all(updateChunk.map(upd => 
+          await Promise.all(updateChunk.map(upd =>
             prisma.invoiceConfiguration.update({
               where: { id: upd.id },
               data: { hubstaff_id: upd.hubstaff_id }
