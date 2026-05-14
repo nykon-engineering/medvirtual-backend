@@ -385,6 +385,30 @@ export class HubstaffService implements OnModuleInit {
     return allActivities;
   }
 
+  /**
+   * Fetches all members in the organization with pagination support.
+   * API: https://developer.hubstaff.com/docs/hubstaff_v2#tag/members/GET/v2/organizations/{organization_id}/members
+   */
+  public async getOrganizationMembers() {
+    let allMembers: any[] = [];
+    let nextPageStartId: number | undefined = undefined;
+
+    do {
+      const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/organizations/${this.organizationId}/members`, {
+        params: nextPageStartId ? { page_start_id: nextPageStartId } : {},
+      });
+
+      const { members, pagination } = res.data;
+      if (members) {
+        allMembers = allMembers.concat(members);
+      }
+      nextPageStartId = pagination?.next_page_start_id;
+    } while (nextPageStartId);
+
+    return allMembers;
+  }
+
+
 
   public async getHubstaffDailyActivityForInvoice({
     hubstaffId,
