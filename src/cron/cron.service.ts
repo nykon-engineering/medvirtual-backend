@@ -632,7 +632,6 @@ export class CronService {
     failed: number;
     errors: string[];
   }> {
-    console.log('Starting syncGrowthPartnersFromHubspot cron job...');
 
     const createdIds: string[] = [];
     const skippedIds: string[] = [];
@@ -759,9 +758,7 @@ export class CronService {
           const profileExists = await tx.affiliateProfile.findUnique({
             where: { hubspot_id: hubspotId },
           });
-          if (profileExists) {
-            return;
-          }
+          if (profileExists)  return;
 
           await tx.affiliateProfile.create({
             data: {
