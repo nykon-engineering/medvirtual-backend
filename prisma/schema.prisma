@@ -1103,6 +1103,7 @@ enum AffiliateStatus {
   active
   inactive
   invited
+  pending
 }
 
 enum PayoutMethod {

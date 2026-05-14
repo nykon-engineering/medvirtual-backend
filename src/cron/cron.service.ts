@@ -20,6 +20,7 @@ import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
+import { AffiliateStatus } from '@prisma/client';
 
 type Event = {
   objectId?: string;
@@ -754,42 +755,17 @@ export class CronService {
           // Reuse existing USER if the email is already in the system
           let user = await tx.uSER.findUnique({ where: { email } });
 
-          if (!user) {
-            user = await tx.uSER.create({
-              data: {
-                email,
-                first_name: firstName,
-                last_name: lastName,
-                phone: '',
-                avatar: '',
-                organization_name: '',
-                role: 'affiliate',
-                job_title: '',
-                workos_id: '',
-                password: '',
-                authentication_method: 'OwnSign',
-                status: 'invited',
-              },
-            });
-          }
-
           // If user already has a profile, just stamp the hubspot_id if missing
           const profileExists = await tx.affiliateProfile.findUnique({
-            where: { user_id: user.id },
+            where: { hubspot_id: hubspotId },
           });
           if (profileExists) {
-            if (!profileExists.hubspot_id) {
-              await tx.affiliateProfile.update({
-                where: { id: profileExists.id },
-                data: { hubspot_id: hubspotId },
-              });
-            }
             return;
           }
 
           await tx.affiliateProfile.create({
             data: {
-              user_id: user.id,
+              user_id: user ? user.id : null,
               hubspot_id: hubspotId,
               full_name: fullName || null,
               commission_percent_default: props.alliance_commission
@@ -798,7 +774,7 @@ export class CronService {
               hubspot_pipeline: props.hs_pipeline ?? null,
               hubspot_pipeline_stage: props.hs_pipeline_stage ?? null,
               business_unit: props.business_unit ?? null,
-              status: 'invited',
+              status: AffiliateStatus.pending,
             },
           });
         });
