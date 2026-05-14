@@ -108,8 +108,16 @@ export class TalentPoolLeadsController {
     description:
       'Get all talent pool leads with pagination, filtering, and search. Requires admin or marketing role.',
   })
-  @ApiQuery({ name: 'status', required: false, enum: ['new', 'contacted', 'qualified', 'converted', 'rejected'] })
-  @ApiQuery({ name: 'source', required: false, enum: ['talent-pool-page', 'berry-talent-pool-page'] })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['new', 'contacted', 'qualified', 'converted', 'rejected'],
+  })
+  @ApiQuery({
+    name: 'source',
+    required: false,
+    enum: ['talent-pool-page', 'berry-talent-pool-page'],
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   @ApiQuery({ name: 'search', required: false, type: String, example: 'John' })
@@ -218,4 +226,3 @@ export class TalentPoolLeadsController {
     };
   }
 }
-

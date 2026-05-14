@@ -5,7 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MedAllianceReferralStatus, OrganizationStatus, USER } from '@prisma/client';
+import {
+  MedAllianceReferralStatus,
+  OrganizationStatus,
+  USER,
+} from '@prisma/client';
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
@@ -42,7 +46,6 @@ import { HubspotService } from '../../hubspot/hubspot.service';
 import { ContactService } from '../../contacts/contacts.service';
 import axios from 'axios';
 
-
 @Injectable()
 export class ReferredCompaniesService {
   constructor(
@@ -56,8 +59,10 @@ export class ReferredCompaniesService {
     private readonly contactService: ContactService,
   ) {}
 
-
-  async create(dto: CreateReferredCompanyDto | CreateOrganizationDto, currentUser: USER) {
+  async create(
+    dto: CreateReferredCompanyDto | CreateOrganizationDto,
+    currentUser: USER,
+  ) {
     // Step 0: Validation — read-only, no rollback needed.
     await this.affiliatesService.requireActiveProfile(currentUser.id);
 
@@ -65,7 +70,11 @@ export class ReferredCompaniesService {
 
     try {
       // Step 1: Create organization (DB + HubSpot company).
-      const org = await this.organizationService.create(dto, currentUser, currentUser.id);
+      const org = await this.organizationService.create(
+        dto,
+        currentUser,
+        currentUser.id,
+      );
       // Save pre-sync hubspot_id: referralSync (Step 4) may update org.hubspot_id to a matched
       // existing HubSpot company. We keep the original ID so the contact is associated with the
       // company that was just created for this referral, not the matched one.
@@ -77,33 +86,54 @@ export class ReferredCompaniesService {
           select: { hubspot_id: true },
         });
         if (freshOrg?.hubspot_id) {
-          await this.hubspot.deleteCompanyInHubspot(freshOrg.hubspot_id, currentUser.id, org.id).catch((e) =>
-            console.error('[rollback] Failed to delete HubSpot company:', e),
-          );
+          await this.hubspot
+            .deleteCompanyInHubspot(freshOrg.hubspot_id, currentUser.id, org.id)
+            .catch((e) =>
+              console.error('[rollback] Failed to delete HubSpot company:', e),
+            );
         }
         // Delete child records that do NOT cascade on org deletion.
-        await this.prisma.$transaction([
-          this.prisma.affiliateCommission.deleteMany({ where: { organization_id: org.id } }),
-          this.prisma.hubspotInvoiceSnapshot.deleteMany({ where: { organization_id: org.id } }),
-          this.prisma.medAllianceAdminReviewCase.deleteMany({ where: { organization_id: org.id } }),
-        ]).catch((e) => console.error('[rollback] Failed to delete child records:', e));
+        await this.prisma
+          .$transaction([
+            this.prisma.affiliateCommission.deleteMany({
+              where: { organization_id: org.id },
+            }),
+            this.prisma.hubspotInvoiceSnapshot.deleteMany({
+              where: { organization_id: org.id },
+            }),
+            this.prisma.medAllianceAdminReviewCase.deleteMany({
+              where: { organization_id: org.id },
+            }),
+          ])
+          .catch((e) =>
+            console.error('[rollback] Failed to delete child records:', e),
+          );
 
         // Delete audit logs (uses entity_id, not a FK).
-        await this.prisma.medAllianceAuditLog.deleteMany({
-          where: { entity_id: org.id },
-        }).catch((e) => console.error('[rollback] Failed to delete audit logs:', e));
+        await this.prisma.medAllianceAuditLog
+          .deleteMany({
+            where: { entity_id: org.id },
+          })
+          .catch((e) =>
+            console.error('[rollback] Failed to delete audit logs:', e),
+          );
 
         // Finally delete the organization itself.
-        await this.prisma.organization.delete({ where: { id: org.id } }).catch((e) =>
-          console.error('[rollback] Failed to delete organization:', e),
-        );
+        await this.prisma.organization
+          .delete({ where: { id: org.id } })
+          .catch((e) =>
+            console.error('[rollback] Failed to delete organization:', e),
+          );
       });
 
       // Step 2: MA-004 — block if this company is already an active client.
       await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
 
       // Step 3: MA-006 — soft duplicate check.
-      const softDuplicateWarning = await this.checkSoftDuplicate(org.id, dto as CreateReferredCompanyDto);
+      const softDuplicateWarning = await this.checkSoftDuplicate(
+        org.id,
+        dto as CreateReferredCompanyDto,
+      );
 
       // Step 4: MA-005 — HubSpot matching + invoice ingestion + commission detection.
       await this.referralSync.run(org.id);
@@ -118,14 +148,14 @@ export class ReferredCompaniesService {
           referredByAffiliate: {
             select: {
               email: true,
-              affiliateProfile:{
+              affiliateProfile: {
                 select: {
                   id: true,
                   full_name: true,
                   hubspot_id: true,
                   commission_percent_default: true,
                   payout_preference_method: true,
-                }
+                },
               },
               organization: {
                 select: {
@@ -133,7 +163,7 @@ export class ReferredCompaniesService {
                   name: true,
                   email: true,
                   phone: true,
-                }
+                },
               },
             },
           },
@@ -145,10 +175,11 @@ export class ReferredCompaniesService {
               last_name: true,
             },
           },
-        }
+        },
       });
 
-      if (!newOrganization) throw new NotFoundException('Organization not found after creation');
+      if (!newOrganization)
+        throw new NotFoundException('Organization not found after creation');
 
       // Step 6: Create Contact in DB + HubSpot with referral data + associations.
       if (currentUser) {
@@ -156,42 +187,66 @@ export class ReferredCompaniesService {
           const { contact: newContact, hubspotId: hubspotContactId } =
             await this.contactService.createForReferredCompany({
               ...newOrganization,
-              hubspot_id: preReferralSyncHubspotId ?? newOrganization.hubspot_id,
+              hubspot_id:
+                preReferralSyncHubspotId ?? newOrganization.hubspot_id,
             });
           if (newContact) {
             cleanupStack.push(async () => {
-              await this.contactService.deleteById(newContact.id).catch((e) =>
-                console.error('[rollback] Failed to delete DB contact:', e),
-              );
+              await this.contactService
+                .deleteById(newContact.id)
+                .catch((e) =>
+                  console.error('[rollback] Failed to delete DB contact:', e),
+                );
             });
           }
           if (hubspotContactId && typeof hubspotContactId === 'string') {
             cleanupStack.push(async () => {
-              await this.hubspot.deleteContactInHubspot({ hubspot_contact_id: hubspotContactId }, currentUser.id).catch((e) =>
-                console.error('[rollback] Failed to delete HubSpot contact:', e),
-              );
+              await this.hubspot
+                .deleteContactInHubspot(
+                  { hubspot_contact_id: hubspotContactId },
+                  currentUser.id,
+                )
+                .catch((e) =>
+                  console.error(
+                    '[rollback] Failed to delete HubSpot contact:',
+                    e,
+                  ),
+                );
             });
           }
         } catch (hubspotError) {
           const errData = hubspotError?.response?.data || hubspotError;
           if (errData?.category === 'CONFLICT') {
-            console.error('[ReferredCompaniesService.create] HubSpot contact conflict, initiating rollback:', errData);
+            console.error(
+              '[ReferredCompaniesService.create] HubSpot contact conflict, initiating rollback:',
+              errData,
+            );
             await this.executeRollback(cleanupStack);
-            throw new BadRequestException(errData.message || 'Contact already exists in HubSpot');
+            throw new BadRequestException(
+              errData.message || 'Contact already exists in HubSpot',
+            );
           }
           throw hubspotError;
         }
       }
 
-      return softDuplicateWarning ? { ...newOrganization, warning: softDuplicateWarning } : newOrganization;
-
+      return softDuplicateWarning
+        ? { ...newOrganization, warning: softDuplicateWarning }
+        : newOrganization;
     } catch (error) {
       if (error instanceof BadRequestException) {
-        throw new BadRequestException(`The contact already exists with this email.`);
+        throw new BadRequestException(
+          `The contact already exists with this email.`,
+        );
       }
-      console.error('[ReferredCompaniesService.create] Error occurred, initiating rollback:', error);
+      console.error(
+        '[ReferredCompaniesService.create] Error occurred, initiating rollback:',
+        error,
+      );
       await this.executeRollback(cleanupStack);
-      throw new BadRequestException(`Failed to create referred company: ${error.message || 'Unknown error'}`);
+      throw new BadRequestException(
+        `Failed to create referred company: ${error.message || 'Unknown error'}`,
+      );
     }
   }
 
@@ -199,7 +254,9 @@ export class ReferredCompaniesService {
    * Executes the cleanup stack in reverse order (LIFO).
    * Each cleanup function has its own error handling so one failure does not block the rest.
    */
-  private async executeRollback(cleanupStack: Array<() => Promise<void>>): Promise<void> {
+  private async executeRollback(
+    cleanupStack: Array<() => Promise<void>>,
+  ): Promise<void> {
     for (let i = cleanupStack.length - 1; i >= 0; i--) {
       try {
         await cleanupStack[i]();
@@ -245,12 +302,45 @@ export class ReferredCompaniesService {
   }
 
   // ---------------------------------------------------------------------------
+  // Admin: create referral on behalf of an affiliate.
+  // ---------------------------------------------------------------------------
+  async createAdminInitiated(
+    affiliateId: string,
+    dto: CreateReferredCompanyDto,
+  ) {
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateId },
+      select: { id: true, user_id: true, status: true },
+    });
+    if (!profile) throw new NotFoundException('Affiliate profile not found');
+    if (profile.status !== 'active')
+      throw new ForbiddenException('Affiliate profile is not active');
+    if (!profile.user_id)
+      throw new BadRequestException('Affiliate has no connected user');
+
+    const affiliateUser = await this.prisma.uSER.findUnique({
+      where: { id: profile.user_id },
+    });
+    if (!affiliateUser)
+      throw new NotFoundException('Affiliate user account not found');
+
+    return this.create(dto, affiliateUser);
+  }
+
+  // ---------------------------------------------------------------------------
   // Affiliate: list own referred companies.
   // ---------------------------------------------------------------------------
   async findAllForAffiliate(dto: ListReferredCompaniesDto, currentUser: USER) {
-    const { page = 1, limit = 20, search, status, sortBy = 'createdAt', sortOrder = 'desc' } = dto;
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      status,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = dto;
     const skip = (page - 1) * limit;
-    
+
     const where: any = {
       referred_by_affiliate_id: currentUser.id,
     };
@@ -313,16 +403,27 @@ export class ReferredCompaniesService {
       let commission_status: 'none' | 'pending' | 'eligible' | 'paid' = 'none';
       if (comms.some((c) => c.status === 'paid')) {
         commission_status = 'paid';
-      } else if (comms.some((c) => c.status === 'eligible' || c.status === 'requested')) {
+      } else if (
+        comms.some((c) => c.status === 'eligible' || c.status === 'requested')
+      ) {
         commission_status = 'eligible';
-      } else if (comms.some((c) => c.status === 'detected' || c.status === 'pending_admin_confirmation')) {
+      } else if (
+        comms.some(
+          (c) =>
+            c.status === 'detected' ||
+            c.status === 'pending_admin_confirmation',
+        )
+      ) {
         commission_status = 'pending';
       }
 
       const { affiliateCommissions: _, eligibility_start_at, ...rest } = org;
       return {
         ...rest,
-        med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+        med_alliance_referral_status: computeEffectiveStatus(
+          org.med_alliance_referral_status,
+          eligibility_start_at,
+        ),
         my_commissions,
         commission_status,
       };
@@ -344,7 +445,9 @@ export class ReferredCompaniesService {
 
     // Prevent data leak: affiliate can only see their own referrals.
     if (check.referred_by_affiliate_id !== currentUser.id) {
-      throw new ForbiddenException('You do not have access to this referred company');
+      throw new ForbiddenException(
+        'You do not have access to this referred company',
+      );
     }
 
     // Return scoped DTO — only referral-safe fields.
@@ -399,7 +502,10 @@ export class ReferredCompaniesService {
     const { eligibility_start_at, ...rest } = org;
     return {
       ...rest,
-      med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+      med_alliance_referral_status: computeEffectiveStatus(
+        org.med_alliance_referral_status,
+        eligibility_start_at,
+      ),
     };
   }
 
@@ -417,7 +523,7 @@ export class ReferredCompaniesService {
       referral_stage,
       med_alliance_referral_status,
       sortBy = 'createdAt',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
     } = dto;
     const skip = (page - 1) * limit;
 
@@ -435,7 +541,8 @@ export class ReferredCompaniesService {
     if (affiliate_id) where.referred_by_affiliate_id = affiliate_id;
     if (affiliate_user_id) where.referred_by_affiliate_id = affiliate_user_id;
     if (referral_stage) where.referral_stage = referral_stage;
-    if (med_alliance_referral_status) where.med_alliance_referral_status = med_alliance_referral_status;
+    if (med_alliance_referral_status)
+      where.med_alliance_referral_status = med_alliance_referral_status;
 
     const [rawData, total] = await this.prisma.$transaction([
       this.prisma.organization.findMany({
@@ -461,7 +568,12 @@ export class ReferredCompaniesService {
           hubspot_sync_status: true,
           createdAt: true,
           referredByAffiliate: {
-            select: { id: true, first_name: true, last_name: true, email: true },
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+            },
           },
           referToUser: {
             select: { id: true, first_name: true, last_name: true },
@@ -490,11 +602,19 @@ export class ReferredCompaniesService {
         .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
       const has_open_review = (org._count?.adminReviewCases ?? 0) > 0;
 
-      const { affiliateCommissions: _, _count: __, eligibility_start_at, ...rest } = org;
+      const {
+        affiliateCommissions: _,
+        _count: __,
+        eligibility_start_at,
+        ...rest
+      } = org;
       return {
         ...rest,
         eligibility_start_at,
-        med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+        med_alliance_referral_status: computeEffectiveStatus(
+          org.med_alliance_referral_status,
+          eligibility_start_at,
+        ),
         total_paid,
         total_pending,
         has_open_review,
@@ -560,7 +680,13 @@ export class ReferredCompaniesService {
         },
         // Platform users (staff members) linked to this org
         users: {
-          select: { id: true, first_name: true, last_name: true, email: true, role: true },
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+            role: true,
+          },
           orderBy: { first_name: 'asc' },
         },
         // Commission records for this org (all affiliates)
@@ -571,7 +697,12 @@ export class ReferredCompaniesService {
             status: true,
             createdAt: true,
             hubspotInvoiceSnapshot: {
-              select: { hubspot_id: true, invoice_amount: true, invoice_status: true, paid_at: true },
+              select: {
+                hubspot_id: true,
+                invoice_amount: true,
+                invoice_status: true,
+                paid_at: true,
+              },
             },
           },
           orderBy: { createdAt: 'desc' },
@@ -609,7 +740,10 @@ export class ReferredCompaniesService {
     return {
       ...rest,
       eligibility_start_at,
-      med_alliance_referral_status: computeEffectiveStatus(org.med_alliance_referral_status, eligibility_start_at),
+      med_alliance_referral_status: computeEffectiveStatus(
+        org.med_alliance_referral_status,
+        eligibility_start_at,
+      ),
     };
   }
 
@@ -617,13 +751,23 @@ export class ReferredCompaniesService {
   // Admin: update the pipeline stage for a referred company.
   // Starting the deployed stage also starts the 30-day eligibility clock.
   // ---------------------------------------------------------------------------
-  async updateReferralStage(id: string, dto: UpdateReferralStageDto, adminUser: USER) {
+  async updateReferralStage(
+    id: string,
+    dto: UpdateReferralStageDto,
+    adminUser: USER,
+  ) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
-      select: { id: true, referral_stage: true, eligibility_start_at: true, referred_by_affiliate_id: true },
+      select: {
+        id: true,
+        referral_stage: true,
+        eligibility_start_at: true,
+        referred_by_affiliate_id: true,
+      },
     });
     if (!org) throw new NotFoundException('Referred company not found');
-    if (!org.referred_by_affiliate_id) throw new BadRequestException('Not a referred company');
+    if (!org.referred_by_affiliate_id)
+      throw new BadRequestException('Not a referred company');
 
     const dataUpdate: Record<string, unknown> = { referral_stage: dto.stage };
 
@@ -632,7 +776,10 @@ export class ReferredCompaniesService {
       dataUpdate.eligibility_start_at = new Date();
     }
 
-    await this.prisma.organization.update({ where: { id }, data: dataUpdate as any });
+    await this.prisma.organization.update({
+      where: { id },
+      data: dataUpdate as any,
+    });
 
     await this.prisma.medAllianceAuditLog.create({
       data: {
@@ -645,7 +792,11 @@ export class ReferredCompaniesService {
         source: 'admin_action',
         actor_user_id: adminUser.id,
         metadata: dataUpdate.eligibility_start_at
-          ? { eligibility_start_at: (dataUpdate.eligibility_start_at as Date).toISOString() } as any
+          ? ({
+              eligibility_start_at: (
+                dataUpdate.eligibility_start_at as Date
+              ).toISOString(),
+            } as any)
           : undefined,
       },
     });
@@ -654,20 +805,20 @@ export class ReferredCompaniesService {
   }
 
   // Get available referral options for the "referred_to" field when creating a referral (i.e. list of active users to whom the referral can be assigned).
-  async getReferredToOptions(): Promise<any>{
+  async getReferredToOptions(): Promise<any> {
     try {
-      const url = "https://api.hubapi.com/crm/v3/properties/contacts";
+      const url = 'https://api.hubapi.com/crm/v3/properties/contacts';
       const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
       });
-  
+
       const vaTypeProperty = response.data.results.find(
-        (prop) => prop.name === "referred_to"
+        (prop) => prop.name === 'referred_to',
       );
-  
+
       if (!vaTypeProperty) {
         return [];
       }
@@ -691,8 +842,11 @@ export class ReferredCompaniesService {
 
       return availableOwners || [];
     } catch (error) {
-      console.error("Failed to find Referred To options:", error.response?.data || error.message);
-      throw new Error("Failed to find Referred To options");
+      console.error(
+        'Failed to find Referred To options:',
+        error.response?.data || error.message,
+      );
+      throw new Error('Failed to find Referred To options');
     }
   }
 
@@ -702,7 +856,17 @@ export class ReferredCompaniesService {
       const response = await axios.post(
         'https://api.hubapi.com/crm/v3/objects/contacts/search',
         {
-          filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ', value: email.toLowerCase() }] }],
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: 'email',
+                  operator: 'EQ',
+                  value: email.toLowerCase(),
+                },
+              ],
+            },
+          ],
           limit: 1,
           properties: ['email'],
         },

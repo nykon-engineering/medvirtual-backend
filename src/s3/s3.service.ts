@@ -15,15 +15,19 @@ export class S3Service {
   private s3: S3Client;
 
   constructor() {
-    
     this.s3 = new S3Client({
-      region: 'us-east-1'
+      region: 'us-east-1',
     });
   }
 
-  async uploadFile(localFilePath: string, originalFileName: string, bucketName: string): Promise<string> {
+  async uploadFile(
+    localFilePath: string,
+    originalFileName: string,
+    bucketName: string,
+  ): Promise<string> {
     const fileContent = fs.readFileSync(localFilePath);
-    const contentType = mime.lookup(originalFileName) || 'application/octet-stream';
+    const contentType =
+      mime.lookup(originalFileName) || 'application/octet-stream';
 
     const fileName = `${uuidv4()}${extname(originalFileName)}`;
 

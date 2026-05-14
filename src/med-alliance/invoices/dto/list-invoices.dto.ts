@@ -19,7 +19,12 @@ export class ListInvoicesDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ description: 'Items per page', default: 20, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({
+    description: 'Items per page',
+    default: 20,
+    minimum: 1,
+    maximum: 100,
+  })
   @IsOptional()
   @Transform(({ value }) => parseInt(value))
   @IsInt()
@@ -28,41 +33,64 @@ export class ListInvoicesDto {
   limit?: number = 20;
 
   // Filter by raw HubSpot invoice_status (e.g. "paid", "outstanding")
-  @ApiPropertyOptional({ description: 'Filter by HubSpot invoice status', example: 'paid' })
+  @ApiPropertyOptional({
+    description: 'Filter by HubSpot invoice status',
+    example: 'paid',
+  })
   @IsOptional()
   @IsString()
   invoice_status?: string;
 
   // Filter by payment_status when available in the HubSpot contract
-  @ApiPropertyOptional({ description: 'Filter by payment status from the HubSpot contract', example: 'paid' })
+  @ApiPropertyOptional({
+    description: 'Filter by payment status from the HubSpot contract',
+    example: 'paid',
+  })
   @IsOptional()
   @IsString()
   payment_status?: string;
 
   // When true, return only snapshots where is_candidate_input === true
-  @ApiPropertyOptional({ description: 'When true, return only invoices flagged as candidate input', example: true })
+  @ApiPropertyOptional({
+    description: 'When true, return only invoices flagged as candidate input',
+    example: true,
+  })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   candidates_only?: boolean;
 
-  @ApiPropertyOptional({ description: 'Filter invoices paid from this date (ISO date string)', example: '2024-01-01' })
+  @ApiPropertyOptional({
+    description: 'Filter invoices paid from this date (ISO date string)',
+    example: '2024-01-01',
+  })
   @IsOptional()
   @IsDateString()
   paid_at_from?: string;
 
-  @ApiPropertyOptional({ description: 'Filter invoices paid up to this date (ISO date string)', example: '2024-12-31' })
+  @ApiPropertyOptional({
+    description: 'Filter invoices paid up to this date (ISO date string)',
+    example: '2024-12-31',
+  })
   @IsOptional()
   @IsDateString()
   paid_at_to?: string;
 
   // Default: paid_at DESC for idempotency consistency (MA-003 spec).
-  @ApiPropertyOptional({ description: 'Field to sort by', enum: ['paid_at', 'invoice_amount', 'createdAt'], default: 'paid_at' })
+  @ApiPropertyOptional({
+    description: 'Field to sort by',
+    enum: ['paid_at', 'invoice_amount', 'createdAt'],
+    default: 'paid_at',
+  })
   @IsOptional()
   @IsEnum(['paid_at', 'invoice_amount', 'createdAt'])
   sortBy?: string = 'paid_at';
 
-  @ApiPropertyOptional({ description: 'Sort order', enum: ['asc', 'desc'], default: 'desc' })
+  @ApiPropertyOptional({
+    description: 'Sort order',
+    enum: ['asc', 'desc'],
+    default: 'desc',
+  })
   @IsOptional()
   @IsEnum(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';

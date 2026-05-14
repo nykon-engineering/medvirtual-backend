@@ -26,7 +26,7 @@ export class InvoiceIngestionService {
     'hs_payment_status',
     'hs_amount_billed',
     'hs_currency_code',
-    'hs_due_date',       // paid_at equivalent — date payment was settled
+    'hs_due_date', // paid_at equivalent — date payment was settled
     'hs_lastmodifieddate',
   ].join(',');
 
@@ -109,7 +109,9 @@ export class InvoiceIngestionService {
    * Fetches full invoice details for a list of invoice IDs.
    * Batches requests individually — HubSpot's batch read could be used for optimization later.
    */
-  private async fetchInvoiceDetails(invoiceIds: string[]): Promise<InvoiceRecord[]> {
+  private async fetchInvoiceDetails(
+    invoiceIds: string[],
+  ): Promise<InvoiceRecord[]> {
     const records: InvoiceRecord[] = [];
 
     for (const id of invoiceIds) {

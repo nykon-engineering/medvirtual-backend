@@ -61,7 +61,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /generated/prisma
 /lambda-package
 
-#claude
+#agents AI
 .claude/
+.codex/
 AGENTS.md
 CLAUDE.md

@@ -20,7 +20,10 @@ import { AuthInviteUserDto } from './dto/authInviteUser.dto';
 import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
 import getVerificationCodeTemplate from '../common/utils/email-templates/verification-code';
 import InviteSignup from '../common/utils/email-templates/invite-signup';
-import { getUserEmailTheme, isUserBerryVirtual } from '../common/utils/email-templates/theme-helper';
+import {
+  getUserEmailTheme,
+  isUserBerryVirtual,
+} from '../common/utils/email-templates/theme-helper';
 import { AuthSignUpDto } from './dto/authSignUp.dto';
 import { AuthVerifyCodeDtoReturn } from './dto/authVerifyCodeReturn.dto';
 import { AuthinvitedUserSignupDto } from './dto/invitedUserSignup.dto';
@@ -39,7 +42,6 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly affiliateUpdateService: AffiliateUpdateService,
   ) {}
-
 
   private buildFromWithPrefix(from: string): string {
     const isProduction = process.env.ENVIRONMENT === 'PROD';
@@ -158,7 +160,7 @@ export class AuthService {
 
     let affiliateId;
     // lets check if the affiliate is active. If not, we cannot send the affiliate profile id in the response, because the frontend need to know if the affiliate is active or not
-    if (user.affiliateProfile?.id){
+    if (user.affiliateProfile?.id) {
       const affiliate = await this.prisma.affiliateProfile.findUnique({
         where: {
           id: user.affiliateProfile.id,
@@ -169,10 +171,10 @@ export class AuthService {
       });
       if (affiliate?.status !== 'active') {
         affiliateId = null; // Set to null if affiliate is not active
-      }else{
+      } else {
         affiliateId = user.affiliateProfile.id; // Set to the actual ID if affiliate is active
       }
-    }else{
+    } else {
       affiliateId = null; // Ensure affiliateProfile is null if no profile exists
     }
     return {
@@ -242,12 +244,17 @@ export class AuthService {
     // Get user email theme and Berry Virtual status
     const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
     const isBerryVirtual = await isUserBerryVirtual(this.prisma, newUser.id);
-    
+
     // Generate verification URL with Berry Virtual parameter
     const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
-    
+
     // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
+    const emailBody = getVerificationCodeTemplate(
+      code,
+      emailTheme || undefined,
+      isBerryVirtual,
+      verificationUrl,
+    );
     const mailSent = await this.mailService.sendMail({
       from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
       to: data.email,
@@ -412,12 +419,17 @@ export class AuthService {
     // Get user email theme and Berry Virtual status
     const emailTheme = await getUserEmailTheme(this.prisma, user.id);
     const isBerryVirtual = await isUserBerryVirtual(this.prisma, user.id);
-    
+
     // Generate verification URL with Berry Virtual parameter
     const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
-    
+
     // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
+    const emailBody = getVerificationCodeTemplate(
+      code,
+      emailTheme || undefined,
+      isBerryVirtual,
+      verificationUrl,
+    );
     const mailSent = await this.mailService.sendMail({
       from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
       to: user.email,
@@ -431,7 +443,7 @@ export class AuthService {
       },
       tags: [
         { name: 'type', value: 'verification_code' },
-        { name: 'source', value: 'medvirtual' }
+        { name: 'source', value: 'medvirtual' },
       ],
     });
 
@@ -469,8 +481,12 @@ export class AuthService {
   async inviteUser(data: AuthInviteUserDto): Promise<string> {
     const authenticationMethod = 'OwnSign';
 
-    if (data.role != 'system_super_admin' && data.role != 'system_admin' && !data.organizationId){
-      throw new BadRequestException('Organization Id not provided')
+    if (
+      data.role != 'system_super_admin' &&
+      data.role != 'system_admin' &&
+      !data.organizationId
+    ) {
+      throw new BadRequestException('Organization Id not provided');
     }
 
     const user = await this.userService.findByEmail(data.email);
@@ -510,12 +526,15 @@ export class AuthService {
 
     // Send signup link via email
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual'
-      ? `${baseInviteLink}&company=berry`
-      : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+      from: this.buildFromWithPrefix(
+        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      ),
       to: data.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
@@ -548,7 +567,6 @@ export class AuthService {
     return `Invitation sent successfully to ${data.email}`;
   }
 
-
   async reInviteUser(id: string): Promise<string> {
     const userToReInvite = await this.userService.findById(id);
     if (!userToReInvite) {
@@ -568,12 +586,15 @@ export class AuthService {
 
     // Send signup link via email
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual'
-      ? `${baseInviteLink}&company=berry`
-      : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+      from: this.buildFromWithPrefix(
+        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      ),
       to: userToReInvite.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
@@ -711,23 +732,25 @@ export class AuthService {
       where: { id: decodedToken.id },
     });
 
-    const existingAffiliate = await this.prisma.affiliateProfile.findUnique({ 
+    const existingAffiliate = await this.prisma.affiliateProfile.findUnique({
       where: {
-        user_id: decodedToken.id
-      }
-    } )
+        user_id: decodedToken.id,
+      },
+    });
 
-    if (existingAffiliate){
+    if (existingAffiliate) {
       //if the user already have an affiliate profile, I need to set the status to active, because the user just accepted the invite, so the affiliate profile need to be active for the user can receive the commission
       await this.prisma.affiliateProfile.update({
         where: { user_id: decodedToken.id },
         data: {
           status: 'active',
         },
-      })
+      });
 
       if (existingAffiliate.hubspot_id) {
-        await this.affiliateUpdateService.reactivate(existingAffiliate.hubspot_id);
+        await this.affiliateUpdateService.reactivate(
+          existingAffiliate.hubspot_id,
+        );
       }
     }
 

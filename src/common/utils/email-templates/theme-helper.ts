@@ -1,7 +1,10 @@
 import { PrismaService } from '../../../prisma/prisma.service';
 import { getEmailThemeByUserId } from './theme';
 
-export async function isUserBerryVirtual(prisma: PrismaService, userId: string): Promise<boolean> {
+export async function isUserBerryVirtual(
+  prisma: PrismaService,
+  userId: string,
+): Promise<boolean> {
   try {
     // Check if prisma is available and has the required methods
     if (!prisma || !prisma.uSER || !prisma.organization) {
@@ -10,11 +13,11 @@ export async function isUserBerryVirtual(prisma: PrismaService, userId: string):
 
     const user = await prisma.uSER.findUnique({
       where: { id: userId },
-      select: { 
+      select: {
         id: true,
         organization_id: true,
-        role: true
-      }
+        role: true,
+      },
     });
 
     if (!user) {
@@ -36,23 +39,25 @@ export async function isUserBerryVirtual(prisma: PrismaService, userId: string):
         OR: [
           { admin_id: userId },
           { owner_id: userId },
-          { id: user.organization_id }
-        ]
+          { id: user.organization_id },
+        ],
       },
       select: {
         business_unit: true,
-        status: true
-      }
+        status: true,
+      },
     });
 
     // Check if any organization is Berry Virtual and active
-    return organizations.some(org => 
-      org.business_unit === "Berry Virtual" && org.status === 'active'
+    return organizations.some(
+      (org) => org.business_unit === 'Berry Virtual' && org.status === 'active',
     );
   } catch (error) {
     // Only log error if it's not a Prisma initialization error (common in tests)
-    if (!error.message?.includes('Environment variable not found') && 
-        !error.message?.includes('Cannot read properties of undefined')) {
+    if (
+      !error.message?.includes('Environment variable not found') &&
+      !error.message?.includes('Cannot read properties of undefined')
+    ) {
       console.error('Error checking if user is Berry Virtual:', error);
     }
     return false;
@@ -68,11 +73,11 @@ export async function getUserEmailTheme(prisma: PrismaService, userId: string) {
 
     const user = await prisma.uSER.findUnique({
       where: { id: userId },
-      select: { 
+      select: {
         id: true,
         organization_id: true,
-        role: true
-      }
+        role: true,
+      },
     });
 
     if (!user) {
@@ -94,20 +99,22 @@ export async function getUserEmailTheme(prisma: PrismaService, userId: string) {
         OR: [
           { admin_id: userId },
           { owner_id: userId },
-          { id: user.organization_id }
-        ]
+          { id: user.organization_id },
+        ],
       },
       select: {
         business_unit: true,
-        status: true
-      }
+        status: true,
+      },
     });
 
     return getEmailThemeByUserId(userId, organizations);
   } catch (error) {
     // Only log error if it's not a Prisma initialization error (common in tests)
-    if (!error.message?.includes('Environment variable not found') && 
-        !error.message?.includes('Cannot read properties of undefined')) {
+    if (
+      !error.message?.includes('Environment variable not found') &&
+      !error.message?.includes('Cannot read properties of undefined')
+    ) {
       console.error('Error getting user email theme:', error);
     }
     return getEmailThemeByUserId(userId, []);

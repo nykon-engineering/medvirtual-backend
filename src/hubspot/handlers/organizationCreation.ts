@@ -1,104 +1,122 @@
-import { BadRequestException, forwardRef, Inject, Injectable } from "@nestjs/common";
-import axios from "axios";
+import {
+  BadRequestException,
+  forwardRef,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
+import axios from 'axios';
 
-import { organizationToDbDictionary } from "../../common/dictionaries/organization-dictionary";
-import { mapOrganizationToDb } from "../../common/utils/hubspot.util";
-import { OrganizationStatus } from "@prisma/client";
-import { PrismaService } from "../../prisma/prisma.service";
-import { OrganizationService } from "../../organization/organization.service";
-import { organizationIndustryToDbDictionary } from "../../common/dictionaries/organizationIndustry-dictionary";
-
+import { organizationToDbDictionary } from '../../common/dictionaries/organization-dictionary';
+import { mapOrganizationToDb } from '../../common/utils/hubspot.util';
+import { OrganizationStatus } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { OrganizationService } from '../../organization/organization.service';
+import { organizationIndustryToDbDictionary } from '../../common/dictionaries/organizationIndustry-dictionary';
 
 @Injectable()
-
 export class HandlerOrganizationCreation {
-    constructor(
-        private readonly prisma: PrismaService,
-        @Inject(forwardRef (() => OrganizationService))
-        private readonly organizationService: OrganizationService
-    ) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => OrganizationService))
+    private readonly organizationService: OrganizationService,
+  ) {}
 
-    async execute(event){
-        const properties = Object.keys(organizationToDbDictionary).join(',');
-        try{
-            let owner;
-            const getObject = await axios.post('https://api.hubapi.com/crm/v3/objects/companies/search',
+  async execute(event) {
+    const properties = Object.keys(organizationToDbDictionary).join(',');
+    try {
+      let owner;
+      const getObject = await axios.post(
+        'https://api.hubapi.com/crm/v3/objects/companies/search',
+        {
+          filterGroups: [
             {
-            filterGroups: [
+              filters: [
                 {
-                filters: [
-                    {
-                    propertyName: 'hs_object_id',
-                    operator: 'EQ',
-                    value: `${event.objectId}`,
-                    },
-                ],
+                  propertyName: 'hs_object_id',
+                  operator: 'EQ',
+                  value: `${event.objectId}`,
                 },
-            ],
-            properties: properties.split(','),
-            limit: 100,
+              ],
             },
-            {
-            headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-                },
-            }
-            );
-            
-            if (!getObject) throw new BadRequestException('No object data found');
-            if(getObject.data.results[0].properties.business_unit !== 'MedVirtual' && 
-                getObject.data.results[0].properties.business_unit !== 'Berry Virtual') 
-                throw new BadRequestException('Organization is not a client of MedVirtual');
+          ],
+          properties: properties.split(','),
+          limit: 100,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
 
-            const organizationData = mapOrganizationToDb(getObject.data.results[0].properties);
+      if (!getObject) throw new BadRequestException('No object data found');
+      if (
+        getObject.data.results[0].properties.business_unit !== 'MedVirtual' &&
+        getObject.data.results[0].properties.business_unit !== 'Berry Virtual'
+      )
+        throw new BadRequestException(
+          'Organization is not a client of MedVirtual',
+        );
 
-            //console.log('Mapped organization data:', organizationData);
+      const organizationData = mapOrganizationToDb(
+        getObject.data.results[0].properties,
+      );
 
-            const hubspotOwnerId = (organizationData as any).hubspot_owner_id;
-            if (hubspotOwnerId) {
-                //console.log('HubSpot Owner ID found:', hubspotOwnerId);
-                //check if the owner exists in the system
-                owner = await this.prisma.uSER.findUnique({
-                    where: {
-                        hubspot_id: String(hubspotOwnerId)
-                    },
-                    select: {
-                        id: true
-                    }
-                })
-                
-                if (owner) { //if owner exists, update the organization admin with the new owner
-                    organizationData.admin_id = owner.id;
-                }
-                
-            }
+      //console.log('Mapped organization data:', organizationData);
 
-            (organizationData as any).hubspot_owner_id = undefined;
+      const hubspotOwnerId = (organizationData as any).hubspot_owner_id;
+      if (hubspotOwnerId) {
+        //console.log('HubSpot Owner ID found:', hubspotOwnerId);
+        //check if the owner exists in the system
+        owner = await this.prisma.uSER.findUnique({
+          where: {
+            hubspot_id: String(hubspotOwnerId),
+          },
+          select: {
+            id: true,
+          },
+        });
 
-
-            organizationData.status=OrganizationStatus.inactive; // => asked by Pauli on 10-13-2025 because She needs to active them manualy or when this organization has a deal/staff
-            organizationData.email = organizationData.email ?? `emptyemail@${getObject.data.results[0].properties.name}.com`; //=> because the email is required on the database, but on HubSpot can be empty, so I need to put a fake email to create the organization and then update it when the email is filled on HubSpot
-            organizationData.industry = organizationData.industry ? organizationIndustryToDbDictionary[organizationData.industry] ?? organizationData.industry : '';
-
-            const organizationExists = await this.prisma.organization.findUnique({
-                where: {
-                    hubspot_id: String(event.objectId)
-                }
-            })
-            if(organizationExists) throw new BadRequestException('Organization already exists on the database');
-
-            const createOrganization = await this.organizationService.create(organizationData)
-            if (!createOrganization) {
-                throw new BadRequestException('Error creating organization in the database');
-            }
-            return true;
-
-
-        
-        }catch (error) {
-            throw new BadRequestException(`Error fetching object creation organization: ${error.message}`);
+        if (owner) {
+          //if owner exists, update the organization admin with the new owner
+          organizationData.admin_id = owner.id;
         }
-            
+      }
+
+      (organizationData as any).hubspot_owner_id = undefined;
+
+      organizationData.status = OrganizationStatus.inactive; // => asked by Pauli on 10-13-2025 because She needs to active them manualy or when this organization has a deal/staff
+      organizationData.email =
+        organizationData.email ??
+        `emptyemail@${getObject.data.results[0].properties.name}.com`; //=> because the email is required on the database, but on HubSpot can be empty, so I need to put a fake email to create the organization and then update it when the email is filled on HubSpot
+      organizationData.industry = organizationData.industry
+        ? (organizationIndustryToDbDictionary[organizationData.industry] ??
+          organizationData.industry)
+        : '';
+
+      const organizationExists = await this.prisma.organization.findUnique({
+        where: {
+          hubspot_id: String(event.objectId),
+        },
+      });
+      if (organizationExists)
+        throw new BadRequestException(
+          'Organization already exists on the database',
+        );
+
+      const createOrganization =
+        await this.organizationService.create(organizationData);
+      if (!createOrganization) {
+        throw new BadRequestException(
+          'Error creating organization in the database',
+        );
+      }
+      return true;
+    } catch (error) {
+      throw new BadRequestException(
+        `Error fetching object creation organization: ${error.message}`,
+      );
     }
+  }
 }

@@ -12,6 +12,14 @@ import { PayoutRequestsModule } from '../med-alliance/payout-requests/payout-req
 @Module({
   controllers: [CronController],
   providers: [CronService],
-  imports: [PrismaModule, CandidatesModule, HubspotModule, MailModule, HireRequestModule, PositionRateConfigModule, PayoutRequestsModule],
+  imports: [
+    PrismaModule,
+    CandidatesModule,
+    HubspotModule,
+    MailModule,
+    HireRequestModule,
+    PositionRateConfigModule,
+    PayoutRequestsModule,
+  ],
 })
 export class CronModule {}

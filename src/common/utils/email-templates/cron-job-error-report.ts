@@ -1,18 +1,27 @@
 import { EmailHeader, EmailFooter } from './components';
 
-export default function cronJobErrorReport(jobName: string, error: unknown, runAt: Date) {
-    const formatDate = (d: Date) =>
-        d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+export default function cronJobErrorReport(
+  jobName: string,
+  error: unknown,
+  runAt: Date,
+) {
+  const formatDate = (d: Date) =>
+    d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
-    const errorMessage = error instanceof Error
-        ? error.message
-        : String(error);
+  const errorMessage = error instanceof Error ? error.message : String(error);
 
-    const errorStack = error instanceof Error && error.stack
-        ? error.stack
-        : 'No stack trace available';
+  const errorStack =
+    error instanceof Error && error.stack
+      ? error.stack
+      : 'No stack trace available';
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />

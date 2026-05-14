@@ -1,10 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsString,
-  IsOptional,
-  IsIn,
-  IsUUID,
-} from 'class-validator';
+import { IsString, IsOptional, IsIn, IsUUID } from 'class-validator';
 
 export class UpdateTalentPoolLeadDto {
   @ApiProperty({
@@ -16,7 +11,8 @@ export class UpdateTalentPoolLeadDto {
   @IsOptional()
   @IsString()
   @IsIn(['new', 'contacted', 'qualified', 'converted', 'rejected'], {
-    message: 'Status must be one of: new, contacted, qualified, converted, rejected',
+    message:
+      'Status must be one of: new, contacted, qualified, converted, rejected',
   })
   status?: string;
 
@@ -38,4 +34,3 @@ export class UpdateTalentPoolLeadDto {
   @IsUUID()
   assigned_to_user_id?: string;
 }
-

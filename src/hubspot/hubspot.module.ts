@@ -41,7 +41,6 @@ import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationCh
 
 import { HandlerComissionCreation } from './handlers/comissionCreation';
 
-
 import { HireRequestModule } from '../hire-request/hire-request.module';
 
 import { OrganizationCreationService } from './create/Organization';
@@ -62,16 +61,15 @@ import { MailModule } from '../mail/mail.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { HubspotAuditService } from './hubspot-audit.service';
 
-
-
 @Module({
   controllers: [HubspotController],
-  providers: [HubspotService, 
-    HandlerObjectCreation, 
-    HandlerObjectPropertyChange, 
-    HandlerObjectDeletion, 
+  providers: [
+    HubspotService,
+    HandlerObjectCreation,
+    HandlerObjectPropertyChange,
+    HandlerObjectDeletion,
     HandlerObjectMerge,
-    HandlerOrganizationCreation, 
+    HandlerOrganizationCreation,
     HandlerOrganizationPropertyChange,
     HandlerOrganizationDeletion,
     HandlerOrganizationMerge,
@@ -110,13 +108,16 @@ import { HubspotAuditService } from './hubspot-audit.service';
     AffiliateUpdateService,
     HubspotAuditService,
   ],
-  imports: [PrismaModule, 
-    GoogledriveModule, 
+  imports: [
+    PrismaModule,
+    GoogledriveModule,
     MailModule,
-    forwardRef(() => CandidatesModule), 
-    forwardRef(() => OrganizationModule), 
-    forwardRef(() => HireRequestModule) ],
-  exports: [HubspotService,
+    forwardRef(() => CandidatesModule),
+    forwardRef(() => OrganizationModule),
+    forwardRef(() => HireRequestModule),
+  ],
+  exports: [
+    HubspotService,
     HandlerOrganizationCreation,
     HandlerObjectCreation,
     HandlerDealCreation,

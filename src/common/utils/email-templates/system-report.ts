@@ -1,13 +1,18 @@
 import { EmailHeader, EmailFooter } from './components';
 const eye = `${process.env.FRONTEND_URL}/eye.png`;
 
-export default function systemReport(availableCandidates, endorsedCandidates, withoutResume, failedResumeParsing, withoutHeadshot) {
-
+export default function systemReport(
+  availableCandidates,
+  endorsedCandidates,
+  withoutResume,
+  failedResumeParsing,
+  withoutHeadshot,
+) {
   const failedResumeParsingRows = failedResumeParsing
-  .map(candidate => {
-    const candidateName = candidate.first_name
-      ? `${candidate.first_name} ${candidate.last_name ?? ''}`
-      : candidate.name ?? 'N/A';
+    .map((candidate) => {
+      const candidateName = candidate.first_name
+        ? `${candidate.first_name} ${candidate.last_name ?? ''}`
+        : (candidate.name ?? 'N/A');
       return `
         <tr>
           <td style="border: 1px solid #ccc; padding: 8px; text-align: left;">
@@ -29,11 +34,11 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
     })
     .join('');
 
-    const withoutHeadshotRows = withoutHeadshot
-    .map(candidate => {
+  const withoutHeadshotRows = withoutHeadshot
+    .map((candidate) => {
       const candidateName = candidate.first_name
         ? `${candidate.first_name} ${candidate.last_name ?? ''}`
-        : candidate.name ?? 'N/A';
+        : (candidate.name ?? 'N/A');
 
       return `
         <tr>
@@ -52,8 +57,8 @@ export default function systemReport(availableCandidates, endorsedCandidates, wi
       `;
     })
     .join('');
-    
-    console.log('chegou...')
+
+  console.log('chegou...');
 
   return `<!DOCTYPE html>
 <html lang="en">

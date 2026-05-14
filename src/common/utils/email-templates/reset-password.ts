@@ -4,7 +4,7 @@ import { EmailTheme } from './theme';
 export default function getResetPasswordTemplate(
   userName: string,
   resetLink: string,
-  theme?: EmailTheme
+  theme?: EmailTheme,
 ) {
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';

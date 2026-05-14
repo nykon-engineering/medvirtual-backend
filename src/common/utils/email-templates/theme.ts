@@ -7,7 +7,9 @@ export interface EmailTheme {
   companyName: string;
 }
 
-export function getEmailThemeByBusinessUnit(businessUnit: string | null): EmailTheme {
+export function getEmailThemeByBusinessUnit(
+  businessUnit: string | null,
+): EmailTheme {
   switch (businessUnit) {
     case 'Berry Virtual':
       return {
@@ -15,7 +17,7 @@ export function getEmailThemeByBusinessUnit(businessUnit: string | null): EmailT
         primaryColorHover: '#E55A5A',
         secondaryColor: '#F8F9FA',
         accentColor: '#FD7171',
-        companyName: 'Berry Virtual'
+        companyName: 'Berry Virtual',
       };
     case 'MedVirtual':
     default:
@@ -24,19 +26,23 @@ export function getEmailThemeByBusinessUnit(businessUnit: string | null): EmailT
         primaryColorHover: '#013A4F',
         secondaryColor: '#F8F9FA',
         accentColor: '#00B2E2',
-        companyName: 'MedVirtual'
+        companyName: 'MedVirtual',
       };
   }
 }
 
-export function getEmailThemeByUserId(userId: string, organizations: any[]): EmailTheme {
+export function getEmailThemeByUserId(
+  userId: string,
+  organizations: any[],
+): EmailTheme {
   // Find Berry Virtual first, then fallback to any other business_unit
-  const berryVirtualOrg = organizations.find(org =>
-    org.business_unit === "Berry Virtual" && org.status === 'active'
+  const berryVirtualOrg = organizations.find(
+    (org) => org.business_unit === 'Berry Virtual' && org.status === 'active',
   );
 
-  const businessUnit = berryVirtualOrg?.business_unit ??
-    organizations.find(org => org.status === 'active')?.business_unit ??
+  const businessUnit =
+    berryVirtualOrg?.business_unit ??
+    organizations.find((org) => org.status === 'active')?.business_unit ??
     null;
 
   return getEmailThemeByBusinessUnit(businessUnit);

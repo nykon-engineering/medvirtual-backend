@@ -1,7 +1,10 @@
 import { getEmailFooter, getEmailHeader } from './components';
 import { EmailTheme } from './theme';
 
-export default function scheduleInterview(inviteLink: string, theme?: EmailTheme) {
+export default function scheduleInterview(
+  inviteLink: string,
+  theme?: EmailTheme,
+) {
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';

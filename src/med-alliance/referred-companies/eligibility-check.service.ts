@@ -105,7 +105,10 @@ export class EligibilityCheckService {
       // on first paid invoice). Only keep eligible if eligibility_start_at is still set.
       const current = await this.prisma.organization.findUnique({
         where: { id: organizationId },
-        select: { med_alliance_referral_status: true, eligibility_start_at: true },
+        select: {
+          med_alliance_referral_status: true,
+          eligibility_start_at: true,
+        },
       });
       const isActiveWindow =
         current?.med_alliance_referral_status === 'eligible' &&

@@ -10,11 +10,11 @@ import { HubspotModule } from '../hubspot/hubspot.module';
   controllers: [AuthController],
   providers: [AuthService],
   imports: [
-    forwardRef(() =>UserModule),
+    forwardRef(() => UserModule),
     MailModule,
     PrismaModule,
-    forwardRef(() =>HubspotModule),
+    forwardRef(() => HubspotModule),
   ],
-  exports: [AuthService]
+  exports: [AuthService],
 })
 export class AuthModule {}

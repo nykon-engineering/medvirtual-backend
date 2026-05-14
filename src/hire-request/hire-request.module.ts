@@ -10,7 +10,13 @@ import { PositionRateConfigModule } from '../position-rate-config/position-rate-
 @Module({
   controllers: [HireRequestController],
   providers: [HireRequestService],
-  imports: [PrismaModule, NotificationsModule, forwardRef(() => HubspotModule), OpenaiModule, PositionRateConfigModule],
+  imports: [
+    PrismaModule,
+    NotificationsModule,
+    forwardRef(() => HubspotModule),
+    OpenaiModule,
+    PositionRateConfigModule,
+  ],
   exports: [HireRequestService],
 })
 export class HireRequestModule {}

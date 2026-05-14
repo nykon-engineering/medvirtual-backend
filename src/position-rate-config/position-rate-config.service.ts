@@ -51,7 +51,8 @@ export class PositionRateConfigService {
       medVirtual_floor_price_english: dto.medVirtual_floor_price_english,
       berryVirtual_floor_price_english: dto.berryVirtual_floor_price_english,
       medVirtual_floor_price_bilingual: dto.medVirtual_floor_price_bilingual,
-      berryVirtual_floor_price_bilingual: dto.berryVirtual_floor_price_bilingual,
+      berryVirtual_floor_price_bilingual:
+        dto.berryVirtual_floor_price_bilingual,
       medVirtual_margin_per_hour: dto.medVirtual_margin_per_hour,
       berryVirtual_margin_per_hour: dto.berryVirtual_margin_per_hour,
     };

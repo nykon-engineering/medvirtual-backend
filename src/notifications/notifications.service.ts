@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
@@ -10,37 +14,43 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
-  ) { }
-
+  ) {}
 
   // Helper function to decode HTML entities
   private decodeHtmlEntities = (text: string): string => {
-  if (!text) return '';
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, '/')
-    .replace(/&#x2f;/g, '/')
-    .replace(/&#47;/g, '/');
-};
+    if (!text) return '';
+    return text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#x27;/g, "'")
+      .replace(/&#x2F;/g, '/')
+      .replace(/&#x2f;/g, '/')
+      .replace(/&#47;/g, '/');
+  };
 
   /**
-   * 
+   *
    * Builds the correct ticket detail URL based on user role
    * Clients (organization admins) use /profile?ticket=, system admins use /tickets?ticket=
    */
   private getTicketDetailUrl(ticketId: string, userRole?: string): string {
-    const isClient = userRole === 'organization_admin' || userRole === 'organization_super_admin';
+    const isClient =
+      userRole === 'organization_admin' ||
+      userRole === 'organization_super_admin';
     const path = isClient ? '/profile' : '/tickets';
     return `${process.env.FRONTEND_URL}${path}?ticket=${ticketId}`;
   }
 
-  private async sendMailWithPrefix(options: { from: string; to: string | string[]; subject: string; html: string }): Promise<boolean> {
+  private async sendMailWithPrefix(options: {
+    from: string;
+    to: string | string[];
+    subject: string;
+    html: string;
+  }): Promise<boolean> {
     const isProduction = process.env.ENVIRONMENT === 'PROD';
     const from = isProduction ? options.from : `[DEV] ${options.from}`;
     return this.mail.sendMail({ ...options, from });
@@ -186,7 +196,9 @@ export class NotificationsService {
 </html>`;
   }
 
-  async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestPlacementCompleted(
+    hireRequestId: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -230,41 +242,48 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
-   
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
       select: { email: true, first_name: true, last_name: true, id: true },
     });
-    
+
     if (!users || users.length === 0 || !users[0].email)
       throw new BadRequestException('Hire request has no assignee email');
-    
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
     // Get winner candidate name
-    const winners = hr.panels?.[0]?.panelCandidates.length > 0
-      ?
-      hr.panels?.[0].panelCandidates.map(pa =>
-        `<p><div style='margin-left:3px; border-radius:8px; background-color:#CCC; padding:3px;'>
+    const winners =
+      hr.panels?.[0]?.panelCandidates.length > 0
+        ? hr.panels?.[0].panelCandidates
+            .map(
+              (pa) =>
+                `<p><div style='margin-left:3px; border-radius:8px; background-color:#CCC; padding:3px;'>
         <strong>${pa.candidate.name || `${pa.candidate.first_name || ''} ${pa.candidate.last_name || ''}`.trim()}</strong><br/>
         Location: <strong>${pa.candidate.country || 'Location not specified'}</strong>
-        </div></p>`
-      )
-      .join('')
-    : '';
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+        </div></p>`,
+            )
+            .join('')
+        : '';
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const recipients = [
-      ...users.map(user => user.email),
+      ...users.map((user) => user.email),
       hr.assigned_sourcing?.email,
       hr.createdBy?.email,
     ].filter((email): email is string => Boolean(email));
@@ -296,7 +315,7 @@ export class NotificationsService {
             View Hire Request Details
           </a>
         </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -305,7 +324,6 @@ export class NotificationsService {
       subject: `Placement completed: ${hr.title}`,
       html,
     });
-    
   }
 
   async notifyInterviewScheduled(hireRequestId: string): Promise<boolean> {
@@ -354,8 +372,11 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
-   
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
@@ -369,18 +390,24 @@ export class NotificationsService {
       : 'Not specified';
 
     // Get the link and date of the scheduled interview
-    const interviewDate = hr.panels?.[0]?.interviews?.[0]?.scheduled_date
+    const interviewDate = hr.panels?.[0]?.interviews?.[0]?.scheduled_date;
     const interviewLink = hr.panels?.[0]?.interviews?.[0]?.link || '#';
     const interviewDateFormatted = interviewDate
       ? new Date(interviewDate).toLocaleString()
       : 'Not specified';
 
-    const bodyLine = interviewLink !== '#' ? `<p><strong>Pairing Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>` : '';
-    const bodyLink = interviewLink !== '#' ? `<div style="text-align: left; margin: 30px 0;">
+    const bodyLine =
+      interviewLink !== '#'
+        ? `<p><strong>Pairing Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>`
+        : '';
+    const bodyLink =
+      interviewLink !== '#'
+        ? `<div style="text-align: left; margin: 30px 0;">
           <a href="${interviewLink}" class="cta-button">
             Join meeting
           </a>
-        </div>` : '';
+        </div>`
+        : '';
 
     //get all users from organization for send emails to them
     const emailsUsers = await this.prisma.uSER.findMany({
@@ -393,8 +420,9 @@ export class NotificationsService {
       },
     });
 
-
-    const emailTheme = await getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>You have been invited to an <strong>Interview</strong>.</p>
@@ -409,17 +437,20 @@ export class NotificationsService {
        </div>
        
        ${bodyLink}`,
-      emailTheme
+      emailTheme,
     );
     return await this.sendMailWithPrefix({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: emailsUsers.map(u => u.email),
+      to: emailsUsers.map((u) => u.email),
       subject: `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
       html,
     });
   }
 
-  async notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled'): Promise<boolean> {
+  async notifyHireRequestClientChange(
+    hireRequestId: string,
+    action: 'edited' | 'canceled',
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -434,7 +465,10 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
@@ -447,7 +481,9 @@ export class NotificationsService {
     const verb = action === 'edited' ? 'edited' : 'canceled';
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<h2>Hire Request ${verb.toUpperCase()}</h2>
@@ -467,18 +503,21 @@ export class NotificationsService {
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: users.map(user => user.email),
+      to: users.map((user) => user.email),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
     });
   }
 
-  async notifyHireRequestSourcingAssignee(hireRequestId: string, action: 'sourcing'): Promise<boolean> {
+  async notifyHireRequestSourcingAssignee(
+    hireRequestId: string,
+    action: 'sourcing',
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -486,7 +525,9 @@ export class NotificationsService {
         title: true,
         description: true,
         priority: true,
-        assigned_sourcing: { select: { id: true, email: true, first_name: true, last_name: true } },
+        assigned_sourcing: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
         organization: {
           select: { name: true, business_unit: true },
         },
@@ -499,7 +540,9 @@ export class NotificationsService {
     const verb = action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>${hr.assigned_sourcing.first_name ?? hr.assigned_sourcing.first_name} ${hr.assigned_sourcing.last_name ?? hr.assigned_sourcing.last_name}</p>
@@ -519,7 +562,7 @@ export class NotificationsService {
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -530,7 +573,10 @@ export class NotificationsService {
     });
   }
 
-  async notifyHireRequestConciergeAssigned(hireRequestId: string, action: 'for_review'): Promise<boolean> {
+  async notifyHireRequestConciergeAssigned(
+    hireRequestId: string,
+    action: 'for_review',
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -545,7 +591,10 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
@@ -558,7 +607,9 @@ export class NotificationsService {
     const verb = action === 'for_review' ? 'For Review' : action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>${users[0].first_name ?? users[0].first_name}</p>
@@ -579,18 +630,22 @@ export class NotificationsService {
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: users.map(user => user.email).filter(Boolean),
+      to: users.map((user) => user.email).filter(Boolean),
       subject: `Hire Request ${verb}: ${hr.title}`,
       html,
     });
   }
 
-  async notifyHireRequestCreated(hireRequestId: string, type?: string, from?: string): Promise<boolean> {
+  async notifyHireRequestCreated(
+    hireRequestId: string,
+    type?: string,
+    from?: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -619,37 +674,48 @@ export class NotificationsService {
 
     let userIds: string[] = [];
     if (type === 'sourcing') {
-      if (!hr.assigned_sourcing?.email) throw new BadRequestException('Hire request has no assignee email');
+      if (!hr.assigned_sourcing?.email)
+        throw new BadRequestException('Hire request has no assignee email');
       userIds = [hr.assigned_sourcing.id];
     } else if (type === 'staffing_coordinator') {
-      if (!hr.assigned_staffing?.email) throw new BadRequestException('Hire request has no assignee email');
+      if (!hr.assigned_staffing?.email)
+        throw new BadRequestException('Hire request has no assignee email');
       userIds = [hr.assigned_staffing.id];
     } else {
-      if (!hr.assign_user_id) throw new BadRequestException('Hire request has no assignee');
-      userIds = hr.assign_user_id.split(',').map(id => id.trim()).filter(Boolean);
+      if (!hr.assign_user_id)
+        throw new BadRequestException('Hire request has no assignee');
+      userIds = hr.assign_user_id
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
     }
-    if (userIds.length === 0) throw new BadRequestException('No valid user IDs to notify');
+    if (userIds.length === 0)
+      throw new BadRequestException('No valid user IDs to notify');
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
       select: { email: true, first_name: true, last_name: true, id: true },
     });
-    const emails = users.map(u => u.email).filter(Boolean);
-    if (emails.length === 0) throw new BadRequestException('No assignee emails found');
+    const emails = users.map((u) => u.email).filter(Boolean);
+    if (emails.length === 0)
+      throw new BadRequestException('No assignee emails found');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
-      `<p>${users.map(u => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
+      `<p>${users.map((u) => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
       ${type === 'sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : type === 'staffing_coordinator' ? `<p><strong>Staffing Coordinator Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
        <p>You have been assigned ${type === 'sourcing' ? `to source` : type === 'staffing_coordinator' ? `as a staffing coordinator` : `to`} this hire request:</p>
        
@@ -674,7 +740,7 @@ export class NotificationsService {
          </a>
        </div>
        ${from === 'panel_request_flow' ? `<p>This hire request was created from Panel Request Flow.</p>` : ''}`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -685,7 +751,9 @@ export class NotificationsService {
     });
   }
 
-  async notifyHireRequestBackToSourcing(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestBackToSourcing(
+    hireRequestId: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -708,20 +776,23 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    let destin = hr.assigned_sourcing;
-    
+    const destin = hr.assigned_sourcing;
+
     if (!destin?.email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
@@ -748,7 +819,7 @@ export class NotificationsService {
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -791,18 +862,24 @@ export class NotificationsService {
       select: { email: true },
     });
 
-    const emails = orgUsers.map(u => u.email).filter(Boolean);
-    if (emails.length === 0) throw new BadRequestException('No active organization users found to notify');
+    const emails = orgUsers.map((u) => u.email).filter(Boolean);
+    if (emails.length === 0)
+      throw new BadRequestException(
+        'No active organization users found to notify',
+      );
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p><strong>Your candidate panel is ready for review!</strong></p>
@@ -826,7 +903,7 @@ export class NotificationsService {
            View Candidates
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -837,7 +914,7 @@ export class NotificationsService {
     });
   }
 
-  async notifyHireRequestPanelReady(hireRequestId: string,): Promise<boolean> {
+  async notifyHireRequestPanelReady(hireRequestId: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -855,29 +932,32 @@ export class NotificationsService {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
-          select: { 
+          select: {
             name: true,
             business_unit: true,
-           },
+          },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    let destin=hr.assigned_sourcing;
-    
+    const destin = hr.assigned_sourcing;
+
     if (!destin?.email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
     // Get email theme by organization business unit
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
@@ -903,7 +983,7 @@ export class NotificationsService {
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -929,7 +1009,10 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
@@ -941,7 +1024,9 @@ export class NotificationsService {
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>${users[0].first_name ?? users[0].first_name} ${users[0].last_name ?? users[0].last_name}</p>
@@ -961,18 +1046,18 @@ export class NotificationsService {
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: users.map(user => user.email),
+      to: users.map((user) => user.email),
       subject: `New candidates in Hire Request: ${hr.title}`,
       html,
     });
   }
 
-    async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -992,11 +1077,21 @@ export class NotificationsService {
             name: true,
             business_unit: true,
             admin: {
-              select: { id: true, email: true, first_name: true, last_name: true }
+              select: {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+              },
             },
             owner: {
-              select: { id: true, email: true, first_name: true, last_name: true }
-            }
+              select: {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+              },
+            },
           },
         },
         panels: {
@@ -1049,8 +1144,9 @@ export class NotificationsService {
 
     // Combine all recipients and remove duplicates
     const allRecipients = [...organizationAdmins, ...additionalRecipients];
-    const uniqueRecipients = allRecipients.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
+    const uniqueRecipients = allRecipients.filter(
+      (recipient, index, self) =>
+        index === self.findIndex((r) => r.email === recipient.email),
     );
 
     if (uniqueRecipients.length === 0) {
@@ -1058,9 +1154,10 @@ export class NotificationsService {
     }
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
@@ -1068,10 +1165,14 @@ export class NotificationsService {
     // Get winner candidate name
     const winnerCandidate = hr.panels?.[0]?.panelCandidates?.[0]?.candidate;
     const winnerName = winnerCandidate
-      ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
+      ? winnerCandidate.name ||
+        `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() ||
+        'Unknown'
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>Your hire request has been completed.</p>
@@ -1094,11 +1195,11 @@ export class NotificationsService {
            Review Hire Request
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
     const results = this.sendMailWithPrefix({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: uniqueRecipients.map(r => r.email),
+      to: uniqueRecipients.map((r) => r.email),
       subject: `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
       html,
     });
@@ -1107,7 +1208,9 @@ export class NotificationsService {
     return results;
   }
 
-  async notifyHireRequestAwaitingDecision(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestAwaitingDecision(
+    hireRequestId: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -1156,8 +1259,9 @@ export class NotificationsService {
     });
 
     // Remove duplicates by email
-    const uniqueRecipients = organizationAdmins.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
+    const uniqueRecipients = organizationAdmins.filter(
+      (recipient, index, self) =>
+        index === self.findIndex((r) => r.email === recipient.email),
     );
 
     if (uniqueRecipients.length === 0) {
@@ -1180,7 +1284,9 @@ export class NotificationsService {
         })
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = getEmailThemeByBusinessUnit(
+      hr.organization.business_unit,
+    );
 
     const html = this.buildEmail(
       `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
@@ -1194,11 +1300,11 @@ export class NotificationsService {
           Review Hire Request
         </a>
       </div>`,
-      emailTheme
+      emailTheme,
     );
     const results = this.sendMailWithPrefix({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: uniqueRecipients.map(r => r.email),
+      to: uniqueRecipients.map((r) => r.email),
       subject: `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
       html,
     });
@@ -1208,7 +1314,10 @@ export class NotificationsService {
   }
   // ======== Tickets ========
 
-  async notifyTicketStatusChangeToCreator(ticket: any, newStatus: 'in_progress' | 'resolved' | 'closed'): Promise<boolean> {
+  async notifyTicketStatusChangeToCreator(
+    ticket: any,
+    newStatus: 'in_progress' | 'resolved' | 'closed',
+  ): Promise<boolean> {
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     // Only notify the creator
@@ -1245,11 +1354,13 @@ export class NotificationsService {
       }
     }
 
-    if (!creatorEmail) throw new BadRequestException('Ticket creator has no email');
+    if (!creatorEmail)
+      throw new BadRequestException('Ticket creator has no email');
 
     // Filter: Only send to clients (organization admins) if ticket type is "Support"
     // System admins always receive notifications for all ticket types
-    const isSystemAdmin = creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
+    const isSystemAdmin =
+      creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
     const isClient = !isSystemAdmin; // Organization admins are considered clients
     const ticketType = ticket.type?.toLowerCase();
     const isSupportTicket = ticketType === 'support';
@@ -1263,14 +1374,18 @@ export class NotificationsService {
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme
-    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+    const emailTheme = emailThemeUserId
+      ? await getUserEmailTheme(this.prisma, emailThemeUserId)
+      : null;
 
     // Format status for display
     const statusDisplay = newStatus.replace('_', ' ').toUpperCase();
 
     // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
     const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
-    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+    const descriptionLabel = isReferralTicket
+      ? 'Candidate Details'
+      : 'Description';
 
     // Parse Referral ticket description format
     let descriptionContent = '';
@@ -1301,7 +1416,7 @@ export class NotificationsService {
          <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
          <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -1349,11 +1464,13 @@ export class NotificationsService {
       }
     }
 
-    if (!creatorEmail) throw new BadRequestException('Ticket creator has no email');
+    if (!creatorEmail)
+      throw new BadRequestException('Ticket creator has no email');
 
     // Filter: Only send to clients (organization admins) if ticket type is "Support"
     // System admins always receive notifications for all ticket types
-    const isSystemAdmin = creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
+    const isSystemAdmin =
+      creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
     const isClient = !isSystemAdmin; // Organization admins are considered clients
     const ticketType = ticket.type?.toLowerCase();
     const isSupportTicket = ticketType === 'support';
@@ -1367,11 +1484,15 @@ export class NotificationsService {
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme
-    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+    const emailTheme = emailThemeUserId
+      ? await getUserEmailTheme(this.prisma, emailThemeUserId)
+      : null;
 
     // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
     const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
-    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+    const descriptionLabel = isReferralTicket
+      ? 'Candidate Details'
+      : 'Description';
 
     // Parse Referral ticket description format
     let descriptionContent = '';
@@ -1402,7 +1523,7 @@ export class NotificationsService {
          <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
          <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
     return await this.sendMailWithPrefix({
@@ -1413,8 +1534,10 @@ export class NotificationsService {
     });
   }
 
-  async notifyTicketEvent(ticket: any, event: 'created' | 'assigned' | 'updated' | 'resolved' | 'closed'): Promise<boolean> {
-
+  async notifyTicketEvent(
+    ticket: any,
+    event: 'created' | 'assigned' | 'updated' | 'resolved' | 'closed',
+  ): Promise<boolean> {
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     // Get ticket type early to check if it's Support
@@ -1457,7 +1580,9 @@ export class NotificationsService {
         select: { id: true, email: true, role: true },
       });
       if (creator?.email) {
-        const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
+        const isSystemAdmin =
+          creator.role === 'system_admin' ||
+          creator.role === 'system_super_admin';
         // Only add creator if ticket is Support OR creator is system admin
         if (isSupportTicket || isSystemAdmin) {
           recipients.push({ email: creator.email, isSystemAdmin });
@@ -1476,7 +1601,9 @@ export class NotificationsService {
           select: { id: true, email: true, role: true },
         });
         if (creator?.email) {
-          const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
+          const isSystemAdmin =
+            creator.role === 'system_admin' ||
+            creator.role === 'system_super_admin';
           // Only add creator if ticket is Support OR creator is system admin
           if (isSupportTicket || isSystemAdmin) {
             recipients.push({ email: creator.email, isSystemAdmin });
@@ -1488,15 +1615,21 @@ export class NotificationsService {
 
     // Assignee (kept for backwards compatibility)
     // Only add assignee if it's different from creator
-    if (ticket.user?.email && (!createdById || ticket.user.id !== createdById)) {
-      const isSystemAdmin = ticket.user.role === 'system_admin' || ticket.user.role === 'system_super_admin';
+    if (
+      ticket.user?.email &&
+      (!createdById || ticket.user.id !== createdById)
+    ) {
+      const isSystemAdmin =
+        ticket.user.role === 'system_admin' ||
+        ticket.user.role === 'system_super_admin';
       recipients.push({ email: ticket.user.email, isSystemAdmin });
       emailThemeUserId = emailThemeUserId || ticket.user.id;
     }
 
     // Remove duplicates but keep system admin flag
-    const uniqueRecipients = recipients.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
+    const uniqueRecipients = recipients.filter(
+      (recipient, index, self) =>
+        index === self.findIndex((r) => r.email === recipient.email),
     );
 
     // Filter: For status change events (resolved, closed), only send to clients if ticket type is "Support"
@@ -1507,33 +1640,48 @@ export class NotificationsService {
     let filteredRecipients = uniqueRecipients;
     if (isStatusChangeEvent && !isSupportTicket) {
       // Filter out client recipients (non-system-admins) for non-Support ticket status changes
-      filteredRecipients = uniqueRecipients.filter(recipient => recipient.isSystemAdmin);
+      filteredRecipients = uniqueRecipients.filter(
+        (recipient) => recipient.isSystemAdmin,
+      );
     }
 
     // Always notify fixed email for Support tickets
-    if (isSupportTicket && !filteredRecipients.some(r => r.email === 'pauli@regenta.ai')) {
-      filteredRecipients = [...filteredRecipients, { email: 'pauli@regenta.ai', isSystemAdmin: true }];
+    if (
+      isSupportTicket &&
+      !filteredRecipients.some((r) => r.email === 'pauli@regenta.ai')
+    ) {
+      filteredRecipients = [
+        ...filteredRecipients,
+        { email: 'pauli@regenta.ai', isSystemAdmin: true },
+      ];
     }
 
-    if (filteredRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
+    if (filteredRecipients.length === 0)
+      throw new BadRequestException('Ticket has no recipient email');
 
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme (based on creator or assignee, in that order)
-    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+    const emailTheme = emailThemeUserId
+      ? await getUserEmailTheme(this.prisma, emailThemeUserId)
+      : null;
 
     // Get ticket type display name
-    const ticketTypeDisplay = ticketTypeReverseDictionary[ticket.type] || ticket.type;
+    const ticketTypeDisplay =
+      ticketTypeReverseDictionary[ticket.type] || ticket.type;
 
     // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
     const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
-    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+    const descriptionLabel = isReferralTicket
+      ? 'Candidate Details'
+      : 'Description';
 
     // Build staff member name (only name, no email)
     const staffName = ticket.staff?.candidate?.name?.trim() || null;
 
     // Build candidate name if available
-    const candidateName = ticket.candidate?.name?.trim() ||
+    const candidateName =
+      ticket.candidate?.name?.trim() ||
       (ticket.candidate?.first_name && ticket.candidate?.last_name
         ? `${ticket.candidate.first_name} ${ticket.candidate.last_name}`.trim()
         : null);
@@ -1541,7 +1689,7 @@ export class NotificationsService {
     // Send emails to each recipient with appropriate formatting
     const emailPromises = filteredRecipients.map(async (recipient) => {
       const isSystemAdmin = recipient.isSystemAdmin;
-      
+
       // Get recipient role to build correct URL
       const recipientUser = await this.prisma.uSER.findUnique({
         where: { email: recipient.email },
@@ -1562,7 +1710,11 @@ export class NotificationsService {
         let emailTitle = '';
         let emailSubject = '';
 
-        if (ticketTypeDisplay === 'Bonus' && staffName && ticket.organization?.name) {
+        if (
+          ticketTypeDisplay === 'Bonus' &&
+          staffName &&
+          ticket.organization?.name
+        ) {
           emailTitle = `Bonus Ticket Created for ${ticket.organization.name}`;
           emailSubject = `Bonus Ticket Created for ${ticket.organization.name}`;
         } else if (ticketTypeDisplay === 'Bonus' && staffName) {
@@ -1616,11 +1768,11 @@ export class NotificationsService {
              <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
              <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
            </div>`,
-          emailTheme
+          emailTheme,
         );
 
         return this.sendMailWithPrefix({
-          from: `${isSystemAdmin ? 'MedVirtual' : (emailTheme?.companyName || 'MedVirtual')} <noreply@medvirtual.ai>`,
+          from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
           subject: emailSubject,
           html,
@@ -1661,11 +1813,11 @@ export class NotificationsService {
              <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
              <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
            </div>`,
-          emailTheme
+          emailTheme,
         );
 
         return this.sendMailWithPrefix({
-          from: `${isSystemAdmin ? 'MedVirtual' : (emailTheme?.companyName || 'MedVirtual')} <noreply@medvirtual.ai>`,
+          from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
           subject: `Ticket ${event}: ${ticket.title}`,
           html,
@@ -1677,12 +1829,21 @@ export class NotificationsService {
     const results = await Promise.all(emailPromises);
 
     // Return true if at least one email was sent successfully
-    return results.some(result => result === true);
+    return results.some((result) => result === true);
   }
 
-
-
-  async notifyTicketNoteAddedToAssignee(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
+  async notifyTicketNoteAddedToAssignee(
+    ticketId: string,
+    note: {
+      content: string;
+      author?: {
+        id?: string;
+        first_name?: string;
+        last_name?: string;
+        email?: string;
+      };
+    },
+  ): Promise<boolean> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
       select: {
@@ -1715,7 +1876,9 @@ export class NotificationsService {
 
     const emailTheme = await getUserEmailTheme(this.prisma, ticket.user.id);
 
-    const authorName = `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() || 'A user';
+    const authorName =
+      `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() ||
+      'A user';
 
     const html = this.buildEmail(
       `<h2>You Received a Response on Your Ticket</h2>
@@ -1747,7 +1910,18 @@ export class NotificationsService {
     });
   }
 
-  async notifyTicketNoteAddedToCreator(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
+  async notifyTicketNoteAddedToCreator(
+    ticketId: string,
+    note: {
+      content: string;
+      author?: {
+        id?: string;
+        first_name?: string;
+        last_name?: string;
+        email?: string;
+      };
+    },
+  ): Promise<boolean> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
       select: {
@@ -1759,19 +1933,29 @@ export class NotificationsService {
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    if (!ticket.created_by) throw new BadRequestException('Ticket has no creator');
+    if (!ticket.created_by)
+      throw new BadRequestException('Ticket has no creator');
 
     const creator = await this.prisma.uSER.findUnique({
       where: { id: ticket.created_by },
-      select: { id: true, email: true, first_name: true, last_name: true, role: true },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+      },
     });
-    if (!creator?.email) throw new BadRequestException('Ticket creator has no email');
+    if (!creator?.email)
+      throw new BadRequestException('Ticket creator has no email');
 
     const detailUrl = this.getTicketDetailUrl(ticket.id, creator.role);
 
     const emailTheme = await getUserEmailTheme(this.prisma, creator.id);
 
-    const authorName = `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() || 'A user';
+    const authorName =
+      `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() ||
+      'A user';
 
     const html = this.buildEmail(
       `<h2>You Received a Response on Your Ticket</h2>
@@ -1833,7 +2017,7 @@ export class NotificationsService {
     let currentField: 'name' | 'email' | 'message' | null = null;
     let messageLines: string[] = [];
 
-    lines.forEach(line => {
+    lines.forEach((line) => {
       const trimmed = line.trim();
 
       if (trimmed.toLowerCase().startsWith('name:')) {
@@ -1873,7 +2057,8 @@ export class NotificationsService {
     }
 
     // Build simple formatted HTML
-    let html = '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">';
+    let html =
+      '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">';
     html += '<h3 style="margin-top: 0; color: #333;">Candidate Details</h3>';
 
     if (parsed.name) {
@@ -1894,5 +2079,3 @@ export class NotificationsService {
     return html;
   }
 }
-
-

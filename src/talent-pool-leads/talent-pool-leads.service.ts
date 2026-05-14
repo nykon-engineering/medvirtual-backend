@@ -18,7 +18,7 @@ export class TalentPoolLeadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
-  ) { }
+  ) {}
 
   /**
    * Check rate limit: maximum 3 submissions per email per day
@@ -49,39 +49,33 @@ export class TalentPoolLeadsService {
   private salesTeamEmails_MedVirtual = [
     'heather@medvirtual.ai',
     'lyndsey@medvirtual.ai',
-     'nilad@medvirtual.ai',
+    'nilad@medvirtual.ai',
     'ava@medvirtual.ai',
     'christina@medvirtual.ai',
-    'vanessa.gudiel@medvirtual.ai'
+    'vanessa.gudiel@medvirtual.ai',
   ];
-  private salesTeamEmails_BerryVirtual =[
-    'kimberly@berryvirtual.ai'
-  ];
+  private salesTeamEmails_BerryVirtual = ['kimberly@berryvirtual.ai'];
 
   private SDRTeamEmails_MedVirtual = [
     'nilad@medvirtual.ai',
     'noel.alcarion@medvirtual.ai',
     'ricky.olivares@medvirtual.ai',
-    'cristie.baldemor@medvirtual.ai'
+    'cristie.baldemor@medvirtual.ai',
   ];
 
-  private SDRTeamEmails_BerryVirtual = [
-  'maureen@berryvirtual.ai'
-  ];
-
+  private SDRTeamEmails_BerryVirtual = ['maureen@berryvirtual.ai'];
 
   async getOwnerId(emailUser: string): Promise<string | null> {
     if (!emailUser) return null;
     const user = await this.prisma.uSER.findUnique({
-    where: { email: emailUser },
-    select: {
+      where: { email: emailUser },
+      select: {
         id: true,
         hubspot_id: true,
         first_name: true,
         last_name: true,
         email: true,
-    },
-
+      },
     });
 
     return user && user.hubspot_id ? user.hubspot_id : null;
@@ -151,7 +145,9 @@ export class TalentPoolLeadsService {
     });
 
     const businessUnit =
-      createDto.source === 'berry-talent-pool-page' ? 'Berry Virtual' : 'MedVirtual';
+      createDto.source === 'berry-talent-pool-page'
+        ? 'Berry Virtual'
+        : 'MedVirtual';
     const normalizedEmail = createDto.email.toLowerCase().trim();
 
     const preExistingOrg = await this.prisma.organization.findFirst({
@@ -230,14 +226,22 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
         },
         include: {
           user: {
-            select: { id: true, email: true, first_name: true, last_name: true, role: true },
+            select: {
+              id: true,
+              email: true,
+              first_name: true,
+              last_name: true,
+              role: true,
+            },
           },
           organization: true,
         },
       });
 
       if (!ticket) {
-        console.warn(`[talent-pool-lead] Failed to create ticket for lead ${lead.id}`);
+        console.warn(
+          `[talent-pool-lead] Failed to create ticket for lead ${lead.id}`,
+        );
       } else {
         try {
           await this.notifications.notifyTicketEvent(ticket, 'assigned');
@@ -259,7 +263,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
             {
               properties: {
                 name: org.name,
-                domain: org.website_url?.replaceAll('&#x2F;','/') || '',
+                domain: org.website_url?.replaceAll('&#x2F;', '/') || '',
                 business_unit: businessUnit,
                 referral_email: normalizedEmail,
                 type: 'PROSPECT',
@@ -326,28 +330,34 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
           } else {
             const isBerry = businessUnit === 'Berry Virtual';
             const hasCandidate = !!createDto.candidate_id;
-            // if we have candidate id, we should use sales team pool, otherwise SDR pool. 
+            // if we have candidate id, we should use sales team pool, otherwise SDR pool.
             // And then pick from Berry or Med pool based on business unit
             const emailPool = hasCandidate
-              ? (isBerry
-                  ? this.salesTeamEmails_BerryVirtual
-                  : this.salesTeamEmails_MedVirtual)
-              : (isBerry
-                  ? this.SDRTeamEmails_BerryVirtual
-                  : this.SDRTeamEmails_MedVirtual);
+              ? isBerry
+                ? this.salesTeamEmails_BerryVirtual
+                : this.salesTeamEmails_MedVirtual
+              : isBerry
+                ? this.SDRTeamEmails_BerryVirtual
+                : this.SDRTeamEmails_MedVirtual;
 
-            ownerEmail = emailPool[Math.floor(Math.random() * emailPool.length)];
+            ownerEmail =
+              emailPool[Math.floor(Math.random() * emailPool.length)];
           }
           //console.log('Selected HubSpot owner email:', ownerEmail);
           const ownerId = await this.getOwnerId(ownerEmail);
 
           const existingCandidate = await this.prisma.candidate.findUnique({
             where: { id: createDto.candidate_id || '' },
-            select: { id: true, first_name: true, last_name: true, approved_positions_pairing: true },
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              approved_positions_pairing: true,
+            },
           });
 
           const selectedCandidateInfo = existingCandidate
-            ? `Candidate: ${existingCandidate.first_name} ${existingCandidate.last_name}\nRole: ${existingCandidate.approved_positions_pairing.map(p => p).join(', ')}`
+            ? `Candidate: ${existingCandidate.first_name} ${existingCandidate.last_name}\nRole: ${existingCandidate.approved_positions_pairing.map((p) => p).join(', ')}`
             : '';
 
           const hubspotContactRes = await axios.post(
@@ -362,14 +372,15 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
                 account_type: accountType,
                 latest_lead_source: 'Website',
                 hubspot_owner_id: ownerId ? ownerId : undefined,
-                ...(createDto.candidate_id ? { 
-                  qualification_status: 'Demo Done',
-                  candidate_selected: 'Yes',
-                  selected_candidate_information: selectedCandidateInfo,
-                 } : {
-                  qualification_status: 'New Leads Day 1',
-                 }),
-
+                ...(createDto.candidate_id
+                  ? {
+                      qualification_status: 'Demo Done',
+                      candidate_selected: 'Yes',
+                      selected_candidate_information: selectedCandidateInfo,
+                    }
+                  : {
+                      qualification_status: 'New Leads Day 1',
+                    }),
               },
               associations: orgHubspotId
                 ? [
@@ -417,7 +428,9 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
                       },
                     },
                   );
-                } catch { /* association is best-effort */ }
+                } catch {
+                  /* association is best-effort */
+                }
               }
             }
           } else {
@@ -507,10 +520,10 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
       assigned_to_user_id: lead.assigned_to_user_id,
       assigned_to_user: lead.assignedTo
         ? {
-          id: lead.assignedTo.id,
-          name: `${lead.assignedTo.first_name} ${lead.assignedTo.last_name}`,
-          email: lead.assignedTo.email,
-        }
+            id: lead.assignedTo.id,
+            name: `${lead.assignedTo.first_name} ${lead.assignedTo.last_name}`,
+            email: lead.assignedTo.email,
+          }
         : null,
       notes: lead.notes,
       created_at: lead.created_at,
@@ -597,10 +610,10 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
       assigned_to_user_id: updatedLead.assigned_to_user_id,
       assigned_to_user: updatedLead.assignedTo
         ? {
-          id: updatedLead.assignedTo.id,
-          name: `${updatedLead.assignedTo.first_name} ${updatedLead.assignedTo.last_name}`,
-          email: updatedLead.assignedTo.email,
-        }
+            id: updatedLead.assignedTo.id,
+            name: `${updatedLead.assignedTo.first_name} ${updatedLead.assignedTo.last_name}`,
+            email: updatedLead.assignedTo.email,
+          }
         : null,
       updated_at: updatedLead.updated_at,
       contacted_at: updatedLead.contacted_at,
@@ -621,4 +634,3 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
       .trim();
   }
 }
-

@@ -15,7 +15,7 @@ export class EmailTestService {
   ) {}
 
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private getTheme(themeName: string): EmailTheme | undefined {
@@ -42,16 +42,20 @@ export class EmailTestService {
     }
   }
 
-  async testVerificationCode(themeName: string, isBerryVirtual: boolean, email: string) {
+  async testVerificationCode(
+    themeName: string,
+    isBerryVirtual: boolean,
+    email: string,
+  ) {
     const theme = this.getTheme(themeName);
     const verificationCode = '123456';
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/signup/verification-code?t=${verificationCode}&berry=${isBerryVirtual ? 'true' : 'false'}`;
-    
+
     const emailBody = getVerificationCodeTemplate(
       verificationCode,
       theme,
       isBerryVirtual,
-      verificationUrl
+      verificationUrl,
     );
 
     try {
@@ -82,7 +86,7 @@ export class EmailTestService {
   async testInviteSignup(themeName: string, email: string) {
     const theme = this.getTheme(themeName);
     const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/signup?token=test-invite-token`;
-    
+
     const emailBody = InviteSignup(inviteLink, theme);
 
     try {
@@ -111,7 +115,7 @@ export class EmailTestService {
   async testResetPassword(themeName: string, email: string) {
     const theme = this.getTheme(themeName);
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/set-password?t=test-reset-token`;
-    
+
     const emailBody = getResetPasswordTemplate('Test User', resetLink, theme);
 
     try {
@@ -139,7 +143,7 @@ export class EmailTestService {
 
   async testNotification(themeName: string, email: string) {
     const theme = this.getTheme(themeName);
-    
+
     const notificationContent = `
       <p>A new hire request has been completed and requires your attention.</p>
       <p><strong>Request Details:</strong></p>
@@ -157,8 +161,11 @@ export class EmailTestService {
     `;
 
     try {
-      const emailBody = (this.notificationsService as any).buildEmail(notificationContent, theme);
-      
+      const emailBody = (this.notificationsService as any).buildEmail(
+        notificationContent,
+        theme,
+      );
+
       await this.mailService.sendMail({
         from: process.env.FROM_EMAIL || 'noreply@medvirtual.ai',
         to: email,
@@ -182,7 +189,11 @@ export class EmailTestService {
 
   async testAllTemplates(themeName: string, email: string) {
     // Send emails with delay to avoid rate limiting (Resend allows 2 requests per second)
-    const verificationCode = await this.testVerificationCode(themeName, themeName === 'berry', email);
+    const verificationCode = await this.testVerificationCode(
+      themeName,
+      themeName === 'berry',
+      email,
+    );
     await this.delay(600); // Wait 600ms between emails
 
     const inviteSignup = await this.testInviteSignup(themeName, email);
@@ -200,15 +211,17 @@ export class EmailTestService {
       notification,
     };
 
-    const allSuccessful = Object.values(results).every(result => result.success);
+    const allSuccessful = Object.values(results).every(
+      (result) => result.success,
+    );
 
     return {
       success: allSuccessful,
-      message: allSuccessful ? 'All email templates sent successfully' : 'Some email templates failed',
+      message: allSuccessful
+        ? 'All email templates sent successfully'
+        : 'Some email templates failed',
       theme: this.getTheme(themeName)?.companyName,
       results,
     };
   }
-
-  
 }

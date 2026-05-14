@@ -98,7 +98,10 @@ export class UserService {
     return users;
   }
 
-  async findUsersByOrganizationByCurrentUser(user: USER, status?: string): Promise<any> {
+  async findUsersByOrganizationByCurrentUser(
+    user: USER,
+    status?: string,
+  ): Promise<any> {
     let whereClause: any = {};
 
     // If user is system_admin, only return users from organizations they admin
@@ -163,15 +166,14 @@ export class UserService {
     search?: string,
     page?: number,
     perPage?: number,
-    ): Promise<any> {
-    
+  ): Promise<any> {
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
     const skip = (page - 1) * perPage;
     const take = perPage;
 
-    let whereClause: any = { 
-      role: { in: ['system_admin', 'system_super_admin'] }  
+    const whereClause: any = {
+      role: { in: ['system_admin', 'system_super_admin'] },
     };
 
     // Add search filter if provided
@@ -203,43 +205,41 @@ export class UserService {
         },
       ];
     }
-    
+
     const [users, total] = await this.prisma.$transaction([
       this.prisma.uSER.findMany({
-      where: whereClause,
-      skip,
-      take,
-      select: {
-        id: true,
-        email: true,
-        first_name: true,
-        last_name: true,
-        job_title: true,
-        role: true,
-        status: true,
-        createdAt: true,
-        sessions:{
-          orderBy: { createdAt: 'desc'},
-          take: 10,
-          select: {
-            id: true,
-            createdAt: true,
-          }
-        }
-      },
-      orderBy: {
-        first_name: 'asc',
-      },
-    }),
-    this.prisma.uSER.count({
-      where: whereClause,
-    }),
-    ])
+        where: whereClause,
+        skip,
+        take,
+        select: {
+          id: true,
+          email: true,
+          first_name: true,
+          last_name: true,
+          job_title: true,
+          role: true,
+          status: true,
+          createdAt: true,
+          sessions: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            select: {
+              id: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: {
+          first_name: 'asc',
+        },
+      }),
+      this.prisma.uSER.count({
+        where: whereClause,
+      }),
+    ]);
 
     if (!users || users.length === 0) {
-      throw new NotFoundException(
-        `No system users found.`,
-      );
+      throw new NotFoundException(`No system users found.`);
     }
 
     return {
@@ -293,9 +293,11 @@ export class UserService {
             specialties: user.organization.specialties || undefined,
             services: user.organization.services || undefined,
             description: user.organization.description || undefined,
-            industry:  user.organization.industry 
-            ? organizationIndustryToDbDictionary[user.organization.industry] || user.organization.industry
-            : undefined,
+            industry: user.organization.industry
+              ? organizationIndustryToDbDictionary[
+                  user.organization.industry
+                ] || user.organization.industry
+              : undefined,
             number_of_employees:
               user.organization.number_of_employees || undefined,
             createdAt: user.organization.createdAt,
@@ -479,9 +481,11 @@ export class UserService {
               specialties: updatedUser.organization.specialties || undefined,
               services: updatedUser.organization.services || undefined,
               description: updatedUser.organization.description || undefined,
-              industry: updatedUser.organization.industry 
-              ? organizationIndustryToDbDictionary[updatedUser.organization.industry] || updatedUser.organization.industry
-              : undefined,
+              industry: updatedUser.organization.industry
+                ? organizationIndustryToDbDictionary[
+                    updatedUser.organization.industry
+                  ] || updatedUser.organization.industry
+                : undefined,
               number_of_employees:
                 updatedUser.organization.number_of_employees || undefined,
               createdAt: updatedUser.organization.createdAt,
@@ -496,7 +500,11 @@ export class UserService {
     }
   }
 
-  async update(id: string, userData: Prisma.USERUpdateInput, actorUserId?: string): Promise<USER> {
+  async update(
+    id: string,
+    userData: Prisma.USERUpdateInput,
+    actorUserId?: string,
+  ): Promise<USER> {
     try {
       let user: Prisma.USERUpdateInput;
       const currentUser = await this.prisma.uSER.findUnique({
@@ -524,14 +532,16 @@ export class UserService {
           ...user,
           hubspot_contact_id: hubspotContactId,
         };
-        await this.hubspotService.updateContactInHubspot(userForHubspot, actorUserId);
+        await this.hubspotService.updateContactInHubspot(
+          userForHubspot,
+          actorUserId,
+        );
       }
 
       return await this.prisma.uSER.update({
         where: { id },
         data: user,
       });
-      
     } catch (error) {
       throw new BadRequestException(`Failed to update user: ${error}`);
     }
@@ -545,7 +555,10 @@ export class UserService {
       }
 
       // Additional safety check: Prevent deletion of kind admins
-      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin' && user.status !== 'invited') {
+      if (
+        (user.role === 'system_super_admin' && user.status !== 'invited') ||
+        (user.role === 'organization_super_admin' && user.status !== 'invited')
+      ) {
         throw new BadRequestException(
           'Cannot delete Admin users for security reasons',
         );
@@ -579,8 +592,11 @@ export class UserService {
       const userForHubspot = {
         ...user,
         hubspot_contact_id: user.hubspot_contact_id,
-      }
-      await this.hubspotService.deleteContactInHubspot(userForHubspot, actorUserId);
+      };
+      await this.hubspotService.deleteContactInHubspot(
+        userForHubspot,
+        actorUserId,
+      );
 
       // Use a transaction to handle all deletions atomically
       return await this.prisma.$transaction(async (tx) => {
@@ -634,9 +650,6 @@ export class UserService {
           where: { id },
         });
       });
-
-      
-
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -666,7 +679,9 @@ export class UserService {
     }
   }
 
-  async searchOrganizationUsers(query: Omit<SearchUsersDto, 'role'>): Promise<any[]> {
+  async searchOrganizationUsers(
+    query: Omit<SearchUsersDto, 'role'>,
+  ): Promise<any[]> {
     const { search, status, organization_id, limit } = query;
 
     const whereClause: Prisma.USERWhereInput = {
@@ -1034,15 +1049,18 @@ export class UserService {
 
       // Get user email theme
       const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
-      
+
       // Send signup link via email
       const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-      const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
-        ? `${baseInviteLink}&company=berry` 
-        : baseInviteLink;
+      const inviteLink =
+        emailTheme?.companyName === 'Berry Virtual'
+          ? `${baseInviteLink}&company=berry`
+          : baseInviteLink;
       const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
-        from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+        from: this.buildFromWithPrefix(
+          `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+        ),
         to: inviteData.email,
         subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
         html: emailBody,
@@ -1073,19 +1091,22 @@ export class UserService {
       }
 
       //create contact in hubspot
-      try{
-          const newUserForHubspot = {
-            ...newUser,
-            organization: {
-              hubspot_id: organization.hubspot_id || '',
-              business_unit: organization.business_unit || '',
-              name: organization.name,
-              admin_id: organization.admin_id || null,
-            },
-          }
+      try {
+        const newUserForHubspot = {
+          ...newUser,
+          organization: {
+            hubspot_id: organization.hubspot_id || '',
+            business_unit: organization.business_unit || '',
+            name: organization.name,
+            admin_id: organization.admin_id || null,
+          },
+        };
 
-          await this.hubspotService.createContactInHubspot(newUserForHubspot, currentUser.id);
-      }catch(err){
+        await this.hubspotService.createContactInHubspot(
+          newUserForHubspot,
+          currentUser.id,
+        );
+      } catch (err) {
         console.error('Error creating contact in Hubspot:', err);
       }
 
@@ -1100,5 +1121,4 @@ export class UserService {
       throw new BadRequestException('Failed to invite user to organization');
     }
   }
-
 }
