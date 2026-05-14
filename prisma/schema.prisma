@@ -402,6 +402,7 @@ model HireRequest {
   hubspot_tasks                     String?
   hubspot_n2_monitors_required      String?
   hubspot_va_shift_hours            String?
+  other_shift_hours                 String?
   hubspot_tools_familiarization     String?
   hubspot_training_request_notes    String?
   hubspot_camera_on_during_shift    String?

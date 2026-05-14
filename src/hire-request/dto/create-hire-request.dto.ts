@@ -195,6 +195,11 @@ export class CreateHireRequestDto {
   @IsOptional()
   hubspot_va_shift_hours: string;
 
+  @ApiProperty({ type: String, description: 'Other Shift Hours (free text)', required: false })
+  @IsString()
+  @IsOptional()
+  other_shift_hours: string;
+
   @ApiProperty({
     type: String,
     description: 'Tools Used by Client',
