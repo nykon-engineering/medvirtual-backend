@@ -4336,12 +4336,21 @@ export class HireRequestService {
                 in: ['selected_by_client', 'blocked'],
               }, //Dont allow get candidates already selected in other panels
             },
+            include: {
+              panel: {
+                include: {
+                  hireRequest: {
+                    select: { title: true },
+                  },
+                },
+              },
+            },
           });
 
           existInOtherPanel &&
             unavailableCandidates.push({
               ...pc.candidate,
-              reason: 'Candidate is already selected in another panel',
+              reason: `Candidate is already selected in panel: ${existInOtherPanel.panel.hireRequest.title}`,
             });
 
           return existInOtherPanel ? null : pc;
