@@ -1,6 +1,8 @@
 import { PrismaClient, OrganizationStatus, OrganizationRole } from '@prisma/client';
 import { Client } from '@hubspot/api-client';
 import * as dotenv from 'dotenv';
+import { sleep } from '../src/common/utils/pacing.util';
+
 
 // Load environment variables from .env file
 dotenv.config();
@@ -162,7 +164,7 @@ async function testSyncInvoiceHubspot() {
   }
 
   try {
-    let after: string | undefined = '0';
+    let after: string | undefined = '10000';
     let totalProcessed = 0;
     let totalCreated = 0;
     let totalExisting = 0;
@@ -332,7 +334,14 @@ async function testSyncInvoiceHubspot() {
 
       totalProcessed += companies.length;
       after = searchResponse.paging?.next?.after;
+
+      if (after) {
+        const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds delay
+        console.log(`⏳ Pacing: Waiting ${delay}ms before next batch...`);
+        await sleep(delay);
+      }
     } while (after);
+
 
     console.log(`\n--------------------------------------------------`);
     console.log(`🏁 Sync completed.`);

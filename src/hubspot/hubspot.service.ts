@@ -6,6 +6,8 @@ import { OrganizationRole, Prisma } from '@prisma/client';
 
 import {  mapHubspotToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
+import { pace } from '../common/utils/pacing.util';
+
 
 import { CandidatesService } from '../candidate/candidates.service';
 
@@ -465,8 +467,11 @@ export class HubspotService {
                 console.log('Candidate created:', result.properties.name);
             }
             
+            // Pace the loop to avoid rate limiting
+            await pace(200); 
         }
         return 'Candidates created successfully';
+
     }
     
     ////=> this service is just a example to read candidates on our database and UPDATE it with the data from hubspot
@@ -584,9 +589,12 @@ export class HubspotService {
             }
             console.log('Candidate updated:', candidate.first_name);
             
+            // Pace the loop to avoid rate limiting
+            await pace(500); 
   
         }
     }
+
 
     //// => This service is just a example to read organizations on our database and UPDATE it with the data from hubspot
     async updateOrganizations(): Promise<any> {
@@ -660,8 +668,11 @@ export class HubspotService {
             
             console.log('Organization updated:', org.name,':=>', organizationData);
   
+            // Pace the loop to avoid rate limiting
+            await pace(500); 
         }
     }
+
 
 
     ////=> this service is just a example to populate our database
@@ -728,9 +739,11 @@ export class HubspotService {
             
             
 
+          await pace(300);
           }
           
           return response;
+
       }catch (error) {
           throw new BadRequestException(`Error fetching candidates: ${error.message}`);
       }
@@ -773,7 +786,10 @@ export class HubspotService {
                 }
 
                 console.log('-------------------------');
+                // Pace the loop
+                await pace(100);
             }
+
 
             return true;
 
