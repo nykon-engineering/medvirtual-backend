@@ -23,6 +23,7 @@ import { getUserEmailTheme } from '../../common/utils/email-templates/theme-help
 import { AffiliateCreationService } from '../../hubspot/create/affiliate';
 import { AffiliateUpdateService } from '../../hubspot/update/affiliate';
 import { HubspotService } from '../../hubspot/hubspot.service';
+import { InvoiceIngestionService } from '../sync/invoice-ingestion.service';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
 import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 
@@ -52,6 +53,7 @@ export class AffiliatesService {
     private readonly affiliateCreationService: AffiliateCreationService,
     private readonly affiliateUpdateService: AffiliateUpdateService,
     private readonly hubspot: HubspotService,
+    private readonly invoiceIngestion: InvoiceIngestionService,
   ) {}
 
   // Shared helper: ensure a user has an active AffiliateProfile.
@@ -1102,6 +1104,15 @@ export class AffiliatesService {
     organizationId: string,
     adminUser: USER,
   ): Promise<void> {
+    const orgData = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { hubspot_id: true },
+    });
+
+    if (orgData?.hubspot_id) {
+      await this.invoiceIngestion.run(organizationId, orgData.hubspot_id);
+    }
+
     const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const now = new Date();

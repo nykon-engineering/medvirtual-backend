@@ -6,6 +6,7 @@ import { MailService } from '../../mail/mail.service';
 import { AffiliateCreationService } from '../../hubspot/create/affiliate';
 import { AffiliateUpdateService } from '../../hubspot/update/affiliate';
 import { HubspotService } from '../../hubspot/hubspot.service';
+import { InvoiceIngestionService } from '../sync/invoice-ingestion.service';
 
 // ---------------------------------------------------------------------------
 // Prisma mock — only the tables touched by AffiliatesService
@@ -38,6 +39,10 @@ const mockAffiliateUpdateService = {
 
 const mockHubspotService = {
   setCompanyAffiliateReferral: jest.fn(),
+};
+
+const mockInvoiceIngestionService = {
+  run: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -91,6 +96,7 @@ describe('AffiliatesService', () => {
         { provide: AffiliateCreationService , useValue: mockAffiliateCreationService },
         { provide: AffiliateUpdateService , useValue: mockAffiliateUpdateService},
         { provide: HubspotService, useValue: mockHubspotService },
+        { provide: InvoiceIngestionService, useValue: mockInvoiceIngestionService },
       ],
     }).compile();
 
