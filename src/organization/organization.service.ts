@@ -864,7 +864,7 @@ export class OrganizationService {
         },
       });
 
-      if (existingOrganization) {
+      if (existingOrganization && data.contact_email !== undefined) {
         throw new BadRequestException(
           `The ${data.contact_email} is main contact of another organization. Please use another email or update the existing organization.`,
         );
