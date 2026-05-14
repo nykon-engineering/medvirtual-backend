@@ -17,6 +17,24 @@ export class OrganizationUpdateService {
     private readonly audit: HubspotAuditService,
   ) {}
 
+  private async getAffiliateHubspotId(affiliateUserId: string): Promise<string | null> {
+    if (!affiliateUserId) return null;
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { user_id: affiliateUserId },
+      select: { hubspot_id: true },
+    });
+    return profile?.hubspot_id ?? null;
+  }
+
+  private async getAffiliateEmail(affiliateUserId: string): Promise<string | null> {
+    if (!affiliateUserId) return null;
+    const user = await this.prisma.uSER.findUnique({
+      where: { id: affiliateUserId },
+      select: { email: true },
+    });
+    return user?.email ?? null;
+  }
+
   async getOwnerId(userId: string): Promise<string | null> {
     if (!userId) return null;
     const user = await this.prisma.uSER.findUnique({
@@ -95,6 +113,88 @@ export class OrganizationUpdateService {
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
       });
+    }
+  }
+
+  async setAffiliateReferral(
+    organizationId: string,
+    affiliateUserId: string,
+    actorUserId?: string,
+  ): Promise<void> {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { hubspot_id: true },
+    });
+    if (!org?.hubspot_id) return;
+
+    const [affiliateEmail, affiliateHubspotId] = await Promise.all([
+      this.getAffiliateEmail(affiliateUserId),
+      this.getAffiliateHubspotId(affiliateUserId),
+    ]);
+
+    const source = actorUserId
+      ? HubspotAuditSource.user_action
+      : HubspotAuditSource.cron;
+
+    try {
+      await axios.patch(
+        `https://api.hubapi.com/crm/v3/objects/companies/${Number(org.hubspot_id)}`,
+        {
+          properties: {
+            referral_source: 'Referral - Partner',
+            referral_partners_email: affiliateEmail ?? '',
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+      void this.audit.log({
+        actorUserId,
+        entityType: HubspotEntityType.organization,
+        entityId: organizationId,
+        hubspotObjectId: org.hubspot_id,
+        hubspotObjectType: 'companies',
+        action: HubspotAuditAction.UPDATE,
+        source,
+        success: true,
+        payload: { fields: ['referral_source', 'referral_partners_email'] },
+      });
+    } catch (error) {
+      void this.audit.log({
+        actorUserId,
+        entityType: HubspotEntityType.organization,
+        entityId: organizationId,
+        hubspotObjectId: org.hubspot_id,
+        hubspotObjectType: 'companies',
+        action: HubspotAuditAction.UPDATE,
+        source,
+        success: false,
+        errorCode: error.response?.status?.toString() ?? error.code,
+        errorMessage: error.message,
+      });
+    }
+
+    if (!affiliateHubspotId) return;
+    try {
+      await axios.put(
+        `https://api.hubapi.com/crm/v4/objects/companies/${Number(org.hubspot_id)}/associations/p20630393_growth_partners/${Number(affiliateHubspotId)}`,
+        [{ associationCategory: 'USER_DEFINED', associationTypeId: 118 }],
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+    } catch (error) {
+      console.error(
+        'Failed to create HubSpot company→affiliate association:',
+        error.response?.data ?? error.message,
+      );
     }
   }
 }

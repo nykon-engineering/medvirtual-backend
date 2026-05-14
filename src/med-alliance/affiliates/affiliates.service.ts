@@ -22,6 +22,7 @@ import { MailService } from '../../mail/mail.service';
 import { getUserEmailTheme } from '../../common/utils/email-templates/theme-helper';
 import { AffiliateCreationService } from '../../hubspot/create/affiliate';
 import { AffiliateUpdateService } from '../../hubspot/update/affiliate';
+import { HubspotService } from '../../hubspot/hubspot.service';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
 import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 
@@ -50,6 +51,7 @@ export class AffiliatesService {
     private readonly mailService: MailService,
     private readonly affiliateCreationService: AffiliateCreationService,
     private readonly affiliateUpdateService: AffiliateUpdateService,
+    private readonly hubspot: HubspotService,
   ) {}
 
   // Shared helper: ensure a user has an active AffiliateProfile.
@@ -1084,6 +1086,12 @@ export class AffiliatesService {
 
     // Backfill: detect existing paid invoices and create commissions retroactively.
     await this._backfillOnAssociation(affiliateId, profile.user_id, organizationId, adminUser);
+
+    void this.hubspot.setCompanyAffiliateReferral(
+      organizationId,
+      profile.user_id,
+      adminUser.id,
+    );
 
     return this.findOne(affiliateId);
   }
