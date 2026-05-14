@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommissionStatus, USER } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
+import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
 import { CreateAffiliateProfileDto } from './dto/create-affiliate-profile.dto';
 import {
   JoinProgramDto,
@@ -1055,20 +1057,15 @@ export class AffiliatesService {
   }
 
   // Admin: associate an existing organization as a referral for this affiliate.
-  async associateCompany(affiliateId: string, organizationId: string) {
+  async associateCompany(affiliateId: string, organizationId: string, adminUser: USER) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateId },
       select: { id: true, user_id: true, status: true },
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
-    
-    /*
-    if (profile.status !== 'active')
-      throw new ForbiddenException('Affiliate profile is not active');
-    */
+
     if (!profile.user_id)
       throw new BadRequestException('Affiliate has no connected user. Please invite this Partner as user first before associating referred companies.');
-    
 
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
@@ -1085,7 +1082,138 @@ export class AffiliatesService {
       data: { referred_by_affiliate_id: profile.user_id },
     });
 
+    // Backfill: detect existing paid invoices and create commissions retroactively.
+    await this._backfillOnAssociation(affiliateId, profile.user_id, organizationId, adminUser);
+
     return this.findOne(affiliateId);
+  }
+
+  private async _backfillOnAssociation(
+    affiliateProfileId: string,
+    affiliateUserId: string,
+    organizationId: string,
+    adminUser: USER,
+  ): Promise<void> {
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const now = new Date();
+
+    const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
+      where: {
+        organization_id: organizationId,
+        invoice_status: 'paid',
+        invoice_amount: { gt: 0 },
+      },
+      select: { id: true, hubspot_id: true, invoice_amount: true, payment_status: true, paid_at: true },
+      orderBy: { paid_at: 'asc' },
+    });
+
+    const candidates = snapshots.filter(
+      (s) => s.payment_status === null || s.payment_status === 'succeeded',
+    );
+
+    if (candidates.length === 0) return;
+
+    const firstInvoiceDate = candidates[0].paid_at ?? now;
+    const daysSinceDeployment = (now.getTime() - firstInvoiceDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    const isExpired = daysSinceDeployment >= 365;
+    const isEligible = !isExpired && daysSinceDeployment >= 30;
+
+    await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        referral_stage: 'deployed',
+        first_paid_invoice_at: firstInvoiceDate,
+        eligibility_start_at: firstInvoiceDate,
+        med_alliance_block_reason: isExpired
+          ? 'eligibility_expired: one-year window elapsed'
+          : null,
+        ...(isEligible && { med_alliance_referral_status: 'eligible' }),
+      },
+    });
+
+    await this.prisma.medAllianceAuditLog.create({
+      data: {
+        entity_type: 'referred_company',
+        entity_id: organizationId,
+        event: 'stage_changed',
+        old_status: 'not_eligible',
+        new_status: isEligible ? 'eligible' : 'not_eligible',
+        reason: 'Company associated by admin — retroactive deployment date set from first paid invoice',
+        source: 'admin_action',
+        actor_user_id: adminUser.id,
+        metadata: {
+          referral_stage: 'deployed',
+          eligibility_start_at: firstInvoiceDate.toISOString(),
+          days_since_first_invoice: Math.floor(daysSinceDeployment),
+          result: isExpired ? 'expired' : isEligible ? 'eligible' : 'stabilization_window',
+        } as any,
+      },
+    });
+
+    if (isExpired) return;
+
+    const affiliateProfile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateProfileId },
+      select: { id: true, commission_percent_default: true, status: true },
+    });
+
+    if (!affiliateProfile || affiliateProfile.status !== 'active') return;
+
+    const commissionStatus = isEligible ? 'pending_admin_confirmation' : 'detected';
+    const auditEvent = isEligible ? 'commission_pending_admin_confirmation' : 'commission_detected';
+
+    for (const snapshot of candidates) {
+      const idempotencyKey = buildCommissionIdempotencyKey({
+        affiliateId: affiliateUserId,
+        hubspotInvoiceId: snapshot.hubspot_id,
+        paidAt: snapshot.paid_at,
+        baseAmount: snapshot.invoice_amount.toString(),
+        commissionPercent: affiliateProfile.commission_percent_default.toString(),
+      });
+
+      try {
+        const commissionAmount = new Decimal(snapshot.invoice_amount)
+          .mul(affiliateProfile.commission_percent_default)
+          .div(100)
+          .toDecimalPlaces(2);
+
+        await this.prisma.affiliateCommission.create({
+          data: {
+            affiliate_id: affiliateUserId,
+            affiliate_profile_id: affiliateProfileId,
+            organization_id: organizationId,
+            hubspot_invoice_snapshot_id: snapshot.id,
+            commission_percent_snapshot: affiliateProfile.commission_percent_default,
+            base_amount_snapshot: snapshot.invoice_amount,
+            commission_amount: commissionAmount,
+            status: commissionStatus as CommissionStatus,
+            idempotency_key: idempotencyKey,
+          },
+        });
+
+        await this.prisma.medAllianceAuditLog.create({
+          data: {
+            entity_type: 'commission',
+            entity_id: idempotencyKey,
+            event: auditEvent,
+            old_status: null,
+            new_status: commissionStatus,
+            reason: 'Created via admin company association backfill',
+            source: 'admin_action',
+            actor_user_id: adminUser.id,
+            metadata: {
+              organization_id: organizationId,
+              hubspot_invoice_id: snapshot.hubspot_id,
+            } as any,
+          },
+        });
+      } catch (err: any) {
+        if (err?.code === 'P2002') continue;
+        console.error(`Backfill commission failed for invoice ${snapshot.id}: ${err?.message}`);
+      }
+    }
   }
 
   // Affiliate: update only payout preferences on own profile.
