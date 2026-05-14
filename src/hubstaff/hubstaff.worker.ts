@@ -26,7 +26,7 @@ export class HubstaffWorker extends WorkerHost {
 
   private async handleSyncMembers() {
     this.logger.log('🚀 Starting Hubstaff members sync...');
-    
+
     try {
       const members = await this.hubstaffService.getOrganizationMembers();
       this.logger.log(`📡 Fetched ${members.length} members from Hubstaff`);
@@ -36,7 +36,7 @@ export class HubstaffWorker extends WorkerHost {
 
       for (const member of members) {
         // member object contains 'email' and 'user_id'
-        const email = member.email;
+        const email = member.user.email;
         const hubstaffUserId = String(member.user_id);
 
         if (!email) {
@@ -51,8 +51,9 @@ export class HubstaffWorker extends WorkerHost {
         if (candidate) {
           await this.prisma.candidate.update({
             where: { id: candidate.id },
-            data: { hubstaff_id: hubstaffUserId },
+            data: { hubstaff_id: hubstaffUserId } as any,
           });
+
           updateCount++;
           this.logger.debug(`✅ Updated candidate ${candidate.id} with Hubstaff ID ${hubstaffUserId}`);
         } else {
