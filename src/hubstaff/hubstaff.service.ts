@@ -398,9 +398,9 @@ export class HubstaffService implements OnModuleInit {
         params: nextPageStartId ? { page_start_id: nextPageStartId } : {},
       });
 
-      const { members, pagination } = res.data;
+      const { members, pagination, users } = res.data;
       if (members) {
-        allMembers = allMembers.concat(members);
+        allMembers = allMembers.concat(members.map(e => ({ ...e, user: users.find(u => u.id === e.user_id) })));
       }
       nextPageStartId = pagination?.next_page_start_id;
     } while (nextPageStartId);
