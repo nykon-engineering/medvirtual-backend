@@ -164,7 +164,7 @@ async function testSyncInvoiceHubspot() {
   }
 
   try {
-    let after: string | undefined = '10000';
+    let after: string | undefined = undefined;
     let totalProcessed = 0;
     let totalCreated = 0;
     let totalExisting = 0;
