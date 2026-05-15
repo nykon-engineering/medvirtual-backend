@@ -65,30 +65,37 @@ export class HandlerInvoiceCreation {
 
       const invoiceData = mapInvoiceToDb(getObject.data.properties);
 
+      let organizationDbId: string | undefined;
       const companyAssociated = getObject.data.associations?.companies;
       if (companyAssociated?.results?.length > 0) {
-        invoiceData.organization_id = companyAssociated.results[0].id;
+        const hubspotCompanyId = String(companyAssociated.results[0].id);
         const organizationExists = await this.prisma.organization.findUnique({
-          where: {
-            hubspot_id: String(invoiceData.organization_id),
-          },
-          select: {
-            id: true,
-            status: true,
-          },
+          where: { hubspot_id: hubspotCompanyId },
+          select: { id: true, status: true },
         });
-        if (organizationExists)
-          invoiceData.organization_id = organizationExists.id;
-        if (organizationExists && organizationExists.status === 'inactive') {
-          await this.prisma.organization.update({
-            where: { id: organizationExists.id },
-            data: { status: 'active' },
-          });
+        if (organizationExists) {
+          organizationDbId = organizationExists.id;
+          if (organizationExists.status === 'inactive') {
+            await this.prisma.organization.update({
+              where: { id: organizationExists.id },
+              data: { status: 'active' },
+            });
+          }
         }
       }
 
+      if (!organizationDbId) {
+        console.log(
+          `Invoice ${event.objectId}: no matching organization found. Skipping.`,
+        );
+        return;
+      }
+
       const invoiceCreated = await this.prisma.hubspotInvoiceSnapshot.create({
-        data: invoiceData,
+        data: {
+          ...invoiceData,
+          organization: { connect: { id: organizationDbId } },
+        },
       });
       if (!invoiceCreated) {
         throw new BadRequestException('Error creating Invoice in the database');

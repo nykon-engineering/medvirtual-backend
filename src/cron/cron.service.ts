@@ -812,7 +812,7 @@ export class CronService {
     });
 
     console.log(
-      `syncInvoicePaymentDates: ${snapshots.length} snapshot(s) with no paid_at`,
+      `syncInvoicePaymentDates: ${snapshots.length} snapshot(s) with paid status`,
     );
 
     let updated = 0;
