@@ -26,6 +26,7 @@ import { HubspotService } from '../../hubspot/hubspot.service';
 import { InvoiceIngestionService } from '../sync/invoice-ingestion.service';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
 import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
+import { organizationIndustryToDbDictionary } from '../../common/dictionaries/organizationIndustry-dictionary';
 
 import * as jwt from 'jsonwebtoken';
 import { MedAllianceInvitation } from '../../common/utils/email-templates/med-alliance-invitation';
@@ -1083,6 +1084,7 @@ export class AffiliatesService {
         contact_email: true,
         med_alliance_referral_status: true,
         eligibility_start_at: true,
+        first_paid_invoice_at: true,
       },
     });
     if (!org) throw new NotFoundException('Organization not found');
@@ -1096,6 +1098,8 @@ export class AffiliatesService {
         invoice_status: true,
         currency: true,
         paid_at: true,
+        createdAt: true,
+        hubspot_pdf_link: true,
       },
       orderBy: { paid_at: 'asc' },
     });
@@ -1127,8 +1131,12 @@ export class AffiliatesService {
     }
 
     return {
+      first_paid_invoice_at: deploymentDate?.toISOString() ?? null,
       organization: {
         ...org,
+        industry: org.industry
+          ? (organizationIndustryToDbDictionary[org.industry] ?? org.industry)
+          : null,
         eligibility_start_at: org.eligibility_start_at?.toISOString() ?? null,
       },
       invoices: invoices.map((i) => ({
@@ -1138,6 +1146,8 @@ export class AffiliatesService {
         invoice_status: i.invoice_status,
         currency: i.currency,
         paid_at: i.paid_at?.toISOString() ?? null,
+        created_at: i.createdAt.toISOString(),
+        hubspot_pdf_link: i.hubspot_pdf_link ?? null,
       })),
       projection: {
         deployment_date: deploymentDate?.toISOString() ?? null,

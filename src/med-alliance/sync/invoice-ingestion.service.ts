@@ -26,7 +26,7 @@ export class InvoiceIngestionService {
     'hs_payment_status',
     'hs_amount_billed',
     'hs_currency_code',
-    'hs_due_date', // paid_at equivalent — date payment was settled
+    'hs_payment_date', // paid_at equivalent — date payment was settled
     'hs_lastmodifieddate',
   ].join(',');
 

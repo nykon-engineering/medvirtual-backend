@@ -799,6 +799,70 @@ export class CronService {
     };
   }
 
+  async syncInvoicePaymentDates(): Promise<{
+    updated: number;
+    skipped: number;
+    failed: number;
+  }> {
+    console.log('Starting syncInvoicePaymentDates cron job...');
+
+    const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
+      where: { invoice_status: 'paid' },
+      select: { id: true, hubspot_id: true },
+    });
+
+    console.log(
+      `syncInvoicePaymentDates: ${snapshots.length} snapshot(s) with no paid_at`,
+    );
+
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const snapshot of snapshots) {
+      try {
+        const response = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/invoices/${snapshot.hubspot_id}?properties=hs_payment_date,hs_pdf_download_link`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
+        );
+
+        const paymentDate: string | null =
+          response.data?.properties?.hs_payment_date ?? null;
+
+        const pdf_link = response.data?.properties?.hs_pdf_download_link ?? null;
+        if (!paymentDate) {
+          skipped++;
+          continue;
+        }
+
+        await this.prisma.hubspotInvoiceSnapshot.update({
+          where: { id: snapshot.id },
+          data: { 
+            paid_at: new Date(paymentDate),
+              hubspot_pdf_link: pdf_link,
+           },
+        });
+
+        updated++;
+      } catch (err) {
+        console.error(
+          `syncInvoicePaymentDates: failed for invoice ${snapshot.hubspot_id} — ${err instanceof Error ? err.message : err}`,
+        );
+        failed++;
+      }
+    }
+
+    console.log(
+      `syncInvoicePaymentDates: updated=${updated}, skipped=${skipped}, failed=${failed}`,
+    );
+
+    return { updated, skipped, failed };
+  }
+
   async promoteDeployedCompanies(): Promise<{
     companiesPromoted: number;
     commissionsPromoted: number;
