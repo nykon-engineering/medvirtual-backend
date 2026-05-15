@@ -156,8 +156,28 @@ export class InvoicesService {
     if (!profile.user_id)
       throw new ForbiddenException('Affiliate has no connected user');
 
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
+    const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
+
     const orgs = await this.prisma.organization.findMany({
-      where: { referred_by_affiliate_id: profile.user_id },
+      where: {
+        referred_by_affiliate_id: profile.user_id,
+        OR: [
+          // Fully eligible: DB status promoted by cron, within the valid time window
+          {
+            med_alliance_referral_status: 'eligible',
+            eligibility_start_at: { gte: oneYearAgo, lte: thirtyDaysAgo },
+          },
+          // In 30-day stabilization: deployed but not yet promoted to eligible
+          {
+            referral_stage: 'deployed',
+            eligibility_start_at: { gte: thirtyDaysAgo },
+          },
+        ],
+      },
       select: { id: true },
     });
 
