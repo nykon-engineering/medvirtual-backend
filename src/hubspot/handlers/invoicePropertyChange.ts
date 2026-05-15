@@ -38,7 +38,12 @@ export class HandlerInvoicePropertyChange {
     let objectToUpdate: any = {};
 
     const fieldUpdated = invoiceToDbDictionary[event.propertyName];
-    const value = event.propertyValue;
+    let value = event.propertyValue;
+
+    // HubSpot sends date fields as Unix millisecond timestamp strings; Prisma requires ISO-8601.
+    if (fieldUpdated === 'paid_at' && value) {
+      value = new Date(Number(value));
+    }
 
     objectToUpdate = {
       [fieldUpdated]: value,

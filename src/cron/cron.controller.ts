@@ -157,6 +157,24 @@ export class CronController {
     };
   }
 
+  @Get('sync-invoice-payment-dates')
+  @ApiOperation({
+    summary:
+      'Fetch hs_payment_date from HubSpot for each invoice snapshot missing paid_at and persist it',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Invoice payment dates sync completed',
+  })
+  async syncInvoicePaymentDates() {
+    const result = await this.cron.syncInvoicePaymentDates();
+    return {
+      status: 200,
+      message: 'Invoice payment dates sync completed',
+      data: result,
+    };
+  }
+
   @Get('promote-deployed-companies')
   @ApiOperation({
     summary:

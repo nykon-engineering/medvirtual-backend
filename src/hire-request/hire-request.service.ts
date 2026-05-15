@@ -304,6 +304,7 @@ export class HireRequestService {
       hubspot_pairing_time: hireRequestData.hubspot_pairing_time
         ? hireRequestData.hubspot_pairing_time
         : null,
+      staff_to_be_replaced_id: hireRequestData.staff_to_be_replaced_id || null,
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({
@@ -723,6 +724,7 @@ export class HireRequestService {
             },
           },
           tickets: true,
+          staff_to_be_replaced: true,
         },
         skip,
         take,
@@ -973,6 +975,7 @@ export class HireRequestService {
           },
         },
         tickets: true,
+        staff_to_be_replaced: true,
       },
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
@@ -1229,6 +1232,7 @@ export class HireRequestService {
             },
           },
         },
+        staff_to_be_replaced: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -1338,6 +1342,7 @@ export class HireRequestService {
       hubspot_contract_amount: sanitizeDecimal(
         hireRequestData.hubspot_contract_amount,
       ),
+      staff_to_be_replaced_id: hireRequestData.staff_to_be_replaced_id || null,
     };
     const requestUpdated = await this.prisma.hireRequest.update({
       where: {
