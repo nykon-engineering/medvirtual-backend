@@ -344,5 +344,4 @@ export class CommissionDetectionService {
       `Org ${organizationId} eligibility window expired — status set to not_eligible`,
     );
   }
-
 }

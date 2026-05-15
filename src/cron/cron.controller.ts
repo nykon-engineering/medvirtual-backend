@@ -2,6 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { CronService } from './cron.service';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
+import { SyncOrganizationsDto } from './dto/sync-organizations.dto';
 
 @ApiTags('cron')
 @Controller('cron')
@@ -189,6 +190,33 @@ export class CronController {
     return {
       status: 200,
       message: 'Deployed companies promotion completed',
+      data: result,
+    };
+  }
+
+  @Get('sync-organizations-with-hubspot')
+  @ApiOperation({
+    summary:
+      'Full Med Alliance sync for referred organizations: resolves HubSpot company ID, ingests invoices, detects commissions, and promotes eligible companies. Pass organization_id to target a single org; omit to process all referred organizations.',
+  })
+  @ApiQuery({
+    name: 'organization_id',
+    required: false,
+    type: String,
+    description:
+      'UUID of a single organization to sync. If omitted, all referred organizations are processed.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Organization sync completed',
+  })
+  async syncOrganizationsWithHubspot(@Query() query: SyncOrganizationsDto) {
+    const result = await this.cron.syncOrganizationsWithHubspot(
+      query.organization_id,
+    );
+    return {
+      status: 200,
+      message: 'Organization sync completed',
       data: result,
     };
   }

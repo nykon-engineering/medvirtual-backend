@@ -50,7 +50,6 @@ export class HandlerAffiliateDeletion {
           },
         });
       }
-      
     } catch (error) {
       throw new BadRequestException('Error deleting affiliate', error);
     }

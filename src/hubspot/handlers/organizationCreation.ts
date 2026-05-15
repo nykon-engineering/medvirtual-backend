@@ -105,7 +105,6 @@ export class HandlerOrganizationCreation {
           'Organization already exists on the database',
         );
 
-        
       const createOrganization =
         await this.organizationService.create(organizationData);
       if (!createOrganization) {

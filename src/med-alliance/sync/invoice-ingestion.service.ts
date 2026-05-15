@@ -108,6 +108,8 @@ export class InvoiceIngestionService {
   /**
    * Fetches full invoice details for a list of invoice IDs.
    * Batches requests individually — HubSpot's batch read could be used for optimization later.
+   * Includes payment associations to resolve paid_at via hs_initiated_date,
+   * since hs_payment_date on the invoice itself is often empty.
    */
   private async fetchInvoiceDetails(
     invoiceIds: string[],
@@ -117,7 +119,7 @@ export class InvoiceIngestionService {
     for (const id of invoiceIds) {
       try {
         const response = await axios.get(
-          `${this.baseUrl}/crm/v3/objects/invoices/${id}?properties=${this.INVOICE_PROPERTIES}`,
+          `${this.baseUrl}/crm/v3/objects/invoices/${id}?properties=${this.INVOICE_PROPERTIES}&associations=payments`,
           {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -126,13 +128,21 @@ export class InvoiceIngestionService {
         );
 
         const props = response.data?.properties ?? {};
+        const paymentResults: Array<{ id: string }> =
+          response.data?.associations?.payments?.results ?? [];
+
+        const paidAt = await this.resolvePaidAt(
+          props.hs_payment_date,
+          paymentResults,
+        );
+
         records.push({
           hubspot_id: id,
           invoice_status: props.hs_invoice_status ?? 'unknown',
           payment_status: props.hs_payment_status ?? null,
           invoice_amount: props.hs_amount_billed ?? '0',
           currency: props.hs_currency_code ?? 'USD',
-          paid_at: props.hs_due_date ? new Date(props.hs_due_date) : null,
+          paid_at: paidAt,
           raw_payload: response.data,
         });
       } catch (err) {
@@ -144,6 +154,44 @@ export class InvoiceIngestionService {
     }
 
     return records;
+  }
+
+  /**
+   * Resolves paid_at for an invoice.
+   * Prefers hs_payment_date from the invoice; falls back to hs_initiated_date
+   * fetched from the first associated payment object when hs_payment_date is absent.
+   */
+  private async resolvePaidAt(
+    hsPaymentDate: string | null | undefined,
+    paymentResults: Array<{ id: string }>,
+  ): Promise<Date | null> {
+    if (hsPaymentDate) {
+      return new Date(hsPaymentDate);
+    }
+
+    if (paymentResults.length === 0) {
+      return null;
+    }
+
+    try {
+      const paymentId = paymentResults[0].id;
+      const paymentResponse = await axios.get(
+        `${this.baseUrl}/crm/v3/objects/payments/${paymentId}?properties=hs_initiated_date`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          },
+        },
+      );
+      const initiatedDate =
+        paymentResponse.data?.properties?.hs_initiated_date;
+      return initiatedDate ? new Date(initiatedDate) : null;
+    } catch (err) {
+      this.logger.warn(
+        `Could not fetch payment date for payment ${paymentResults[0].id}: ${err instanceof Error ? err.message : err}`,
+      );
+      return null;
+    }
   }
 
   /**
