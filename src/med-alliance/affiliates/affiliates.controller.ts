@@ -37,6 +37,7 @@ import { ListAffiliatesDto } from './dto/list-affiliates.dto';
 import { CreateUserAndAffiliateProfileDto } from './dto/create-user-and-affiliate.dto';
 import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 import { AssociateCompanyDto } from './dto/associate-company.dto';
+import { AssociationPreviewQueryDto } from './dto/association-preview-query.dto';
 
 @ApiTags('med-alliance')
 @ApiBearerAuth()
@@ -624,6 +625,31 @@ export class AffiliatesController {
   ) {
     const data = await this.affiliatesService.linkOrganization(id, dto);
     return { status: 200, message: 'Organization linked successfully', data };
+  }
+
+  // GET /med-alliance/admin/affiliates/:id/association-preview — Preview what association would produce.
+  // Must be declared before /:id/associate-company to avoid routing collision.
+  @Get('admin/affiliates/:id/association-preview')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary:
+      'Preview the result of associating an organization: returns org info, invoice snapshots, and projected eligibility',
+  })
+  @ApiParam({ name: 'id', description: 'Affiliate profile UUID' })
+  @ApiQuery({ type: AssociationPreviewQueryDto })
+  @ApiResponse({ status: 200, description: 'Preview data retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Affiliate profile or organization not found' })
+  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
+  async associationPreview(
+    @Param('id') id: string,
+    @Query() query: AssociationPreviewQueryDto,
+  ) {
+    const data = await this.affiliatesService.previewAssociation(
+      id,
+      query.organization_id,
+    );
+    return { status: 200, message: 'Preview data retrieved successfully', data };
   }
 
   // POST /med-alliance/admin/affiliates/:id/associate-company — Associate existing org as referral.

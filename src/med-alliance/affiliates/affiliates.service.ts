@@ -1060,6 +1060,97 @@ export class AffiliatesService {
     return this.findOne(id);
   }
 
+  // Admin: preview what an association would produce (org info + invoice snapshots + projected eligibility).
+  async previewAssociation(affiliateProfileId: string, organizationId: string) {
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateProfileId },
+      select: { commission_percent_default: true },
+    });
+    if (!profile) throw new NotFoundException('Affiliate profile not found');
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        email: true,
+        industry: true,
+        location: true,
+        hubspot_id: true,
+        contact_first_name: true,
+        contact_last_name: true,
+        contact_email: true,
+        med_alliance_referral_status: true,
+        eligibility_start_at: true,
+      },
+    });
+    if (!org) throw new NotFoundException('Organization not found');
+
+    const invoices = await this.prisma.hubspotInvoiceSnapshot.findMany({
+      where: { organization_id: organizationId },
+      select: {
+        id: true,
+        hubspot_id: true,
+        invoice_amount: true,
+        invoice_status: true,
+        currency: true,
+        paid_at: true,
+      },
+      orderBy: { paid_at: 'asc' },
+    });
+
+    const paidInvoices = invoices.filter(
+      (i) => i.invoice_status === 'paid' && i.paid_at != null,
+    );
+    const deploymentDate = paidInvoices[0]?.paid_at ?? null;
+    const now = new Date();
+    const daysSince =
+      deploymentDate != null
+        ? (now.getTime() - deploymentDate.getTime()) / (1000 * 60 * 60 * 24)
+        : null;
+
+    let eligibilityWindow: 'no_invoices' | 'too_new' | 'eligible' | 'expired';
+    let commissionStatus: 'detected' | 'pending_admin_confirmation' | null;
+    if (daysSince === null) {
+      eligibilityWindow = 'no_invoices';
+      commissionStatus = null;
+    } else if (daysSince >= 365) {
+      eligibilityWindow = 'expired';
+      commissionStatus = null;
+    } else if (daysSince >= 30) {
+      eligibilityWindow = 'eligible';
+      commissionStatus = 'pending_admin_confirmation';
+    } else {
+      eligibilityWindow = 'too_new';
+      commissionStatus = 'detected';
+    }
+
+    return {
+      organization: {
+        ...org,
+        eligibility_start_at: org.eligibility_start_at?.toISOString() ?? null,
+      },
+      invoices: invoices.map((i) => ({
+        id: i.id,
+        hubspot_id: i.hubspot_id,
+        invoice_amount: i.invoice_amount?.toString() ?? '0',
+        invoice_status: i.invoice_status,
+        currency: i.currency,
+        paid_at: i.paid_at?.toISOString() ?? null,
+      })),
+      projection: {
+        deployment_date: deploymentDate?.toISOString() ?? null,
+        days_since_deployment: daysSince !== null ? Math.floor(daysSince) : null,
+        eligibility_window: eligibilityWindow,
+        commission_status: commissionStatus,
+        projected_commission_count: paidInvoices.length,
+        affiliate_commission_percent:
+          profile.commission_percent_default.toNumber(),
+      },
+    };
+  }
+
   // Admin: associate an existing organization as a referral for this affiliate.
   async associateCompany(affiliateId: string, organizationId: string, adminUser: USER) {
     const profile = await this.prisma.affiliateProfile.findUnique({
