@@ -303,4 +303,9 @@ export class CreateHireRequestDto {
   @IsArray()
   @IsOptional()
   selectedCandidates: any[];
+
+  @ApiProperty({ type: String, description: 'Staff member to be replaced (ID)', required: false })
+  @IsString()
+  @IsOptional()
+  staff_to_be_replaced_id?: string;
 }

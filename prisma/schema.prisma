@@ -429,6 +429,8 @@ model HireRequest {
 
   assign_sourcing_id                String?
   old_status                        HireRequestStatus?
+  staff_to_be_replaced_id           String?
+  staff_to_be_replaced              Staff?             @relation("StaffToBeReplaced", fields: [staff_to_be_replaced_id], references: [id])
   panels                            CandidatePanel[]
   assigned_sourcing                 USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
   assigned_staffing                 USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
@@ -590,6 +592,7 @@ model Staff {
   hireRequest             HireRequest?  @relation(fields: [hirerequest_id], references: [id])
   organization            Organization? @relation(fields: [organization_id], references: [id])
   tickets                 Ticket[]
+  replaced_in_requests    HireRequest[] @relation("StaffToBeReplaced")
 
   @@index([candidate_id], map: "idx_staff_candidate_id")
   @@index([hirerequest_id], map: "idx_staff_hirerequest_id")
