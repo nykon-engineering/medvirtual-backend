@@ -1,4 +1,5 @@
 import { OrganizationRole, Prisma } from '@prisma/client';
+import axios from 'axios';
 import {
   candidadeToDbDictionary,
   dbToCandidateDictionary,
@@ -197,4 +198,32 @@ export function changeLabelAvailability(label: string): string {
     : label === 'Available Candidates'
       ? 'Full Time'
       : 'Full Time';
+}
+
+/**
+ * Resolves paid_at for a HubSpot invoice.
+ * Prefers hs_payment_date directly from the invoice; falls back to
+ * hs_initiated_date from the first associated payment object when absent.
+ */
+export async function resolvePaidAt(
+  hsPaymentDate: string | null | undefined,
+  paymentResults: Array<{ id: string }>,
+): Promise<Date | null> {
+  if (hsPaymentDate) {
+    return new Date(hsPaymentDate);
+  }
+  if (paymentResults.length === 0) {
+    return null;
+  }
+  try {
+    const paymentId = paymentResults[0].id;
+    const response = await axios.get(
+      `https://api.hubapi.com/crm/v3/objects/payments/${paymentId}?properties=hs_initiated_date`,
+      { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}` } },
+    );
+    const initiatedDate = response.data?.properties?.hs_initiated_date;
+    return initiatedDate ? new Date(initiatedDate) : null;
+  } catch {
+    return null;
+  }
 }

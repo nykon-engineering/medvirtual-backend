@@ -1,9 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import axios from 'axios';
-import { mapInvoiceToDb } from '../../common/utils/hubspot.util';
+import { mapInvoiceToDb, resolvePaidAt } from '../../common/utils/hubspot.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { invoiceToDbDictionary } from '../../common/dictionaries/invoice-dictionary';
-import { get } from 'http';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -46,7 +45,7 @@ export class HandlerInvoiceCreation {
       const properties = Object.keys(invoiceToDbDictionary).join(',');
       const getObject = await retry(() =>
         axios.get(
-          `https://api.hubapi.com/crm/v3/objects/invoices/${event.objectId}?properties=${properties}&associations=line_items,companies`,
+          `https://api.hubapi.com/crm/v3/objects/invoices/${event.objectId}?properties=${properties}&associations=line_items,companies,payments`,
           {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -64,6 +63,16 @@ export class HandlerInvoiceCreation {
       //console.log(`Associations line_items:`, getObject.data.associations?.['line items']);
 
       const invoiceData = mapInvoiceToDb(getObject.data.properties);
+
+      const paymentResults: Array<{ id: string }> =
+        getObject.data.associations?.payments?.results ?? [];
+      const resolvedPaidAt = await resolvePaidAt(
+        getObject.data.properties.hs_payment_date,
+        paymentResults,
+      );
+      if (resolvedPaidAt) {
+        invoiceData.paid_at = resolvedPaidAt;
+      }
 
       let organizationDbId: string | undefined;
       const companyAssociated = getObject.data.associations?.companies;

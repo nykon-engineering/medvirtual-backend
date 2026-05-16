@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { HandlerInvoiceCreation } from './invoiceCreation';
 import { invoiceToDbDictionary } from '../../common/dictionaries/invoice-dictionary';
 import { HandlerComissionCreation } from './comissionCreation';
+import { resolvePaidAt } from '../../common/utils/hubspot.util';
 
 @Injectable()
 export class HandlerInvoicePropertyChange {
@@ -76,6 +77,31 @@ export class HandlerInvoicePropertyChange {
             },
           },
         });
+
+      if (invoiceWithOrg && !invoiceWithOrg.paid_at) {
+        const invoiceWithPayments = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/invoices/${event.objectId}?properties=hs_payment_date&associations=payments`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+        const paymentResults: Array<{ id: string }> =
+          invoiceWithPayments.data?.associations?.payments?.results ?? [];
+        const resolvedPaidAt = await resolvePaidAt(
+          invoiceWithPayments.data?.properties?.hs_payment_date,
+          paymentResults,
+        );
+        if (resolvedPaidAt) {
+          await this.prisma.hubspotInvoiceSnapshot.update({
+            where: { hubspot_id: String(event.objectId) },
+            data: { paid_at: resolvedPaidAt },
+          });
+          invoiceWithOrg.paid_at = resolvedPaidAt; // narrowed to non-null by outer guard
+        }
+      }
 
       if (invoiceWithOrg?.organization?.id) {
         // Mark the organization as deployed before creating the commission.
