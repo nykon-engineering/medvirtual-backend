@@ -80,6 +80,22 @@ export class HandlerInvoiceCreation {
               where: { id: organizationExists.id },
               data: { status: 'active' },
             });
+            await this.prisma.hubspotAuditLog.create({
+              data: {
+                entity_type: 'organization',
+                entity_id: organizationExists.id,
+                hubspot_object_type: 'invoice',
+                hubspot_object_id: String(event.objectId),
+                action: 'UPDATE',
+                source: 'webhook',
+                success: true,
+                payload: {
+                  previous_status: 'inactive',
+                  new_status: 'active',
+                  reason: 'invoice_received_while_inactive',
+                },
+              },
+            });
           }
         }
       }

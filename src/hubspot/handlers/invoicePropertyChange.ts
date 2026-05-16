@@ -204,7 +204,9 @@ export class HandlerInvoicePropertyChange {
       return false;
     }
 
-    const now = new Date();
+    const eligibilityStartAt = new Date(
+      params.firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.organization.updateMany({
@@ -226,7 +228,7 @@ export class HandlerInvoicePropertyChange {
         },
         data: {
           referral_stage: 'deployed',
-          eligibility_start_at: now,
+          eligibility_start_at: eligibilityStartAt,
           first_paid_invoice_at: params.firstInvoiceDate,
           med_alliance_block_reason: null,
           // med_alliance_referral_status intentionally stays as-is.
@@ -255,7 +257,7 @@ export class HandlerInvoicePropertyChange {
           metadata: {
             referral_stage: 'deployed',
             previous_referral_stage: org.referral_stage,
-            eligibility_start_at: now.toISOString(),
+            eligibility_start_at: eligibilityStartAt.toISOString(),
             first_paid_invoice_at: params.firstInvoiceDate.toISOString(),
             hubspot_invoice_id: params.hubspotInvoiceId ?? null,
           } as any,

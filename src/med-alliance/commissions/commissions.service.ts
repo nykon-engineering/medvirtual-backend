@@ -664,12 +664,14 @@ export class CommissionsService {
       // Transition to deployed on first paid invoice (idempotent).
       if (!org.first_paid_invoice_at && org.referral_stage !== 'deployed') {
         const firstInvoiceDate = snapshot.paid_at ?? new Date();
-        const now = new Date();
+        const eligibilityStartAt = new Date(
+          firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+        );
         await this.prisma.organization.update({
           where: { id: org.id },
           data: {
             referral_stage: 'deployed',
-            eligibility_start_at: now,
+            eligibility_start_at: eligibilityStartAt,
             first_paid_invoice_at: firstInvoiceDate,
             med_alliance_block_reason: null,
           },
@@ -687,7 +689,7 @@ export class CommissionsService {
             actor_user_id: adminUser.id,
             metadata: {
               referral_stage: 'deployed',
-              eligibility_start_at: now.toISOString(),
+              eligibility_start_at: eligibilityStartAt.toISOString(),
             } as any,
           },
         });
@@ -716,7 +718,7 @@ export class CommissionsService {
             commission_percent_snapshot: profile.commission_percent_default,
             base_amount_snapshot: snapshot.invoice_amount,
             commission_amount: commissionAmount,
-            status: CommissionStatus.eligible,
+            status: CommissionStatus.pending_admin_confirmation,
             idempotency_key: idempotencyKey,
           },
           select: { id: true },

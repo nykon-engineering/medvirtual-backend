@@ -12,6 +12,7 @@ export interface InvoiceRecord {
   currency: string;
   paid_at: Date | null;
   raw_payload: any;
+  hubspot_pdf_link: string | null;
 }
 
 @Injectable()
@@ -28,6 +29,7 @@ export class InvoiceIngestionService {
     'hs_currency_code',
     'hs_payment_date', // paid_at equivalent — date payment was settled
     'hs_lastmodifieddate',
+    'hs_pdf_download_link',
   ].join(',');
 
   constructor(
@@ -128,6 +130,7 @@ export class InvoiceIngestionService {
         );
 
         const props = response.data?.properties ?? {};
+
         const paymentResults: Array<{ id: string }> =
           response.data?.associations?.payments?.results ?? [];
 
@@ -144,6 +147,7 @@ export class InvoiceIngestionService {
           currency: props.hs_currency_code ?? 'USD',
           paid_at: paidAt,
           raw_payload: response.data,
+          hubspot_pdf_link: props.hs_pdf_download_link ?? null,
         });
       } catch (err) {
         this.logger.error(
@@ -204,6 +208,7 @@ export class InvoiceIngestionService {
     organizationId: string,
     invoice: InvoiceRecord,
   ): Promise<'created' | 'updated' | 'skipped'> {
+
     const syncHash = this.computeSyncHash(invoice);
 
     const existing = await this.prisma.hubspotInvoiceSnapshot.findUnique({
@@ -233,6 +238,7 @@ export class InvoiceIngestionService {
           paid_at: invoice.paid_at,
           sync_hash: syncHash,
           raw_payload: invoice.raw_payload,
+          hubspot_pdf_link: invoice.hubspot_pdf_link,
         },
       });
       return 'created';
@@ -252,6 +258,7 @@ export class InvoiceIngestionService {
         paid_at: invoice.paid_at,
         sync_hash: syncHash,
         raw_payload: invoice.raw_payload,
+        hubspot_pdf_link: invoice.hubspot_pdf_link,
       },
     });
 

@@ -325,7 +325,7 @@ describe('CronService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             med_alliance_referral_status: 'not_eligible',
-            eligibility_start_at: expect.objectContaining({
+            first_paid_invoice_at: expect.objectContaining({
               lte: expect.any(Date), // ≤ 30 days ago
               gte: expect.any(Date), // ≥ 1 year ago
             }),

@@ -882,7 +882,7 @@ export class CronService {
     const orgs = await this.prisma.organization.findMany({
       where: {
         referral_stage: 'deployed' as any,
-        eligibility_start_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+        first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
         med_alliance_referral_status: 'not_eligible',
       },
       select: { id: true, name: true, eligibility_start_at: true },
@@ -1023,8 +1023,9 @@ export class CronService {
       orgIds = [organizationId];
     } else {
       const orgs = await this.prisma.organization.findMany({
-        where: { referred_by_affiliate_id: { not: null } },
+        where: { status: 'active' },
         select: { id: true },
+        orderBy: { updatedAt: 'asc' },
       });
       orgIds = orgs.map((o) => o.id);
     }

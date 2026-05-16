@@ -771,9 +771,11 @@ export class ReferredCompaniesService {
 
     const dataUpdate: Record<string, unknown> = { referral_stage: dto.stage };
 
-    // Manually moving to deployed starts the 30-day clock if not already running.
+    // Manually moving to deployed starts the eligibility clock: eligible 30 days from now.
     if (dto.stage === 'deployed' && !org.eligibility_start_at) {
-      dataUpdate.eligibility_start_at = new Date();
+      dataUpdate.eligibility_start_at = new Date(
+        Date.now() + 30 * 24 * 60 * 60 * 1000,
+      );
     }
 
     await this.prisma.organization.update({

@@ -1253,6 +1253,9 @@ export class AffiliatesService {
     if (candidates.length === 0) return;
 
     const firstInvoiceDate = candidates[0].paid_at ?? now;
+    const eligibilityStartAt = new Date(
+      firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
     const daysSinceDeployment =
       (now.getTime() - firstInvoiceDate.getTime()) / (1000 * 60 * 60 * 24);
 
@@ -1264,7 +1267,7 @@ export class AffiliatesService {
       data: {
         referral_stage: 'deployed',
         first_paid_invoice_at: firstInvoiceDate,
-        eligibility_start_at: firstInvoiceDate,
+        eligibility_start_at: eligibilityStartAt,
         med_alliance_block_reason: isExpired
           ? 'eligibility_expired: one-year window elapsed'
           : null,
@@ -1285,7 +1288,7 @@ export class AffiliatesService {
         actor_user_id: adminUser.id,
         metadata: {
           referral_stage: 'deployed',
-          eligibility_start_at: firstInvoiceDate.toISOString(),
+          eligibility_start_at: eligibilityStartAt.toISOString(),
           days_since_first_invoice: Math.floor(daysSinceDeployment),
           result: isExpired
             ? 'expired'
