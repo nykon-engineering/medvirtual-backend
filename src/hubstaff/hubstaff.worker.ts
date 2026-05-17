@@ -44,11 +44,18 @@ export class HubstaffWorker extends WorkerHost {
           continue;
         }
 
+        if (email === "patriciazafra27@gmail.com") {
+          console.log("-------------------------", email)
+        }
+
         const candidate = await this.prisma.candidate.findFirst({
           where: { email: { equals: email, mode: 'insensitive' } },
         });
 
         if (candidate) {
+          console.log("-------------------------", candidate.email)
+        }
+        if (candidate && candidate.hubstaff_id !== hubstaffUserId) {
           await this.prisma.candidate.update({
             where: { id: candidate.id },
             data: { hubstaff_id: hubstaffUserId } as any,

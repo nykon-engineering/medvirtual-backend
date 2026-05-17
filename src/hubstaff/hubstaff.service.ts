@@ -394,7 +394,7 @@ export class HubstaffService implements OnModuleInit {
     let nextPageStartId: number | undefined = undefined;
 
     do {
-      const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/organizations/${this.organizationId}/members?include=users`, {
+      const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/organizations/${this.organizationId}/members?include=users&membership_roles=user`, {
         params: nextPageStartId ? { page_start_id: nextPageStartId } : {},
       });
 

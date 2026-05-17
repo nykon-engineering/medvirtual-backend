@@ -19,11 +19,11 @@ import { activePipelines } from '../common/constant/activeDealPipelines';
 
 @Injectable()
 export class StaffService {
-    constructor(
-      private readonly prisma: PrismaService,
-      private readonly objectCreation : HandlerObjectCreation,
-      private readonly organizationCreation: HandlerOrganizationCreation,
-  ) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly objectCreation: HandlerObjectCreation,
+    private readonly organizationCreation: HandlerOrganizationCreation,
+  ) { }
 
   private async findOne(id: string) {
     return await this.prisma.staff.findUnique({
@@ -189,7 +189,7 @@ export class StaffService {
           organization: { connect: { id: user.organization_id || undefined } },
           type: 'bonus',
           staff: { connect: { id: data.staff_id } },
-          title: `Bonus Added: $${data.bonus} to ${staff.hubspot_deal_name ? staff.hubspot_deal_name :  staff?.candidate?.first_name+` `+staff?.candidate?.last_name}`,
+          title: `Bonus Added: $${data.bonus} to ${staff.hubspot_deal_name ? staff.hubspot_deal_name : staff?.candidate?.first_name + ` ` + staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'medium',
           createdBy: { connect: { id: user.id } },
@@ -266,7 +266,7 @@ export class StaffService {
           organization: { connect: { id: user.organization_id || undefined } },
           staff: { connect: { id: staff.id } },
           type: 'termination',
-          title: `Termination Requested: ${staff.hubspot_deal_name ? staff.hubspot_deal_name :  staff?.candidate?.first_name+` `+staff?.candidate?.last_name}`,
+          title: `Termination Requested: ${staff.hubspot_deal_name ? staff.hubspot_deal_name : staff?.candidate?.first_name + ` ` + staff?.candidate?.last_name}`,
           description: data.description,
           priority: 'high',
           createdBy: { connect: { id: user.id } },
@@ -358,6 +358,7 @@ export class StaffService {
             country: true,
             about_me: true,
             avatar_url: true,
+            hubstaff_id: true,
             gender: true,
             languages: {
               select: {
@@ -412,9 +413,9 @@ export class StaffService {
       ...s,
       candidate: s.candidate
         ? {
-            ...s.candidate,
-            avatar: s.candidate.avatar_url ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}` : null,
-          }
+          ...s.candidate,
+          avatar: s.candidate.avatar_url ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}` : null,
+        }
         : null,
     }));
   }
@@ -592,7 +593,7 @@ export class StaffService {
       ...staff,
       candidate: {
         ...staff.candidate,
-        avatar: staff.candidate?.avatar_url ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}` :  null,
+        avatar: staff.candidate?.avatar_url ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}` : null,
       }
     }))
 
@@ -631,7 +632,7 @@ export class StaffService {
       candidate: {},
     };
 
-    
+
     where.OR = [
       {
         hireRequest: {
@@ -642,8 +643,8 @@ export class StaffService {
         organization_id: organizationId,
       },
     ];
-    
-    
+
+
     if (search) {
       where.OR = [
         {
@@ -792,7 +793,7 @@ export class StaffService {
       if (status !== undefined) {
         staffUpdateData.status = staffStatusDictionary[status] || status;
       }
-      
+
       // Use transaction to update both staff and candidate records
       const result = await this.prisma.$transaction(async (tx) => {
         // Update staff record
@@ -908,7 +909,7 @@ export class StaffService {
     const allDeals: any[] = [];
     const properties = Object.keys(dealToDbDictionary)
 
-    
+
     while (hasMore) {
       const body: any = {
         filterGroups: [
@@ -921,9 +922,9 @@ export class StaffService {
         properties: properties,
         limit: BATCH_SIZE,
       };
-  
+
       if (after) body.after = after;
-  
+
       const result = await axios.post(
         'https://api.hubapi.com/crm/v3/objects/deals/search',
         body,
@@ -945,30 +946,30 @@ export class StaffService {
     }
 
     console.log(`Total deals fetched from HubSpot: ${allDeals.length}`);
-    
+
     const mappedDeals = allDeals.map(deal => {
       const mapped: any = { hubspot_id: deal.id };
       for (const [hubspotKey, dbKey] of Object.entries(dealToDbDictionary)) {
-          let value = deal.properties[hubspotKey];
+        let value = deal.properties[hubspotKey];
 
-          if (value === "" || value === undefined) {
-            value = null;
-          }
+        if (value === "" || value === undefined) {
+          value = null;
+        }
 
-          if (
-              dbKey === 'hubspot_close_date' && value ||
-              dbKey === 'start_date' && value
-          ) {
-            const dateValue = new Date(value);
-            value = isNaN(dateValue.getTime()) ? null : dateValue;
-          }
+        if (
+          dbKey === 'hubspot_close_date' && value ||
+          dbKey === 'start_date' && value
+        ) {
+          const dateValue = new Date(value);
+          value = isNaN(dateValue.getTime()) ? null : dateValue;
+        }
 
-          
-          mapped[dbKey] = value;
+
+        mapped[dbKey] = value;
       }
       return mapped;
     });
-    
+
 
     const VADeals: any[] = [];
     const CompanyDeals: any[] = [];
@@ -1006,7 +1007,7 @@ export class StaffService {
 
             if (candidateExists) {
               deal.candidate_id = candidateExists.id;
-            }else{
+            } else {
               let event = {
                 objectId: hubspotCandidateId
               }
@@ -1016,20 +1017,20 @@ export class StaffService {
                 select: { id: true },
               });
               if (candidateExists)
-              deal.candidate_id = candidateExists.id;
+                deal.candidate_id = candidateExists.id;
             }
             deal.hubspot_candidate_id = hubspotCandidateId;
           }
           deal.status = activePipelines.some(([key]) => key === deal.hubspot_dealstage) ? 'active' : 'inactive';
           VADeals.push(deal);
         }
-        
+
       } catch (error: any) {
         console.error("Error to find batch process :", error.response?.data || error);
       }
     }
     console.log('Deals with candidates Associated: ', VADeals)
-    
+
 
 
     for (let i = 0; i < VADeals.length; i += ASSOCIATION_BATCH_SIZE) {
@@ -1068,10 +1069,10 @@ export class StaffService {
             }
             deal.hubspot_organization_id = hubspotCandidateId;
           }
-          
+
           CompanyDeals.push(deal);
         }
-        
+
       } catch (error: any) {
         console.error("Error to find batch process :", error.response?.data || error);
       }
@@ -1088,9 +1089,9 @@ export class StaffService {
         skipDuplicates: true,
       });
     }
-  
+
     return `DB populated from HubSpot successfully with ${CompanyDeals.length} deals`;
-    
+
   }
 
 
@@ -1161,9 +1162,9 @@ export class StaffService {
       throw new BadRequestException('Staff ID is required');
     }
     const staff = await this.prisma.staff.findUnique({
-      where: { 
-        id: staffId, 
-        status: 'termination-requested' 
+      where: {
+        id: staffId,
+        status: 'termination-requested'
       },
       select: {
         id: true,
@@ -1185,5 +1186,5 @@ export class StaffService {
     return this.findOne(staffId);
   }
 
-  
+
 }

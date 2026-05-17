@@ -40,14 +40,19 @@ import { InvoiceModule } from './invoice/invoice.module';
     }),
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        connection: {
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-          password: configService.get<string>('REDIS_PASSWORD'),
-          username: configService.get<string>('REDIS_USERNAME', 'basic'),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const baseKey = configService.get<string>('REDIS_BASE_KEY', 'medvirtual');
+        const prefix = baseKey.endsWith(':') ? baseKey.slice(0, -1) : baseKey;
+        return {
+          connection: {
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: configService.get<number>('REDIS_PORT', 6379),
+            password: configService.get<string>('REDIS_PASSWORD'),
+            username: configService.get<string>('REDIS_USERNAME', 'basic'),
+          },
+          prefix,
+        };
+      },
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000, // 1 minute

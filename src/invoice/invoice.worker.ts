@@ -37,6 +37,11 @@ export class InvoiceWorker extends WorkerHost {
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
+    if (job.name !== 'generate-invoice') {
+      this.logger.warn(`Unknown job name: ${job.name}`);
+      return;
+    }
+
     const payload = job.data;
     const { job_id, organization_id, billing_start_date, billing_end_date, created_by, is_prebill } = payload;
 
