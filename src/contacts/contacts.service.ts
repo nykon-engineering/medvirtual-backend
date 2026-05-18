@@ -272,6 +272,7 @@ export class ContactService {
             referrals_industry:
               org.business_unit === 'Med Virtual' ? 'Medical' : 'Non-Medical',
             referred_to: hubspotOwnerId ?? '',
+            type: 'Alliance',
           },
           associations: associations.length > 0 ? associations : undefined,
         },
