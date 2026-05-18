@@ -351,6 +351,7 @@ export class AffiliatesController {
       hubspot_pipeline: profile.hubspot_pipeline ?? null,
       hubspot_pipeline_stage: profile.hubspot_pipeline_stage ?? null,
       business_unit: profile.business_unit ?? null,
+      user_role: user?.role ?? null,
       created_at: profile.createdAt.toISOString(),
       referred_companies: (user?.referredOrganizations ?? []).map(
         (org: any) => ({
@@ -535,6 +536,7 @@ export class AffiliatesController {
       hubspot_pipeline: profile.hubspot_pipeline ?? null,
       hubspot_pipeline_stage: profile.hubspot_pipeline_stage ?? null,
       business_unit: profile.business_unit ?? null,
+      user_role: user?.role ?? null,
       created_at: profile.createdAt.toISOString(),
       referred_companies: (user?.referredOrganizations ?? []).map(
         (org: any) => ({
