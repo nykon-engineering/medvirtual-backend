@@ -97,23 +97,59 @@ export class InvoiceWorker extends WorkerHost {
   }
 
   private async generateInvoiceRecord(org: any, payload: any) {
-    const { 
-      organization_id, 
-      billing_start_date, 
-      billing_end_date, 
-      issue_date, 
-      due_date, 
-      public_due_date, 
-      is_prebill, 
-      created_by 
+    const {
+      organization_id,
+      billing_start_date,
+      billing_end_date,
+      issue_date,
+      due_date,
+      public_due_date,
+      is_prebill,
+      created_by
     } = payload;
     const hubstaffId = org.invoiceConfiguration.hubstaff_id;
 
     // Fetch project members to get names for snapshots
     const members = await this.hubstaff.getProjectMembers(hubstaffId);
-    const memberMap = new Map<number, string>(
-      members.map((m: any) => [m.user_id, m.name])
-    );
+
+    const emailMap = new Map<number, string>();
+    const memberMap = new Map<number, string>();
+    members.forEach((m: any) => {
+      if (m.user_id) {
+        memberMap.set(m.user_id, m.name || m.user?.name || `Hubstaff User ${m.user_id}`);
+        if (m.user?.email) {
+          emailMap.set(m.user_id, m.user.email);
+        }
+      }
+    });
+
+    const emails = Array.from(emailMap.values());
+    const names = members
+      .map((m: any) => m.name || m.user?.name)
+      .filter((name): name is string => !!name);
+
+    // Fetch all candidates by email OR name, populated with their staff records
+    const candidates = (emails.length > 0 || names.length > 0) ? await this.prisma.candidate.findMany({
+      where: {
+        OR: [
+          {
+            email: {
+              in: emails,
+              mode: 'insensitive',
+            },
+          },
+          {
+            name: {
+              in: names,
+              mode: 'insensitive',
+            },
+          },
+        ],
+      },
+      include: {
+        staff: true,
+      },
+    }) : [];
 
     // Aggregate by user
     const userSummary = new Map<number, { tracked: number; overall: number }>();
@@ -198,7 +234,29 @@ export class InvoiceWorker extends WorkerHost {
       // 3. Create Line Items
       for (const [userId, stats] of userSummary.entries()) {
         const hours = new Decimal(stats.tracked).dividedBy(3600); // convert seconds to hours
-        const hourlyRate = new Decimal(25); // Placeholder: Should fetch from Expert/Staff record
+
+        // Find Candidate & Staff
+        const email = emailMap.get(userId);
+        const name = memberMap.get(userId);
+
+        let candidate = email ? candidates.find(c => c.email.toLowerCase() === email.toLowerCase()) : null;
+        if (!candidate && name) {
+          candidate = candidates.find(
+            c => c.name?.trim().toLowerCase() === name.trim().toLowerCase()
+          ) || null;
+        }
+
+        const staff = candidate?.staff.find((s: any) => s.organization_id === organization_id) || candidate?.staff[0];
+
+        let hourlyRate = new Decimal(25); // Default fallback
+
+        if (staff && staff.salary) {
+          const hoursPerMonth = Number(process.env.CANDIDATE_HOUR_PER_MONTH) || 176;
+          hourlyRate = new Decimal(Number(staff.salary) / hoursPerMonth);
+        } else if (candidate && candidate.hourly_pay_rate) {
+          hourlyRate = new Decimal(Number(candidate.hourly_pay_rate));
+        }
+
         const lineTotal = hours.mul(hourlyRate);
 
         const memberName = memberMap.get(userId) || `Hubstaff User ${userId}`;
