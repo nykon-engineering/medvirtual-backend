@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { HandlerInvoiceCreation } from './invoiceCreation';
 import { invoiceToDbDictionary } from '../../common/dictionaries/invoice-dictionary';
 import { HandlerComissionCreation } from './comissionCreation';
+import { resolvePaidAt } from '../../common/utils/hubspot.util';
 
 @Injectable()
 export class HandlerInvoicePropertyChange {
@@ -76,6 +77,31 @@ export class HandlerInvoicePropertyChange {
             },
           },
         });
+
+      if (invoiceWithOrg && !invoiceWithOrg.paid_at) {
+        const invoiceWithPayments = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/invoices/${event.objectId}?properties=hs_payment_date&associations=payments`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+        const paymentResults: Array<{ id: string }> =
+          invoiceWithPayments.data?.associations?.payments?.results ?? [];
+        const resolvedPaidAt = await resolvePaidAt(
+          invoiceWithPayments.data?.properties?.hs_payment_date,
+          paymentResults,
+        );
+        if (resolvedPaidAt) {
+          await this.prisma.hubspotInvoiceSnapshot.update({
+            where: { hubspot_id: String(event.objectId) },
+            data: { paid_at: resolvedPaidAt },
+          });
+          invoiceWithOrg.paid_at = resolvedPaidAt; // narrowed to non-null by outer guard
+        }
+      }
 
       if (invoiceWithOrg?.organization?.id) {
         // Mark the organization as deployed before creating the commission.
@@ -204,7 +230,9 @@ export class HandlerInvoicePropertyChange {
       return false;
     }
 
-    const now = new Date();
+    const eligibilityStartAt = new Date(
+      params.firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.organization.updateMany({
@@ -226,7 +254,7 @@ export class HandlerInvoicePropertyChange {
         },
         data: {
           referral_stage: 'deployed',
-          eligibility_start_at: now,
+          eligibility_start_at: eligibilityStartAt,
           first_paid_invoice_at: params.firstInvoiceDate,
           med_alliance_block_reason: null,
           // med_alliance_referral_status intentionally stays as-is.
@@ -255,7 +283,7 @@ export class HandlerInvoicePropertyChange {
           metadata: {
             referral_stage: 'deployed',
             previous_referral_stage: org.referral_stage,
-            eligibility_start_at: now.toISOString(),
+            eligibility_start_at: eligibilityStartAt.toISOString(),
             first_paid_invoice_at: params.firstInvoiceDate.toISOString(),
             hubspot_invoice_id: params.hubspotInvoiceId ?? null,
           } as any,

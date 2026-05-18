@@ -550,7 +550,12 @@ export class CommissionsService {
 
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateProfileId },
-      select: { id: true, user_id: true, status: true, commission_percent_default: true },
+      select: {
+        id: true,
+        user_id: true,
+        status: true,
+        commission_percent_default: true,
+      },
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
     if (profile.status !== 'active')
@@ -585,10 +590,13 @@ export class CommissionsService {
       const isEligibleInvoice =
         snapshot.invoice_status === 'paid' &&
         new Decimal(snapshot.invoice_amount).gt(0) &&
-        (snapshot.payment_status === null || snapshot.payment_status === 'succeeded');
+        (snapshot.payment_status === null ||
+          snapshot.payment_status === 'succeeded');
 
       if (!isEligibleInvoice) {
-        this.logger.warn(`Invoice snapshot ${invoiceId} failed eligibility check — skipping`);
+        this.logger.warn(
+          `Invoice snapshot ${invoiceId} failed eligibility check — skipping`,
+        );
         skipped++;
         continue;
       }
@@ -609,7 +617,9 @@ export class CommissionsService {
       });
 
       if (!org || org.referred_by_affiliate_id !== profile.user_id) {
-        this.logger.warn(`Invoice ${invoiceId}: org not found or not referred by this affiliate — skipping`);
+        this.logger.warn(
+          `Invoice ${invoiceId}: org not found or not referred by this affiliate — skipping`,
+        );
         skipped++;
         continue;
       }
@@ -638,7 +648,8 @@ export class CommissionsService {
           where: { id: org.id },
           data: {
             med_alliance_referral_status: 'not_eligible',
-            med_alliance_block_reason: 'eligibility_expired: one-year window elapsed',
+            med_alliance_block_reason:
+              'eligibility_expired: one-year window elapsed',
           },
         });
         skipped++;
@@ -653,12 +664,14 @@ export class CommissionsService {
       // Transition to deployed on first paid invoice (idempotent).
       if (!org.first_paid_invoice_at && org.referral_stage !== 'deployed') {
         const firstInvoiceDate = snapshot.paid_at ?? new Date();
-        const now = new Date();
+        const eligibilityStartAt = new Date(
+          firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+        );
         await this.prisma.organization.update({
           where: { id: org.id },
           data: {
             referral_stage: 'deployed',
-            eligibility_start_at: now,
+            eligibility_start_at: eligibilityStartAt,
             first_paid_invoice_at: firstInvoiceDate,
             med_alliance_block_reason: null,
           },
@@ -670,10 +683,14 @@ export class CommissionsService {
             event: 'stage_changed',
             old_status: 'not_eligible',
             new_status: 'not_eligible',
-            reason: 'First paid invoice — transitioned to deployed stage via manual commission creation',
+            reason:
+              'First paid invoice — transitioned to deployed stage via manual commission creation',
             source: 'admin_action',
             actor_user_id: adminUser.id,
-            metadata: { referral_stage: 'deployed', eligibility_start_at: now.toISOString() } as any,
+            metadata: {
+              referral_stage: 'deployed',
+              eligibility_start_at: eligibilityStartAt.toISOString(),
+            } as any,
           },
         });
       }
@@ -692,7 +709,6 @@ export class CommissionsService {
           .div(100)
           .toDecimalPlaces(2);
 
-
         const commission = await this.prisma.affiliateCommission.create({
           data: {
             affiliate_id: profile.user_id,
@@ -702,7 +718,7 @@ export class CommissionsService {
             commission_percent_snapshot: profile.commission_percent_default,
             base_amount_snapshot: snapshot.invoice_amount,
             commission_amount: commissionAmount,
-            status: CommissionStatus.eligible,
+            status: CommissionStatus.pending_admin_confirmation,
             idempotency_key: idempotencyKey,
           },
           select: { id: true },

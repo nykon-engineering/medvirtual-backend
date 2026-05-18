@@ -1151,7 +1151,8 @@ export class AffiliatesService {
       })),
       projection: {
         deployment_date: deploymentDate?.toISOString() ?? null,
-        days_since_deployment: daysSince !== null ? Math.floor(daysSince) : null,
+        days_since_deployment:
+          daysSince !== null ? Math.floor(daysSince) : null,
         eligibility_window: eligibilityWindow,
         commission_status: commissionStatus,
         projected_commission_count: paidInvoices.length,
@@ -1162,7 +1163,11 @@ export class AffiliatesService {
   }
 
   // Admin: associate an existing organization as a referral for this affiliate.
-  async associateCompany(affiliateId: string, organizationId: string, adminUser: USER) {
+  async associateCompany(
+    affiliateId: string,
+    organizationId: string,
+    adminUser: USER,
+  ) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateId },
       select: { id: true, user_id: true, status: true },
@@ -1170,7 +1175,9 @@ export class AffiliatesService {
     if (!profile) throw new NotFoundException('Affiliate profile not found');
 
     if (!profile.user_id)
-      throw new BadRequestException('Affiliate has no connected user. Please invite this Partner as user first before associating referred companies.');
+      throw new BadRequestException(
+        'Affiliate has no connected user. Please invite this Partner as user first before associating referred companies.',
+      );
 
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
@@ -1188,7 +1195,12 @@ export class AffiliatesService {
     });
 
     // Backfill: detect existing paid invoices and create commissions retroactively.
-    await this._backfillOnAssociation(affiliateId, profile.user_id, organizationId, adminUser);
+    await this._backfillOnAssociation(
+      affiliateId,
+      profile.user_id,
+      organizationId,
+      adminUser,
+    );
 
     void this.hubspot.setCompanyAffiliateReferral(
       organizationId,
@@ -1224,7 +1236,13 @@ export class AffiliatesService {
         invoice_status: 'paid',
         invoice_amount: { gt: 0 },
       },
-      select: { id: true, hubspot_id: true, invoice_amount: true, payment_status: true, paid_at: true },
+      select: {
+        id: true,
+        hubspot_id: true,
+        invoice_amount: true,
+        payment_status: true,
+        paid_at: true,
+      },
       orderBy: { paid_at: 'asc' },
     });
 
@@ -1235,7 +1253,11 @@ export class AffiliatesService {
     if (candidates.length === 0) return;
 
     const firstInvoiceDate = candidates[0].paid_at ?? now;
-    const daysSinceDeployment = (now.getTime() - firstInvoiceDate.getTime()) / (1000 * 60 * 60 * 24);
+    const eligibilityStartAt = new Date(
+      firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+    );
+    const daysSinceDeployment =
+      (now.getTime() - firstInvoiceDate.getTime()) / (1000 * 60 * 60 * 24);
 
     const isExpired = daysSinceDeployment >= 365;
     const isEligible = !isExpired && daysSinceDeployment >= 30;
@@ -1245,7 +1267,7 @@ export class AffiliatesService {
       data: {
         referral_stage: 'deployed',
         first_paid_invoice_at: firstInvoiceDate,
-        eligibility_start_at: firstInvoiceDate,
+        eligibility_start_at: eligibilityStartAt,
         med_alliance_block_reason: isExpired
           ? 'eligibility_expired: one-year window elapsed'
           : null,
@@ -1260,14 +1282,19 @@ export class AffiliatesService {
         event: 'stage_changed',
         old_status: 'not_eligible',
         new_status: isEligible ? 'eligible' : 'not_eligible',
-        reason: 'Company associated by admin — retroactive deployment date set from first paid invoice',
+        reason:
+          'Company associated by admin — retroactive deployment date set from first paid invoice',
         source: 'admin_action',
         actor_user_id: adminUser.id,
         metadata: {
           referral_stage: 'deployed',
-          eligibility_start_at: firstInvoiceDate.toISOString(),
+          eligibility_start_at: eligibilityStartAt.toISOString(),
           days_since_first_invoice: Math.floor(daysSinceDeployment),
-          result: isExpired ? 'expired' : isEligible ? 'eligible' : 'stabilization_window',
+          result: isExpired
+            ? 'expired'
+            : isEligible
+              ? 'eligible'
+              : 'stabilization_window',
         } as any,
       },
     });
@@ -1281,8 +1308,12 @@ export class AffiliatesService {
 
     if (!affiliateProfile || affiliateProfile.status !== 'active') return;
 
-    const commissionStatus = isEligible ? 'pending_admin_confirmation' : 'detected';
-    const auditEvent = isEligible ? 'commission_pending_admin_confirmation' : 'commission_detected';
+    const commissionStatus = isEligible
+      ? 'pending_admin_confirmation'
+      : 'detected';
+    const auditEvent = isEligible
+      ? 'commission_pending_admin_confirmation'
+      : 'commission_detected';
 
     for (const snapshot of candidates) {
       const idempotencyKey = buildCommissionIdempotencyKey({
@@ -1290,7 +1321,8 @@ export class AffiliatesService {
         hubspotInvoiceId: snapshot.hubspot_id,
         paidAt: snapshot.paid_at,
         baseAmount: snapshot.invoice_amount.toString(),
-        commissionPercent: affiliateProfile.commission_percent_default.toString(),
+        commissionPercent:
+          affiliateProfile.commission_percent_default.toString(),
       });
 
       try {
@@ -1305,7 +1337,8 @@ export class AffiliatesService {
             affiliate_profile_id: affiliateProfileId,
             organization_id: organizationId,
             hubspot_invoice_snapshot_id: snapshot.id,
-            commission_percent_snapshot: affiliateProfile.commission_percent_default,
+            commission_percent_snapshot:
+              affiliateProfile.commission_percent_default,
             base_amount_snapshot: snapshot.invoice_amount,
             commission_amount: commissionAmount,
             status: commissionStatus as CommissionStatus,
@@ -1331,7 +1364,9 @@ export class AffiliatesService {
         });
       } catch (err: any) {
         if (err?.code === 'P2002') continue;
-        console.error(`Backfill commission failed for invoice ${snapshot.id}: ${err?.message}`);
+        console.error(
+          `Backfill commission failed for invoice ${snapshot.id}: ${err?.message}`,
+        );
       }
     }
   }

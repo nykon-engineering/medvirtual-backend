@@ -638,9 +638,18 @@ export class AffiliatesController {
   })
   @ApiParam({ name: 'id', description: 'Affiliate profile UUID' })
   @ApiQuery({ type: AssociationPreviewQueryDto })
-  @ApiResponse({ status: 200, description: 'Preview data retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Affiliate profile or organization not found' })
-  @ApiResponse({ status: 403, description: 'Access denied: insufficient permissions' })
+  @ApiResponse({
+    status: 200,
+    description: 'Preview data retrieved successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Affiliate profile or organization not found',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
   async associationPreview(
     @Param('id') id: string,
     @Query() query: AssociationPreviewQueryDto,
@@ -649,7 +658,11 @@ export class AffiliatesController {
       id,
       query.organization_id,
     );
-    return { status: 200, message: 'Preview data retrieved successfully', data };
+    return {
+      status: 200,
+      message: 'Preview data retrieved successfully',
+      data,
+    };
   }
 
   // POST /med-alliance/admin/affiliates/:id/associate-company — Associate existing org as referral.

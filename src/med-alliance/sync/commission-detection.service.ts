@@ -58,6 +58,10 @@ export class CommissionDetectionService {
       },
     });
 
+    if (!org?.first_paid_invoice_at) {
+      await this.trackFirstPaidInvoice(organizationId);
+    }
+
     if (!org?.referred_by_affiliate_id) {
       this.logger.warn(
         `Org ${organizationId} has no affiliate — skipping commission detection`,
@@ -75,7 +79,7 @@ export class CommissionDetectionService {
 
     const now = new Date();
 
-    // Eligibility window expiry: eligible but eligibility_start_at (deployment date) is older than one year.
+    // Eligibility window expiry: eligible but eligibility_start_at (first_paid_invoice_at + 30 days) is older than one year.
     if (
       org.med_alliance_referral_status === 'eligible' &&
       org.eligibility_start_at &&
@@ -165,7 +169,9 @@ export class CommissionDetectionService {
       await this.markDeployed(organizationId, firstInvoiceDate);
       // Update local org state so downstream logic sees the new values.
       org.referral_stage = 'deployed';
-      org.eligibility_start_at = now;
+      org.eligibility_start_at = new Date(
+        firstInvoiceDate.getTime() + THIRTY_DAYS_MS,
+      );
       org.first_paid_invoice_at = firstInvoiceDate;
     }
 
@@ -183,7 +189,7 @@ export class CommissionDetectionService {
     const isEligibleNow =
       org.med_alliance_referral_status === 'eligible' &&
       org.eligibility_start_at != null &&
-      Date.now() - org.eligibility_start_at.getTime() >= THIRTY_DAYS_MS &&
+      Date.now() >= org.eligibility_start_at.getTime() &&
       Date.now() - org.eligibility_start_at.getTime() <= ONE_YEAR_MS;
 
     const commissionStatus = isEligibleNow
@@ -265,6 +271,26 @@ export class CommissionDetectionService {
   // Private helpers
   // ---------------------------------------------------------------------------
 
+  private async trackFirstPaidInvoice(organizationId: string): Promise<void> {
+    const earliest = await this.prisma.hubspotInvoiceSnapshot.findFirst({
+      where: {
+        organization_id: organizationId,
+        invoice_status: 'paid',
+        invoice_amount: { gt: 0 },
+        OR: [{ payment_status: null }, { payment_status: 'succeeded' }],
+      },
+      orderBy: { paid_at: 'asc' },
+      select: { paid_at: true },
+    });
+
+    if (!earliest?.paid_at) return;
+
+    await this.prisma.organization.updateMany({
+      where: { id: organizationId, first_paid_invoice_at: null },
+      data: { first_paid_invoice_at: earliest.paid_at },
+    });
+  }
+
   /**
    * Transitions a referred organization to the 'deployed' pipeline stage on its first paid invoice.
    * Sets eligibility_start_at to NOW (deployment date — anchor for both 30-day and one-year windows)
@@ -275,12 +301,14 @@ export class CommissionDetectionService {
     organizationId: string,
     firstInvoiceDate: Date,
   ): Promise<void> {
-    const now = new Date();
+    const eligibilityStartAt = new Date(
+      firstInvoiceDate.getTime() + THIRTY_DAYS_MS,
+    );
     await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
         referral_stage: 'deployed',
-        eligibility_start_at: now,
+        eligibility_start_at: eligibilityStartAt,
         first_paid_invoice_at: firstInvoiceDate,
         med_alliance_block_reason: null,
         // med_alliance_referral_status intentionally stays 'not_eligible'
@@ -300,13 +328,13 @@ export class CommissionDetectionService {
         actor_user_id: null,
         metadata: {
           referral_stage: 'deployed',
-          eligibility_start_at: now.toISOString(),
+          eligibility_start_at: eligibilityStartAt.toISOString(),
         } as any,
       },
     });
 
     this.logger.log(
-      `Org ${organizationId} transitioned to deployed — eligibility_start_at=${now.toISOString()}`,
+      `Org ${organizationId} transitioned to deployed — eligibility_start_at=${eligibilityStartAt.toISOString()}`,
     );
   }
 
@@ -344,5 +372,4 @@ export class CommissionDetectionService {
       `Org ${organizationId} eligibility window expired — status set to not_eligible`,
     );
   }
-
 }

@@ -79,7 +79,7 @@ export class HubspotMatchingService {
       }
 
       if (results.length > 1) {
-        await this.handleMultipleMatches(organizationId, org);
+        await this.handleMultipleMatches(organizationId, org, !!org.referred_by_affiliate_id);
         return { outcome: 'multiple_matches' };
       }
 
@@ -92,13 +92,15 @@ export class HubspotMatchingService {
         hubspot_synced_at: new Date(),
       });
 
-      // Re-run MA-004: now that hubspot_id is set, the eligibility check
-      // may find a match by hubspot_id that was missed earlier.
-      await this.eligibilityCheck.runAndPersist(
-        organizationId,
-        'system',
-        'sync',
-      );
+      // MA-004: re-run eligibility check now that hubspot_id is set.
+      // Only applies to referred orgs — non-referred orgs have no Med Alliance eligibility.
+      if (org.referred_by_affiliate_id) {
+        await this.eligibilityCheck.runAndPersist(
+          organizationId,
+          'system',
+          'sync',
+        );
+      }
 
       return { outcome: 'synced', hubspotCompanyId };
     } catch (err) {
@@ -192,17 +194,28 @@ export class HubspotMatchingService {
         email: string;
       } | null;
     },
+    isReferred: boolean,
   ) {
+    const updateData: Record<string, any> = {
+      hubspot_sync_status: 'multiple_matches',
+      hubspot_sync_error:
+        'Multiple HubSpot company records matched. Manual review required.',
+      hubspot_synced_at: null,
+    };
+
+    // Only set Med Alliance eligibility fields for referred organizations
+    if (isReferred) {
+      updateData.med_alliance_referral_status = 'not_eligible';
+    }
+
     await this.prisma.organization.update({
       where: { id: organizationId },
-      data: {
-        med_alliance_referral_status: 'not_eligible',
-        hubspot_sync_status: 'multiple_matches',
-        hubspot_sync_error:
-          'Multiple HubSpot company records matched. Manual review required.',
-        hubspot_synced_at: null,
-      },
+      data: updateData,
     });
+
+    if (!isReferred) {
+      return;
+    }
 
     // MA-006: open an admin review case so it appears in the review queue
     await this.reviewCases.openOrSkip(

@@ -204,7 +204,11 @@ export class UpdateHireRequestDto {
   @IsOptional()
   hubspot_va_shift_hours: string;
 
-  @ApiProperty({ type: String, description: 'Other Shift Hours (free text)', required: false })
+  @ApiProperty({
+    type: String,
+    description: 'Other Shift Hours (free text)',
+    required: false,
+  })
   @IsString()
   @IsOptional()
   other_shift_hours: string;
@@ -296,7 +300,11 @@ export class UpdateHireRequestDto {
   @IsOptional()
   request_role: string;
 
-  @ApiProperty({ type: String, description: 'Staff member to be replaced (ID)', required: false })
+  @ApiProperty({
+    type: String,
+    description: 'Staff member to be replaced (ID)',
+    required: false,
+  })
   @IsString()
   @IsOptional()
   staff_to_be_replaced_id?: string;

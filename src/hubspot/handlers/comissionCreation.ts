@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommissionStatus } from '@prisma/client';
+import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
 
 @Injectable()
 export class HandlerComissionCreation {
@@ -15,7 +17,9 @@ export class HandlerComissionCreation {
           },
           select: {
             id: true,
+            hubspot_id: true,
             invoice_amount: true,
+            paid_at: true,
             organization: {
               select: {
                 id: true,
@@ -63,23 +67,26 @@ export class HandlerComissionCreation {
         invoiceExists?.organization.referredByAffiliate?.affiliateProfile
           ?.commission_percent_default || 0;
       const baseAmmount = invoiceExists.invoice_amount;
-      const comissionAmountValue =
-        (Number(baseAmmount) * Number(comissionAmount)) / 100;
-      const idempotencyKey = `${invoiceExists.id}-${invoiceExists.organization.referredByAffiliate.id}`;
+      const comissionAmountValue = new Decimal(baseAmmount)
+        .mul(comissionAmount)
+        .div(100)
+        .toDecimalPlaces(2);
+      const idempotencyKey = buildCommissionIdempotencyKey({
+        affiliateId: invoiceExists.organization.referredByAffiliate.id,
+        hubspotInvoiceId: invoiceExists.hubspot_id,
+        paidAt: invoiceExists.paid_at,
+        baseAmount: baseAmmount.toString(),
+        commissionPercent: comissionAmount.toString(),
+      });
 
-      // One year in milliseconds — used for the eligibility window and referral-age rule.
       const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-
-      // 30-day stabilization window: deployed companies must be deployed for this long before going eligible.
-      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
       const isEligibleNow =
         invoiceExists.organization.med_alliance_referral_status ===
           'eligible' &&
         invoiceExists.organization.eligibility_start_at != null &&
-        Date.now() -
-          invoiceExists.organization.eligibility_start_at.getTime() >=
-          THIRTY_DAYS_MS &&
+        Date.now() >=
+          invoiceExists.organization.eligibility_start_at.getTime() &&
         Date.now() -
           invoiceExists.organization.eligibility_start_at.getTime() <=
           ONE_YEAR_MS;

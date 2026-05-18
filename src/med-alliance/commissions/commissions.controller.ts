@@ -322,15 +322,27 @@ export class CommissionsController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({
-    summary: 'List paid invoices without commissions for an affiliate (manual commission creation)',
+    summary:
+      'List paid invoices without commissions for an affiliate (manual commission creation)',
   })
   @ApiParam({ name: 'affiliateId', description: 'AffiliateProfile UUID' })
-  @ApiResponse({ status: 200, description: 'Eligible invoices retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Eligible invoices retrieved successfully',
+  })
   @ApiResponse({ status: 404, description: 'Affiliate profile not found' })
-  @ApiResponse({ status: 403, description: 'Access denied or affiliate is not active' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied or affiliate is not active',
+  })
   async getEligibleInvoices(@Param('affiliateId') affiliateId: string) {
-    const data = await this.invoicesService.getEligibleInvoicesForAffiliate(affiliateId);
-    return { status: 200, message: 'Eligible invoices retrieved successfully', data };
+    const data =
+      await this.invoicesService.getEligibleInvoicesForAffiliate(affiliateId);
+    return {
+      status: 200,
+      message: 'Eligible invoices retrieved successfully',
+      data,
+    };
   }
 
   // POST /med-alliance/admin/affiliates/:affiliateId/commissions/from-invoices
@@ -339,19 +351,27 @@ export class CommissionsController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({
-    summary: 'Manually create commissions for an affiliate from selected paid HubSpot invoices',
+    summary:
+      'Manually create commissions for an affiliate from selected paid HubSpot invoices',
   })
   @ApiParam({ name: 'affiliateId', description: 'AffiliateProfile UUID' })
   @ApiBody({ type: CreateFromInvoicesDto })
   @ApiResponse({ status: 200, description: 'Commissions created successfully' })
   @ApiResponse({ status: 404, description: 'Affiliate profile not found' })
-  @ApiResponse({ status: 403, description: 'Access denied or affiliate is not active' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied or affiliate is not active',
+  })
   async createFromInvoices(
     @Param('affiliateId') affiliateId: string,
     @Body() dto: CreateFromInvoicesDto,
     @CurrentUser() admin: USER,
   ) {
-    const result = await this.commissionsService.createFromInvoices(affiliateId, dto.invoice_ids, admin);
+    const result = await this.commissionsService.createFromInvoices(
+      affiliateId,
+      dto.invoice_ids,
+      admin,
+    );
     return {
       status: 200,
       message: `${result.created} commission(s) created, ${result.skipped} skipped`,

@@ -21,6 +21,10 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 import { AffiliateStatus } from '@prisma/client';
+import {
+  ReferralSyncService,
+  SyncResult,
+} from '../med-alliance/sync/referral-sync.service';
 
 type Event = {
   objectId?: string;
@@ -36,6 +40,7 @@ export class CronService {
     private readonly hireRequestService: HireRequestService,
     private readonly positionRateConfigService: PositionRateConfigService,
     private readonly payoutRequestsService: PayoutRequestsService,
+    private readonly referralSync: ReferralSyncService,
   ) {}
 
   async reRunPipeline(statusDto: reRunPipelineDto): Promise<boolean> {
@@ -632,7 +637,6 @@ export class CronService {
     failed: number;
     errors: string[];
   }> {
-
     const createdIds: string[] = [];
     const skippedIds: string[] = [];
     const errors: string[] = [];
@@ -752,13 +756,13 @@ export class CronService {
 
         await this.prisma.$transaction(async (tx) => {
           // Reuse existing USER if the email is already in the system
-          let user = await tx.uSER.findUnique({ where: { email } });
+          const user = await tx.uSER.findUnique({ where: { email } });
 
           // If user already has a profile, just stamp the hubspot_id if missing
           const profileExists = await tx.affiliateProfile.findUnique({
             where: { hubspot_id: hubspotId },
           });
-          if (profileExists)  return;
+          if (profileExists) return;
 
           await tx.affiliateProfile.create({
             data: {
@@ -833,7 +837,8 @@ export class CronService {
         const paymentDate: string | null =
           response.data?.properties?.hs_payment_date ?? null;
 
-        const pdf_link = response.data?.properties?.hs_pdf_download_link ?? null;
+        const pdf_link =
+          response.data?.properties?.hs_pdf_download_link ?? null;
         if (!paymentDate) {
           skipped++;
           continue;
@@ -841,10 +846,10 @@ export class CronService {
 
         await this.prisma.hubspotInvoiceSnapshot.update({
           where: { id: snapshot.id },
-          data: { 
+          data: {
             paid_at: new Date(paymentDate),
-              hubspot_pdf_link: pdf_link,
-           },
+            hubspot_pdf_link: pdf_link,
+          },
         });
 
         updated++;
@@ -877,7 +882,7 @@ export class CronService {
     const orgs = await this.prisma.organization.findMany({
       where: {
         referral_stage: 'deployed' as any,
-        eligibility_start_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+        first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
         med_alliance_referral_status: 'not_eligible',
       },
       select: { id: true, name: true, eligibility_start_at: true },
@@ -984,5 +989,131 @@ export class CronService {
     }
 
     return { companiesPromoted, commissionsPromoted, errors };
+  }
+
+  /**
+   * Syncs referred organizations against HubSpot:
+   *   1. Resolves hubspot_id (Phase A — HubSpot company matching).
+   *   2. Ingests invoices and creates missing HubspotInvoiceSnapshot records (Phase B).
+   *   3. Detects commissions and transitions org to 'deployed' on first paid invoice.
+   *   4. Promotes organizations that have been deployed for 30+ days to 'eligible'
+   *      and advances their 'detected' commissions to 'pending_admin_confirmation'.
+   *
+   * @param organizationId - Single org to process. If omitted, all referred orgs are processed.
+   */
+  async syncOrganizationsWithHubspot(organizationId?: string): Promise<{
+    processed: number;
+    syncFailed: number;
+    companiesPromoted: number;
+    commissionsPromoted: number;
+    syncResults: SyncResult[];
+    promotionErrors: string[];
+  }> {
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+    const now = new Date();
+
+
+    console.log("Organization ID provided:", organizationId);
+    
+    
+    let orgIds: string[];
+
+    if (organizationId) {
+      orgIds = [organizationId];
+    } else {
+      const orgs = await this.prisma.organization.findMany({
+        where: { status: 'active' },
+        select: { id: true },
+        orderBy: { updatedAt: 'asc' },
+      });
+      orgIds = orgs.map((o) => o.id);
+    }
+
+    console.log(
+      `syncOrganizationsWithHubspot: processing ${orgIds.length} organization(s)`,
+    );
+
+    const syncResults: SyncResult[] = [];
+    let syncFailed = 0;
+
+    for (const orgId of orgIds) {
+      try {
+        const result = await this.referralSync.run(orgId);
+        syncResults.push(result);
+      } catch (err) {
+        syncFailed++;
+        console.error(
+          `syncOrganizationsWithHubspot: error syncing org ${orgId} — ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
+    // Promote deployed orgs that have passed the 30-day stabilization window
+    const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
+    const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
+    console.log("OrgsID to check for promotion:", orgIds);
+
+    const deployedOrgs = await this.prisma.organization.findMany({
+      where: {
+        id: { in: orgIds },
+        referral_stage: 'deployed' as any,
+        first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+        med_alliance_referral_status: 'not_eligible',
+      },
+      select: { id: true, name: true, eligibility_start_at: true },
+    });
+
+    console.log("Deployed orgs eligible for promotion:", deployedOrgs);
+
+    let companiesPromoted = 0;
+    let commissionsPromoted = 0;
+    const promotionErrors: string[] = [];
+
+    for (const org of deployedOrgs) {
+      try {
+        await this.prisma.organization.update({
+          where: { id: org.id },
+          data: {
+            med_alliance_referral_status: 'eligible',
+            med_alliance_block_reason: null,
+          },
+        });
+
+        companiesPromoted++;
+
+        const detected = await this.prisma.affiliateCommission.findMany({
+          where: { organization_id: org.id, status: 'detected' },
+          select: { id: true },
+        });
+
+        for (const commission of detected) {
+          await this.prisma.affiliateCommission.update({
+            where: { id: commission.id },
+            data: { status: 'pending_admin_confirmation' },
+          });
+          
+          commissionsPromoted++;
+        }
+      } catch (err: any) {
+        const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
+        console.error(`syncOrganizationsWithHubspot: ${msg}`);
+        promotionErrors.push(msg);
+      }
+    }
+
+    console.log(
+      `syncOrganizationsWithHubspot: processed=${orgIds.length} syncFailed=${syncFailed} ` +
+        `companiesPromoted=${companiesPromoted} commissionsPromoted=${commissionsPromoted}`,
+    );
+
+    return {
+      processed: orgIds.length,
+      syncFailed,
+      companiesPromoted,
+      commissionsPromoted,
+      syncResults,
+      promotionErrors,
+    };
   }
 }

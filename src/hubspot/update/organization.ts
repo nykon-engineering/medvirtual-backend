@@ -17,7 +17,9 @@ export class OrganizationUpdateService {
     private readonly audit: HubspotAuditService,
   ) {}
 
-  private async getAffiliateHubspotId(affiliateUserId: string): Promise<string | null> {
+  private async getAffiliateHubspotId(
+    affiliateUserId: string,
+  ): Promise<string | null> {
     if (!affiliateUserId) return null;
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { user_id: affiliateUserId },
@@ -26,7 +28,9 @@ export class OrganizationUpdateService {
     return profile?.hubspot_id ?? null;
   }
 
-  private async getAffiliateEmail(affiliateUserId: string): Promise<string | null> {
+  private async getAffiliateEmail(
+    affiliateUserId: string,
+  ): Promise<string | null> {
     if (!affiliateUserId) return null;
     const user = await this.prisma.uSER.findUnique({
       where: { id: affiliateUserId },
