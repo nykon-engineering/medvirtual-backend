@@ -675,7 +675,7 @@ export class AffiliatesService {
             organization: { select: { id: true, name: true } },
           },
           orderBy: { createdAt: 'desc' as const },
-          take: 10,
+          take: 50,
         },
       },
     });
