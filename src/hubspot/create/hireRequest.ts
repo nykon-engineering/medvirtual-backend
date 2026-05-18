@@ -38,6 +38,7 @@ export class HireRequestCreationService {
   }
 
   async execute(data: any, actorUserId?: string): Promise<any> {
+
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -46,7 +47,7 @@ export class HireRequestCreationService {
         data.salary_range_from && data.salary_range_to
           ? `${data.salary_range_from} - ${data.salary_range_to}`
           : '';
-      //console.log("Data arriving on HireRequestCreationService:", data);
+      //console.log("Data arriving on HireRequestCreationService:", data.other_shift_hours);
       const hrDescription = data.description ? data.description : '';
 
       const response = await axios.post(
@@ -116,7 +117,9 @@ export class HireRequestCreationService {
               data.background_requirements_of_candidate
                 ? data.background_requirements_of_candidate
                 : undefined,
-
+            other_shift_hours: data.other_shift_hours
+              ? data.other_shift_hours.toString()
+              : undefined,
             //ticketOwner
             hubspot_owner_id: data.assign_user_id
               ? await this.getOwnerId(
