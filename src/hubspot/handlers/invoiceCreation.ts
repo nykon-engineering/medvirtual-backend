@@ -74,6 +74,14 @@ export class HandlerInvoiceCreation {
         invoiceData.paid_at = resolvedPaidAt;
       }
 
+      const rawAmount = parseFloat(invoiceData.invoice_amount ?? '0');
+      if (isNaN(rawAmount) || rawAmount <= 0) {
+        console.log(
+          `Invoice ${event.objectId} has a zero or missing amount. Skipping snapshot creation.`,
+        );
+        return;
+      }
+
       let organizationDbId: string | undefined;
       const companyAssociated = getObject.data.associations?.companies;
       if (companyAssociated?.results?.length > 0) {

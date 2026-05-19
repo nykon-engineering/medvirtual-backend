@@ -56,9 +56,12 @@ export class HandlerComissionCreation {
         );
         return;
       }
-      if (invoiceExists?.invoice_amount === null) {
+      if (
+        invoiceExists?.invoice_amount === null ||
+        new Decimal(invoiceExists.invoice_amount).lte(0)
+      ) {
         console.log(
-          `The invoice with Hubspot ID ${event.objectId} has no amount billed. No comission will be created.`,
+          `The invoice with Hubspot ID ${event.objectId} has no amount billed or is zero. No commission will be created.`,
         );
         return;
       }
