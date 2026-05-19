@@ -112,10 +112,10 @@ export class ReferralSyncService {
       organizationId,
       org.hubspot_id,
     );
-    
+
     //commented only for populate databse
     const commissionStats = await this.commissionDetection.run(organizationId);
-    //const commissionStats = { created: 0, skipped: 0 }; 
+    //const commissionStats = { created: 0, skipped: 0 };
 
     result.phaseB = {
       invoices: invoiceStats,

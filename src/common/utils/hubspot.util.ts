@@ -219,7 +219,11 @@ export async function resolvePaidAt(
     const paymentId = paymentResults[0].id;
     const response = await axios.get(
       `https://api.hubapi.com/crm/v3/objects/payments/${paymentId}?properties=hs_initiated_date`,
-      { headers: { Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}` } },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+        },
+      },
     );
     const initiatedDate = response.data?.properties?.hs_initiated_date;
     return initiatedDate ? new Date(initiatedDate) : null;

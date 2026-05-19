@@ -216,7 +216,13 @@ export class HireRequestService {
         'User not found or not part of an organization',
       );
 
-    const { skills, client_id, selectedCandidates, staff_to_be_replaced_id, ...hireRequestData } = data;
+    const {
+      skills,
+      client_id,
+      selectedCandidates,
+      staff_to_be_replaced_id,
+      ...hireRequestData
+    } = data;
 
     if (user.role.includes('system') && !client_id)
       throw new BadRequestException('Client ID is required for system users');
@@ -307,7 +313,6 @@ export class HireRequestService {
       staff_to_be_replaced: staff_to_be_replaced_id
         ? { connect: { id: staff_to_be_replaced_id } }
         : undefined,
-        
     };
 
     const newHireRequest = await this.prisma.hireRequest.create({

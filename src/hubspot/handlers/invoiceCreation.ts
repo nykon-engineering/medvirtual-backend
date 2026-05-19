@@ -73,6 +73,9 @@ export class HandlerInvoiceCreation {
       if (resolvedPaidAt) {
         invoiceData.paid_at = resolvedPaidAt;
       }
+      if (invoiceData.due_date) {
+        invoiceData.due_date = new Date(invoiceData.due_date as string);
+      }
 
       const rawAmount = parseFloat(invoiceData.invoice_amount ?? '0');
       if (isNaN(rawAmount) || rawAmount <= 0) {

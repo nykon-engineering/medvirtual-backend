@@ -50,6 +50,7 @@ const COMMISSION_SELECT = {
       invoice_amount: true,
       currency: true,
       paid_at: true,
+      due_date: true,
       hubspot_pdf_link: true,
       lineItems: {
         select: {

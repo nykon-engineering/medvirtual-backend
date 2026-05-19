@@ -1013,10 +1013,8 @@ export class CronService {
     const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
     const now = new Date();
 
+    console.log('Organization ID provided:', organizationId);
 
-    console.log("Organization ID provided:", organizationId);
-    
-    
     let orgIds: string[];
 
     if (organizationId) {
@@ -1052,7 +1050,7 @@ export class CronService {
     // Promote deployed orgs that have passed the 30-day stabilization window
     const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
     const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
-    console.log("OrgsID to check for promotion:", orgIds);
+    console.log('OrgsID to check for promotion:', orgIds);
 
     const deployedOrgs = await this.prisma.organization.findMany({
       where: {
@@ -1064,7 +1062,7 @@ export class CronService {
       select: { id: true, name: true, eligibility_start_at: true },
     });
 
-    console.log("Deployed orgs eligible for promotion:", deployedOrgs);
+    console.log('Deployed orgs eligible for promotion:', deployedOrgs);
 
     let companiesPromoted = 0;
     let commissionsPromoted = 0;
@@ -1092,7 +1090,7 @@ export class CronService {
             where: { id: commission.id },
             data: { status: 'pending_admin_confirmation' },
           });
-          
+
           commissionsPromoted++;
         }
       } catch (err: any) {

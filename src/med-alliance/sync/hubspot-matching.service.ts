@@ -79,7 +79,11 @@ export class HubspotMatchingService {
       }
 
       if (results.length > 1) {
-        await this.handleMultipleMatches(organizationId, org, !!org.referred_by_affiliate_id);
+        await this.handleMultipleMatches(
+          organizationId,
+          org,
+          !!org.referred_by_affiliate_id,
+        );
         return { outcome: 'multiple_matches' };
       }
 

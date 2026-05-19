@@ -45,6 +45,9 @@ export class HandlerInvoicePropertyChange {
     if (fieldUpdated === 'paid_at' && value) {
       value = new Date(Number(value));
     }
+    if (fieldUpdated === 'due_date' && value) {
+      value = new Date(Number(value));
+    }
 
     objectToUpdate = {
       [fieldUpdated]: value,
