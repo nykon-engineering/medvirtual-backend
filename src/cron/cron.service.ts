@@ -868,6 +868,66 @@ export class CronService {
     return { updated, skipped, failed };
   }
 
+  async syncInvoiceDueDates(): Promise<{
+    updated: number;
+    skipped: number;
+    failed: number;
+  }> {
+    console.log('Starting syncInvoiceDueDates backfill...');
+
+    const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
+      where: { due_date: null },
+      select: { id: true, hubspot_id: true },
+    });
+
+    console.log(
+      `syncInvoiceDueDates: ${snapshots.length} snapshot(s) with null due_date`,
+    );
+
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const snapshot of snapshots) {
+      try {
+        const response = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/invoices/${snapshot.hubspot_id}?properties=hs_due_date`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
+        );
+
+        const dueDate: string | null =
+          response.data?.properties?.hs_due_date ?? null;
+
+        if (!dueDate) {
+          skipped++;
+          continue;
+        }
+
+        await this.prisma.hubspotInvoiceSnapshot.update({
+          where: { id: snapshot.id },
+          data: { due_date: new Date(dueDate) },
+        });
+
+        updated++;
+      } catch (err) {
+        console.error(
+          `syncInvoiceDueDates: failed for invoice ${snapshot.hubspot_id} — ${err instanceof Error ? err.message : err}`,
+        );
+        failed++;
+      }
+    }
+
+    console.log(
+      `syncInvoiceDueDates: updated=${updated}, skipped=${skipped}, failed=${failed}`,
+    );
+
+    return { updated, skipped, failed };
+  }
+
   async promoteDeployedCompanies(): Promise<{
     companiesPromoted: number;
     commissionsPromoted: number;

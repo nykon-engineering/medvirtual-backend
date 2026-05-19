@@ -457,23 +457,19 @@ export class AffiliatesService {
       ];
     }
 
-    // Build user-level conditions (search + organization may both apply).
-    const userConditions: any = {};
     if (search) {
-      userConditions.OR = [
-        { first_name: { contains: search, mode: 'insensitive' } },
-        { last_name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-    if (organization === 'with_org') {
-      userConditions.organization_id = { not: null };
-    } else if (organization === 'without_org') {
-      userConditions.organization_id = null;
+      where.OR = [
+            { full_name: { contains: search.trim(), mode: 'insensitive' } },
+            { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
+          ];
+
+      
     }
 
-    if (Object.keys(userConditions).length > 0) {
-      where.user = userConditions;
+    if (organization === 'with_org') {
+      where.user = { organization_id: { not: null } };
+    } else if (organization === 'without_org') {
+      where.user = { organization_id: null };
     }
 
     const [data, total] = await this.prisma.$transaction([

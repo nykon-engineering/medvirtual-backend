@@ -176,6 +176,24 @@ export class CronController {
     };
   }
 
+  @Get('sync-invoice-due-dates')
+  @ApiOperation({
+    summary:
+      'Fetch hs_due_date from HubSpot for each invoice snapshot missing due_date and persist it',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Invoice due dates backfill completed',
+  })
+  async syncInvoiceDueDates() {
+    const result = await this.cron.syncInvoiceDueDates();
+    return {
+      status: 200,
+      message: 'Invoice due dates backfill completed',
+      data: result,
+    };
+  }
+
   @Get('promote-deployed-companies')
   @ApiOperation({
     summary:
