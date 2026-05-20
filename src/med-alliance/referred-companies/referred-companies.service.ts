@@ -269,7 +269,7 @@ export class ReferredCompaniesService {
     } catch (error) {
       if (error?.response?.status === 404) {
         throw new BadRequestException(
-          'Your Growth Partner profile could not be found in HubSpot. Please contact support to re-link your affiliate account before referring a company.',
+          'Your Growth Partner profile could not be found. Please contact support to re-link your affiliate account before referring a company.',
         );
       }
       // Other errors (network, rate limit) → do not block; let the flow continue.
