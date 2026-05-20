@@ -64,7 +64,8 @@ export class ReferredCompaniesService {
     currentUser: USER,
   ) {
     // Step 0: Validation — read-only, no rollback needed.
-    await this.affiliatesService.requireActiveProfile(currentUser.id);
+    const affiliateProfile = await this.affiliatesService.requireActiveProfile(currentUser.id);
+    await this.verifyGrowthPartnerInHubspot(affiliateProfile.hubspot_id);
 
     const cleanupStack: Array<() => Promise<void>> = [];
 
@@ -254,6 +255,27 @@ export class ReferredCompaniesService {
    * Executes the cleanup stack in reverse order (LIFO).
    * Each cleanup function has its own error handling so one failure does not block the rest.
    */
+  private async verifyGrowthPartnerInHubspot(hubspotId: string | null): Promise<void> {
+    if (!hubspotId) return;
+    try {
+      await axios.get(
+        `https://api.hubapi.com/crm/v3/objects/p20630393_growth_partners/${hubspotId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          },
+        },
+      );
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        throw new BadRequestException(
+          'Your Growth Partner profile could not be found in HubSpot. Please contact support to re-link your affiliate account before referring a company.',
+        );
+      }
+      // Other errors (network, rate limit) → do not block; let the flow continue.
+    }
+  }
+
   private async executeRollback(
     cleanupStack: Array<() => Promise<void>>,
   ): Promise<void> {
