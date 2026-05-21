@@ -500,6 +500,7 @@ model Ticket {
   staff          Staff?        @relation(fields: [staff_id], references: [id])
   user           USER?         @relation(fields: [user_id], references: [id])
   TicketNotes    TicketNotes[]
+  invoiceLineItems InvoiceLineItem[]
 
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
@@ -1363,6 +1364,8 @@ model InvoiceLineItem {
   // hierarchy for rendering nested additional rows
   parent_line_item_id         String?
 
+  ticket_id                   String?
+
   // nullable for account-wide fees
   worker_id                   String?
   worker_name_snapshot        String?
@@ -1424,6 +1427,7 @@ model InvoiceLineItem {
   children                    InvoiceLineItem[]   @relation("InvoiceLineChildren")
 
   creator                     USER                @relation("InvoiceLineCreatedBy", fields: [created_by], references: [id])
+  ticket                      Ticket?             @relation(fields: [ticket_id], references: [id], onDelete: SetNull)
 
   hour_breakdowns             InvoiceLineHourBreakdown[]
   adjustment_history          InvoiceLineAdjustmentHistory[]

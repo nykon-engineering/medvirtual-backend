@@ -24,6 +24,11 @@ export class InvoiceLineItemDto {
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
+  ticket_id?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
   worker_id?: string;
 
   @ApiProperty({ required: false })

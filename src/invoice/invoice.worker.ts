@@ -414,6 +414,7 @@ export class InvoiceWorker extends WorkerHost {
                   data: {
                     invoice_version_id: version.id,
                     parent_line_item_id: primaryLineItem.id,
+                    ticket_id: ticket.id,
                     worker_id: userId.toString(),
                     worker_name_snapshot: memberName,
                     type: InvoiceLineType.additional,

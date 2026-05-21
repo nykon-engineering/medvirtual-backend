@@ -4,7 +4,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
 import { CreateInvoiceDto, BulkCreateInvoiceDto } from './dto/create-invoice.dto';
-import { InvoiceJobStatus, InvoiceStatus, Prisma } from '@prisma/client';
+import { InvoiceJobStatus, InvoiceStatus, Prisma, TicketStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
@@ -295,6 +295,34 @@ export class InvoiceService {
         organization: true,
       },
     });
+
+    // If approved, close any associated tickets for bonus line items
+    if (status === InvoiceStatus.approved && updatedInvoice.current_version_id) {
+      const lineItems = await this.prisma.invoiceLineItem.findMany({
+        where: {
+          invoice_version_id: updatedInvoice.current_version_id,
+          ticket_id: { not: null },
+        },
+        select: {
+          ticket_id: true,
+        },
+      });
+
+      const ticketIds = lineItems
+        .map((item) => item.ticket_id)
+        .filter((tId): tId is string => !!tId);
+
+      if (ticketIds.length > 0) {
+        await this.prisma.ticket.updateMany({
+          where: {
+            id: { in: ticketIds },
+          },
+          data: {
+            status: TicketStatus.closed,
+          },
+        });
+      }
+    }
 
     // Create Audit Log
     await this.prisma.invoiceAuditLog.create({
