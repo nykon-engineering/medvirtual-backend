@@ -157,6 +157,7 @@ export class InvoiceWorker extends WorkerHost {
 
     // Aggregate by user
     const userSummary = new Map<number, { tracked: number; overall: number }>();
+    let activities: any[] = [];
 
     if (is_prebill) {
       // Pre-bill logic: Assume 8hrs per day for all project members
@@ -177,7 +178,7 @@ export class InvoiceWorker extends WorkerHost {
       }
     } else {
       // Regular logic: Fetch Hubstaff activities
-      const activities = await this.hubstaff.getHubstaffDailyActivityForInvoice({
+      activities = await this.hubstaff.getHubstaffDailyActivityForInvoice({
         hubstaffId: Number(hubstaffId),
         start_date: billing_start_date,
         end_date: billing_end_date,
@@ -199,6 +200,33 @@ export class InvoiceWorker extends WorkerHost {
           memberMap.set(act.user_id, act.user_name);
         }
       });
+    }
+
+    // Now collect all unique user IDs for fetching PTOs
+    const uniqueUserIdsForPto = Array.from(new Set([
+      ...hubstaffUserIds,
+      ...activities.map((act: any) => String(act.user_id))
+    ]));
+
+    // Fetch and filter approved PTOs
+    const startDateISO = DateTime.fromISO(billing_start_date).startOf('day').toISO() || undefined;
+    const endDateISO = DateTime.fromISO(billing_end_date).plus({ days: 1 }).startOf('day').toISO() || undefined;
+
+    const ptoRequests = (uniqueUserIdsForPto.length > 0)
+      ? await this.hubstaff.getTimeOffRequests(uniqueUserIdsForPto, startDateISO, endDateISO)
+      : [];
+
+    const approvedPtos = ptoRequests.filter(pto => pto.status === 'approved');
+
+    // Define the list of all days in the billing period
+    const startJSDate = new Date(billing_start_date);
+    const endJSDate = new Date(billing_end_date);
+    let curDate = DateTime.fromJSDate(startJSDate).startOf('day');
+    const lastDate = DateTime.fromJSDate(endJSDate).startOf('day');
+    const allDaysList: DateTime[] = [];
+    while (curDate.toMillis() <= lastDate.toMillis()) {
+      allDaysList.push(curDate);
+      curDate = curDate.plus({ days: 1 });
     }
 
     return await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -237,25 +265,66 @@ export class InvoiceWorker extends WorkerHost {
 
       // 3. Create Line Items
       for (const [userId, stats] of userSummary.entries()) {
-        const hours = new Decimal(stats.tracked).dividedBy(3600); // convert seconds to hours
-
         // Find Staff & Candidate
         const staff = staffRecords.find(s => s.candidate?.hubstaff_id === String(userId)) || null;
         const candidate = staff?.candidate || null;
+
+        let isFullTime = false;
+        if (staff) {
+          const deploymentType = (staff.hubspot_deployment_type || '').trim().toLowerCase().replace('-', ' ');
+          isFullTime = deploymentType === 'full time' || deploymentType === 'fulltime';
+        }
+        const dailyBaseline = isFullTime ? 8 : 4;
+
+        // Loop through all days in the billing period to calculate daily worked, PTO, and holiday hours
+        let totalWorkedHours = 0;
+        let totalPtoHours = 0;
+        const totalHolidayHours = 0;
+
+        for (const dayOfPeriod of allDaysList) {
+          const dateStr = dayOfPeriod.toFormat('yyyy-MM-dd');
+          const isWeekday = dayOfPeriod.weekday >= 1 && dayOfPeriod.weekday <= 5;
+
+          // 1. Calculate worked hours for this day
+          let dailyWorked = 0;
+          if (is_prebill) {
+            dailyWorked = isWeekday ? dailyBaseline : 0;
+          } else {
+            const dayActs = activities.filter(act => act.user_id === userId && act.day === dateStr);
+            const totalSeconds = dayActs.reduce((sum, act) => sum + act.total_time_logged, 0);
+            dailyWorked = totalSeconds / 3600;
+          }
+          totalWorkedHours += dailyWorked;
+
+          // 2. Calculate approved PTO hours for this day
+          let dailyPto = 0;
+          if (isWeekday) {
+            const userPtos = approvedPtos.filter(pto => pto.user_id === userId);
+            for (const pto of userPtos) {
+              const days = pto.time_off_request_days
+                ? (Array.isArray(pto.time_off_request_days) ? pto.time_off_request_days : [pto.time_off_request_days])
+                : [];
+              for (const day of days) {
+                if (day.date === dateStr) {
+                  dailyPto += (day.amount_used || 0) * dailyBaseline;
+                }
+              }
+            }
+          }
+          totalPtoHours += dailyPto;
+        }
+
+        const totalPayableHours = totalWorkedHours + totalPtoHours + totalHolidayHours;
+        const hours = new Decimal(totalPayableHours);
 
         let hourlyRate = new Decimal(25); // Default fallback
         let lineTotal = hours.mul(hourlyRate);
 
         if (staff && staff.salary) {
           const monthlySalary = Number(staff.salary);
-          const deploymentType = (staff.hubspot_deployment_type || '').trim().toLowerCase().replace('-', ' ');
-          const isFullTime = deploymentType === 'full time' || deploymentType === 'fulltime';
 
           if (isFullTime) {
             // Full-Time staff logic
-            const startJSDate = new Date(billing_start_date);
-            const endJSDate = new Date(billing_end_date);
-            
             const startDT = DateTime.fromJSDate(startJSDate);
             const endDT = DateTime.fromJSDate(endJSDate);
             const diffInDays = endDT.diff(startDT, 'days').days + 1;
@@ -265,7 +334,7 @@ export class InvoiceWorker extends WorkerHost {
 
             const workdaysInPeriod = this.getWorkdaysCount(startJSDate, endJSDate);
             const requiredHours = workdaysInPeriod * 8;
-            const actualHours = hours.toNumber();
+            const actualHours = totalPayableHours;
             const deficit = requiredHours - actualHours;
 
             if (deficit > 10) {
@@ -292,7 +361,7 @@ export class InvoiceWorker extends WorkerHost {
 
         const memberName = memberMap.get(userId) || `Hubstaff User ${userId}`;
 
-        await tx.invoiceLineItem.create({
+        const primaryLineItem = await tx.invoiceLineItem.create({
           data: {
             invoice_version_id: version.id,
             worker_id: userId.toString(),
@@ -301,7 +370,9 @@ export class InvoiceWorker extends WorkerHost {
             category: InvoiceLineCategory.hourly_service,
             description: `Hourly services for ${memberName}`,
             effective_worked_hours: hours,
-            total_hours_worked: hours,
+            total_hours_worked: new Decimal(totalWorkedHours),
+            total_pto_hours: new Decimal(totalPtoHours),
+            total_holiday_hours: new Decimal(totalHolidayHours),
             total_hours_payable: hours,
             hourly_rate: hourlyRate,
             final_total: lineTotal,
@@ -310,6 +381,54 @@ export class InvoiceWorker extends WorkerHost {
         });
 
         subtotal = subtotal.add(lineTotal);
+
+        if (staff) {
+          const startOfPeriod = DateTime.fromISO(billing_start_date).startOf('day').toJSDate();
+          const endOfPeriod = DateTime.fromISO(billing_end_date).endOf('day').toJSDate();
+
+          const bonusTickets = await tx.ticket.findMany({
+            where: {
+              staff_id: staff.id,
+              type: {
+                equals: 'bonus',
+                mode: 'insensitive',
+              },
+              org_id: organization_id,
+              status: 'resolved',
+              createdAt: {
+                gte: startOfPeriod,
+                lte: endOfPeriod,
+              },
+            },
+          });
+
+          for (const ticket of bonusTickets) {
+            const dollarMatch = ticket.title.match(/\$\s*([\d,]+(?:\.\d+)?)/);
+            if (dollarMatch) {
+              const amountStr = dollarMatch[1].replace(/,/g, '');
+              const amount = parseFloat(amountStr);
+              if (!isNaN(amount) && amount > 0) {
+                const bonusAmount = new Decimal(amount);
+
+                await tx.invoiceLineItem.create({
+                  data: {
+                    invoice_version_id: version.id,
+                    parent_line_item_id: primaryLineItem.id,
+                    worker_id: userId.toString(),
+                    worker_name_snapshot: memberName,
+                    type: InvoiceLineType.additional,
+                    category: InvoiceLineCategory.bonus,
+                    description: `Bonus: ${ticket.title}`,
+                    final_total: bonusAmount,
+                    created_by,
+                  },
+                });
+
+                subtotal = subtotal.add(bonusAmount);
+              }
+            }
+          }
+        }
       }
 
       // 4. Update Version Totals

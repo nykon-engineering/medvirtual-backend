@@ -4,7 +4,7 @@ import axios, { AxiosResponse } from 'axios';
 import Bottleneck from 'bottleneck';
 import { SecretsService } from '../secrets/secrets.service';
 import * as redis from 'redis';
-import { HubstaffMember, HubstaffUser } from './hubstaff.interface';
+import { HubstaffMember, HubstaffUser, HubstaffTimeOffRequest } from './hubstaff.interface';
 
 export enum ActivityType {
   WORK = 'WORK',
@@ -487,4 +487,55 @@ export class HubstaffService implements OnModuleInit {
       return [];
     }
   }
+
+  /**
+   * Fetches all time off requests for the specified user IDs.
+   * API: https://developer.hubstaff.com/docs/hubstaff_v2#tag/time_off_requests/GET/v2/organizations/{organization_id}/time_off_requests
+   */
+  public async getTimeOffRequests(
+    userIds: (number | string)[],
+    startDate?: string,
+    endDate?: string,
+  ): Promise<HubstaffTimeOffRequest[]> {
+    if (!userIds || userIds.length === 0) {
+      return [];
+    }
+
+    let allRequests: HubstaffTimeOffRequest[] = [];
+    let nextPageStartId: any = undefined;
+
+    do {
+      const params: any = {
+        user_ids: userIds.join(','),
+      };
+      if (startDate) {
+        params['starts_at[start]'] = startDate;
+      }
+      if (endDate) {
+        params['starts_at[stop]'] = endDate;
+      }
+      if (nextPageStartId) {
+        params.page_start_id = nextPageStartId;
+      }
+
+      const res = await this.hubstaffRequest<{
+        time_off_requests: HubstaffTimeOffRequest[];
+        pagination?: { next_page_start_id: any };
+      }>(
+        'get',
+        `https://api.hubstaff.com/v2/organizations/${this.organizationId}/time_off_requests`,
+        { params }
+      );
+
+      const { time_off_requests, pagination } = res.data;
+      if (time_off_requests) {
+        allRequests = allRequests.concat(time_off_requests);
+      }
+      nextPageStartId = pagination?.next_page_start_id;
+    } while (nextPageStartId);
+
+    return allRequests;
+  }
+
 }
+
