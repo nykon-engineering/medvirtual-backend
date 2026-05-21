@@ -856,6 +856,9 @@ model AffiliatePayoutRequest {
   payment_reference     String?
   transaction_reference String?
   payment_proof_notes   String?
+  bill_com_payment_id   String?
+  bill_com_status       String?
+  bill_com_error        String?
   approved_by           String?
   approved_at           DateTime?
   paid_at               DateTime?
@@ -1117,6 +1120,7 @@ enum PayoutMethod {
   paypal
   zelle
   other
+  bill_com
 }
 
 enum CommissionStatus {
@@ -1136,6 +1140,8 @@ enum PayoutRequestStatus {
   rejected
   paid
   cancelled
+  processing
+  failed
 }
 
 enum PayoutNoteType {

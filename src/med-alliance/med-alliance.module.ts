@@ -6,6 +6,7 @@ import { CommissionsModule } from './commissions/commissions.module';
 import { PayoutRequestsModule } from './payout-requests/payout-requests.module';
 import { SyncModule } from './sync/sync.module';
 import { ReviewCasesModule } from './review-cases/review-cases.module';
+import { BillComModule } from './bill-com/bill-com.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ReviewCasesModule } from './review-cases/review-cases.module';
     PayoutRequestsModule,
     SyncModule,
     ReviewCasesModule,
+    BillComModule,
   ],
 })
 export class MedAllianceModule {}

@@ -1589,6 +1589,8 @@ describe('PayoutRequestsService', () => {
         paid: 0,
         rejected: 0,
         cancelled: 0,
+        failed: 0,
+        processing: 0,
       });
     });
 

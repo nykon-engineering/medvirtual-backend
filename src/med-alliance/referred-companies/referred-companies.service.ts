@@ -64,7 +64,9 @@ export class ReferredCompaniesService {
     currentUser: USER,
   ) {
     // Step 0: Validation — read-only, no rollback needed.
-    const affiliateProfile = await this.affiliatesService.requireActiveProfile(currentUser.id);
+    const affiliateProfile = await this.affiliatesService.requireActiveProfile(
+      currentUser.id,
+    );
     await this.verifyGrowthPartnerInHubspot(affiliateProfile.hubspot_id);
 
     const cleanupStack: Array<() => Promise<void>> = [];
@@ -255,7 +257,9 @@ export class ReferredCompaniesService {
    * Executes the cleanup stack in reverse order (LIFO).
    * Each cleanup function has its own error handling so one failure does not block the rest.
    */
-  private async verifyGrowthPartnerInHubspot(hubspotId: string | null): Promise<void> {
+  private async verifyGrowthPartnerInHubspot(
+    hubspotId: string | null,
+  ): Promise<void> {
     if (!hubspotId) return;
     try {
       await axios.get(

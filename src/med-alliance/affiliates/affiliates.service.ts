@@ -459,11 +459,9 @@ export class AffiliatesService {
 
     if (search) {
       where.OR = [
-            { full_name: { contains: search.trim(), mode: 'insensitive' } },
-            { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
-          ];
-
-      
+        { full_name: { contains: search.trim(), mode: 'insensitive' } },
+        { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
+      ];
     }
 
     if (organization === 'with_org') {
