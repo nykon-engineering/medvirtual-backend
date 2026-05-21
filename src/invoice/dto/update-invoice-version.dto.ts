@@ -1,11 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { 
-  IsArray, 
-  IsOptional, 
-  IsString, 
-  IsNumber, 
-  IsEnum, 
-  ValidateNested, 
+import {
+  IsArray,
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsEnum,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { InvoiceLineType, InvoiceLineCategory, AdjustmentType } from '@prisma/client';
