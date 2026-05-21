@@ -137,6 +137,9 @@ export class InvoiceWorker extends WorkerHost {
       .map((m: any) => m.user_id ? String(m.user_id) : null)
       .filter((id): id is string => !!id);
 
+    const startOfPeriod = DateTime.fromISO(billing_start_date).startOf('day').toJSDate();
+    const endOfPeriod = DateTime.fromISO(billing_end_date).endOf('day').toJSDate();
+
     // Fetch all staff by candidate's hubstaff_id, matching this organization
     const staffRecords = (hubstaffUserIds.length > 0) ? await this.prisma.staff.findMany({
       where: {
@@ -152,6 +155,20 @@ export class InvoiceWorker extends WorkerHost {
       },
       include: {
         candidate: true,
+        tickets: {
+          where: {
+            type: {
+              equals: 'bonus',
+              mode: 'insensitive',
+            },
+            org_id: organization_id,
+            status: 'resolved',
+            createdAt: {
+              gte: startOfPeriod,
+              lte: endOfPeriod,
+            },
+          },
+        },
       },
     }) : [];
 
@@ -383,24 +400,7 @@ export class InvoiceWorker extends WorkerHost {
         subtotal = subtotal.add(lineTotal);
 
         if (staff) {
-          const startOfPeriod = DateTime.fromISO(billing_start_date).startOf('day').toJSDate();
-          const endOfPeriod = DateTime.fromISO(billing_end_date).endOf('day').toJSDate();
-
-          const bonusTickets = await tx.ticket.findMany({
-            where: {
-              staff_id: staff.id,
-              type: {
-                equals: 'bonus',
-                mode: 'insensitive',
-              },
-              org_id: organization_id,
-              status: 'resolved',
-              createdAt: {
-                gte: startOfPeriod,
-                lte: endOfPeriod,
-              },
-            },
-          });
+          const bonusTickets = staff.tickets || [];
 
           for (const ticket of bonusTickets) {
             const dollarMatch = ticket.title.match(/\$\s*([\d,]+(?:\.\d+)?)/);
