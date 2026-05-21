@@ -425,7 +425,7 @@ export class InvoiceService {
     const idMapping = new Map<string, string>();
 
     for (const itemDto of dto.line_items) {
-      const { id: clientSideId, parent_line_item_id, ...itemData } = itemDto;
+      const { id: clientSideId, parent_line_item_id, adjustment_sign, ...itemData } = itemDto;
 
       const createdItem = await this.prisma.invoiceLineItem.create({
         data: {

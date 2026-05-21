@@ -42,6 +42,11 @@ export class InvoiceLineItemDto {
   @IsOptional()
   is_full_time?: boolean;
 
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  adjustment_sign?: string;
+
   @ApiProperty({ enum: InvoiceLineType })
   @IsEnum(InvoiceLineType)
   type: InvoiceLineType;
