@@ -112,39 +112,23 @@ export class InvoiceWorker extends WorkerHost {
     // Fetch project members to get names for snapshots
     const members = await this.hubstaff.getProjectMembers(hubstaffId);
 
-    const emailMap = new Map<number, string>();
     const memberMap = new Map<number, string>();
     members.forEach((m: any) => {
       if (m.user_id) {
         memberMap.set(m.user_id, m.name || m.user?.name || `Hubstaff User ${m.user_id}`);
-        if (m.user?.email) {
-          emailMap.set(m.user_id, m.user.email);
-        }
       }
     });
 
-    const emails = Array.from(emailMap.values());
-    const names = members
-      .map((m: any) => m.name || m.user?.name)
-      .filter((name): name is string => !!name);
+    const hubstaffUserIds = members
+      .map((m: any) => m.user_id ? String(m.user_id) : null)
+      .filter((id): id is string => !!id);
 
-    // Fetch all candidates by email OR name, populated with their staff records
-    const candidates = (emails.length > 0 || names.length > 0) ? await this.prisma.candidate.findMany({
+    // Fetch all candidates by hubstaff_id, populated with their staff records
+    const candidates = (hubstaffUserIds.length > 0) ? await this.prisma.candidate.findMany({
       where: {
-        OR: [
-          {
-            email: {
-              in: emails,
-              mode: 'insensitive',
-            },
-          },
-          {
-            name: {
-              in: names,
-              mode: 'insensitive',
-            },
-          },
-        ],
+        hubstaff_id: {
+          in: hubstaffUserIds,
+        },
       },
       include: {
         staff: true,
@@ -236,15 +220,7 @@ export class InvoiceWorker extends WorkerHost {
         const hours = new Decimal(stats.tracked).dividedBy(3600); // convert seconds to hours
 
         // Find Candidate & Staff
-        const email = emailMap.get(userId);
-        const name = memberMap.get(userId);
-
-        let candidate = email ? candidates.find(c => c.email.toLowerCase() === email.toLowerCase()) : null;
-        if (!candidate && name) {
-          candidate = candidates.find(
-            c => c.name?.trim().toLowerCase() === name.trim().toLowerCase()
-          ) || null;
-        }
+        const candidate = candidates.find(c => c.hubstaff_id === String(userId)) || null;
 
         const staff = candidate?.staff.find((s: any) => s.organization_id === organization_id) || candidate?.staff[0];
 

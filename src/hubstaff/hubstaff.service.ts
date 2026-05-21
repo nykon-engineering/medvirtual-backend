@@ -4,6 +4,7 @@ import axios, { AxiosResponse } from 'axios';
 import Bottleneck from 'bottleneck';
 import { SecretsService } from '../secrets/secrets.service';
 import * as redis from 'redis';
+import { HubstaffMember, HubstaffUser } from './hubstaff.interface';
 
 export enum ActivityType {
   WORK = 'WORK',
@@ -397,15 +398,22 @@ export class HubstaffService implements OnModuleInit {
    * API: https://developer.hubstaff.com/docs/hubstaff_v2#tag/members/GET/v2/organizations/{organization_id}/members
    */
   public async getOrganizationMembers() {
-    let allMembers: any[] = [];
+    let allMembers: HubstaffMember[] = [];
     let nextPageStartId: number | undefined = undefined;
 
     do {
-      const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/organizations/${this.organizationId}/members?include=users&membership_roles=user`, {
-        params: nextPageStartId ? { page_start_id: nextPageStartId } : {},
+      const params: any = {};
+      if (nextPageStartId) {
+        params.page_start_id = nextPageStartId;
+      }
+      params.membership_roles = 'user';
+      params.include = "users";
+      params.include_profile = true
+      const res = await this.hubstaffRequest('get', `https://api.hubstaff.com/v2/organizations/${this.organizationId}/members`, {
+        params,
       });
 
-      const { members, pagination, users } = res.data;
+      const { members, pagination, users } = res.data as { members: HubstaffMember[], pagination: any, users: HubstaffUser[] };
       if (members) {
         allMembers = allMembers.concat(members.map(e => ({ ...e, user: users.find(u => u.id === e.user_id) })));
       }

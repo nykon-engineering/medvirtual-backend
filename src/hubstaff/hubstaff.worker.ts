@@ -3,6 +3,7 @@ import { Job } from 'bullmq';
 import { HubstaffService } from './hubstaff.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from '@nestjs/common';
+import { HubspotService } from '../hubspot/hubspot.service';
 
 @Processor('hubstaff-sync')
 export class HubstaffWorker extends WorkerHost {
@@ -11,6 +12,7 @@ export class HubstaffWorker extends WorkerHost {
   constructor(
     private readonly hubstaffService: HubstaffService,
     private readonly prisma: PrismaService,
+    private readonly hubspotService: HubspotService,
   ) {
     super();
   }
@@ -31,38 +33,88 @@ export class HubstaffWorker extends WorkerHost {
       const members = await this.hubstaffService.getOrganizationMembers();
       this.logger.log(`📡 Fetched ${members.length} members from Hubstaff`);
 
+      // Extract all non-empty VA IDs from Hubstaff members
+      const vaIds: string[] = [];
+      const memberVaIdMap = new Map<string, string>(); // Maps member user_id to VA ID
+
+      for (const member of members) {
+        const customFields = member.profile?.custom_fields ?? {};
+        const vaIdKey = Object.keys(customFields).find(key => key.toUpperCase().includes('VA ID'));
+        const vaId = vaIdKey ? customFields[vaIdKey]?.trim() : null;
+
+        if (vaId) {
+          vaIds.push(vaId);
+          memberVaIdMap.set(String(member.user_id), vaId);
+        }
+      }
+
+      this.logger.log(`📡 Found ${vaIds.length} members with VA ID profiles`);
+
+      if (vaIds.length === 0) {
+        this.logger.log('🏁 Sync completed. No members with VA ID profiles found.');
+        return { updateCount: 0, skipCount: members.length };
+      }
+
+      this.logger.log('📡 Fetching matched candidates from HubSpot...');
+      const hubspotResult = await this.hubspotService.fetchPropertiesAndCandidates(vaIds);
+      this.logger.log(`HubSpot candidates fetched: ${hubspotResult.candidates.length}`);
+
       let updateCount = 0;
       let skipCount = 0;
 
       for (const member of members) {
-        // member object contains 'email' and 'user_id'
-        const email = member.user.email;
         const hubstaffUserId = String(member.user_id);
+        const vaId = memberVaIdMap.get(hubstaffUserId);
 
-        if (!email) {
+        if (!vaId) {
           skipCount++;
           continue;
         }
 
-        if (email === "patriciazafra27@gmail.com") {
-          console.log("-------------------------", email)
+        const matchedCandidate = hubspotResult.candidates.find(c => {
+          const hubspotVaId = c.properties?.vaid;
+          return hubspotVaId && hubspotVaId.trim() === vaId;
+        });
+
+        if (!matchedCandidate) {
+          skipCount++;
+          continue;
         }
 
-        const candidate = await this.prisma.candidate.findFirst({
-          where: { email: { equals: email, mode: 'insensitive' } },
+        const hubspotId = matchedCandidate.id || matchedCandidate.properties?.hs_object_id;
+        if (!hubspotId) {
+          skipCount++;
+          continue;
+        }
+
+        const candidate = await this.prisma.candidate.findUnique({
+          where: { hubspot_id: String(hubspotId) },
         });
 
         if (candidate) {
-          console.log("-------------------------", candidate.email)
-        }
-        if (candidate && candidate.hubstaff_id !== hubstaffUserId) {
-          await this.prisma.candidate.update({
-            where: { id: candidate.id },
-            data: { hubstaff_id: hubstaffUserId } as any,
-          });
+          if (candidate.hubstaff_id !== hubstaffUserId) {
+            const existingWithSameHubstaffId = await this.prisma.candidate.findUnique({
+              where: { hubstaff_id: hubstaffUserId },
+            });
 
-          updateCount++;
-          this.logger.debug(`✅ Updated candidate ${candidate.id} with Hubstaff ID ${hubstaffUserId}`);
+            if (existingWithSameHubstaffId) {
+              await this.prisma.candidate.update({
+                where: { id: existingWithSameHubstaffId.id },
+                data: { hubstaff_id: null },
+              });
+              this.logger.debug(`Cleared hubstaff_id from candidate ${existingWithSameHubstaffId.id} to avoid unique constraint conflict`);
+            }
+
+            await this.prisma.candidate.update({
+              where: { id: candidate.id },
+              data: { hubstaff_id: hubstaffUserId },
+            });
+
+            updateCount++;
+            this.logger.debug(`✅ Updated candidate ${candidate.id} with Hubstaff ID ${hubstaffUserId}`);
+          } else {
+            skipCount++;
+          }
         } else {
           skipCount++;
         }

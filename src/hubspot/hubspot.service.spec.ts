@@ -420,3 +420,94 @@ describe('HubspotService => changeDataToHubspot', () => {
 
 
 })
+
+describe('HubspotService => fetchPropertiesAndCandidates', () => {
+  let service: HubspotService;
+  const originalEnv = process.env.HUBSPOT_CUSTOM_OBJECT;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        HubspotService,
+        {provide: GoogledriveService, useValue: googleMock},
+        {provide: PrismaService, useValue: prismaMock},
+        {provide: HandlerObjectCreation, useValue: handlerObjectCreationMock},
+        {provide: HandlerObjectPropertyChange, useValue: handlerObjectPropertyChangeMock},
+        {provide: HandlerObjectDeletion, useValue: handlerObjectDeletionmock},
+        {provide: HandlerObjectMerge, useValue: HandlerObjectMergeMock},
+        {provide: HandlerOrganizationCreation, useValue: HandlerOrganizationCreationMock},
+        {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
+        {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
+        {provide: HandlerOrganizationDeletion, useValue: HandlerOrganizationDeletionMock},
+        {provide: HandlerOrganizationMerge, useValue: HandlerOrganizationMergeMock},
+        {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
+        {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
+        {provide: HandlerOwnerPropertyChange , useValue: HandlerOwnerPropertyChangeMock},
+        {provide: CandidatesService, useValue: candidateMock},
+        {provide: HandlerDealCreation, useValue: HandlerDealCreationMock},
+        {provide: HandlerDealPropertyChange, useValue: HandlerDealPropertyChangeMock},
+        {provide: HandlerDealDeletion, useValue: HandlerDealDeletionMock},
+        {provide: HandlerDealAssociationChange, useValue: HandlerDealAssociationChangeMock},
+        {provide: HireRequestCreationService, useValue: hireRequestCreationServiceMock},
+        {provide: HireRequestUpdateService, useValue: hireRequestUpdateServiceMock},
+        {provide: HandlerTicketCreation, useValue: HandlerTicketCreationMock},
+        {provide: HandlerTicketDeletion, useValue: HandlerTicketDeletionMock},
+        {provide: HandlerTicketRestore, useValue: HandlerTicketRestoreMock},
+        {provide: HandlerTicketPropertyChange, useValue: HandlerTicketPropertyChangeMock},
+        {provide: OrganizationCreationService, useValue: organizationCreationServiceMock},
+        {provide: OrganizationUpdateService, useValue: organizationUpdateServiceMock},
+        {provide: OwnerCreationService, useValue: ownerCreationServiceMock},
+        {provide: ContactCreationService, useValue: contactCreationServiceMock},
+        {provide: ContactFromCompanyCreationService, useValue: contactCreationFromCompanyServiceMock},
+        {provide: ContactUpdateService, useValue: updateContactServiceMock},
+        {provide: ContactDeleteService, useValue: deleteContactServiceMock},
+        {provide: CompanyDeleteService, useValue: companyDeleteServiceMock},
+        {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
+        {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
+        {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
+        {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
+        {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
+        {provide: HandlerComissionCreation, useValue: HandlerComissionCreationMock},
+        {provide: AffiliateCreationService, useValue: affiliateCreationServiceMock},
+      ]
+    }).compile();
+
+    service = module.get<HubspotService>(HubspotService);
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env.HUBSPOT_CUSTOM_OBJECT = originalEnv;
+  });
+
+  it('should throw NotFoundException if HUBSPOT_CUSTOM_OBJECT is not defined', async () => {
+    delete process.env.HUBSPOT_CUSTOM_OBJECT;
+    await expect(service.fetchPropertiesAndCandidates()).rejects.toThrow(
+      'Custom Object is not defined on the environment variables',
+    );
+  });
+
+  it('should fetch candidates successfully with vaid in properties', async () => {
+    process.env.HUBSPOT_CUSTOM_OBJECT = 'custom_obj';
+    doSearchMock.mockResolvedValueOnce({
+      results: [{ id: '1', properties: {} }],
+      paging: { next: { after: 'next_page' } },
+    }).mockResolvedValueOnce({
+      results: [{ id: '2', properties: {} }],
+      paging: undefined,
+    });
+
+    const result = await service.fetchPropertiesAndCandidates();
+    expect(result).toEqual({
+      candidates: [
+        { id: '1', properties: {} },
+        { id: '2', properties: {} },
+      ],
+    });
+
+    expect(doSearchMock).toHaveBeenCalledTimes(2);
+    expect(doSearchMock).toHaveBeenNthCalledWith(1, 'custom_obj', expect.objectContaining({
+      properties: expect.arrayContaining(['vaid']),
+    }));
+  });
+});

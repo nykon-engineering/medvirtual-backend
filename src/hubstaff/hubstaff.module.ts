@@ -5,11 +5,13 @@ import { HubstaffController } from './hubstaff.controller';
 import { HubstaffWorker } from './hubstaff.worker';
 import { SecretsModule } from '../secrets/secrets.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { HubspotModule } from '../hubspot/hubspot.module';
 
 @Module({
   imports: [
     SecretsModule,
     PrismaModule,
+    HubspotModule,
     BullModule.registerQueue({
       name: 'hubstaff-sync',
     }),

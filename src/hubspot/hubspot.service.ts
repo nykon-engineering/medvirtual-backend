@@ -4,7 +4,7 @@ import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects'
 import axios from 'axios';
 import { OrganizationRole, Prisma } from '@prisma/client';
 
-import {  mapHubspotToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util'
+import { mapHubspotToDb, mapOrganizationToDbHubspot } from '../common/utils/hubspot.util'
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 import { pace } from '../common/utils/pacing.util';
 
@@ -63,77 +63,77 @@ export class HubspotService {
 
     private hubspotClient: Client;
     constructor(
-      private readonly prisma: PrismaService,
-      private readonly objectCreation: HandlerObjectCreation,
-      private readonly objectPropertyChange: HandlerObjectPropertyChange,
-      private readonly objectDeletion: HandlerObjectDeletion,
-      private readonly objectMerge: HandlerObjectMerge,
+        private readonly prisma: PrismaService,
+        private readonly objectCreation: HandlerObjectCreation,
+        private readonly objectPropertyChange: HandlerObjectPropertyChange,
+        private readonly objectDeletion: HandlerObjectDeletion,
+        private readonly objectMerge: HandlerObjectMerge,
 
-      private readonly organizationCreation: HandlerOrganizationCreation,
-      private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
-      private readonly organizationDeletion : HandlerOrganizationDeletion,
-      private readonly organizationMerge: HandlerOrganizationMerge,
-      private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
-      private readonly organizationUpdateService: OrganizationUpdateService,
+        private readonly organizationCreation: HandlerOrganizationCreation,
+        private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
+        private readonly organizationDeletion: HandlerOrganizationDeletion,
+        private readonly organizationMerge: HandlerOrganizationMerge,
+        private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
+        private readonly organizationUpdateService: OrganizationUpdateService,
 
-      private readonly dealCreation: HandlerDealCreation,
-      private readonly dealPropertyChange: HandlerDealPropertyChange,
-      private readonly dealDeletion: HandlerDealDeletion,
-      private readonly dealAssociationChange: HandlerDealAssociationChange,
+        private readonly dealCreation: HandlerDealCreation,
+        private readonly dealPropertyChange: HandlerDealPropertyChange,
+        private readonly dealDeletion: HandlerDealDeletion,
+        private readonly dealAssociationChange: HandlerDealAssociationChange,
 
-      private readonly ticketRestore: HandlerTicketRestore,
-      private readonly ticketDeletion: HandlerTicketDeletion,
-      private readonly ticketPropertyChange: HandlerTicketPropertyChange,
+        private readonly ticketRestore: HandlerTicketRestore,
+        private readonly ticketDeletion: HandlerTicketDeletion,
+        private readonly ticketPropertyChange: HandlerTicketPropertyChange,
 
-      private readonly hireRequestCreationService: HireRequestCreationService,
-      private readonly hireRequestUpdateService: HireRequestUpdateService,
+        private readonly hireRequestCreationService: HireRequestCreationService,
+        private readonly hireRequestUpdateService: HireRequestUpdateService,
 
-      private readonly organizationCreationService: OrganizationCreationService,
+        private readonly organizationCreationService: OrganizationCreationService,
 
-      private readonly contactCreationService: ContactCreationService,
-      private readonly contactCreationFromCompanyService: ContactFromCompanyCreationService,
-      private readonly contactUpdateService: ContactUpdateService,
-      private readonly contactDeleteService: ContactDeleteService,
-      private readonly companyDeleteService: CompanyDeleteService,
+        private readonly contactCreationService: ContactCreationService,
+        private readonly contactCreationFromCompanyService: ContactFromCompanyCreationService,
+        private readonly contactUpdateService: ContactUpdateService,
+        private readonly contactDeleteService: ContactDeleteService,
+        private readonly companyDeleteService: CompanyDeleteService,
 
-      private readonly ownerCreation: HandlerOwnerCreation,
-      private readonly ownerDeletion: HandlerOwnerDeletion,
-      private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
+        private readonly ownerCreation: HandlerOwnerCreation,
+        private readonly ownerDeletion: HandlerOwnerDeletion,
+        private readonly ownerPropertyChange: HandlerOwnerPropertyChange,
 
-      private readonly affiliateCreation: HandlerAffiliateCreation,
-      private readonly affiliatePropertyChange: HandlerAffiliatePropertyChange,
+        private readonly affiliateCreation: HandlerAffiliateCreation,
+        private readonly affiliatePropertyChange: HandlerAffiliatePropertyChange,
 
-      private readonly invoiceCreation: HandlerInvoiceCreation,
-      private readonly invoicePropertyChange: HandlerInvoicePropertyChange,
-      private readonly invoiceAssociationChange: HandlerInvoiceAssociationChange,
+        private readonly invoiceCreation: HandlerInvoiceCreation,
+        private readonly invoicePropertyChange: HandlerInvoicePropertyChange,
+        private readonly invoiceAssociationChange: HandlerInvoiceAssociationChange,
 
 
-      @Inject(forwardRef (() => CandidatesService))
-      private readonly candidate: CandidatesService
+        @Inject(forwardRef(() => CandidatesService))
+        private readonly candidate: CandidatesService
     ) {
-        this.hubspotClient = new Client({ 
+        this.hubspotClient = new Client({
             accessToken: process.env.HUBSPOT_ACCESS_TOKEN,
         });
     }
 
     async getCandidates(data: GetCandidatesDto): Promise<any> {
         if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');
-        try{
-            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant,{
+        try {
+            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant, {
                 filterGroups: [
                     {
                         filters: (data.filters ?? []).map(item => ({
                             propertyName: item.field,
                             operator: FilterOperatorEnum.Eq,
                             value: item.value
-                          }))
+                        }))
                     }
                 ],
                 properties: data.properties
             })
 
             return response;
-        }catch (error) {
+        } catch (error) {
             throw new BadRequestException(`Error fetching candidates`);
         }
     }
@@ -150,78 +150,78 @@ export class HubspotService {
         let orderedData: any[] = [];
 
         if (!data || data.length >= 2) {
-            orderedData = data.sort((a,b)=>{
+            orderedData = data.sort((a, b) => {
                 if (a.subscriptionType < b.subscriptionType) return -1;
                 if (a.subscriptionType > b.subscriptionType) return 1;
                 return 0;
             })
-        }else{
+        } else {
             orderedData = data;
         }
 
-        for (const event of orderedData){
+        for (const event of orderedData) {
             switch (event.subscriptionType) {
 
                 /*
                 2-5922196 => This is the objectTypeId for our custom object "Virtual Assistant"
                 2-54072002 => This is the objectTypeId for our custom object "Growth Partner"
                 */
-               
+
                 case 'object.creation':
                 case 'object.restore':
-                    if (event.objectTypeId ==="2-5922196") { // Virtual Assistant
+                    if (event.objectTypeId === "2-5922196") { // Virtual Assistant
                         await this.objectCreation.execute(event);
-                    }else if (event.objectTypeId === "2-54072002") { // Growth Partner
+                    } else if (event.objectTypeId === "2-54072002") { // Growth Partner
                         await this.affiliateCreation.execute(event);
-                    }else if (event.objectTypeId === "0-53") { // Invoice
+                    } else if (event.objectTypeId === "0-53") { // Invoice
                         await this.invoiceCreation.execute(event);
                     }
 
                     break;
                 case 'object.propertyChange':
-                    if (event.objectTypeId ==="2-5922196") {
+                    if (event.objectTypeId === "2-5922196") {
                         await this.objectPropertyChange.execute(event);
-                    }else if (event.objectTypeId === "2-54072002") {
+                    } else if (event.objectTypeId === "2-54072002") {
                         await this.affiliatePropertyChange.execute(event);
-                    }else if (event.objectTypeId === "0-53") { // Invoice
+                    } else if (event.objectTypeId === "0-53") { // Invoice
                         await this.invoicePropertyChange.execute(event);
                     }
                     break;
 
                 case 'object.deletion':
-                    if (event.objectTypeId ==="2-5922196") {
+                    if (event.objectTypeId === "2-5922196") {
                         await this.objectDeletion.execute(event);
                     }
                     break;
                 case 'object.merge':
-                    if (event.objectTypeId ==="2-5922196") {
+                    if (event.objectTypeId === "2-5922196") {
                         await this.objectMerge.execute(event);
                     }
                     break;
 
                 case 'object.associationChange':
-                    if (event.associationTypeId ==="179" || event.associationTypeId === "180") { //INVOICE_TO_COMPANY or COMPANY_TO_INVOICE
+                    if (event.associationTypeId === "179" || event.associationTypeId === "180") { //INVOICE_TO_COMPANY or COMPANY_TO_INVOICE
                         await this.invoiceAssociationChange.execute(event);
                     }
                     break;
-                
+
                 case 'owners.creation':
                 case 'owners.restore':
-                //case 'contact.creation':
-                //case 'contact.restore':
+                    //case 'contact.creation':
+                    //case 'contact.restore':
                     await this.ownerCreation.execute(event);
                     break;
 
                 case 'owners.deletion':
-                //case 'contact.deletion':
+                    //case 'contact.deletion':
                     await this.ownerDeletion.execute(event);
                     break;
 
                 case 'owners.propertyChange':
-                //case 'contact.propertyChange':
+                    //case 'contact.propertyChange':
                     await this.ownerPropertyChange.execute(event);
                     break;
-                
+
                 case 'company.creation':
                 case 'company.restore':
                     await this.organizationCreation.execute(event);
@@ -230,19 +230,19 @@ export class HubspotService {
                 case 'company.propertyChange':
                     await this.organizationPropertyChange.execute(event);
                     break;
-                
+
                 case 'company.deletion':
                     await this.organizationDeletion.execute(event);
                     break;
-                
+
                 case 'company.merge':
                     await this.organizationMerge.execute(event);
                     break;
 
-                case 'company.associationChange': 
+                case 'company.associationChange':
                     await this.organizationAssociationChange.execute(event);
                     break;
-                
+
                 case 'deal.creation':
                 case 'deal.restore':
                     await this.dealCreation.execute(event);
@@ -261,7 +261,7 @@ export class HubspotService {
                     break;
 
                 //case 'ticket.creation': =. just comment because we dont have rules 
-                
+
                 //case 'ticket.restore':
                 //    await this.ticketRestore.execute(event);
                 //    break;
@@ -269,20 +269,20 @@ export class HubspotService {
                 case 'ticket.deletion':
                     await this.ticketDeletion.execute(event);
                     break;
-                
+
                 case 'ticket.propertyChange':
                     await this.ticketPropertyChange.execute(event);
                     break;
 
-                
+
             }
         }
 
-        
+
     }
 
     async changeDataToHubspot(objectId: string, data: changeDataToHubspotDto): Promise<boolean> {
-        if(!objectId) throw new BadRequestException('Object ID is required');
+        if (!objectId) throw new BadRequestException('Object ID is required');
 
         const body = {
             properties: data.properties.reduce((acc: any, item: any) => {
@@ -290,7 +290,7 @@ export class HubspotService {
                 return acc;
             }, {})
         }
-        try{
+        try {
             const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${objectId}`,
                 body,
                 {
@@ -301,35 +301,35 @@ export class HubspotService {
                 }
             )
             return true;
-        }catch (error) {
+        } catch (error) {
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
     }
 
     async updateManyCandidatesFromHireRequest(candidates, pipelineStatus): Promise<boolean> {
-        try{
+        try {
             if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
             await this.hubspotClient.crm.objects.batchApi.update(process.env.HUBSPOT_CUSTOM_OBJECT,
                 {
-                  inputs: candidates.map(c => ({
-                    id: c.hubspot_id,
-                    properties: {
-                      hs_pipeline_stage: pipelineStatus,
-                    },
-                  })),
+                    inputs: candidates.map(c => ({
+                        id: c.hubspot_id,
+                        properties: {
+                            hs_pipeline_stage: pipelineStatus,
+                        },
+                    })),
                 }
-              );
-              return true;
-        }catch (error) {
+            );
+            return true;
+        } catch (error) {
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
     }
 
     async updateOneCandidateFromHireRequest(hubspot_id: string, pipelineStatus: string): Promise<boolean> {
         console.log('Updating candidate in HubSpot with ID:', hubspot_id, 'to pipeline status:', pipelineStatus);
-        try{
+        try {
             if (!process.env.HUBSPOT_CUSTOM_OBJECT) throw new NotFoundException('Custom Object is not defined on the environment variables');
-            
+
             const updateBody = {
                 properties: {
                     hs_pipeline_stage: pipelineStatus,
@@ -339,10 +339,10 @@ export class HubspotService {
             await this.hubspotClient.crm.objects.basicApi.update(
                 process.env.HUBSPOT_CUSTOM_OBJECT,
                 hubspot_id,
-                updateBody, 
+                updateBody,
             );
             return true;
-        }catch (error) {
+        } catch (error) {
             throw new BadRequestException(`Error updating data in HubSpot: ${error.message}`);
         }
     }
@@ -385,10 +385,10 @@ export class HubspotService {
 
     ////=> this service is just a example to read candidates on our database and CREATE it with the data from hubspot
     async createCandidates(pipeline_stage: string): Promise<string> {
-        const virtualAssistant ='p20630393_Virtual_Assistant';
-        const properties = Object.keys(candidadeToDbDictionary).join(',')+',career_highlights_relevant_job_experiences,language_spoken';
+        const virtualAssistant = 'p20630393_Virtual_Assistant';
+        const properties = Object.keys(candidadeToDbDictionary).join(',') + ',career_highlights_relevant_job_experiences,language_spoken';
 
-        const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant,{
+        const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant, {
             filterGroups: [
                 {
                     filters: [
@@ -402,7 +402,7 @@ export class HubspotService {
             ],
             properties: properties.split(','),
             limit: 100
-            })
+        })
         if (!response || !response.results || response.results.length === 0) {
             throw new BadRequestException('No candidates data found');
         }
@@ -418,17 +418,17 @@ export class HubspotService {
                     pipeline_status: pipeline_stage ? pipeline_stage : '99999999'
                 }
             })
-            
 
-            
-            if (!user){
+
+
+            if (!user) {
                 console.log('Candidate found in Hubspot and not found on database:', result.properties.name, result.properties.hs_object_id);
                 const candidateData = mapHubspotToDb(result.properties);
 
                 if (candidateData.approved_positions_pairing && typeof candidateData.approved_positions_pairing === 'string') {
                     candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as string)
-                    .split(';')
-                    .map(s => s.trim());
+                        .split(';')
+                        .map(s => s.trim());
                 } else {
                     candidateData.approved_positions_pairing = [];
                 }
@@ -466,51 +466,51 @@ export class HubspotService {
                 }
                 console.log('Candidate created:', result.properties.name);
             }
-            
+
             // Pace the loop to avoid rate limiting
-            await pace(200); 
+            await pace(200);
         }
         return 'Candidates created successfully';
 
     }
-    
+
     ////=> this service is just a example to read candidates on our database and UPDATE it with the data from hubspot
     async updateCandidates(pipeline_stage: string): Promise<any> {
-        const virtualAssistant ='p20630393_Virtual_Assistant';
-        const properties = Object.keys(candidadeToDbDictionary).join(',')+',career_highlights_relevant_job_experiences,language_spoken';
+        const virtualAssistant = 'p20630393_Virtual_Assistant';
+        const properties = Object.keys(candidadeToDbDictionary).join(',') + ',career_highlights_relevant_job_experiences,language_spoken';
 
         const candidates = await this.prisma.candidate.findMany({
             where: {
                 pipeline_status: pipeline_stage ? pipeline_stage : undefined,
             },
-            orderBy:{
+            orderBy: {
                 createdAt: 'desc'
             },
-            select:{
+            select: {
                 id: true,
                 first_name: true,
                 resume_url: true,
                 hubspot_id: true,
             }
         })
-       // console.log('Candidates to process:', candidates);
+        // console.log('Candidates to process:', candidates);
 
-        for (const candidate of candidates){
+        for (const candidate of candidates) {
 
-            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant,{
-            filterGroups: [
-                {
-                    filters: [
-                        {
-                            propertyName: 'hs_object_id',
-                            operator: FilterOperatorEnum.Eq,
-                            value: candidate.hubspot_id
-                        }
-                    ]
-                }
-            ],
-            properties: properties.split(','),
-            limit: 100
+            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(virtualAssistant, {
+                filterGroups: [
+                    {
+                        filters: [
+                            {
+                                propertyName: 'hs_object_id',
+                                operator: FilterOperatorEnum.Eq,
+                                value: candidate.hubspot_id
+                            }
+                        ]
+                    }
+                ],
+                properties: properties.split(','),
+                limit: 100
             })
             if (!response || !response.results || response.results.length === 0) {
                 //throw new BadRequestException('No candidates data found');
@@ -521,21 +521,21 @@ export class HubspotService {
             const hubspotProps = response.results[0].properties;
             console.log('Candidate found in Hubspot:', hubspotProps.name);
 
-            
 
 
-            const candidateData : Prisma.CandidateUpdateInput = mapHubspotToDb(hubspotProps);
+
+            const candidateData: Prisma.CandidateUpdateInput = mapHubspotToDb(hubspotProps);
 
             if (candidateData.approved_positions_pairing) {
                 candidateData.approved_positions_pairing = (candidateData.approved_positions_pairing as string)
-                .split(';')
-                .map(s => s.trim())
-                .filter(Boolean);
-            }else {
-                candidateData.approved_positions_pairing = []; 
-              }
-              
-            
+                    .split(';')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+            } else {
+                candidateData.approved_positions_pairing = [];
+            }
+
+
             await this.prisma.candidate.update({
                 where: {
                     id: candidate.id
@@ -548,7 +548,7 @@ export class HubspotService {
 
             console.log('Candidate updated:', response.results[0]);
             //Here, I start to work with the skills
-            
+
             if (hubspotProps.career_highlights_relevant_job_experiences) {
                 await this.prisma.candidateSkill.deleteMany({
                     where: {
@@ -588,54 +588,54 @@ export class HubspotService {
                 }
             }
             console.log('Candidate updated:', candidate.first_name);
-            
+
             // Pace the loop to avoid rate limiting
-            await pace(500); 
-  
+            await pace(500);
+
         }
     }
 
 
     //// => This service is just a example to read organizations on our database and UPDATE it with the data from hubspot
     async updateOrganizations(): Promise<any> {
-        
+
         const properties = Object.keys(organizationToDbDictionary).join(',');
 
         const organizations = await this.prisma.organization.findMany({
-            where:{
+            where: {
                 type: null
             },
-            orderBy:{
+            orderBy: {
                 updatedAt: 'asc'
             },
-            select:{
+            select: {
                 id: true,
                 hubspot_id: true,
                 name: true,
                 owner_id: true,
             }
         })
-       // console.log('Candidates to process:', candidates);
+        // console.log('Candidates to process:', candidates);
 
-        for (const org of organizations){
-            if (!org.hubspot_id) {  
+        for (const org of organizations) {
+            if (!org.hubspot_id) {
                 console.log('Organization with ID:', org.id, 'does not have a Hubspot ID. Skipping update.');
                 continue;
             }
             const response = await this.hubspotClient.crm.companies.searchApi.doSearch({
-            filterGroups: [
-                {
-                    filters: [
-                        {
-                            propertyName: 'hs_object_id',
-                            operator: FilterOperatorEnum.Eq,
-                            value: org.hubspot_id
-                        }
-                    ]
-                }
-            ],
-            properties: properties.split(','),
-            limit: 100
+                filterGroups: [
+                    {
+                        filters: [
+                            {
+                                propertyName: 'hs_object_id',
+                                operator: FilterOperatorEnum.Eq,
+                                value: org.hubspot_id
+                            }
+                        ]
+                    }
+                ],
+                properties: properties.split(','),
+                limit: 100
             })
             if (!response || !response.results || response.results.length === 0) {
                 //throw new BadRequestException('No candidates data found');
@@ -649,9 +649,9 @@ export class HubspotService {
             const organizationData = mapOrganizationToDbHubspot(hubspotProps);
 
             organizationData.email = organizationData.email ?? undefined;
-            organizationData.industry = organizationData.industry 
-            ? organizationIndustryToDbDictionary[organizationData.industry] ?? organizationData.industry  
-            : '';
+            organizationData.industry = organizationData.industry
+                ? organizationIndustryToDbDictionary[organizationData.industry] ?? organizationData.industry
+                : '';
             organizationData.organization_role = organizationData.organization_role?.toLocaleLowerCase() === 'prospect' ? OrganizationRole.prospect : OrganizationRole.client;
             organizationData.specialties = organizationData.specialties ? organizationData.specialties.toString().split(',').map((item: string) => item.trim()).filter((item: string) => item.length > 0) : [];
             organizationData.number_of_employees = organizationData.number_of_employees ? Number(organizationData.number_of_employees) : 0;
@@ -661,15 +661,15 @@ export class HubspotService {
                     id: org.id
                 },
                 //data: organizationData,
-                data:{
+                data: {
                     type: organizationData.type ? organizationData.type : '',
                 }
             })
-            
-            console.log('Organization updated:', org.name,':=>', organizationData);
-  
+
+            console.log('Organization updated:', org.name, ':=>', organizationData);
+
             // Pace the loop to avoid rate limiting
-            await pace(500); 
+            await pace(500);
         }
     }
 
@@ -677,124 +677,194 @@ export class HubspotService {
 
     ////=> this service is just a example to populate our database
     async getCandidatesAndDownload(data: GetCandidatesDto): Promise<any> {
-      if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');
-      try{
-            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant,{
-              filterGroups: [
-                  {
-                      filters: (data.filters ?? []).map(item => ({
-                          propertyName: item.field,
-                          operator: FilterOperatorEnum.Eq,
-                          value: item.value
+        if (!data.virtualAssistant) throw new BadRequestException('Virtual Assistant identifier is required');
+        try {
+            const response = await this.hubspotClient.crm.objects.searchApi.doSearch(data.virtualAssistant, {
+                filterGroups: [
+                    {
+                        filters: (data.filters ?? []).map(item => ({
+                            propertyName: item.field,
+                            operator: FilterOperatorEnum.Eq,
+                            value: item.value
                         }))
-                  }
-              ],
-              properties: data.properties,
-              limit: 100
+                    }
+                ],
+                properties: data.properties,
+                limit: 100
             })
             if (!response || !response.results || response.results.length === 0) {
-              throw new BadRequestException('No candidates found');
+                throw new BadRequestException('No candidates found');
             }
 
 
-            for (let i=0; i< response.results.length ; i++){
-            const candidateData = mapHubspotToDb(response.results[i].properties);
-            
-            //=> function to populate db with the datas from hubspot
-            const candidate = await this.prisma.candidate.findUnique({
-                where: {
-                    hubspot_id: String(response.results[i].properties.hs_object_id),
-                    NOT: {
-                        processing_status: 'completed'
-                    }
-                },
-                select: {
-                    id: true,
-                    processing_status: true,
-                    first_name: true,
-                    resume_url: true,
-                }   
-            })
-            console.log('Candidate found:', candidate?.first_name , 'on the stage:', candidate?.processing_status);
+            for (let i = 0; i < response.results.length; i++) {
+                const candidateData = mapHubspotToDb(response.results[i].properties);
 
-            if (candidate && candidate.processing_status !== 'completed' && candidate.resume_url?.includes('http')){
-                
-                await this.prisma.candidate.update({
+                //=> function to populate db with the datas from hubspot
+                const candidate = await this.prisma.candidate.findUnique({
                     where: {
-                        id: candidate.id
+                        hubspot_id: String(response.results[i].properties.hs_object_id),
+                        NOT: {
+                            processing_status: 'completed'
+                        }
                     },
-                    data: candidateData
+                    select: {
+                        id: true,
+                        processing_status: true,
+                        first_name: true,
+                        resume_url: true,
+                    }
                 })
-                console.log('Candidate updated:', candidate.first_name);
-                if (process.env.ENVIRONMENT === 'PROD') {
-                    await this.candidate.processData(candidate.id)
-                    console.log('Candidate processed:', candidate.first_name);
-                }else{
-                    console.log('Environment is not PROD. Skipping processing for candidate:', candidate.first_name);
+                console.log('Candidate found:', candidate?.first_name, 'on the stage:', candidate?.processing_status);
+
+                if (candidate && candidate.processing_status !== 'completed' && candidate.resume_url?.includes('http')) {
+
+                    await this.prisma.candidate.update({
+                        where: {
+                            id: candidate.id
+                        },
+                        data: candidateData
+                    })
+                    console.log('Candidate updated:', candidate.first_name);
+                    if (process.env.ENVIRONMENT === 'PROD') {
+                        await this.candidate.processData(candidate.id)
+                        console.log('Candidate processed:', candidate.first_name);
+                    } else {
+                        console.log('Environment is not PROD. Skipping processing for candidate:', candidate.first_name);
+                    }
+
                 }
 
+
+
+
+
+                await pace(300);
             }
-            
-                
-            
-            
 
-          await pace(300);
-          }
-          
-          return response;
+            return response;
 
-      }catch (error) {
-          throw new BadRequestException(`Error fetching candidates: ${error.message}`);
-      }
+        } catch (error) {
+            throw new BadRequestException(`Error fetching candidates: ${error.message}`);
+        }
     }
 
 
     async alignOwners() {
-        
-            const getObject = await axios.get(`https://api.hubapi.com/crm/v3/owners`,
+
+        const getObject = await axios.get(`https://api.hubapi.com/crm/v3/owners`,
             {
-            headers: {
-                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
+                headers: {
+                    Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json',
                 },
             });
 
-            if (!getObject) {
-                throw new BadRequestException('No object data found');
-            }
-            //console.log('Fetched Owner Data from HubSpot:', getObject.data);
-            
-            for (const owner of getObject.data.results){
-                console.log('Email from hubspot owner:', owner.email);
-                const ownerExists = await this.prisma.uSER.findUnique({
+        if (!getObject) {
+            throw new BadRequestException('No object data found');
+        }
+        //console.log('Fetched Owner Data from HubSpot:', getObject.data);
+
+        for (const owner of getObject.data.results) {
+            console.log('Email from hubspot owner:', owner.email);
+            const ownerExists = await this.prisma.uSER.findUnique({
+                where: {
+                    email: String(owner.email)
+                }
+            })
+
+            if (ownerExists) {
+                await this.prisma.uSER.update({
                     where: {
-                        email: String(owner.email)
+                        id: ownerExists.id
+                    },
+                    data: {
+                        hubspot_id: String(owner.id)
                     }
                 })
-
-                if (ownerExists) {
-                    await this.prisma.uSER.update({
-                        where: {
-                            id: ownerExists.id
-                        },
-                        data: {
-                            hubspot_id: String(owner.id)
-                        }
-                    })
-                    console.log('Owner updated with hubspot id:', owner.email);
-                }
-
-                console.log('-------------------------');
-                // Pace the loop
-                await pace(100);
+                console.log('Owner updated with hubspot id:', owner.email);
             }
 
+            console.log('-------------------------');
+            // Pace the loop
+            await pace(100);
+        }
 
-            return true;
 
-        
+        return true;
+
+
     }
 
-    
+    async fetchPropertiesAndCandidates(vaIds?: string[]): Promise<{ candidates: any[] }> {
+        const customObject = process.env.HUBSPOT_CUSTOM_OBJECT;
+        if (!customObject) {
+            throw new NotFoundException('Custom Object is not defined on the environment variables');
+        }
+
+        try {
+            const requestedProperties = [...Object.keys(candidadeToDbDictionary), 'vaid'];
+            let allCandidates: any[] = [];
+
+            if (vaIds && vaIds.length > 0) {
+                // Chunk the vaIds list into batches of 100 to respect HubSpot limit
+                const chunkSize = 100;
+                for (let i = 0; i < vaIds.length; i += chunkSize) {
+                    const chunk = vaIds.slice(i, i + chunkSize);
+                    let after: string | undefined = undefined;
+
+                    do {
+                        const apiResponse = await this.hubspotClient.crm.objects.searchApi.doSearch(
+                            customObject,
+                            {
+                                limit: 100,
+                                after: after,
+                                properties: requestedProperties,
+                                filterGroups: [
+                                    {
+                                        filters: [
+                                            {
+                                                propertyName: 'vaid',
+                                                operator: FilterOperatorEnum.In,
+                                                values: chunk,
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        );
+
+                        allCandidates.push(...apiResponse.results);
+                        after = apiResponse.paging?.next?.after;
+                    } while (after);
+                }
+            } else {
+                // Fetch all candidate records using the properties list
+                let after: string | undefined = undefined;
+
+                do {
+                    const apiResponse = await this.hubspotClient.crm.objects.searchApi.doSearch(
+                        customObject,
+                        {
+                            limit: 100,
+                            after: after,
+                            properties: requestedProperties,
+                            filterGroups: [],
+                        }
+                    );
+
+                    allCandidates.push(...apiResponse.results);
+                    after = apiResponse.paging?.next?.after;
+                } while (after);
+            }
+
+            console.log(`Successfully fetched ${allCandidates.length} candidates from HubSpot`);
+            return {
+                candidates: allCandidates,
+            };
+        } catch (error: any) {
+            console.error('Error fetching candidates from HubSpot:', error.message);
+            throw new BadRequestException(`Failed to fetch candidates from HubSpot: ${error.message}`);
+        }
+    }
 }
