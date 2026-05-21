@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsEnum,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { InvoiceLineType, InvoiceLineCategory, AdjustmentType } from '@prisma/client';
@@ -35,6 +36,11 @@ export class InvoiceLineItemDto {
   @IsString()
   @IsOptional()
   worker_name_snapshot?: string;
+
+  @ApiProperty({ required: false })
+  @IsBoolean()
+  @IsOptional()
+  is_full_time?: boolean;
 
   @ApiProperty({ enum: InvoiceLineType })
   @IsEnum(InvoiceLineType)

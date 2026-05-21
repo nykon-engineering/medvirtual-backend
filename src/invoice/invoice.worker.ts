@@ -486,7 +486,7 @@ export class InvoiceWorker extends WorkerHost {
                     worker_name_snapshot: memberName,
                     type: InvoiceLineType.additional,
                     category: InvoiceLineCategory.bonus,
-                    description: `Bonus: ${ticket.description}`,
+                    description: `${ticket.description}`,
                     final_total: bonusAmount,
                     is_full_time: isFullTime,
                     created_by,
