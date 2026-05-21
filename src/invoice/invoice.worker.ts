@@ -36,6 +36,20 @@ export class InvoiceWorker extends WorkerHost {
     return result;
   }
 
+  private getWorkdaysCount(startDate: Date, endDate: Date): number {
+    let count = 0;
+    let curDate = DateTime.fromJSDate(startDate).startOf('day');
+    const lastDate = DateTime.fromJSDate(endDate).startOf('day');
+    while (curDate.toMillis() <= lastDate.toMillis()) {
+      const dayOfWeek = curDate.weekday; // 1 = Monday, 7 = Sunday in Luxon
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        count++;
+      }
+      curDate = curDate.plus({ days: 1 });
+    }
+    return count;
+  }
+
   async process(job: Job<any, any, string>): Promise<any> {
     if (job.name !== 'generate-invoice') {
       this.logger.warn(`Unknown job name: ${job.name}`);
@@ -123,15 +137,21 @@ export class InvoiceWorker extends WorkerHost {
       .map((m: any) => m.user_id ? String(m.user_id) : null)
       .filter((id): id is string => !!id);
 
-    // Fetch all candidates by hubstaff_id, populated with their staff records
-    const candidates = (hubstaffUserIds.length > 0) ? await this.prisma.candidate.findMany({
+    // Fetch all staff by candidate's hubstaff_id, matching this organization
+    const staffRecords = (hubstaffUserIds.length > 0) ? await this.prisma.staff.findMany({
       where: {
-        hubstaff_id: {
-          in: hubstaffUserIds,
+        candidate: {
+          hubstaff_id: {
+            in: hubstaffUserIds,
+          },
         },
+        OR: [
+          { organization_id: organization_id },
+          ...(org.hubspot_id ? [{ hubspot_organization_id: org.hubspot_id }] : []),
+        ],
       },
       include: {
-        staff: true,
+        candidate: true,
       },
     }) : [];
 
@@ -219,21 +239,55 @@ export class InvoiceWorker extends WorkerHost {
       for (const [userId, stats] of userSummary.entries()) {
         const hours = new Decimal(stats.tracked).dividedBy(3600); // convert seconds to hours
 
-        // Find Candidate & Staff
-        const candidate = candidates.find(c => c.hubstaff_id === String(userId)) || null;
-
-        const staff = candidate?.staff.find((s: any) => s.organization_id === organization_id) || candidate?.staff[0];
+        // Find Staff & Candidate
+        const staff = staffRecords.find(s => s.candidate?.hubstaff_id === String(userId)) || null;
+        const candidate = staff?.candidate || null;
 
         let hourlyRate = new Decimal(25); // Default fallback
+        let lineTotal = hours.mul(hourlyRate);
 
         if (staff && staff.salary) {
-          const hoursPerMonth = Number(process.env.CANDIDATE_HOUR_PER_MONTH) || 176;
-          hourlyRate = new Decimal(Number(staff.salary) / hoursPerMonth);
+          const monthlySalary = Number(staff.salary);
+          const deploymentType = (staff.hubspot_deployment_type || '').trim().toLowerCase().replace('-', ' ');
+          const isFullTime = deploymentType === 'full time' || deploymentType === 'fulltime';
+
+          if (isFullTime) {
+            // Full-Time staff logic
+            const startJSDate = new Date(billing_start_date);
+            const endJSDate = new Date(billing_end_date);
+            
+            const startDT = DateTime.fromJSDate(startJSDate);
+            const endDT = DateTime.fromJSDate(endJSDate);
+            const diffInDays = endDT.diff(startDT, 'days').days + 1;
+            const isFullMonth = diffInDays >= 27;
+
+            const baseSalary = isFullMonth ? monthlySalary : (monthlySalary / 2);
+
+            const workdaysInPeriod = this.getWorkdaysCount(startJSDate, endJSDate);
+            const requiredHours = workdaysInPeriod * 8;
+            const actualHours = hours.toNumber();
+            const deficit = requiredHours - actualHours;
+
+            if (deficit > 10) {
+              // Compute hourly rate and prorate
+              const prorationRate = (monthlySalary * 12) / 52 / 40;
+              hourlyRate = new Decimal(prorationRate);
+              lineTotal = hours.mul(hourlyRate);
+            } else {
+              // Pay full amount (baseSalary)
+              lineTotal = new Decimal(baseSalary);
+              hourlyRate = hours.gt(0) ? lineTotal.dividedBy(hours) : new Decimal(0);
+            }
+          } else {
+            // Non-Full-Time staff logic
+            const prorationRate = (monthlySalary * 12) / 52 / 40;
+            hourlyRate = new Decimal(prorationRate);
+            lineTotal = hours.mul(hourlyRate);
+          }
         } else if (candidate && candidate.hourly_pay_rate) {
           hourlyRate = new Decimal(Number(candidate.hourly_pay_rate));
+          lineTotal = hours.mul(hourlyRate);
         }
-
-        const lineTotal = hours.mul(hourlyRate);
 
         const memberName = memberMap.get(userId) || `Hubstaff User ${userId}`;
 
