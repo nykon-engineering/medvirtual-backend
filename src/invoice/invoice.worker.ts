@@ -271,12 +271,13 @@ export class InvoiceWorker extends WorkerHost {
             if (deficit > 10) {
               // Compute hourly rate and prorate
               const prorationRate = (monthlySalary * 12) / 52 / 40;
-              hourlyRate = new Decimal(prorationRate);
-              lineTotal = hours.mul(hourlyRate);
+              const prorationHourlyDecimal = new Decimal(prorationRate);
+              lineTotal = hours.mul(prorationHourlyDecimal);
+              hourlyRate = lineTotal;
             } else {
               // Pay full amount (baseSalary)
               lineTotal = new Decimal(baseSalary);
-              hourlyRate = hours.gt(0) ? lineTotal.dividedBy(hours) : new Decimal(0);
+              hourlyRate = lineTotal;
             }
           } else {
             // Non-Full-Time staff logic
