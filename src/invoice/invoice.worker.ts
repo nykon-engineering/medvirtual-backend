@@ -334,45 +334,89 @@ export class InvoiceWorker extends WorkerHost {
         const totalPayableHours = totalWorkedHours + totalPtoHours + totalHolidayHours;
         const hours = new Decimal(totalPayableHours);
 
+        const workdaysInPeriod = this.getWorkdaysCount(startJSDate, endJSDate);
+        const requiredHours = workdaysInPeriod * dailyBaseline;
+        const actualHours = totalPayableHours;
+        const hasOvertime = actualHours > requiredHours + 4;
+
         let hourlyRate = new Decimal(25); // Default fallback
         let lineTotal = hours.mul(hourlyRate);
+        let primaryHours = actualHours;
 
-        if (staff && staff.salary) {
-          const monthlySalary = Number(staff.salary);
+        let overtimeHours = 0;
+        let overtimeHourlyRate = new Decimal(0);
+        let overtimeTotal = new Decimal(0);
 
-          if (isFullTime) {
-            // Full-Time staff logic
-            const startDT = DateTime.fromJSDate(startJSDate);
-            const endDT = DateTime.fromJSDate(endJSDate);
-            const diffInDays = endDT.diff(startDT, 'days').days + 1;
-            const isFullMonth = diffInDays >= 27;
+        if (hasOvertime) {
+          overtimeHours = actualHours - requiredHours;
+          primaryHours = requiredHours;
 
-            const baseSalary = isFullMonth ? monthlySalary : (monthlySalary / 2);
-
-            const workdaysInPeriod = this.getWorkdaysCount(startJSDate, endJSDate);
-            const requiredHours = workdaysInPeriod * 8;
-            const actualHours = totalPayableHours;
-            const deficit = requiredHours - actualHours;
-
-            if (deficit > 10) {
-              // Compute hourly rate and prorate
-              const prorationRate = (monthlySalary * 12) / 52 / 40;
-              const prorationHourlyDecimal = new Decimal(prorationRate);
-              lineTotal = hours.mul(prorationHourlyDecimal);
-            } else {
-              // Pay full amount (baseSalary)
-              lineTotal = new Decimal(baseSalary);
-            }
-            hourlyRate = lineTotal.div(hours);
-          } else {
-            // Non-Full-Time staff logic
+          if (staff && staff.salary) {
+            const monthlySalary = Number(staff.salary);
             const prorationRate = (monthlySalary * 12) / 52 / 40;
-            hourlyRate = new Decimal(prorationRate);
+            overtimeHourlyRate = new Decimal(prorationRate);
+            overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
+
+            if (isFullTime) {
+              const startDT = DateTime.fromJSDate(startJSDate);
+              const endDT = DateTime.fromJSDate(endJSDate);
+              const diffInDays = endDT.diff(startDT, 'days').days + 1;
+              const isFullMonth = diffInDays >= 27;
+
+              const baseSalary = isFullMonth ? monthlySalary : (monthlySalary / 2);
+              lineTotal = new Decimal(baseSalary);
+              hourlyRate = primaryHours > 0 ? lineTotal.div(new Decimal(primaryHours)) : new Decimal(0);
+            } else {
+              hourlyRate = new Decimal(prorationRate);
+              lineTotal = new Decimal(primaryHours).mul(hourlyRate);
+            }
+          } else if (candidate && candidate.hourly_pay_rate) {
+            const rate = Number(candidate.hourly_pay_rate);
+            hourlyRate = new Decimal(rate);
+            lineTotal = new Decimal(primaryHours).mul(hourlyRate);
+            overtimeHourlyRate = new Decimal(rate);
+            overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
+          } else {
+            hourlyRate = new Decimal(25);
+            lineTotal = new Decimal(primaryHours).mul(hourlyRate);
+            overtimeHourlyRate = new Decimal(25);
+            overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
+          }
+        } else {
+          if (staff && staff.salary) {
+            const monthlySalary = Number(staff.salary);
+
+            if (isFullTime) {
+              // Full-Time staff logic
+              const startDT = DateTime.fromJSDate(startJSDate);
+              const endDT = DateTime.fromJSDate(endJSDate);
+              const diffInDays = endDT.diff(startDT, 'days').days + 1;
+              const isFullMonth = diffInDays >= 27;
+
+              const baseSalary = isFullMonth ? monthlySalary : (monthlySalary / 2);
+
+              const deficit = requiredHours - actualHours;
+
+              if (deficit > 10) {
+                // Compute hourly rate and prorate
+                const prorationRate = (monthlySalary * 12) / 52 / 40;
+                const prorationHourlyDecimal = new Decimal(prorationRate);
+                lineTotal = hours.mul(prorationHourlyDecimal);
+              } else {
+                // Pay full amount (baseSalary)
+                lineTotal = new Decimal(baseSalary);
+              }
+              hourlyRate = hours.gt(0) ? lineTotal.div(hours) : new Decimal(0);
+            } else {
+              // Non-Full-Time staff logic
+              const prorationRate = (monthlySalary * 12) / 52 / 40;
+              hourlyRate = new Decimal(prorationRate);
+              lineTotal = hours.mul(hourlyRate);
+            }
+          } else if (candidate && candidate.hourly_pay_rate) {
+            hourlyRate = new Decimal(Number(candidate.hourly_pay_rate));
             lineTotal = hours.mul(hourlyRate);
           }
-        } else if (candidate && candidate.hourly_pay_rate) {
-          hourlyRate = new Decimal(Number(candidate.hourly_pay_rate));
-          lineTotal = hours.mul(hourlyRate);
         }
 
         const memberName = memberMap.get(userId) || `Hubstaff User ${userId}`;
@@ -385,18 +429,40 @@ export class InvoiceWorker extends WorkerHost {
             type: InvoiceLineType.primary,
             category: InvoiceLineCategory.hourly_service,
             description: `Hourly services for ${memberName}`,
-            effective_worked_hours: hours,
+            effective_worked_hours: new Decimal(primaryHours),
             total_hours_worked: new Decimal(totalWorkedHours),
             total_pto_hours: new Decimal(totalPtoHours),
             total_holiday_hours: new Decimal(totalHolidayHours),
-            total_hours_payable: hours,
+            total_hours_payable: new Decimal(primaryHours),
             hourly_rate: hourlyRate,
             final_total: lineTotal,
+            is_full_time: isFullTime,
             created_by,
           },
         });
 
         subtotal = subtotal.add(lineTotal);
+
+        if (hasOvertime) {
+          await tx.invoiceLineItem.create({
+            data: {
+              invoice_version_id: version.id,
+              parent_line_item_id: primaryLineItem.id,
+              worker_id: userId.toString(),
+              worker_name_snapshot: memberName,
+              type: InvoiceLineType.additional,
+              category: InvoiceLineCategory.overtime,
+              description: `Overtime: ${overtimeHours.toFixed(2)} hours`,
+              effective_worked_hours: new Decimal(overtimeHours),
+              total_hours_payable: new Decimal(overtimeHours),
+              hourly_rate: overtimeHourlyRate,
+              final_total: overtimeTotal,
+              is_full_time: isFullTime,
+              created_by,
+            },
+          });
+          subtotal = subtotal.add(overtimeTotal);
+        }
 
         if (staff) {
           this.logger.log('Staff found for user_id:', userId);
@@ -422,6 +488,7 @@ export class InvoiceWorker extends WorkerHost {
                     category: InvoiceLineCategory.bonus,
                     description: `Bonus: ${ticket.description}`,
                     final_total: bonusAmount,
+                    is_full_time: isFullTime,
                     created_by,
                   },
                 });

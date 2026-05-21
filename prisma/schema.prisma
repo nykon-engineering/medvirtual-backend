@@ -1370,6 +1370,8 @@ model InvoiceLineItem {
   worker_id                   String?
   worker_name_snapshot        String?
 
+  is_full_time                Boolean             @default(false)
+
   type                        InvoiceLineType
   category                    InvoiceLineCategory
 
