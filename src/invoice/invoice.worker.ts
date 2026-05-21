@@ -400,6 +400,8 @@ export class InvoiceWorker extends WorkerHost {
         subtotal = subtotal.add(lineTotal);
 
         if (staff) {
+          this.logger.log('Staff found for user_id:', userId);
+          this.logger.log('Staff record:', staff);
           const bonusTickets = staff.tickets || [];
 
           for (const ticket of bonusTickets) {
