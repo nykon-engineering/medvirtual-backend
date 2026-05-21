@@ -419,7 +419,7 @@ export class InvoiceWorker extends WorkerHost {
                     worker_name_snapshot: memberName,
                     type: InvoiceLineType.additional,
                     category: InvoiceLineCategory.bonus,
-                    description: `Bonus: ${ticket.title}`,
+                    description: `Bonus: ${ticket.description}`,
                     final_total: bonusAmount,
                     created_by,
                   },
