@@ -52,6 +52,44 @@ export class InvoiceWorker extends WorkerHost {
     return count;
   }
 
+  public getHolidaysForYear(year: number): string[] {
+    const holidays: string[] = [];
+
+    // 1. New Year's Day (Jan 1)
+    holidays.push(DateTime.fromObject({ year, month: 1, day: 1 }).toFormat('yyyy-MM-dd'));
+
+    // 2. Memorial Day (last Monday of May)
+    let memorialDay = DateTime.fromObject({ year, month: 5, day: 31 });
+    while (memorialDay.weekday !== 1) { // 1 = Monday in Luxon
+      memorialDay = memorialDay.minus({ days: 1 });
+    }
+    holidays.push(memorialDay.toFormat('yyyy-MM-dd'));
+
+    // 3. Independence Day (July 4)
+    holidays.push(DateTime.fromObject({ year, month: 7, day: 4 }).toFormat('yyyy-MM-dd'));
+
+    // 4. Labor Day (first Monday of September)
+    let laborDay = DateTime.fromObject({ year, month: 9, day: 1 });
+    while (laborDay.weekday !== 1) {
+      laborDay = laborDay.plus({ days: 1 });
+    }
+    holidays.push(laborDay.toFormat('yyyy-MM-dd'));
+
+    // 5. Thanksgiving (fourth Thursday of November)
+    let thanksgiving = DateTime.fromObject({ year, month: 11, day: 1 });
+    while (thanksgiving.weekday !== 4) { // 4 = Thursday in Luxon
+      thanksgiving = thanksgiving.plus({ days: 1 });
+    }
+    thanksgiving = thanksgiving.plus({ weeks: 3 });
+    holidays.push(thanksgiving.toFormat('yyyy-MM-dd'));
+
+    // 6. Christmas (Dec 25)
+    holidays.push(DateTime.fromObject({ year, month: 12, day: 25 }).toFormat('yyyy-MM-dd'));
+
+    return holidays;
+  }
+
+
   async process(job: Job<any, any, string>): Promise<any> {
     if (job.name === 'attempt-collection') {
       const { invoiceId, stripeInvoiceId } = job.data;
@@ -266,6 +304,13 @@ export class InvoiceWorker extends WorkerHost {
       curDate = curDate.plus({ days: 1 });
     }
 
+    const startYear = DateTime.fromISO(billing_start_date).year;
+    const endYear = DateTime.fromISO(billing_end_date).year;
+    const holidayDates = new Set<string>();
+    for (let y = startYear; y <= endYear; y++) {
+      this.getHolidaysForYear(y).forEach(h => holidayDates.add(h));
+    }
+
     return await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // 1. Create Invoice Header
       const invoice = await tx.invoice.create({
@@ -316,16 +361,20 @@ export class InvoiceWorker extends WorkerHost {
         // Loop through all days in the billing period to calculate daily worked, PTO, and holiday hours
         let totalWorkedHours = 0;
         let totalPtoHours = 0;
-        const totalHolidayHours = 0;
+        let totalHolidayHours = 0;
+        let actualWorkedHoursOnHolidays = 0;
 
         for (const dayOfPeriod of allDaysList) {
           const dateStr = dayOfPeriod.toFormat('yyyy-MM-dd');
           const isWeekday = dayOfPeriod.weekday >= 1 && dayOfPeriod.weekday <= 5;
+          const isHoliday = isWeekday && holidayDates.has(dateStr);
 
           // 1. Calculate worked hours for this day
           let dailyWorked = 0;
           if (is_prebill) {
-            dailyWorked = isWeekday ? dailyBaseline : 0;
+            // Pre-bill assumes baseline hours on weekday non-holidays,
+            // and 0 worked hours on holidays (they just get standard holiday pay at 100%).
+            dailyWorked = (isWeekday && !isHoliday) ? dailyBaseline : 0;
           } else {
             const dayActs = activities.filter(act => act.user_id === userId && act.day === dateStr);
             const totalSeconds = dayActs.reduce((sum, act) => sum + act.total_time_logged, 0);
@@ -333,25 +382,39 @@ export class InvoiceWorker extends WorkerHost {
           }
           totalWorkedHours += dailyWorked;
 
-          // 2. Calculate approved PTO hours for this day
-          let dailyPto = 0;
-          if (isWeekday) {
-            const userPtos = approvedPtos.filter(pto => pto.user_id === userId);
-            for (const pto of userPtos) {
-              const days = pto.time_off_request_days
-                ? (Array.isArray(pto.time_off_request_days) ? pto.time_off_request_days : [pto.time_off_request_days])
-                : [];
-              for (const day of days) {
-                if (day.date === dateStr) {
-                  dailyPto += (day.amount_used || 0) * dailyBaseline;
+          if (isHoliday) {
+            // Holiday billing logic:
+            // If VA does NOT work (dailyWorked is zero): You bill required hours (dailyBaseline)
+            // If VA DOES work (dailyWorked > zero): You bill required hours (dailyBaseline) + dailyWorked * 50%
+            let dailyHolidayPayable = dailyBaseline;
+            if (dailyWorked > 0) {
+              dailyHolidayPayable += dailyWorked * 0.5;
+              actualWorkedHoursOnHolidays += dailyWorked;
+            }
+            totalHolidayHours += dailyHolidayPayable;
+          } else {
+            // 2. Calculate approved PTO hours for this day (only on non-holiday weekdays)
+            // Note: If a day is a holiday, we ignore any approved PTO requests for it
+            // since the holiday block above already pipes in the holiday pay.
+            let dailyPto = 0;
+            if (isWeekday) {
+              const userPtos = approvedPtos.filter(pto => pto.user_id === userId);
+              for (const pto of userPtos) {
+                const days = pto.time_off_request_days
+                  ? (Array.isArray(pto.time_off_request_days) ? pto.time_off_request_days : [pto.time_off_request_days])
+                  : [];
+                for (const day of days) {
+                  if (day.date === dateStr) {
+                    dailyPto += (day.amount_used || 0) / 3600;
+                  }
                 }
               }
             }
+            totalPtoHours += dailyPto;
           }
-          totalPtoHours += dailyPto;
         }
 
-        const totalPayableHours = totalWorkedHours + totalPtoHours + totalHolidayHours;
+        const totalPayableHours = (totalWorkedHours - actualWorkedHoursOnHolidays) + totalPtoHours + totalHolidayHours;
         const hours = new Decimal(totalPayableHours);
 
         const workdaysInPeriod = this.getWorkdaysCount(startJSDate, endJSDate);
@@ -486,7 +549,6 @@ export class InvoiceWorker extends WorkerHost {
 
         if (staff) {
           this.logger.log('Staff found for user_id:', userId);
-          this.logger.log('Staff record:', staff);
           const bonusTickets = staff.tickets || [];
 
           for (const ticket of bonusTickets) {

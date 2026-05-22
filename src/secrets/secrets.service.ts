@@ -6,7 +6,6 @@ export class SecretsService {
   private client: SecretsManagerClient;
 
   constructor() {
-    console.log(process.env.AWS_REGION)
     this.client = new SecretsManagerClient({
       region: process.env.AWS_REGION || 'us-east-2',
       credentials: {
@@ -21,7 +20,6 @@ export class SecretsService {
    */
   async getSecret(secretId: string): Promise<any> {
     try {
-      console.log(process.env.AWS_REGION)
       const command = new GetSecretValueCommand({ SecretId: secretId });
       const response = await this.client.send(command);
 
