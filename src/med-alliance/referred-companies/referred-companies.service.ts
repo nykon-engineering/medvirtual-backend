@@ -45,6 +45,7 @@ import { OrganizationService } from '../../organization/organization.service';
 import { HubspotService } from '../../hubspot/hubspot.service';
 import { ContactService } from '../../contacts/contacts.service';
 import axios from 'axios';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ReferredCompaniesService {
@@ -57,6 +58,7 @@ export class ReferredCompaniesService {
     private readonly organizationService: OrganizationService,
     private readonly hubspot: HubspotService,
     private readonly contactService: ContactService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   async create(
@@ -232,6 +234,15 @@ export class ReferredCompaniesService {
           throw hubspotError;
         }
       }
+
+      const affiliateName =
+        `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim() ||
+        currentUser.email;
+      void this.allianceNotifications.notifyAdminReferralNew({
+        organizationName: newOrganization.name,
+        affiliateName,
+        referredCompanyId: newOrganization.id,
+      });
 
       return softDuplicateWarning
         ? { ...newOrganization, warning: softDuplicateWarning }
@@ -786,9 +797,11 @@ export class ReferredCompaniesService {
       where: { id },
       select: {
         id: true,
+        name: true,
         referral_stage: true,
         eligibility_start_at: true,
         referred_by_affiliate_id: true,
+        referredByAffiliate: { select: { email: true, first_name: true } },
       },
     });
     if (!org) throw new NotFoundException('Referred company not found');
@@ -828,6 +841,20 @@ export class ReferredCompaniesService {
           : undefined,
       },
     });
+
+    if (org.referredByAffiliate?.email) {
+      void this.allianceNotifications.notifyReferralStageChanged(
+        {
+          email: org.referredByAffiliate.email,
+          first_name: org.referredByAffiliate.first_name ?? '',
+        },
+        {
+          organizationName: org.name,
+          previousStage: org.referral_stage ?? 'referred',
+          newStage: dto.stage,
+        },
+      );
+    }
 
     return this.findOneForAdmin(id);
   }

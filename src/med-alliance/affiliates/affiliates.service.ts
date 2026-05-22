@@ -33,6 +33,7 @@ import { MedAllianceInvitation } from '../../common/utils/email-templates/med-al
 import { MedAllianceInvitationForOrgUsers } from '../../common/utils/email-templates/med-alliance-invitation-for-org-users';
 import { MedAllianceInviteSignup } from '../../common/utils/email-templates/med-alliance-invite-signup';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
 const USER_SELECT = {
@@ -55,6 +56,7 @@ export class AffiliatesService {
     private readonly affiliateUpdateService: AffiliateUpdateService,
     private readonly hubspot: HubspotService,
     private readonly invoiceIngestion: InvoiceIngestionService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   // Shared helper: ensure a user has an active AffiliateProfile.
@@ -141,6 +143,14 @@ export class AffiliatesService {
         emailError,
       );
     }
+
+    const partnerName =
+      `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || user.email;
+    void this.allianceNotifications.notifyAdminPartnerRegistered({
+      partnerName,
+      partnerEmail: user.email,
+      affiliateProfileId: newAffiliateData.id,
+    });
 
     return newAffiliateData;
   }

@@ -24,6 +24,7 @@ import {
   PAYOUT_REQUEST_SELECT,
   shapeAdminRequest,
 } from './payout-request.selects';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 // ---------------------------------------------------------------------------
 // Service
@@ -34,6 +35,7 @@ export class PayoutRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly affiliatesService: AffiliatesService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -159,6 +161,16 @@ export class PayoutRequestsService {
         },
       });
     }
+
+    const affiliateName =
+      `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim() ||
+      currentUser.email;
+    void this.allianceNotifications.notifyAdminPayoutRequested({
+      affiliateName,
+      totalAmount: parseFloat(String(requestedAmount)),
+      commissionCount: dto.commission_ids.length,
+      payoutRequestId: payoutRequest.id,
+    });
 
     return this.prisma.affiliatePayoutRequest.findUnique({
       where: { id: payoutRequest.id },
@@ -686,6 +698,7 @@ export class PayoutRequestsService {
         approved_amount: true,
         requested_amount: true,
         commissions: { select: { commission_id: true } },
+        affiliate: { select: { email: true, first_name: true } },
       },
     });
     if (!request) throw new NotFoundException('Payout request not found');
@@ -752,6 +765,19 @@ export class PayoutRequestsService {
           metadata: { payout_request_id: id } as any,
         },
       });
+    }
+
+    if (request.affiliate?.email) {
+      void this.allianceNotifications.notifyPayoutPaid(
+        {
+          email: request.affiliate.email,
+          first_name: request.affiliate.first_name ?? '',
+        },
+        {
+          totalAmount: paidAmount,
+          paidAt: paidAt,
+        },
+      );
     }
 
     return this.findOneForAdmin(id);

@@ -46,11 +46,19 @@ export class BillComService {
       );
     }
 
-    return { username, password, organizationId, devKey, fundingAccountId, billBaseUrl };
+    return {
+      username,
+      password,
+      organizationId,
+      devKey,
+      fundingAccountId,
+      billBaseUrl,
+    };
   }
 
   private async login(): Promise<string> {
-    const { username, password, organizationId, devKey, billBaseUrl } = this.requireEnv();
+    const { username, password, organizationId, devKey, billBaseUrl } =
+      this.requireEnv();
 
     try {
       const response = await axios.post<LoginResponse>(

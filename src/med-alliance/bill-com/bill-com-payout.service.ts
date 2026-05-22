@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MailService } from '../../mail/mail.service';
 import { BillComService } from './bill-com.service';
 import { USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -13,6 +12,7 @@ import {
   ADMIN_SELECT,
   shapeAdminRequest,
 } from '../payout-requests/payout-request.selects';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BillComPayoutService {
@@ -20,8 +20,8 @@ export class BillComPayoutService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mailService: MailService,
     private readonly billComService: BillComService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   private toDateString(date: Date): string {
@@ -245,19 +245,13 @@ export class BillComPayoutService {
     });
 
     if (request.affiliate?.email) {
-      try {
-        await this.mailService.sendMail({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: request.affiliate.email,
-          subject: 'Your payout has been sent',
-          html: `<p>Hi ${request.affiliate.first_name ?? 'Partner'},</p><p>Your payout of $${paidAmount.toFixed(2)} has been successfully processed via Bill.com (reference: ${billComPaymentId}).</p><p>Thank you for being a MedVirtual Med Alliance partner.</p>`,
-        });
-      } catch (emailErr) {
-        this.logger.error(
-          'Failed to send payout paid email to partner',
-          emailErr,
-        );
-      }
+      void this.allianceNotifications.notifyPayoutPaid(
+        {
+          email: request.affiliate.email,
+          first_name: request.affiliate.first_name ?? '',
+        },
+        { totalAmount: paidAmount, paidAt: new Date() },
+      );
     }
   }
 
@@ -334,40 +328,17 @@ export class BillComPayoutService {
     billComPaymentId: string,
     errorMsg: string,
   ): Promise<void> {
-    const admins = await this.prisma.uSER.findMany({
-      where: { role: { in: ['system_admin', 'system_super_admin'] } },
-      select: { email: true, first_name: true },
-    });
-
     const partnerName = affiliate
       ? `${affiliate.first_name ?? ''} ${affiliate.last_name ?? ''}`.trim() ||
         affiliate.email
       : 'Unknown partner';
 
-    for (const admin of admins) {
-      try {
-        await this.mailService.sendMail({
-          from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: admin.email,
-          subject: `Bill.com payment failed — ${partnerName} ($${amount.toFixed(2)})`,
-          html: `
-            <p>Hi ${admin.first_name ?? 'Admin'},</p>
-            <p>A Bill.com payment has failed and requires your attention.</p>
-            <ul>
-              <li><strong>Partner:</strong> ${partnerName}</li>
-              <li><strong>Amount:</strong> $${amount.toFixed(2)}</li>
-              <li><strong>Bill.com Payment ID:</strong> ${billComPaymentId}</li>
-              <li><strong>Error:</strong> ${errorMsg}</li>
-            </ul>
-            <p><a href="${process.env.FRONTEND_URL ?? ''}/admin/med-alliance/payout-requests/${payoutRequestId}">View payout request</a></p>
-          `,
-        });
-      } catch (emailErr) {
-        this.logger.error(
-          `Failed to send payment failure notification to admin ${admin.email}`,
-          emailErr,
-        );
-      }
-    }
+    void this.allianceNotifications.notifyAdminPaymentFailed({
+      partnerName,
+      amount,
+      billComPaymentId,
+      errorMsg,
+      payoutRequestId,
+    });
   }
 }

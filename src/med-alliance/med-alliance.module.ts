@@ -7,9 +7,11 @@ import { PayoutRequestsModule } from './payout-requests/payout-requests.module';
 import { SyncModule } from './sync/sync.module';
 import { ReviewCasesModule } from './review-cases/review-cases.module';
 import { BillComModule } from './bill-com/bill-com.module';
+import { AllianceNotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
+    AllianceNotificationsModule,
     AffiliatesModule,
     ReferredCompaniesModule,
     InvoicesModule,

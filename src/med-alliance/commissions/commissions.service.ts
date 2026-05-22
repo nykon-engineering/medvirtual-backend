@@ -17,6 +17,7 @@ import {
 } from './dto/decide-commission.dto';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 // Terminal statuses — transitions out of these are not allowed.
 const TERMINAL_STATUSES = ['paid', 'void', 'rejected'];
@@ -91,7 +92,10 @@ const PAYOUT_LINKAGE_SELECT = {
 export class CommissionsService {
   private readonly logger = new Logger(CommissionsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly allianceNotifications: AllianceNotificationsService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Shared: write an audit log entry for a commission transition.
@@ -302,6 +306,33 @@ export class CommissionsService {
       reason: dto.reason,
       source: 'admin_action',
     });
+
+    if (newStatus === 'eligible') {
+      const full = await this.prisma.affiliateCommission.findUnique({
+        where: { id },
+        select: {
+          commission_amount: true,
+          commission_percent_snapshot: true,
+          affiliate: { select: { email: true, first_name: true } },
+          organization: { select: { name: true } },
+        },
+      });
+      if (full?.affiliate?.email) {
+        void this.allianceNotifications.notifyCommissionEligible(
+          {
+            email: full.affiliate.email,
+            first_name: full.affiliate.first_name ?? '',
+          },
+          {
+            organizationName: full.organization?.name ?? '',
+            commissionAmount: parseFloat(String(full.commission_amount ?? 0)),
+            commissionPercent: parseFloat(
+              String(full.commission_percent_snapshot ?? 0),
+            ),
+          },
+        );
+      }
+    }
 
     return updated;
   }

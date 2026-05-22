@@ -3,6 +3,12 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PayoutRequestsService } from './payout-requests.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
+
+const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
+  notifyAdminPayoutRequested: jest.fn(),
+  notifyPayoutPaid: jest.fn(),
+};
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -96,6 +102,7 @@ describe('PayoutRequestsService', () => {
         PayoutRequestsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AffiliatesService, useValue: mockAffiliatesService },
+        { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
       ],
     }).compile();
 
