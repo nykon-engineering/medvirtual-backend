@@ -164,18 +164,10 @@ async function testSyncInvoiceHubspot() {
   }
 
   try {
-    let after: string | undefined = undefined;
-    let totalProcessed = 0;
-    let totalCreated = 0;
-    let totalExisting = 0;
-    let totalConfigsAdded = 0;
-
-    const properties = Object.keys(organizationToDbDictionary);
-
-    do {
-      console.log(`\n🔍 Fetching batch of companies from HubSpot... ${after ? '(paging after: ' + after + ')' : ''}`);
-
-      const searchResponse = await hubspotClient.crm.companies.searchApi.doSearch({
+    let earliestDate = new Date('2020-01-01T00:00:00.000Z');
+    try {
+      console.log('🔍 Finding earliest company creation date in HubSpot...');
+      const earliestResponse = await hubspotClient.crm.companies.searchApi.doSearch({
         filterGroups: [
           {
             filters: [
@@ -196,151 +188,242 @@ async function testSyncInvoiceHubspot() {
             ]
           }
         ],
-        properties,
-        limit: 100,
-        after
+        properties: ['createdate'],
+        sorts: ['createdate'] as any,
+        limit: 1,
       });
-
-      const companies = searchResponse.results;
-      if (companies.length === 0) break;
-
-      console.log(`✅ Fetched ${companies.length} companies from HubSpot.`);
-
-      // 1. Bulk fetch existing Organizations and their InvoiceConfigurations
-      const hubspotIds = companies.map(c => c.id);
-      const existingOrgs = await prisma.organization.findMany({
-        where: { hubspot_id: { in: hubspotIds } },
-        include: { invoiceConfiguration: true }
-      });
-      const orgMap = new Map(existingOrgs.map(o => [o.hubspot_id, o]));
-
-      // 2. Bulk fetch HubSpot Owners to map as Admins
-      const ownerIds = Array.from(new Set(companies.map(c => String(c.properties.hubspot_owner_id)).filter(id => id && id !== 'null')));
-      const users = await prisma.uSER.findMany({
-        where: { hubspot_id: { in: ownerIds } },
-        select: { id: true, hubspot_id: true }
-      });
-      const userMap = new Map(users.map(u => [u.hubspot_id, u.id]));
-
-      // 3. Prepare processing results
-      const orgsToCreate: any[] = [];
-      const configsToCreate: any[] = [];
-      const configsToUpdate: any[] = [];
-
-      // Parallelize the mapping and check logic
-      await Promise.all(companies.map(async (company) => {
-        const hubspotId = company.id;
-        const props = company.properties;
-        const existing = orgMap.get(hubspotId);
-
-        if (existing) {
-          totalExisting++;
-          const config = (existing as any).invoiceConfiguration;
-
-          if (!config) {
-            configsToCreate.push({
-              organization_id: existing.id,
-              hubspot_id: hubspotId,
-              hubstaff_id: props.hubspot_project_id ? String(props.hubspot_project_id) : undefined,
-            });
-          } else if (props.hubspot_project_id && String(props.hubspot_project_id) !== config.hubstaff_id) {
-            console.log(`🔄 Queuing update for ${props.name}: ${config.hubstaff_id} -> ${props.hubspot_project_id}`);
-            configsToUpdate.push({
-              id: config.id,
-              hubstaff_id: String(props.hubspot_project_id)
-            });
+      if (earliestResponse.results && earliestResponse.results.length > 0) {
+        const hsCreated = earliestResponse.results[0].properties.createdate;
+        if (hsCreated) {
+          const parsed = new Date(hsCreated);
+          if (!isNaN(parsed.getTime())) {
+            earliestDate = parsed;
           }
-          return;
         }
+      }
+      console.log(`📅 Earliest company creation date found: ${earliestDate.toISOString()}`);
+    } catch (err: any) {
+      console.warn('⚠️ Could not fetch earliest company creation date, falling back to 2020-01-01. Error:', err.message);
+    }
 
-        // Prepare new organization data
-        const adminId = userMap.get(String(props.hubspot_owner_id)) || null;
-        const specialties = props.specialty ? props.specialty.split(';').map((s: string) => s.trim()) : [];
-        const role = props.type === 'PROSPECT' ? OrganizationRole.prospect : OrganizationRole.client;
+    const ranges: Array<[string, string]> = [];
+    let currentStart = new Date(earliestDate);
+    currentStart.setUTCHours(0, 0, 0, 0);
 
-        orgsToCreate.push({
-          hubspot_id: hubspotId,
-          name: props.name || 'Unknown HubSpot Company',
-          email: props.referral_email || null,
-          phone: props.phone || null,
-          website_url: props.domain || null,
-          address: props.address || null,
-          city: props.city || null,
-          state: props.state || null,
-          postal_code: props.zip || null,
-          location: props.country || null,
-          description: props.description || props.about_us || null,
-          industry: props.industry ? (organizationIndustryToDbDictionary[props.industry] || props.industry) : null,
-          business_unit: props.business_unit || null,
-          organization_role: role,
-          number_of_employees: props.numberofemployees ? parseInt(props.numberofemployees) : null,
-          status: OrganizationStatus.inactive,
-          specialties: specialties,
-          admin_id: adminId,
-          source: 'Hubspot',
+    const now = new Date();
+    // Add buffer of 1 day to now to ensure we cover everything created today
+    now.setUTCDate(now.getUTCDate() + 1);
+
+    while (currentStart < now) {
+      const nextEnd = new Date(currentStart);
+      nextEnd.setUTCMonth(currentStart.getUTCMonth() + 6);
+      
+      ranges.push([currentStart.toISOString(), nextEnd.toISOString()]);
+      currentStart = nextEnd;
+    }
+    console.log(`📊 Generated ${ranges.length} date ranges for chunked sync.`);
+
+    let totalProcessed = 0;
+    let totalCreated = 0;
+    let totalExisting = 0;
+    let totalConfigsAdded = 0;
+
+    const properties = Object.keys(organizationToDbDictionary);
+
+    for (const [start, end] of ranges) {
+      console.log(`\n📅 Syncing range: [${start}] to [${end}]`);
+      let after: string | undefined = undefined;
+
+      do {
+        console.log(`🔍 Fetching batch of companies from HubSpot... ${after ? '(paging after: ' + after + ')' : ''}`);
+
+        const searchResponse = await hubspotClient.crm.companies.searchApi.doSearch({
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: 'business_unit',
+                  operator: 'EQ' as any,
+                  value: 'MedVirtual'
+                },
+                {
+                  propertyName: 'createdate',
+                  operator: 'GTE' as any,
+                  value: start
+                },
+                {
+                  propertyName: 'createdate',
+                  operator: 'LT' as any,
+                  value: end
+                }
+              ]
+            },
+            {
+              filters: [
+                {
+                  propertyName: 'business_unit',
+                  operator: 'EQ' as any,
+                  value: 'Berry Virtual'
+                },
+                {
+                  propertyName: 'createdate',
+                  operator: 'GTE' as any,
+                  value: start
+                },
+                {
+                  propertyName: 'createdate',
+                  operator: 'LT' as any,
+                  value: end
+                }
+              ]
+            }
+          ],
+          properties,
+          limit: 100,
+          after
         });
-      }));
 
-      // 4. Bulk Create Organizations
-      if (orgsToCreate.length > 0) {
-        console.log(`🆕 Creating ${orgsToCreate.length} new organizations...`);
-        await prisma.organization.createMany({
-          data: orgsToCreate,
-          skipDuplicates: true
+        const companies = searchResponse.results;
+        if (companies.length === 0) break;
+
+        console.log(`✅ Fetched ${companies.length} companies from HubSpot.`);
+
+        // 1. Bulk fetch existing Organizations and their InvoiceConfigurations
+        const hubspotIds = companies.map(c => c.id);
+        const existingOrgs = await prisma.organization.findMany({
+          where: { hubspot_id: { in: hubspotIds } },
+          include: { invoiceConfiguration: true }
         });
+        const orgMap = new Map(existingOrgs.map(o => [o.hubspot_id, o]));
 
-        // Fetch back to get IDs for InvoiceConfiguration creation
-        const newOrgs = await prisma.organization.findMany({
-          where: { hubspot_id: { in: orgsToCreate.map(o => o.hubspot_id) } },
+        // 2. Bulk fetch HubSpot Owners to map as Admins
+        const ownerIds = Array.from(new Set(companies.map(c => String(c.properties.hubspot_owner_id)).filter(id => id && id !== 'null')));
+        const users = await prisma.uSER.findMany({
+          where: { hubspot_id: { in: ownerIds } },
           select: { id: true, hubspot_id: true }
         });
+        const userMap = new Map(users.map(u => [u.hubspot_id, u.id]));
 
-        const newConfigs = newOrgs.map(org => {
-          const company = companies.find(c => c.id === org.hubspot_id);
-          return {
-            organization_id: org.id,
-            hubspot_id: org.hubspot_id,
-            hubstaff_id: company?.properties.hubspot_project_id ? String(company.properties.hubspot_project_id) : undefined,
-          };
-        });
+        // 3. Prepare processing results
+        const orgsToCreate: any[] = [];
+        const configsToCreate: any[] = [];
+        const configsToUpdate: any[] = [];
 
-        if (newConfigs.length > 0) {
-          await prisma.invoiceConfiguration.createMany({ data: newConfigs });
+        // Parallelize the mapping and check logic
+        await Promise.all(companies.map(async (company) => {
+          const hubspotId = company.id;
+          const props = company.properties;
+          const existing = orgMap.get(hubspotId);
+
+          if (existing) {
+            totalExisting++;
+            const config = (existing as any).invoiceConfiguration;
+
+            if (!config) {
+              configsToCreate.push({
+                organization_id: existing.id,
+                hubspot_id: hubspotId,
+                hubstaff_id: props.hubspot_project_id ? String(props.hubspot_project_id) : undefined,
+              });
+            } else if (props.hubspot_project_id && String(props.hubspot_project_id) !== config.hubstaff_id) {
+              console.log(`🔄 Queuing update for ${props.name}: ${config.hubstaff_id} -> ${props.hubspot_project_id}`);
+              configsToUpdate.push({
+                id: config.id,
+                hubstaff_id: String(props.hubspot_project_id)
+              });
+            }
+            return;
+          }
+
+          // Prepare new organization data
+          const adminId = userMap.get(String(props.hubspot_owner_id)) || null;
+          const specialties = props.specialty ? props.specialty.split(';').map((s: string) => s.trim()) : [];
+          const role = props.type === 'PROSPECT' ? OrganizationRole.prospect : OrganizationRole.client;
+
+          orgsToCreate.push({
+            hubspot_id: hubspotId,
+            name: props.name || 'Unknown HubSpot Company',
+            email: props.referral_email || null,
+            phone: props.phone || null,
+            website_url: props.domain || null,
+            address: props.address || null,
+            city: props.city || null,
+            state: props.state || null,
+            postal_code: props.zip || null,
+            location: props.country || null,
+            description: props.description || props.about_us || null,
+            industry: props.industry ? (organizationIndustryToDbDictionary[props.industry] || props.industry) : null,
+            business_unit: props.business_unit || null,
+            organization_role: role,
+            number_of_employees: props.numberofemployees ? parseInt(props.numberofemployees) : null,
+            status: OrganizationStatus.inactive,
+            specialties: specialties,
+            admin_id: adminId,
+            source: 'Hubspot',
+          });
+        }));
+
+        // 4. Bulk Create Organizations
+        if (orgsToCreate.length > 0) {
+          console.log(`🆕 Creating ${orgsToCreate.length} new organizations...`);
+          await prisma.organization.createMany({
+            data: orgsToCreate,
+            skipDuplicates: true
+          });
+
+          // Fetch back to get IDs for InvoiceConfiguration creation
+          const newOrgs = await prisma.organization.findMany({
+            where: { hubspot_id: { in: orgsToCreate.map(o => o.hubspot_id) } },
+            select: { id: true, hubspot_id: true }
+          });
+
+          const newConfigs = newOrgs.map(org => {
+            const company = companies.find(c => c.id === org.hubspot_id);
+            return {
+              organization_id: org.id,
+              hubspot_id: org.hubspot_id,
+              hubstaff_id: company?.properties.hubspot_project_id ? String(company.properties.hubspot_project_id) : undefined,
+            };
+          });
+
+          if (newConfigs.length > 0) {
+            await prisma.invoiceConfiguration.createMany({ data: newConfigs });
+          }
+          totalCreated += orgsToCreate.length;
         }
-        totalCreated += orgsToCreate.length;
-      }
 
-      // 5. Bulk Create missing InvoiceConfigurations for existing orgs
-      if (configsToCreate.length > 0) {
-        console.log(`🛠️ Adding ${configsToCreate.length} missing InvoiceConfigurations...`);
-        await prisma.invoiceConfiguration.createMany({ data: configsToCreate });
-        totalConfigsAdded += configsToCreate.length;
-      }
-
-      // 6. Execute Updates in batches to avoid connection pool exhaustion
-      if (configsToUpdate.length > 0) {
-        console.log(`🔄 Updating ${configsToUpdate.length} existing InvoiceConfigurations...`);
-        const updateBatchSize = 10;
-        for (let j = 0; j < configsToUpdate.length; j += updateBatchSize) {
-          const updateChunk = configsToUpdate.slice(j, j + updateBatchSize);
-          await Promise.all(updateChunk.map(upd =>
-            prisma.invoiceConfiguration.update({
-              where: { id: upd.id },
-              data: { hubstaff_id: upd.hubstaff_id }
-            })
-          ));
+        // 5. Bulk Create missing InvoiceConfigurations for existing orgs
+        if (configsToCreate.length > 0) {
+          console.log(`🛠️ Adding ${configsToCreate.length} missing InvoiceConfigurations...`);
+          await prisma.invoiceConfiguration.createMany({ data: configsToCreate });
+          totalConfigsAdded += configsToCreate.length;
         }
-      }
 
-      totalProcessed += companies.length;
-      after = searchResponse.paging?.next?.after;
+        // 6. Execute Updates in batches to avoid connection pool exhaustion
+        if (configsToUpdate.length > 0) {
+          console.log(`🔄 Updating ${configsToUpdate.length} existing InvoiceConfigurations...`);
+          const updateBatchSize = 10;
+          for (let j = 0; j < configsToUpdate.length; j += updateBatchSize) {
+            const updateChunk = configsToUpdate.slice(j, j + updateBatchSize);
+            await Promise.all(updateChunk.map(upd =>
+              prisma.invoiceConfiguration.update({
+                where: { id: upd.id },
+                data: { hubstaff_id: upd.hubstaff_id }
+              })
+            ));
+          }
+        }
 
-      if (after) {
-        const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds delay
-        console.log(`⏳ Pacing: Waiting ${delay}ms before next batch...`);
-        await sleep(delay);
-      }
-    } while (after);
+        totalProcessed += companies.length;
+        after = searchResponse.paging?.next?.after;
+
+        if (after) {
+          const delay = Math.floor(Math.random() * 2000) + 1000; // 1-3 seconds delay
+          console.log(`⏳ Pacing: Waiting ${delay}ms before next batch...`);
+          await sleep(delay);
+        }
+      } while (after);
+    }
 
 
     console.log(`\n--------------------------------------------------`);
