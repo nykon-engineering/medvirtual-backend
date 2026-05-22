@@ -32,6 +32,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { RedisModule } from './redis/redis.module';
 import { PusherModule } from './pusher/pusher.module';
 import { InvoiceModule } from './invoice/invoice.module';
+import { StripeModule } from './stripe/stripe.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { InvoiceModule } from './invoice/invoice.module';
     RedisModule,
     PusherModule,
     InvoiceModule,
+    StripeModule,
   ],
   controllers: [AppController],
   providers: [

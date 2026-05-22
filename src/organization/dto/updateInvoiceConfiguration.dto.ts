@@ -57,4 +57,9 @@ export class UpdateInvoiceConfigurationDto {
   @IsOptional()
   @IsBoolean()
   requires_reconciliation?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  stripe_customer_id?: string;
 }

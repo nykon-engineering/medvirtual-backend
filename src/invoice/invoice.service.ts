@@ -10,6 +10,8 @@ import { ListInvoicesDto } from './dto/list-invoices.dto';
 import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
 import { Decimal } from '@prisma/client/runtime/library';
 
+import { StripeService } from '../stripe/stripe.service';
+
 @Injectable()
 export class InvoiceService {
   private readonly logger = new Logger(InvoiceService.name);
@@ -18,6 +20,7 @@ export class InvoiceService {
     private readonly prisma: PrismaService,
     @InjectQueue('invoice') private readonly invoiceQueue: Queue,
     private readonly configService: ConfigService,
+    private readonly stripeService: StripeService,
   ) { }
 
   async createInvoice(dto: CreateInvoiceDto, userId: string) {
@@ -284,7 +287,62 @@ export class InvoiceService {
 
     // Placeholder for extra actions when publishing
     if (status === InvoiceStatus.published) {
-      // TODO: Add logic for publishing (e.g., generate final invoice number, notify client)
+      const fullInvoice = await this.findOne(id);
+      if (!fullInvoice) {
+        throw new BadRequestException('Invoice not found');
+      }
+
+      const config = fullInvoice.organization?.invoiceConfiguration;
+      if (config?.auto_sync_to_stripe) {
+        let stripeInvId = fullInvoice.stripe_invoice_id;
+        const stripeCustId = config.stripe_customer_id;
+
+        if (!stripeCustId) {
+          throw new BadRequestException('Stripe customer ID is not configured for this organization');
+        }
+
+        if (!stripeInvId) {
+          const createRes = await this.stripeService.createStripeInvoiceOnly({
+            clientId: fullInvoice.organization_id,
+            reference: fullInvoice.reference || '',
+            dueDate: fullInvoice.currentVersion?.due_date || new Date(),
+            isPrebill: fullInvoice.currentVersion?.is_prebill || false,
+            periodStart: fullInvoice.currentVersion?.billing_start_date?.toISOString(),
+            periodEnd: fullInvoice.currentVersion?.billing_end_date?.toISOString(),
+          });
+          stripeInvId = createRes.invoice.id;
+        }
+
+        // Get fresh state of the invoice
+        let freshInvoice = await this.findOne(id);
+        if (!freshInvoice) {
+          throw new BadRequestException('Invoice not found after creation on Stripe');
+        }
+
+        if (freshInvoice.stripe_status === 'invoice_created') {
+          await this.stripeService.attachStripeInvoiceItems(freshInvoice, stripeCustId);
+          freshInvoice = await this.findOne(id);
+          if (!freshInvoice) {
+            throw new BadRequestException('Invoice not found after attaching line items on Stripe');
+          }
+        }
+
+        if (freshInvoice.stripe_status === 'all_line_items_added') {
+          await this.stripeService.finalizeStripeInvoice(freshInvoice);
+          freshInvoice = await this.findOne(id);
+          if (!freshInvoice) {
+            throw new BadRequestException('Invoice not found after finalizing on Stripe');
+          }
+        }
+
+        if (freshInvoice.stripe_status === 'finalized') {
+          await this.stripeService.verifyFinalizedStripeInvoice(freshInvoice);
+        } else {
+          throw new BadRequestException(
+            `Stripe invoice must be finalized to publish. Current status: ${freshInvoice.stripe_status}`,
+          );
+        }
+      }
     }
 
     const updatedInvoice = await this.prisma.invoice.update({
@@ -483,7 +541,11 @@ export class InvoiceService {
             },
           },
         },
-        organization: true,
+        organization: {
+          include: {
+            invoiceConfiguration: true,
+          },
+        },
         creator: {
           select: { id: true, first_name: true, last_name: true, email: true },
         },

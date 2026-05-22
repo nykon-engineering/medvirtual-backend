@@ -7,6 +7,7 @@ import { PusherService } from '../pusher/pusher.service';
 import { InvoiceJobStatus, InvoiceStatus, InvoiceVersionStatus, InvoiceLineType, InvoiceLineCategory, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { DateTime } from 'luxon';
+import { StripeService } from '../stripe/stripe.service';
 
 @Processor('invoice')
 @Injectable()
@@ -17,6 +18,7 @@ export class InvoiceWorker extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly hubstaff: HubstaffService,
     private readonly pusher: PusherService,
+    private readonly stripeService: StripeService,
   ) {
     super();
   }
@@ -51,6 +53,24 @@ export class InvoiceWorker extends WorkerHost {
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
+    if (job.name === 'attempt-collection') {
+      const { invoiceId, stripeInvoiceId } = job.data;
+      this.logger.log(`Attempting collection for invoice ${invoiceId} / Stripe ${stripeInvoiceId}`);
+      const invoice = await this.prisma.invoice.findUnique({
+        where: { id: invoiceId },
+      });
+      if (invoice && invoice.status !== 'paid') {
+        try {
+          await this.stripeService.payInvoice(stripeInvoiceId);
+          this.logger.log(`Successfully collected payment for invoice ${invoiceId}`);
+        } catch (err) {
+          this.logger.error(`Failed to collect payment for invoice ${invoiceId}: ${err.message}`);
+          throw err; // retry job
+        }
+      }
+      return;
+    }
+
     if (job.name !== 'generate-invoice') {
       this.logger.warn(`Unknown job name: ${job.name}`);
       return;
