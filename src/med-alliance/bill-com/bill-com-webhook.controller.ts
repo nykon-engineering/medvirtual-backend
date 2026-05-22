@@ -25,6 +25,8 @@ export class BillComWebhookController {
       const eventType: string = payload?.eventType ?? payload?.type ?? '';
       const paymentId: string = payload?.data?.id ?? '';
 
+      //here I'll check the x-bill-sha-signature header to verify authenticity 
+      // Also I need to validate some datas, such as organizationID
       if (!paymentId) {
         this.logger.warn(
           'Bill.com webhook received with no payment ID, ignoring',
