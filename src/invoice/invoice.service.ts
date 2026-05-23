@@ -672,9 +672,9 @@ export class InvoiceService {
 
       const page = await context.newPage();
 
-      page.on('request', req => this.logger.log(`[Playwright Request] ${req.url()} (${req.method()})`));
-      page.on('response', res => this.logger.log(`[Playwright Response] ${res.url()} -> Status ${res.status()}`));
-      page.on('requestfailed', req => this.logger.log(`[Playwright Request Failed] ${req.url()} - Error: ${req.failure()?.errorText}`));
+      // page.on('request', req => this.logger.log(`[Playwright Request] ${req.url()} (${req.method()})`));
+      // page.on('response', res => this.logger.log(`[Playwright Response] ${res.url()} -> Status ${res.status()}`));
+      // page.on('requestfailed', req => this.logger.log(`[Playwright Request Failed] ${req.url()} - Error: ${req.failure()?.errorText}`));
 
       let url = `${frontendUrl}/templates/invoices?invoiceId=${invoiceId}`;
       if (token) {
