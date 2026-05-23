@@ -1,4 +1,7 @@
-import { Controller, Post, Body, UseGuards, HttpCode, Get, Param, Query, Patch } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, Get, Param, Query, Patch, Res, BadRequestException } from '@nestjs/common';
+import { Response } from 'express';
+import { existsSync, unlinkSync } from 'fs';
+import * as path from 'path';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto, BulkCreateInvoiceDto } from './dto/create-invoice.dto';
@@ -62,6 +65,48 @@ export class InvoiceController {
   @ApiOperation({ summary: 'Fetch all versions of an invoice' })
   async findVersions(@Param('id') id: string) {
     return await this.invoiceService.findVersions(id);
+  }
+
+  @Get(':id/pdf')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Generate and download invoice PDF' })
+  async downloadPdf(@Param('id') id: string, @Res() res: Response) {
+    const invoice = await this.invoiceService.findOne(id);
+    if (!invoice) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const filePath = await this.invoiceService.generateInvoicePdf(id);
+    
+    if (!filePath || !existsSync(filePath)) {
+      throw new BadRequestException('Failed to generate PDF');
+    }
+
+    let ref = invoice.invoice_number
+      ? invoice.reference?.replace(/[A-Z]{5}$/, invoice.invoice_number)
+      : invoice.reference || invoice.id;
+    let name = `${ref}.pdf`;
+
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    return res.download(filePath, name, (err) => {
+      if (existsSync(filePath)) {
+        try {
+          unlinkSync(filePath);
+        } catch (e) {
+          console.error('Failed to unlink temp PDF:', e);
+        }
+      }
+      if (err) {
+        console.error('PDF download error:', err);
+      }
+    });
+  }
+
+  @Get(':id/audit-logs')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Fetch all audit logs of an invoice' })
+  async findAuditLogs(@Param('id') id: string) {
+    return await this.invoiceService.findAuditLogs(id);
   }
 
   @Patch(':id/status')

@@ -11,6 +11,12 @@ import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
 import { Decimal } from '@prisma/client/runtime/library';
 
 import { StripeService } from '../stripe/stripe.service';
+import { chromium, Browser as PlaywrightBrowser } from 'playwright';
+import { PDFDocument } from 'pdf-lib';
+const pdf = require('pdf-parse');
+import * as jwt from 'jsonwebtoken';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class InvoiceService {
@@ -577,5 +583,248 @@ export class InvoiceService {
       this.logger.error(`Failed to send message to BullMQ: ${error.message}`);
       throw error;
     }
+  }
+
+  public async generateInvoicePdf(
+    invoiceId: string,
+    truncatePage1?: boolean,
+  ): Promise<string> {
+    let browser: PlaywrightBrowser | null = null;
+    try {
+      let user = await this.prisma.uSER.findFirst({
+        where: {
+          email: "pdf.generator@legalsoft.com",
+        },
+      });
+      if (!user) {
+        let baseUser = await this.prisma.uSER.findFirst({
+          where: {
+            email: "admin@medvirtual.ai",
+          },
+        });
+        if (!baseUser) {
+          baseUser = await this.prisma.uSER.findFirst({
+            where: {
+              role: "system_super_admin",
+            },
+          });
+        }
+        if (baseUser) {
+          user = await this.prisma.uSER.create({
+            data: {
+              email: "pdf.generator@legalsoft.com",
+              first_name: "PDF",
+              last_name: "Generator",
+              role: baseUser.role,
+              status: "active",
+              verified: true,
+              password: baseUser.password,
+              phone: baseUser.phone || "",
+              avatar: baseUser.avatar || "",
+              job_title: "PDF Generator Service",
+              organization_name: baseUser.organization_name || "",
+              workos_id: baseUser.workos_id || "",
+              authentication_method: baseUser.authentication_method || "OwnSign",
+            },
+          });
+        }
+      }
+
+      let token: string | null = null;
+      if (user) {
+        const jwtToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'secret', {
+          expiresIn: '8h',
+        });
+        token = jwtToken;
+        await this.prisma.session.updateMany({
+          where: { userId: user.id },
+          data: { isRevoked: true },
+        });
+        await this.prisma.session.create({
+          data: {
+            userId: user.id,
+            token: jwtToken,
+            expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
+          },
+        });
+      }
+
+      const invoice = await this.findOne(invoiceId);
+      if (!invoice) throw new BadRequestException("Invoice not found");
+
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox"],
+      });
+      const context = await browser.newContext();
+
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL') || process.env.FRONTEND_URL || 'https://staging.medvirtual.ai';
+
+      if (token) {
+        await context.addCookies([
+          {
+            name: 'auth-token',
+            value: token,
+            url: frontendUrl,
+          }
+        ]);
+      }
+
+      const page = await context.newPage();
+
+      page.on('request', req => this.logger.log(`[Playwright Request] ${req.url()} (${req.method()})`));
+      page.on('response', res => this.logger.log(`[Playwright Response] ${res.url()} -> Status ${res.status()}`));
+      page.on('requestfailed', req => this.logger.log(`[Playwright Request Failed] ${req.url()} - Error: ${req.failure()?.errorText}`));
+
+      let url = `${frontendUrl}/templates/invoices?invoiceId=${invoiceId}`;
+      if (token) {
+        url += `&token=${token}`;
+      }
+
+      await page.goto(url, { waitUntil: "domcontentloaded" });
+
+      await page.waitForResponse(
+        (response) =>
+          response.url().includes(`invoice/${invoiceId}`) &&
+          response.status() === 200,
+        { timeout: 40000 },
+      );
+
+      const divSelector = ".invoice-template";
+
+      await page.addStyleTag({
+        content: `
+          @page {
+            size: A3 landscape;
+            margin: 0;
+          }
+
+          @media print {
+            html, body {
+              width: 100%;
+              height: auto !important;
+              overflow: visible !important;
+            }
+            .invoice-template {
+              page-break-inside: avoid;
+              page-break-after: always;
+              width: 100%;
+              transform-origin: top left;
+            }
+          }
+        `,
+      });
+
+      await page.waitForSelector(divSelector);
+      const divHandle = await page.$(divSelector);
+
+      const localFilePath = path.join(process.cwd(), 'generated-files');
+      if (!existsSync(localFilePath)) {
+        mkdirSync(localFilePath, { recursive: true });
+      }
+
+      if (divHandle) {
+        const fullHeight = await page.evaluate(() => {
+          return Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight,
+          );
+        });
+        await page.setViewportSize({ width: 1920, height: fullHeight });
+
+        const ref = invoice?.reference || invoiceId;
+        const filePath = path.join(localFilePath, `${ref}.pdf`);
+        const payload: any = {
+          path: filePath,
+          format: "A3",
+          margin: {
+            top: "0",
+            right: "0",
+            bottom: "0",
+            left: "0",
+          },
+          scale: 1,
+          landscape: true,
+          printBackground: true,
+          preferCSSPageSize: true,
+        };
+
+        if (truncatePage1) {
+          payload.pageRanges = '2-';
+        }
+
+        await page.pdf(payload);
+        this.logger.log(`PDF saved for invoice ${invoiceId}`);
+        // await this.checkEmptyFirstPage(filePath);
+        return filePath;
+      }
+      return "";
+    } catch (error) {
+      this.logger.error(`Error generating invoice PDF: ${error.message}`, error.stack);
+      return "";
+    } finally {
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeError) {
+          this.logger.error("Error closing browser:", closeError);
+        }
+      }
+    }
+  }
+
+  public async checkEmptyFirstPage(filePath: string) {
+    try {
+      const existingPdfBytes = readFileSync(filePath);
+      const pdfDoc = await PDFDocument.load(existingPdfBytes);
+
+      const initialPageCount = pdfDoc.getPageCount();
+      const pagesToRemove: number[] = [];
+
+      for (let i = 0; i < initialPageCount; i++) {
+        try {
+          const newPdfDoc = await PDFDocument.create();
+          const [copiedPage] = await newPdfDoc.copyPages(pdfDoc, [i]);
+          newPdfDoc.addPage(copiedPage);
+          const singlePagePdfBytes = await newPdfDoc.save({
+            useObjectStreams: false,
+          });
+          const pdfContent = await (pdf as any)(Buffer.from(singlePagePdfBytes));
+          const pageText = pdfContent.text.trim();
+
+          if (pageText.length === 0) {
+            this.logger.log(`Page ${i + 1} is likely blank. Marking for removal.`);
+            pagesToRemove.push(i);
+          } else {
+            this.logger.log(`Page ${i + 1} contains content.`);
+          }
+        } catch (error) {
+          this.logger.error(`Error checking page ${i + 1}: ${error.message}`);
+          pagesToRemove.push(i);
+        }
+      }
+
+      for (let i = pagesToRemove.length - 1; i >= 0; i--) {
+        pdfDoc.removePage(pagesToRemove[i]);
+      }
+
+      const modifiedPdfBytes = await pdfDoc.save({ useObjectStreams: false });
+      writeFileSync(filePath, modifiedPdfBytes);
+      this.logger.log(`PDF processed and saved to ${filePath}`);
+    } catch (error) {
+      this.logger.error(`Failed to process first page check for ${filePath}: ${error.message}`);
+    }
+  }
+
+  async findAuditLogs(invoiceId: string) {
+    return await this.prisma.invoiceAuditLog.findMany({
+      where: { invoice_id: invoiceId },
+      include: {
+        actor: {
+          select: { id: true, first_name: true, last_name: true, email: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 }
