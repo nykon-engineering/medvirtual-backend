@@ -315,6 +315,7 @@ export class InvoiceService {
             isPrebill: fullInvoice.currentVersion?.is_prebill || false,
             periodStart: fullInvoice.currentVersion?.billing_start_date?.toISOString(),
             periodEnd: fullInvoice.currentVersion?.billing_end_date?.toISOString(),
+            invoice: fullInvoice,
           });
           stripeInvId = createRes.invoice.id;
         }
@@ -489,22 +490,54 @@ export class InvoiceService {
     // Handle line items with parent mapping
     // We use a mapping to translate the IDs sent from the client to the new database IDs
     const idMapping = new Map<string, string>();
+    const workerMapping = new Map<string, string>();
 
+    // Pass 1: Create all parent line items first (where parent_line_item_id is null/undefined)
     for (const itemDto of dto.line_items) {
-      const { id: clientSideId, parent_line_item_id, adjustment_sign, ...itemData } = itemDto;
+      if (!itemDto.parent_line_item_id) {
+        const { id: clientSideId, parent_line_item_id, adjustment_sign, ...itemData } = itemDto;
 
-      const createdItem = await this.prisma.invoiceLineItem.create({
-        data: {
-          ...itemData,
-          invoice_version_id: newVersion.id,
-          parent_line_item_id,
-          created_by: userId,
-        },
-      });
+        const createdItem = await this.prisma.invoiceLineItem.create({
+          data: {
+            ...itemData,
+            invoice_version_id: newVersion.id,
+            parent_line_item_id: null,
+            created_by: userId,
+          },
+        });
 
-      // Map the client-side ID to the new database ID for potential children
-      if (clientSideId) {
-        idMapping.set(clientSideId, createdItem.id);
+        if (clientSideId) {
+          idMapping.set(clientSideId, createdItem.id);
+        }
+        if (createdItem.worker_id) {
+          workerMapping.set(createdItem.worker_id, createdItem.id);
+        }
+      }
+    }
+
+    // Pass 2: Create child line items, resolving parent_line_item_id to the new database IDs
+    for (const itemDto of dto.line_items) {
+      if (itemDto.parent_line_item_id) {
+        const { id: clientSideId, parent_line_item_id, adjustment_sign, ...itemData } = itemDto;
+
+        const resolvedParentId =
+          idMapping.get(parent_line_item_id) ||
+          workerMapping.get(parent_line_item_id) ||
+          (itemDto.worker_id ? workerMapping.get(itemDto.worker_id) : undefined) ||
+          parent_line_item_id;
+
+        const createdItem = await this.prisma.invoiceLineItem.create({
+          data: {
+            ...itemData,
+            invoice_version_id: newVersion.id,
+            parent_line_item_id: resolvedParentId,
+            created_by: userId,
+          },
+        });
+
+        if (clientSideId) {
+          idMapping.set(clientSideId, createdItem.id);
+        }
       }
     }
 

@@ -598,8 +598,9 @@ export class StripeService implements OnModuleInit {
     isPrebill: boolean;
     periodStart?: string;
     periodEnd?: string;
+    invoice?: any;
   }) {
-    const { clientId, reference, dueDate, isPrebill, periodStart, periodEnd } = params;
+    const { clientId, reference, dueDate, isPrebill, periodStart, periodEnd, invoice } = params;
 
     const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
       where: { organization_id: clientId },
@@ -663,22 +664,83 @@ export class StripeService implements OnModuleInit {
       effectiveDueDate = new Date(Date.now() + 2 * 60 * 60 * 1000);
     }
 
-    const invoice = await this.safeStripeCall(() =>
+    // Process discounts if invoice is provided
+    const discounts: any[] = [];
+    if (invoice) {
+      const version = invoice.currentVersion;
+      if (version) {
+        const discountType = version.discountType;
+        const discountValue = Number(version.discountValue);
+
+        if (discountValue > 0) {
+          if (discountType === 'percent') {
+            const coupon = await this.stripe.coupons.create({
+              percent_off: discountValue,
+              duration: 'once',
+              name: `Discount - ${reference}`,
+            });
+            discounts.push({ coupon: coupon.id });
+          } else if (discountType === 'dollar') {
+            const coupon = await this.stripe.coupons.create({
+              amount_off: Math.round(discountValue * 100),
+              currency: 'usd',
+              duration: 'once',
+              name: `Discount - ${reference}`,
+            });
+            discounts.push({ coupon: coupon.id });
+          }
+        }
+      }
+
+      const allianceCreditVal = invoice.allianceCredit || invoice.currentVersion?.allianceCredit;
+      if (
+        allianceCreditVal &&
+        !Number.isNaN(Number(allianceCreditVal)) &&
+        Number(allianceCreditVal) > 0
+      ) {
+        const coupon = await this.stripe.coupons.create({
+          amount_off: Math.round(Number(allianceCreditVal) * 100),
+          currency: 'usd',
+          duration: 'once',
+          name: `Alliance credit - ${reference}`,
+        });
+        discounts.push({ coupon: coupon.id });
+      }
+
+      const discountDollarVal = invoice.discountDollar || invoice.currentVersion?.discountDollar;
+      if (discountDollarVal && Number(discountDollarVal) > 0) {
+        const coupon = await this.stripe.coupons.create({
+          amount_off: Math.round(Number(discountDollarVal) * 100),
+          currency: 'usd',
+          duration: 'once',
+          name: `Discount - ${reference}`,
+        });
+        discounts.push({ coupon: coupon.id });
+      }
+    }
+
+    const invoiceCreateParams: any = {
+      customer: stripeCustomerId,
+      collection_method: 'send_invoice',
+      auto_advance: false, // critical: do NOT finalize
+      due_date: Math.ceil(effectiveDueDate.getTime() / 1000),
+      description: 'Invoice for services rendered',
+      metadata: {
+        reference: reference || '',
+        clientId,
+        prebilled: isPrebill ? 'true' : 'false',
+        periodStart: periodStart || '',
+        periodEnd: periodEnd || '',
+      },
+    };
+
+    if (discounts.length > 0) {
+      invoiceCreateParams.discounts = discounts;
+    }
+
+    const stripeInvoice = await this.safeStripeCall(() =>
       this.stripe.invoices.create(
-        {
-          customer: stripeCustomerId,
-          collection_method: 'send_invoice',
-          auto_advance: false, // critical: do NOT finalize
-          due_date: Math.ceil(effectiveDueDate.getTime() / 1000),
-          description: 'Invoice for services rendered',
-          metadata: {
-            reference: reference || '',
-            clientId,
-            prebilled: isPrebill ? 'true' : 'false',
-            periodStart: periodStart || '',
-            periodEnd: periodEnd || '',
-          },
-        },
+        invoiceCreateParams,
         {
           idempotencyKey: `creates-invoice-${reference}-${stripeCustomerId}`,
         },
@@ -689,14 +751,14 @@ export class StripeService implements OnModuleInit {
     await this.prisma.invoice.update({
       where: { reference },
       data: {
-        stripe_invoice_id: invoice.id,
-        stripe_invoice_number: invoice.number,
+        stripe_invoice_id: stripeInvoice.id,
+        stripe_invoice_number: stripeInvoice.number,
         stripe_status: 'invoice_created',
       },
     });
 
     return {
-      invoice,
+      invoice: stripeInvoice,
       default_payment_method,
       stripe_customer_id: stripeCustomerId,
     };
@@ -739,6 +801,8 @@ export class StripeService implements OnModuleInit {
         type: 'LINE_ITEM',
       });
     }
+
+    const version = invoice.currentVersion;
 
     return result;
   }
@@ -825,79 +889,7 @@ export class StripeService implements OnModuleInit {
       return;
     }
 
-    // 2. Resolve all applicable discounts deterministically
-    const discounts: any[] = [];
-
-    const version = invoice.currentVersion;
-    if (version) {
-      const discountType = version.discountType;
-      const discountValue = Number(version.discountValue);
-
-      if (discountValue > 0) {
-        if (discountType === 'percent') {
-          const coupon = await this.createInvoiceDiscount(
-            discountValue,
-            invoice.organization_id,
-            'Discount',
-          );
-          if (coupon) {
-            discounts.push({ promotion_code: coupon.id });
-          }
-        } else if (discountType === 'dollar') {
-          const coupon = await this.createInvoiceDiscountDollar(
-            discountValue,
-            invoice.organization_id,
-            'Discount',
-          );
-          if (coupon) {
-            discounts.push({ promotion_code: coupon.id });
-          }
-        }
-      }
-    }
-
-    const allianceCreditVal = (invoice as any).allianceCredit || (invoice.currentVersion as any)?.allianceCredit;
-    if (
-      allianceCreditVal &&
-      !Number.isNaN(Number(allianceCreditVal)) &&
-      Number(allianceCreditVal) > 0
-    ) {
-      const coupon = await this.createInvoiceDiscountDollar(
-        Number(allianceCreditVal),
-        invoice.organization_id,
-        'Alliance credit',
-      );
-      if (coupon) {
-        discounts.push({ promotion_code: coupon.id });
-      }
-    }
-
-    const discountDollarVal = (invoice as any).discountDollar || (invoice.currentVersion as any)?.discountDollar;
-    if (discountDollarVal && Number(discountDollarVal) > 0) {
-      const coupon = await this.createInvoiceDiscountDollar(
-        Number(discountDollarVal),
-        invoice.organization_id,
-        'Discount',
-      );
-      if (coupon) {
-        discounts.push({ promotion_code: coupon.id });
-      }
-    }
-
-    // 3. Apply discounts ONCE
-    if (discounts.length > 0) {
-      await this.safeStripeCall(() =>
-        this.stripe.invoices.update(
-          stripeInvoiceId,
-          { discounts },
-          {
-            idempotencyKey: `apply-discounts-${invoice.reference}`,
-          },
-        ),
-      );
-    }
-
-    // 4. Finalize invoice (idempotent)
+    // 2. Finalize invoice (idempotent)
     await this.safeStripeCall(() =>
       this.stripe.invoices.finalizeInvoice(
         stripeInvoiceId,
