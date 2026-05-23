@@ -481,6 +481,8 @@ export class InvoiceService {
         billing_start_date: invoice.currentVersion?.billing_start_date,
         billing_end_date: invoice.currentVersion?.billing_end_date,
         is_prebill: invoice.currentVersion?.is_prebill || false,
+        discountType: dto.discountType !== undefined ? dto.discountType : ((invoice.currentVersion as any)?.discountType || 'dollar'),
+        discountValue: dto.discountValue !== undefined ? dto.discountValue : ((invoice.currentVersion as any)?.discountValue || 0),
       },
     });
 

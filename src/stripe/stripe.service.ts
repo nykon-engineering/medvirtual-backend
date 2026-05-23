@@ -828,15 +828,31 @@ export class StripeService implements OnModuleInit {
     // 2. Resolve all applicable discounts deterministically
     const discounts: any[] = [];
 
-    const discountVal = (invoice as any).discount || (invoice.currentVersion as any)?.discount;
-    if (discountVal && Number(discountVal) > 0) {
-      const coupon = await this.createInvoiceDiscount(
-        Number(discountVal),
-        invoice.organization_id,
-        'Discount',
-      );
-      if (coupon) {
-        discounts.push({ promotion_code: coupon.id });
+    const version = invoice.currentVersion;
+    if (version) {
+      const discountType = version.discountType;
+      const discountValue = Number(version.discountValue);
+
+      if (discountValue > 0) {
+        if (discountType === 'percent') {
+          const coupon = await this.createInvoiceDiscount(
+            discountValue,
+            invoice.organization_id,
+            'Discount',
+          );
+          if (coupon) {
+            discounts.push({ promotion_code: coupon.id });
+          }
+        } else if (discountType === 'dollar') {
+          const coupon = await this.createInvoiceDiscountDollar(
+            discountValue,
+            invoice.organization_id,
+            'Discount',
+          );
+          if (coupon) {
+            discounts.push({ promotion_code: coupon.id });
+          }
+        }
       }
     }
 

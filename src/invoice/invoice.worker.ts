@@ -340,6 +340,8 @@ export class InvoiceWorker extends WorkerHost {
           created_by,
           subtotal: 0,
           total: 0,
+          discountType: 'dollar',
+          discountValue: 0,
         },
       });
 

@@ -138,6 +138,16 @@ export class UpdateInvoiceVersionDto {
   @IsNumber()
   total: number;
 
+  @ApiProperty({ required: false, enum: ['dollar', 'percent'] })
+  @IsString()
+  @IsOptional()
+  discountType?: string;
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  discountValue?: number;
+
   @ApiProperty({ type: [InvoiceLineItemDto] })
   @IsArray()
   @ValidateNested({ each: true })

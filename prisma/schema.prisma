@@ -1330,6 +1330,9 @@ model InvoiceVersion {
   tax_total             Decimal              @db.Decimal(14,2) @default(0)
   total                 Decimal              @db.Decimal(14,2) @default(0)
 
+  discountType          String               @default("dollar")
+  discountValue         Decimal              @db.Decimal(14,2) @default(0)
+
   notes                 String?
   internal_notes        String?
 
