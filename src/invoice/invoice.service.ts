@@ -161,7 +161,9 @@ export class InvoiceService {
     const where: Prisma.InvoiceWhereInput = {};
 
     if (status) {
-      where.status = status;
+      where.status = {
+        in: status.split(",") as unknown as InvoiceStatus[]
+      };
     }
 
     if (organizationIds && organizationIds.length > 0) {

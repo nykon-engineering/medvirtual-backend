@@ -5,9 +5,9 @@ import { Transform } from 'class-transformer';
 
 export class ListInvoicesDto {
   @ApiProperty({ enum: InvoiceStatus, required: false })
-  @IsEnum(InvoiceStatus)
+  @IsString()
   @IsOptional()
-  status?: InvoiceStatus;
+  status?: string;
 
   @ApiProperty({ required: false, description: 'Search by reference, invoice number, or organization name' })
   @IsString()

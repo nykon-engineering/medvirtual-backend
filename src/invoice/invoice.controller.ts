@@ -40,7 +40,6 @@ export class InvoiceController {
   }
 
   @Get()
-  @Roles('system_admin', 'system_super_admin')
   @ApiOperation({ summary: 'Fetch all invoices with their current versions and optional filters' })
   async findAll(@Query() query: ListInvoicesDto) {
     return await this.invoiceService.findAll(query);
@@ -54,7 +53,6 @@ export class InvoiceController {
   }
 
   @Get(':id')
-  @Roles('system_admin', 'system_super_admin')
   @ApiOperation({ summary: 'Fetch a single invoice by ID' })
   async findOne(@Param('id') id: string) {
     return await this.invoiceService.findOne(id);
