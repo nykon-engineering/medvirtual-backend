@@ -28,7 +28,6 @@ export class StripeController {
 
   @Get('stripe/invoices/:id/url')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'system_admin')
   async getInvoiceUrl(@Param('id') id: string) {
     if (!id) {
       throw new BadRequestException('Stripe invoice ID is required');

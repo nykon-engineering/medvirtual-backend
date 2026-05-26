@@ -66,7 +66,6 @@ export class InvoiceController {
   }
 
   @Get(':id/pdf')
-  @Roles('system_admin', 'system_super_admin')
   @ApiOperation({ summary: 'Generate and download invoice PDF' })
   async downloadPdf(@Param('id') id: string, @Res() res: Response) {
     const invoice = await this.invoiceService.findOne(id);
@@ -101,7 +100,6 @@ export class InvoiceController {
   }
 
   @Get(':id/audit-logs')
-  @Roles('system_admin', 'system_super_admin')
   @ApiOperation({ summary: 'Fetch all audit logs of an invoice' })
   async findAuditLogs(@Param('id') id: string) {
     return await this.invoiceService.findAuditLogs(id);
