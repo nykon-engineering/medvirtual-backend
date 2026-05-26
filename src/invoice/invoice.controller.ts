@@ -52,6 +52,30 @@ export class InvoiceController {
     return await this.invoiceService.getStats(query);
   }
 
+  @Get('organization/:orgId/ledger')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({
+    summary: 'Fetch billing ledger for a client organisation',
+    description:
+      'Returns all BillingLedgerEntry rows for the org, fully populated with ' +
+      'their source reconciliation, source prebill line item (+ invoice) and the ' +
+      'adjustment line item they were applied to (+ invoice), if any.',
+  })
+  async getOrgBillingLedger(
+    @Param('orgId') orgId: string,
+    @Query('status') status?: 'pending' | 'applied',
+    @Query('workerId') workerId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return await this.invoiceService.getOrgBillingLedger(orgId, {
+      status,
+      workerId,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+    });
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Fetch a single invoice by ID' })
   async findOne(@Param('id') id: string) {

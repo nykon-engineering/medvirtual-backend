@@ -887,6 +887,99 @@ export class InvoiceService {
     });
   }
 
+  async getOrgBillingLedger(
+    organizationId: string,
+    opts: {
+      status?: 'pending' | 'applied';
+      workerId?: string;
+      page: number;
+      limit: number;
+    },
+  ) {
+    const { status, workerId, page, limit } = opts;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.BillingLedgerEntryWhereInput = {
+      organization_id: organizationId,
+      ...(workerId ? { worker_id: workerId } : {}),
+      ...(status === 'pending'
+        ? { applied_to_line_item_id: null }
+        : status === 'applied'
+          ? { applied_to_line_item_id: { not: null } }
+          : {}),
+    };
+
+    const lineItemSelect = {
+      id: true,
+      worker_id: true,
+      worker_name_snapshot: true,
+      type: true,
+      category: true,
+      description: true,
+      final_total: true,
+      effective_worked_hours: true,
+      invoiceVersion: {
+        select: {
+          id: true,
+          billing_start_date: true,
+          billing_end_date: true,
+          is_prebill: true,
+          invoice: {
+            select: {
+              id: true,
+              reference: true,
+              invoice_number: true,
+              status: true,
+              createdAt: true,
+            },
+          },
+        },
+      },
+    };
+
+    const [entries, total] = await Promise.all([
+      this.prisma.billingLedgerEntry.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          reconciliation: {
+            select: {
+              id: true,
+              worker_id: true,
+              estimated_amount: true,
+              actual_amount: true,
+              delta_amount: true,
+              status: true,
+              createdAt: true,
+              completedAt: true,
+            },
+          },
+          sourceLineItem: {
+            select: lineItemSelect,
+          },
+          appliedLineItem: {
+            select: lineItemSelect,
+          },
+        },
+      }),
+      this.prisma.billingLedgerEntry.count({ where }),
+    ]);
+
+    return {
+      data: entries,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+
+
   /**
    * Manually retrigger the prebill reconciliation job for a specific invoice.
    * Validates that the invoice exists, is a prebill, and has been paid,
