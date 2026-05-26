@@ -22,6 +22,7 @@ export class StripeService implements OnModuleInit {
     @Inject('REDIS_CLIENT') private readonly redisClient: redis.RedisClientType,
     private readonly prisma: PrismaService,
     @InjectQueue('invoice') private readonly invoiceQueue: Queue,
+    @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue,
   ) { }
 
   async onModuleInit() {
@@ -288,6 +289,9 @@ export class StripeService implements OnModuleInit {
                 },
               });
             }
+
+            // Schedule prebill reconciliation if this was a pre-billed invoice
+            await this.schedulePrebillReconciliationIfNeeded(internalInvoice.id);
           }
           break;
         }
@@ -971,4 +975,67 @@ export class StripeService implements OnModuleInit {
     );
     return { url: invoice.hosted_invoice_url || null };
   }
+
+  /**
+   * Checks if the paid invoice was pre-billed.
+   * If so, schedules a delayed BullMQ job to fire on the day after billing_end_date
+   * so real Hubstaff data can be reconciled against the prebill amounts.
+   */
+  private async schedulePrebillReconciliationIfNeeded(invoiceId: string): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        currentVersion: {
+          select: { is_prebill: true, billing_end_date: true },
+        },
+      },
+    });
+
+    if (!invoice?.currentVersion?.is_prebill) {
+      return; // Not a prebill — nothing to reconcile
+    }
+
+    const billingEndDate = invoice.currentVersion.billing_end_date ?? invoice.billing_end_date;
+    if (!billingEndDate) {
+      this.logger.warn(`Invoice ${invoiceId} is prebill but has no billing_end_date — skipping prebill reconciliation scheduling`);
+      return;
+    }
+
+    // Fire at the very start of the day after billing_end_date
+    const runAt = DateTime.fromJSDate(billingEndDate)
+      .plus({ days: 1 })
+      .startOf('day')
+      .toMillis();
+
+    const delayMs = Math.max(runAt - Date.now(), 0);
+    const jobId = `prebill-recon-${invoiceId}`;
+
+    // Remove any pre-existing job for this invoice to avoid duplicates
+    const existing = await this.prebillReconQueue.getJob(jobId);
+    if (existing) {
+      try { await existing.remove(); } catch { /* already processed */ }
+    }
+
+    await this.prebillReconQueue.add(
+      'reconcile-prebill-invoice',
+      {
+        invoiceId,
+        organizationId: invoice.organization_id,
+        billingStartDate: invoice.billing_start_date.toISOString(),
+        billingEndDate: billingEndDate.toISOString(),
+      },
+      {
+        delay: delayMs,
+        jobId,
+        removeOnComplete: true,
+        removeOnFail: false,
+      },
+    );
+
+    this.logger.log(
+      `Scheduled prebill reconciliation for invoice ${invoiceId} ` +
+      `in ${Math.round(delayMs / 1000 / 60 / 60)}h (after billing_end_date ${billingEndDate.toISOString()})`,
+    );
+  }
 }
+

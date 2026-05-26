@@ -136,4 +136,13 @@ export class InvoiceController {
   ) {
     return await this.invoiceService.createVersion(id, dto, user.id);
   }
+
+  @Post(':id/prebill-reconciliation')
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(202)
+  @ApiOperation({ summary: 'Manually retrigger prebill reconciliation for an invoice' })
+  @ApiResponse({ status: 202, description: 'Prebill reconciliation job queued for immediate execution' })
+  async triggerPrebillReconciliation(@Param('id') id: string) {
+    return await this.invoiceService.triggerPrebillReconciliation(id);
+  }
 }

@@ -38,7 +38,7 @@ export class InvoiceWorker extends WorkerHost {
     return result;
   }
 
-  private getWorkdaysCount(startDate: Date, endDate: Date): number {
+  public getWorkdaysCount(startDate: Date, endDate: Date): number {
     let count = 0;
     let curDate = DateTime.fromJSDate(startDate).startOf('day');
     const lastDate = DateTime.fromJSDate(endDate).startOf('day');

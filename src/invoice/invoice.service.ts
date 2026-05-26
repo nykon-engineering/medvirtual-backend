@@ -25,6 +25,7 @@ export class InvoiceService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue('invoice') private readonly invoiceQueue: Queue,
+    @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue,
     private readonly configService: ConfigService,
     private readonly stripeService: StripeService,
   ) { }
@@ -864,4 +865,68 @@ export class InvoiceService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  /**
+   * Manually retrigger the prebill reconciliation job for a specific invoice.
+   * Validates that the invoice exists, is a prebill, and has been paid,
+   * then enqueues the job for immediate execution (delay = 0).
+   */
+  async triggerPrebillReconciliation(invoiceId: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        currentVersion: {
+          select: { is_prebill: true, billing_end_date: true, billing_start_date: true },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    if (!invoice.currentVersion?.is_prebill) {
+      throw new BadRequestException('Invoice is not a pre-billed invoice');
+    }
+
+    if (invoice.status !== 'paid') {
+      throw new BadRequestException(`Invoice must be paid before reconciliation can run (current status: ${invoice.status})`);
+    }
+
+    const billingStartDate = invoice.currentVersion.billing_start_date ?? invoice.billing_start_date;
+    const billingEndDate = invoice.currentVersion.billing_end_date ?? invoice.billing_end_date;
+
+    if (!billingStartDate || !billingEndDate) {
+      throw new BadRequestException('Invoice is missing billing period dates');
+    }
+
+    const jobId = `prebill-recon-${invoiceId}`;
+
+    // Remove any stale delayed job so the new one runs immediately
+    const existing = await this.prebillReconQueue.getJob(jobId);
+    if (existing) {
+      try { await existing.remove(); } catch { /* already processed or gone */ }
+    }
+
+    await this.prebillReconQueue.add(
+      'reconcile-prebill-invoice',
+      {
+        invoiceId,
+        organizationId: invoice.organization_id,
+        billingStartDate: billingStartDate.toISOString(),
+        billingEndDate: billingEndDate.toISOString(),
+      },
+      {
+        jobId,
+        removeOnComplete: true,
+        removeOnFail: false,
+        // delay: 0 — run immediately
+      },
+    );
+
+    this.logger.log(`Manually triggered prebill reconciliation for invoice ${invoiceId}`);
+
+    return { status: 'queued', invoiceId };
+  }
 }
+

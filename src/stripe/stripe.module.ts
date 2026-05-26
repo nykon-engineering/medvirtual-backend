@@ -8,7 +8,10 @@ import { BullModule } from '@nestjs/bullmq';
 @Module({
   imports: [
     PrismaModule,
-    BullModule.registerQueue({ name: 'invoice' }),
+    BullModule.registerQueue(
+      { name: 'invoice' },
+      { name: 'invoice-prebill-reconciliation' },
+    ),
   ],
   providers: [StripeService],
   controllers: [StripeController],
