@@ -294,6 +294,27 @@ export class InvoiceService {
       dataToUpdate.voidedAt = new Date();
     }
 
+    if (status === InvoiceStatus.voided || status === InvoiceStatus.cancelled) {
+      // Release any BillingLedgerEntry rows that were applied to this invoice's
+      // line items so they can be picked up by a future invoice.
+      const versionId = invoice.current_version_id;
+      if (versionId) {
+        const lineItems = await this.prisma.invoiceLineItem.findMany({
+          where: { invoice_version_id: versionId },
+          select: { id: true },
+        });
+        const lineItemIds = lineItems.map((li) => li.id);
+
+        if (lineItemIds.length > 0) {
+          await this.prisma.billingLedgerEntry.updateMany({
+            where: { applied_to_line_item_id: { in: lineItemIds } },
+            data: { applied_to_line_item_id: null },
+          });
+        }
+      }
+    }
+
+
     // Placeholder for extra actions when publishing
     if (status === InvoiceStatus.published) {
       const fullInvoice = await this.findOne(id);

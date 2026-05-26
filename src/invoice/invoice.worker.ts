@@ -588,7 +588,71 @@ export class InvoiceWorker extends WorkerHost {
         }
       }
 
-      // 4. Update Version Totals
+      // 4. Apply any pending BillingLedgerEntry adjustments for this org/period
+      //    These are reconciliation deltas from previous pre-billed invoices that
+      //    have not yet been applied to a subsequent invoice line item.
+      const workerIds = Array.from(userSummary.keys()).map(String);
+
+      if (workerIds.length > 0) {
+        const pendingLedgerEntries = await tx.billingLedgerEntry.findMany({
+          where: {
+            organization_id,
+            worker_id: { in: workerIds },
+            applied_to_line_item_id: null,
+          },
+        });
+
+        for (const ledgerEntry of pendingLedgerEntries) {
+          // Find the primary line item on this version for the same worker
+          const matchingLineItem = await tx.invoiceLineItem.findFirst({
+            where: {
+              invoice_version_id: version.id,
+              worker_id: ledgerEntry.worker_id,
+              type: InvoiceLineType.primary,
+            },
+          });
+
+          if (!matchingLineItem) continue;
+
+          // debit  = client owes more (actual > prebill) → add to invoice
+          // credit = client was overbilled               → deduct from invoice
+          const isDebit = ledgerEntry.direction === 'debit';
+          const adjustmentAmount = new Decimal(ledgerEntry.remaining_amount);
+          const signedAmount = isDebit ? adjustmentAmount : adjustmentAmount.negated();
+
+          const adjustmentLine = await tx.invoiceLineItem.create({
+            data: {
+              invoice_version_id: version.id,
+              parent_line_item_id: matchingLineItem.id,
+              worker_id: ledgerEntry.worker_id ?? undefined,
+              worker_name_snapshot: matchingLineItem.worker_name_snapshot,
+              type: InvoiceLineType.additional,
+              category: isDebit
+                ? InvoiceLineCategory.reconciliation_debit
+                : InvoiceLineCategory.reconciliation_credit,
+              description: isDebit
+                ? `Reconciliation adjustment (underbill from prior period)`
+                : `Reconciliation credit (overbill from prior period)`,
+              effective_worked_hours: new Decimal(0),
+              total_hours_payable: new Decimal(0),
+              hourly_rate: new Decimal(0),
+              final_total: signedAmount,
+              is_full_time: matchingLineItem.is_full_time,
+              created_by,
+            },
+          });
+
+          subtotal = subtotal.add(signedAmount);
+
+          // Link the ledger entry to this new line item
+          await tx.billingLedgerEntry.update({
+            where: { id: ledgerEntry.id },
+            data: { applied_to_line_item_id: adjustmentLine.id },
+          });
+        }
+      }
+
+      // 5. Update Version Totals
       const finalVersion = await tx.invoiceVersion.update({
         where: { id: version.id },
         data: {
@@ -597,7 +661,7 @@ export class InvoiceWorker extends WorkerHost {
         },
       });
 
-      // 5. Link Version to Invoice Header
+      // 6. Link Version to Invoice Header
       await tx.invoice.update({
         where: { id: invoice.id },
         data: { current_version_id: version.id },
