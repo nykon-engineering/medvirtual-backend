@@ -62,6 +62,7 @@
     "class-validator": "^0.14.2",
     "google-auth-library": "^10.1.0",
     "googleapis": "^159.0.0",
+    "ioredis": "^5.11.0",
     "jsonwebtoken": "^9.0.2",
     "luxon": "^3.7.2",
     "mime-types": "^3.0.1",

@@ -33,7 +33,6 @@ import { RedisModule } from './redis/redis.module';
 import { PusherModule } from './pusher/pusher.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { StripeModule } from './stripe/stripe.module';
-import IORedis from 'ioredis';
 
 @Module({
   imports: [
@@ -45,24 +44,15 @@ import IORedis from 'ioredis';
       useFactory: (configService: ConfigService) => {
         const baseKey = configService.get<string>('REDIS_BASE_KEY', 'medvirtual');
         const prefix = baseKey.endsWith(':') ? baseKey.slice(0, -1) : baseKey;
-
-        // Single shared IORedis connection for ALL BullMQ queues & workers.
-        // BullMQ will multiplex over this one connection instead of opening
-        // 3 new connections per queue (listener + worker + blocking client).
-        const sharedConnection = new IORedis({
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-          password: configService.get<string>('REDIS_PASSWORD'),
-          username: configService.get<string>('REDIS_USERNAME', 'basic'),
-          maxRetriesPerRequest: null, // required by BullMQ
-          enableReadyCheck: false,
-          // Let BullMQ manage reconnects; don't buffer commands while offline
-          enableOfflineQueue: false,
-          lazyConnect: false,
-        });
-
         return {
-          connection: sharedConnection,
+          connection: {
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: configService.get<number>('REDIS_PORT', 6379),
+            password: configService.get<string>('REDIS_PASSWORD'),
+            username: configService.get<string>('REDIS_USERNAME', 'basic'),
+            maxRetriesPerRequest: null, // required by BullMQ
+            enableReadyCheck: false,    // recommended by BullMQ
+          },
           prefix,
         };
       },
