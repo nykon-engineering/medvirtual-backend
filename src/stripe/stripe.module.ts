@@ -2,17 +2,19 @@ import { Module, Global } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { StripeController } from './stripe.controller';
 import { PrismaModule } from '../prisma/prisma.module';
-import { InvoiceModule } from '../invoice/invoice.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Global()
 @Module({
   imports: [
     PrismaModule,
-    // InvoiceModule already registers and exports all invoice-related queues.
-    // Importing it here gives StripeService access to @InjectQueue('invoice')
-    // and @InjectQueue('invoice-prebill-reconciliation') without opening
-    // duplicate Redis connections.
-    InvoiceModule,
+    // Registering queues here is safe — BullModule.forRootAsync in AppModule
+    // provides a shared IORedis instance, so these registrations reuse that
+    // connection instead of opening new ones.
+    BullModule.registerQueue(
+      { name: 'invoice' },
+      { name: 'invoice-prebill-reconciliation' },
+    ),
   ],
   providers: [StripeService],
   controllers: [StripeController],
