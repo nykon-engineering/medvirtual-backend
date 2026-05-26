@@ -6,6 +6,7 @@ import { AllianceNotificationsService } from '../notifications/notifications.ser
 
 const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
   notifyCommissionEligible: jest.fn(),
+  notifyAdminCommissionReverted: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------

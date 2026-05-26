@@ -9,6 +9,7 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
 import { PositionRateConfigModule } from '../position-rate-config/position-rate-config.module';
 import { PayoutRequestsModule } from '../med-alliance/payout-requests/payout-requests.module';
 import { SyncModule } from '../med-alliance/sync/sync.module';
+import { AllianceNotificationsModule } from '../med-alliance/notifications/notifications.module';
 
 @Module({
   controllers: [CronController],
@@ -22,6 +23,7 @@ import { SyncModule } from '../med-alliance/sync/sync.module';
     PositionRateConfigModule,
     PayoutRequestsModule,
     SyncModule,
+    AllianceNotificationsModule,
   ],
 })
 export class CronModule {}

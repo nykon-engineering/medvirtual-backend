@@ -69,6 +69,10 @@ export class HandlerOrganizationPropertyChange {
       value = event.propertyValue ? Number(event.propertyValue) : null;
     }
 
+    if (fieldUpdated === 'deployment_date') {
+      value = event.propertyValue ? new Date(event.propertyValue) : null;
+    }
+
     if (event.propertyName === 'hubspot_owner_id') {
       //check if the owner exists in the system
       owner = await this.prisma.uSER.findUnique({

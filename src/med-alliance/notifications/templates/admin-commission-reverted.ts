@@ -1,21 +1,22 @@
 import { getEmailFooter } from '../../../common/utils/email-templates/components';
 import { EmailTheme } from '../../../common/utils/email-templates/theme';
 
-export interface AdminReferralNewPayload {
+export interface AdminCommissionRevertedPayload {
   organizationName: string;
   affiliateName: string;
-  referredCompanyId: string;
-  adminName?: string;
+  commissionAmount: number;
+  commissionId: string;
+  revertedByName: string;
 }
 
-export function adminReferralNewTemplate(
-  payload: AdminReferralNewPayload,
+export function adminCommissionRevertedTemplate(
+  payload: AdminCommissionRevertedPayload,
   theme?: EmailTheme,
 ): string {
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
-  const ctaLink = `${process.env.FRONTEND_URL}/modules/alliance/admin/pipeline`;
+  const ctaLink = `${process.env.FRONTEND_URL}/modules/alliance/admin/commissions`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
   return `
@@ -24,7 +25,7 @@ export function adminReferralNewTemplate(
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>New referral: ${payload.organizationName}</title>
+  <title>Commission reverted to pending review — ${payload.organizationName}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
     .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
@@ -51,20 +52,17 @@ export function adminReferralNewTemplate(
           <img src="${logo}" alt="${companyName} Logo" />
         </div>
         <div class="main-message">
-          <p>A new company has been referred through the Med Alliance program.</p>
+          <p>A commission has been manually <strong>reverted to pending review</strong> by an admin and requires your attention.</p>
           <table class="detail-table">
-            <tr><td>Company</td><td>${payload.organizationName}</td></tr>
-            ${
-              payload.adminName
-                ? `<tr><td>Performed by</td><td>${payload.adminName}</td></tr>
-            <tr><td>Referred to</td><td>${payload.affiliateName}</td></tr>`
-                : `<tr><td>Referred by</td><td>${payload.affiliateName}</td></tr>`
-            }
-            <tr><td>Company ID</td><td>${payload.referredCompanyId}</td></tr>
+            <tr><td>Organization</td><td>${payload.organizationName}</td></tr>
+            <tr><td>Affiliate</td><td>${payload.affiliateName}</td></tr>
+            <tr><td>Commission Amount</td><td>$${payload.commissionAmount.toFixed(2)}</td></tr>
+            <tr><td>Commission ID</td><td>${payload.commissionId}</td></tr>
+            <tr><td>Reverted by</td><td>${payload.revertedByName}</td></tr>
           </table>
         </div>
         <div style="text-align: left; margin: 30px 0;">
-          <a href="${ctaLink}" class="cta-button">View Pipeline</a>
+          <a href="${ctaLink}" class="cta-button">Review Commissions</a>
         </div>
         <div class="closing">Best,</div>
         <div class="sender"><strong>${companyName}</strong> team</div>

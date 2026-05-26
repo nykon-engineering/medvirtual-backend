@@ -11,6 +11,10 @@ import {
 } from './templates/commission-eligible';
 import { payoutPaidTemplate, PayoutPaidPayload } from './templates/payout-paid';
 import {
+  payoutCancelledTemplate,
+  PayoutCancelledPayload,
+} from './templates/payout-cancelled';
+import {
   referralStageChangedTemplate,
   ReferralStageChangedPayload,
 } from './templates/referral-stage-changed';
@@ -34,6 +38,14 @@ import {
   adminPaymentFailedTemplate,
   AdminPaymentFailedPayload,
 } from './templates/admin-payment-failed';
+import {
+  adminCommissionRevertedTemplate,
+  AdminCommissionRevertedPayload,
+} from './templates/admin-commission-reverted';
+import {
+  adminCommissionPendingSummaryTemplate,
+  AdminCommissionPendingSummaryPayload,
+} from './templates/admin-commission-pending-summary';
 
 @Injectable()
 export class AllianceNotificationsService {
@@ -56,8 +68,14 @@ export class AllianceNotificationsService {
   }
 
   private async getAdminEmails(): Promise<string[]> {
+    if (process.env.ENVIRONMENT === 'DEV') {
+      return ['paulo@regenta.ai'];
+    }
     const admins = await this.prisma.uSER.findMany({
-      where: { role: { in: ['system_admin', 'system_super_admin'] } },
+      where: {
+        role: { in: ['system_admin', 'system_super_admin'] },
+        status: 'active',
+      },
       select: { email: true },
     });
     return admins.map((a) => a.email);
@@ -82,6 +100,30 @@ export class AllianceNotificationsService {
     } catch (err) {
       this.logger.error(
         `Failed to send commission eligible email to ${affiliate.email}`,
+        err,
+      );
+    }
+  }
+
+  async notifyPayoutCancelled(
+    affiliate: { email: string; first_name: string },
+    payload: Omit<PayoutCancelledPayload, 'firstName'>,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? this.defaultTheme();
+    try {
+      await this.mail.sendMail({
+        from: this.buildFrom(resolvedTheme),
+        to: affiliate.email,
+        subject: `Your payout request of $${payload.totalAmount.toFixed(2)} has been cancelled`,
+        html: payoutCancelledTemplate(
+          { firstName: affiliate.first_name, ...payload },
+          resolvedTheme,
+        ),
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to send payout cancelled email to ${affiliate.email}`,
         err,
       );
     }
@@ -199,6 +241,38 @@ export class AllianceNotificationsService {
     }
   }
 
+  async notifyAdminCommissionReverted(
+    payload: AdminCommissionRevertedPayload,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? this.defaultTheme();
+    try {
+      const adminEmails = await this.getAdminEmails();
+      const subject = `Commission reverted to Pending — ${payload.organizationName}`;
+      const html = adminCommissionRevertedTemplate(payload, resolvedTheme);
+      for (const email of adminEmails) {
+        try {
+          await this.mail.sendMail({
+            from: this.buildFrom(resolvedTheme),
+            to: email,
+            subject,
+            html,
+          });
+        } catch (err) {
+          this.logger.error(
+            `Failed to send admin commission reverted email to ${email}`,
+            err,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send admin commission reverted notifications',
+        err,
+      );
+    }
+  }
+
   async notifyAdminReferralNew(
     payload: AdminReferralNewPayload,
     theme?: EmailTheme,
@@ -206,7 +280,9 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = await this.getAdminEmails();
-      const subject = `New referral: ${payload.organizationName} referred by ${payload.affiliateName}`;
+      const subject = payload.adminName
+        ? `New referral: ${payload.organizationName} — initiated by ${payload.adminName}`
+        : `New referral: ${payload.organizationName} referred by ${payload.affiliateName}`;
       const html = adminReferralNewTemplate(payload, resolvedTheme);
       for (const email of adminEmails) {
         try {
@@ -255,6 +331,38 @@ export class AllianceNotificationsService {
     } catch (err) {
       this.logger.error(
         'Failed to send admin partner registered notifications',
+        err,
+      );
+    }
+  }
+
+  async notifyAdminDailyCommissionSummary(
+    payload: AdminCommissionPendingSummaryPayload,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? this.defaultTheme();
+    try {
+      const adminEmails = await this.getAdminEmails();
+      const subject = `Daily commission review — ${payload.commissions.length} pending ($${payload.totalAmount.toFixed(2)})`;
+      const html = adminCommissionPendingSummaryTemplate(payload, resolvedTheme);
+      for (const email of adminEmails) {
+        try {
+          await this.mail.sendMail({
+            from: this.buildFrom(resolvedTheme),
+            to: email,
+            subject,
+            html,
+          });
+        } catch (err) {
+          this.logger.error(
+            `Failed to send daily commission summary email to ${email}`,
+            err,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send daily commission summary notifications',
         err,
       );
     }

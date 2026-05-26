@@ -9,6 +9,7 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 import { ReferralSyncService } from '../med-alliance/sync/referral-sync.service';
+import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 
 jest.mock('axios');
 
@@ -22,6 +23,7 @@ describe('CronService', () => {
   let positionRateConfigServiceMock: Record<string, jest.Mock>;
   let payoutRequestsServiceMock: Record<string, jest.Mock>;
   let referralSyncServiceMock: { run: jest.Mock };
+  let allianceNotificationsMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     prismaServiceMock = {
@@ -74,6 +76,12 @@ describe('CronService', () => {
       run: jest.fn(),
     };
 
+    allianceNotificationsMock = {
+      notifyCommissionEligible: jest.fn(),
+      notifyAdminCommissionReverted: jest.fn(),
+      notifyAdminCommissionPendingSummary: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CronService,
@@ -85,6 +93,7 @@ describe('CronService', () => {
         { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
         { provide: PayoutRequestsService, useValue: payoutRequestsServiceMock },
         { provide: ReferralSyncService, useValue: referralSyncServiceMock },
+        { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
       ],
     }).compile();
 

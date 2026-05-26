@@ -413,6 +413,25 @@ export class CommissionsService {
       source: 'admin_action',
     });
 
+    const full = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: {
+        commission_amount: true,
+        affiliate: { select: { first_name: true, last_name: true } },
+        organization: { select: { name: true } },
+      },
+    });
+    if (full) {
+      void this.allianceNotifications.notifyAdminCommissionReverted({
+        organizationName: full.organization?.name ?? '',
+        affiliateName:
+          `${full.affiliate?.first_name ?? ''} ${full.affiliate?.last_name ?? ''}`.trim(),
+        commissionAmount: parseFloat(String(full.commission_amount ?? 0)),
+        commissionId: id,
+        revertedByName: `${adminUser.first_name} ${adminUser.last_name}`.trim(),
+      });
+    }
+
     return updated;
   }
 

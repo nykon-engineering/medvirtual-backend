@@ -25,6 +25,7 @@ import {
   ReferralSyncService,
   SyncResult,
 } from '../med-alliance/sync/referral-sync.service';
+import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 
 type Event = {
   objectId?: string;
@@ -41,6 +42,7 @@ export class CronService {
     private readonly positionRateConfigService: PositionRateConfigService,
     private readonly payoutRequestsService: PayoutRequestsService,
     private readonly referralSync: ReferralSyncService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   async reRunPipeline(statusDto: reRunPipelineDto): Promise<boolean> {
@@ -1173,5 +1175,44 @@ export class CronService {
       syncResults,
       promotionErrors,
     };
+  }
+
+  async dailyCommissionSummary(): Promise<{ sent: boolean; count: number }> {
+    const commissions = await this.prisma.affiliateCommission.findMany({
+      where: { status: 'pending_admin_confirmation' },
+      select: {
+        id: true,
+        commission_amount: true,
+        organization: { select: { name: true } },
+        affiliate: { select: { email: true, first_name: true, last_name: true } },
+      },
+    });
+
+    if (commissions.length === 0) {
+      return { sent: false, count: 0 };
+    }
+
+    const items = commissions.map((c) => {
+      const u = c.affiliate;
+      const affiliateName = u
+        ? [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email
+        : 'Unknown';
+      return {
+        commissionId: c.id,
+        organizationName: c.organization?.name ?? 'Unknown',
+        affiliateName,
+        commissionAmount: Number(c.commission_amount),
+      };
+    });
+
+    const totalAmount = items.reduce((sum, i) => sum + i.commissionAmount, 0);
+
+    void this.allianceNotifications.notifyAdminDailyCommissionSummary({
+      commissions: items,
+      totalAmount,
+      reportDate: new Date(),
+    });
+
+    return { sent: true, count: commissions.length };
   }
 }

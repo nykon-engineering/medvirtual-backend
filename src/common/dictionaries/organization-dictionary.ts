@@ -17,6 +17,7 @@ export const organizationToDbDictionary: Record<string, string> = {
   type: 'type',
   business_unit: 'business_unit',
   hubspot_owner_id: 'hubspot_owner_id',
+  deploy_date_of_first_va: 'deployment_date',
 };
 
 export const dbToOrganizationDictionary: Record<string, string> =

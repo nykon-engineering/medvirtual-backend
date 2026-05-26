@@ -212,6 +212,26 @@ export class CronController {
     };
   }
 
+  @Get('daily-commission-summary')
+  @ApiOperation({
+    summary:
+      'Send a daily summary email to admins listing all commissions pending review',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Daily commission summary sent successfully',
+  })
+  async dailyCommissionSummary() {
+    const result = await this.cron.dailyCommissionSummary();
+    return {
+      status: 200,
+      message: result.sent
+        ? `Daily commission summary sent (${result.count} commissions)`
+        : 'No pending commissions — email not sent',
+      data: result,
+    };
+  }
+
   @Get('sync-organizations-with-hubspot')
   @ApiOperation({
     summary:

@@ -178,6 +178,8 @@ model Organization {
   eligibility_start_at         DateTime?
   // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
   first_paid_invoice_at        DateTime?
+  // Deployment date synced from HubSpot organization.deploy_date_of_first_va; preferred over first_paid_invoice_at for display.
+  deployment_date              DateTime?
   // Pipeline stage tracking where this referral is in the sales-to-deployment lifecycle.
   // 'deployed' starts the 30-day stabilization clock (eligibility_start_at); cron promotes to eligible after 30 days.
   referral_stage               ReferralStage?              @default(referred)

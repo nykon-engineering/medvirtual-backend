@@ -175,8 +175,13 @@ export class ReferredCompaniesController {
   async createForAffiliate(
     @Param('affiliateId') affiliateId: string,
     @Body() dto: CreateReferredCompanyDto,
+    @CurrentUser() adminUser: USER,
   ) {
-    const data = await this.service.createAdminInitiated(affiliateId, dto);
+    const data = await this.service.createAdminInitiated(
+      affiliateId,
+      dto,
+      adminUser,
+    );
     return {
       status: 201,
       message: 'Referred company created successfully',

@@ -285,6 +285,14 @@ export class AffiliatesService {
       );
     }
 
+    const partnerName =
+      `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || user.email;
+    void this.allianceNotifications.notifyAdminPartnerRegistered({
+      partnerName,
+      partnerEmail: user.email,
+      affiliateProfileId: newAffiliateData.id,
+    });
+
     return newAffiliateData;
   }
 
@@ -1089,6 +1097,7 @@ export class AffiliatesService {
         med_alliance_referral_status: true,
         eligibility_start_at: true,
         first_paid_invoice_at: true,
+        deployment_date: true,
       },
     });
     if (!org) throw new NotFoundException('Organization not found');
@@ -1142,6 +1151,8 @@ export class AffiliatesService {
           ? (organizationIndustryToDbDictionary[org.industry] ?? org.industry)
           : null,
         eligibility_start_at: org.eligibility_start_at?.toISOString() ?? null,
+        first_paid_invoice_at: org.first_paid_invoice_at?.toISOString() ?? null,
+        deployment_date: org.deployment_date?.toISOString() ?? null,
       },
       invoices: invoices.map((i) => ({
         id: i.id,

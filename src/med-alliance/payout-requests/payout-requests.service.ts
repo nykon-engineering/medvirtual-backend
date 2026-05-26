@@ -800,7 +800,9 @@ export class PayoutRequestsService {
       select: {
         id: true,
         status: true,
+        requested_amount: true,
         commissions: { select: { commission_id: true } },
+        affiliate: { select: { email: true, first_name: true } },
       },
     });
     if (!request) throw new NotFoundException('Payout request not found');
@@ -862,6 +864,16 @@ export class PayoutRequestsService {
           metadata: { payout_request_id: id } as any,
         },
       });
+    }
+
+    if (request.affiliate) {
+      void this.allianceNotifications.notifyPayoutCancelled(
+        { email: request.affiliate.email, first_name: request.affiliate.first_name ?? '' },
+        {
+          totalAmount: Number(request.requested_amount),
+          cancellationReason: dto.reason ?? undefined,
+        },
+      );
     }
 
     return this.findOneForAdmin(id);

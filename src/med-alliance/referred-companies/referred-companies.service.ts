@@ -64,6 +64,7 @@ export class ReferredCompaniesService {
   async create(
     dto: CreateReferredCompanyDto | CreateOrganizationDto,
     currentUser: USER,
+    adminUser?: USER,
   ) {
     // Step 0: Validation — read-only, no rollback needed.
     const affiliateProfile = await this.affiliatesService.requireActiveProfile(
@@ -238,10 +239,15 @@ export class ReferredCompaniesService {
       const affiliateName =
         `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim() ||
         currentUser.email;
+      const adminName = adminUser
+        ? `${adminUser.first_name ?? ''} ${adminUser.last_name ?? ''}`.trim() ||
+          adminUser.email
+        : undefined;
       void this.allianceNotifications.notifyAdminReferralNew({
         organizationName: newOrganization.name,
         affiliateName,
         referredCompanyId: newOrganization.id,
+        adminName,
       });
 
       return softDuplicateWarning
@@ -344,6 +350,7 @@ export class ReferredCompaniesService {
   async createAdminInitiated(
     affiliateId: string,
     dto: CreateReferredCompanyDto,
+    adminUser: USER,
   ) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateId },
@@ -361,7 +368,7 @@ export class ReferredCompaniesService {
     if (!affiliateUser)
       throw new NotFoundException('Affiliate user account not found');
 
-    return this.create(dto, affiliateUser);
+    return this.create(dto, affiliateUser, adminUser);
   }
 
   // ---------------------------------------------------------------------------
@@ -687,6 +694,7 @@ export class ReferredCompaniesService {
         med_alliance_referral_status: true,
         eligibility_start_at: true,
         first_paid_invoice_at: true,
+        deployment_date: true,
         med_alliance_block_reason: true,
         referral_stage: true,
         hubspot_id: true,
