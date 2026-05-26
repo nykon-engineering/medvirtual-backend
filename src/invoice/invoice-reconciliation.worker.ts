@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from '../stripe/stripe.service';
 import { InvoiceStatus } from '@prisma/client';
 import { DateTime } from 'luxon';
+import { ConfigService } from '@nestjs/config';
+import { isLocalMode } from '../common/bull.utils';
 
 /**
  * Stripe → Internal invoice reconciliation.
@@ -33,12 +35,17 @@ export class InvoiceReconciliationWorker extends WorkerHost implements OnModuleI
   constructor(
     private readonly prisma: PrismaService,
     private readonly stripeService: StripeService,
+    private readonly configService: ConfigService,
     @InjectQueue('invoice-reconciliation') private readonly reconciliationQueue: Queue,
   ) {
     super();
   }
 
   async onModuleInit() {
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn('LOCAL mode — Stripe reconciliation recurring job NOT scheduled.');
+      return;
+    }
     // Recurring hourly job
     await this.reconciliationQueue.add(
       'reconcile-stripe-invoices',
@@ -68,6 +75,10 @@ export class InvoiceReconciliationWorker extends WorkerHost implements OnModuleI
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn('LOCAL mode — Stripe reconciliation job skipped.');
+      return;
+    }
     this.logger.log('Starting Stripe invoice reconciliation...');
 
     const oneMonthAgo = DateTime.now().minus({ months: 1 }).toJSDate();

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { CreateInvoiceDto, BulkCreateInvoiceDto } from './dto/create-invoice.dto';
 import { InvoiceJobStatus, InvoiceStatus, Prisma, TicketStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+import { isLocalMode } from '../common/bull.utils';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -24,8 +25,8 @@ export class InvoiceService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @InjectQueue('invoice') private readonly invoiceQueue: Queue,
-    @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue,
+    @Optional() @InjectQueue('invoice') private readonly invoiceQueue: Queue | null,
+    @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
     private readonly configService: ConfigService,
     private readonly stripeService: StripeService,
   ) { }
@@ -631,8 +632,12 @@ export class InvoiceService {
   }
 
   private async sendToQueue(message: any) {
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn('LOCAL mode — invoice generation job NOT enqueued.');
+      return;
+    }
     try {
-      await this.invoiceQueue.add('generate-invoice', message, {
+      await this.invoiceQueue!.add('generate-invoice', message, {
         jobId: message.idempotency_key, // Use idempotency key as job ID to prevent duplicates
         removeOnComplete: true,
         removeOnFail: false,
@@ -1017,12 +1022,12 @@ export class InvoiceService {
     const jobId = `prebill-recon-${invoiceId}`;
 
     // Remove any stale delayed job so the new one runs immediately
-    const existing = await this.prebillReconQueue.getJob(jobId);
+    const existing = await this.prebillReconQueue!.getJob(jobId);
     if (existing) {
       try { await existing.remove(); } catch { /* already processed or gone */ }
     }
 
-    await this.prebillReconQueue.add(
+    await this.prebillReconQueue!.add(
       'reconcile-prebill-invoice',
       {
         invoiceId,

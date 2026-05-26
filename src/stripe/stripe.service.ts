@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit, Logger, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SecretsService } from '../secrets/secrets.service';
 import Stripe = require('stripe');
@@ -8,6 +8,7 @@ import * as redis from 'redis';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
+import { isLocalMode } from '../common/bull.utils';
 
 @Injectable()
 export class StripeService implements OnModuleInit {
@@ -21,8 +22,8 @@ export class StripeService implements OnModuleInit {
     private readonly secretsService: SecretsService,
     @Inject('REDIS_CLIENT') private readonly redisClient: redis.RedisClientType,
     private readonly prisma: PrismaService,
-    @InjectQueue('invoice') private readonly invoiceQueue: Queue,
-    @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue,
+    @Optional() @InjectQueue('invoice') private readonly invoiceQueue: Queue | null,
+    @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
   ) { }
 
   async onModuleInit() {
@@ -421,28 +422,32 @@ export class StripeService implements OnModuleInit {
             if (dueDateMs > now) {
               const delayMs = dueDateMs - now;
               const jobId = `attempt-collection-${internalInvoice.id}`;
-              const existingJob = await this.invoiceQueue.getJob(jobId);
-              if (existingJob) {
-                try {
-                  await existingJob.remove();
-                } catch (err) {
-                  this.logger.warn(`Failed to remove existing delayed job ${jobId}: ${err.message}`);
+              if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+                this.logger.warn('LOCAL mode — attempt-collection job NOT scheduled.');
+              } else {
+                const existingJob = await this.invoiceQueue!.getJob(jobId);
+                if (existingJob) {
+                  try {
+                    await existingJob.remove();
+                  } catch (err) {
+                    this.logger.warn(`Failed to remove existing delayed job ${jobId}: ${err.message}`);
+                  }
                 }
+                await this.invoiceQueue!.add(
+                  'attempt-collection',
+                  {
+                    invoiceId: internalInvoice.id,
+                    stripeInvoiceId: finalizedInvoice.id,
+                  },
+                  {
+                    delay: delayMs,
+                    jobId,
+                    removeOnComplete: true,
+                    removeOnFail: false,
+                  },
+                );
+                this.logger.log(`Scheduled collection job for invoice ${internalInvoice.id} in ${delayMs}ms`);
               }
-              await this.invoiceQueue.add(
-                'attempt-collection',
-                {
-                  invoiceId: internalInvoice.id,
-                  stripeInvoiceId: finalizedInvoice.id,
-                },
-                {
-                  delay: delayMs,
-                  jobId,
-                  removeOnComplete: true,
-                  removeOnFail: false,
-                },
-              );
-              this.logger.log(`Scheduled collection job for invoice ${internalInvoice.id} in ${delayMs}ms`);
             } else {
               this.logger.log(`Due date is today or in the past. Attempting immediate collection for invoice ${internalInvoice.id}`);
               await this.payInvoice(finalizedInvoice.id);
@@ -1010,13 +1015,18 @@ export class StripeService implements OnModuleInit {
     const delayMs = Math.max(runAt - Date.now(), 0);
     const jobId = `prebill-recon-${invoiceId}`;
 
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn(`LOCAL mode — prebill reconciliation job for invoice ${invoiceId} NOT scheduled.`);
+      return;
+    }
+
     // Remove any pre-existing job for this invoice to avoid duplicates
-    const existing = await this.prebillReconQueue.getJob(jobId);
+    const existing = await this.prebillReconQueue!.getJob(jobId);
     if (existing) {
       try { await existing.remove(); } catch { /* already processed */ }
     }
 
-    await this.prebillReconQueue.add(
+    await this.prebillReconQueue!.add(
       'reconcile-prebill-invoice',
       {
         invoiceId,

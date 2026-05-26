@@ -7,6 +7,8 @@ import { InvoiceWorker } from './invoice.worker';
 import { LedgerDirection, ReconciliationStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { DateTime } from 'luxon';
+import { ConfigService } from '@nestjs/config';
+import { isLocalMode } from '../common/bull.utils';
 
 // ---------------------------------------------------------------------------
 // Lightweight computed line item (no DB ids, pure in-memory)
@@ -52,6 +54,7 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hubstaff: HubstaffService,
+    private readonly configService: ConfigService,
     // Reuse helper methods from InvoiceWorker (getWorkdaysCount, getHolidaysForYear)
     private readonly invoiceWorker: InvoiceWorker,
   ) {
@@ -63,6 +66,10 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
   // ---------------------------------------------------------------------------
 
   async process(job: Job<PrebillReconciliationJobPayload, any, string>): Promise<any> {
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn('LOCAL mode — prebill reconciliation job skipped.');
+      return;
+    }
     const { invoiceId, organizationId, billingStartDate, billingEndDate } = job.data;
 
     this.logger.log(

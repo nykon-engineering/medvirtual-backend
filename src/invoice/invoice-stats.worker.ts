@@ -4,6 +4,8 @@ import { Job, Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { InvoiceStatus, InvoiceVersionStatus, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
+import { ConfigService } from '@nestjs/config';
+import { isLocalMode } from '../common/bull.utils';
 
 @Processor('invoice-stats')
 @Injectable()
@@ -12,12 +14,17 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
     @InjectQueue('invoice-stats') private readonly statsQueue: Queue,
   ) {
     super();
   }
 
   async onModuleInit() {
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn('LOCAL mode — invoice stats recurring job NOT scheduled.');
+      return;
+    }
     // Schedule the stats computation to run every 2 hours
     await this.statsQueue.add(
       'compute-billing-stats',
@@ -35,6 +42,10 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn('LOCAL mode — invoice stats job skipped.');
+      return;
+    }
     this.logger.log('Starting invoice stats computation...');
 
     try {

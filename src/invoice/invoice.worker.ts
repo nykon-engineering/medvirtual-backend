@@ -8,6 +8,8 @@ import { InvoiceJobStatus, InvoiceStatus, InvoiceVersionStatus, InvoiceLineType,
 import { Decimal } from '@prisma/client/runtime/library';
 import { DateTime } from 'luxon';
 import { StripeService } from '../stripe/stripe.service';
+import { ConfigService } from '@nestjs/config';
+import { isLocalMode } from '../common/bull.utils';
 
 @Processor('invoice')
 @Injectable()
@@ -19,6 +21,7 @@ export class InvoiceWorker extends WorkerHost {
     private readonly hubstaff: HubstaffService,
     private readonly pusher: PusherService,
     private readonly stripeService: StripeService,
+    private readonly configService: ConfigService,
   ) {
     super();
   }
@@ -91,6 +94,10 @@ export class InvoiceWorker extends WorkerHost {
 
 
   async process(job: Job<any, any, string>): Promise<any> {
+    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      this.logger.warn(`LOCAL mode — invoice job '${job.name}' skipped.`);
+      return;
+    }
     if (job.name === 'attempt-collection') {
       const { invoiceId, stripeInvoiceId } = job.data;
       this.logger.log(`Attempting collection for invoice ${invoiceId} / Stripe ${stripeInvoiceId}`);

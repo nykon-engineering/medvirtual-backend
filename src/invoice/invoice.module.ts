@@ -9,21 +9,32 @@ import { InvoicePrebillReconciliationWorker } from './invoice-prebill-reconcilia
 import { PrismaModule } from '../prisma/prisma.module';
 import { PusherModule } from '../pusher/pusher.module';
 import { HubstaffModule } from '../hubstaff/hubstaff.module';
+import { isLocalModeSync } from '../common/bull.utils';
+
+const LOCAL = isLocalModeSync();
+
+const workerProviders = LOCAL
+  ? []
+  : [InvoiceWorker, InvoiceStatsWorker, InvoiceReconciliationWorker, InvoicePrebillReconciliationWorker];
 
 @Module({
   imports: [
     PrismaModule,
     PusherModule,
     HubstaffModule,
-    BullModule.registerQueue(
-      { name: 'invoice' },
-      { name: 'invoice-stats' },
-      { name: 'invoice-reconciliation' },
-      { name: 'invoice-prebill-reconciliation' },
-    ),
+    ...(LOCAL
+      ? []
+      : [
+          BullModule.registerQueue(
+            { name: 'invoice' },
+            { name: 'invoice-stats' },
+            { name: 'invoice-reconciliation' },
+            { name: 'invoice-prebill-reconciliation' },
+          ),
+        ]),
   ],
   controllers: [InvoiceController],
-  providers: [InvoiceService, InvoiceWorker, InvoiceStatsWorker, InvoiceReconciliationWorker, InvoicePrebillReconciliationWorker],
-  exports: [InvoiceService, InvoiceWorker, InvoiceStatsWorker, InvoiceReconciliationWorker, InvoicePrebillReconciliationWorker],
+  providers: [InvoiceService, ...workerProviders],
+  exports: [InvoiceService, ...workerProviders],
 })
 export class InvoiceModule {}
