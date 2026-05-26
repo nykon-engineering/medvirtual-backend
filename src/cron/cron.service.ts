@@ -944,10 +944,22 @@ export class CronService {
     const orgs = await this.prisma.organization.findMany({
       where: {
         referral_stage: 'deployed' as any,
-        first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
         med_alliance_referral_status: 'not_eligible',
+        OR: [
+          { deployment_date: { lte: thirtyDaysAgo, gte: oneYearAgo } },
+          {
+            deployment_date: null,
+            first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+          },
+        ],
       },
-      select: { id: true, name: true, eligibility_start_at: true },
+      select: {
+        id: true,
+        name: true,
+        eligibility_start_at: true,
+        deployment_date: true,
+        first_paid_invoice_at: true,
+      },
     });
 
     let companiesPromoted = 0;

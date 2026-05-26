@@ -59,6 +59,7 @@ export class CommissionDetectionService {
         eligibility_start_at: true,
         first_paid_invoice_at: true,
         referral_stage: true,
+        deployment_date: true,
         createdAt: true,
       },
     });
@@ -167,6 +168,7 @@ export class CommissionDetectionService {
     // Skip if already deployed or churned (idempotent).
     if (
       !org.first_paid_invoice_at &&
+      !org.deployment_date &&
       org.referral_stage !== 'deployed' &&
       org.referral_stage !== 'churned'
     ) {

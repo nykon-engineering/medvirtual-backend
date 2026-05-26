@@ -109,6 +109,86 @@ export class HandlerOrganizationPropertyChange {
       });
     }
 
+    if (fieldUpdated === 'deployment_date') {
+      const fullOrg = await this.prisma.organization.findUnique({
+        where: { id: organization.id },
+        select: { referred_by_affiliate_id: true },
+      });
+
+      if (!fullOrg?.referred_by_affiliate_id) return true;
+
+      const now = new Date();
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+      if (value === null) {
+        // deployment_date cleared — revert to referred/not_eligible
+        await this.prisma.organization.update({
+          where: { id: organization.id },
+          data: {
+            referral_stage: 'referred' as any,
+            med_alliance_referral_status: 'not_eligible',
+            eligibility_start_at: null,
+            med_alliance_block_reason: null,
+          },
+        });
+      } else {
+        const deployDate = value as Date;
+        const eligibilityStartAt = new Date(deployDate.getTime() + THIRTY_DAYS_MS);
+
+        if (deployDate > now) {
+          // Future date: revert to referred/not_eligible
+          await this.prisma.organization.update({
+            where: { id: organization.id },
+            data: {
+              referral_stage: 'referred' as any,
+              med_alliance_referral_status: 'not_eligible',
+              eligibility_start_at: null,
+              med_alliance_block_reason: null,
+            },
+          });
+        } else if (now.getTime() - deployDate.getTime() >= THIRTY_DAYS_MS) {
+          // 30+ days ago: deployed + eligible
+          await this.prisma.organization.update({
+            where: { id: organization.id },
+            data: {
+              referral_stage: 'deployed' as any,
+              med_alliance_referral_status: 'eligible',
+              eligibility_start_at: eligibilityStartAt,
+              med_alliance_block_reason: null,
+            },
+          });
+        } else {
+          // Today or < 30 days ago: deployed + not_eligible (cron promotes after 30 days)
+          await this.prisma.organization.update({
+            where: { id: organization.id },
+            data: {
+              referral_stage: 'deployed' as any,
+              med_alliance_referral_status: 'not_eligible',
+              eligibility_start_at: eligibilityStartAt,
+              med_alliance_block_reason: null,
+            },
+          });
+        }
+
+        await this.prisma.medAllianceAuditLog.create({
+          data: {
+            entity_type: 'referred_company',
+            entity_id: organization.id,
+            event: 'stage_changed',
+            old_status: null,
+            new_status: null,
+            reason: 'deployment_date synced from HubSpot deploy_date_of_first_va',
+            source: 'sync',
+            actor_user_id: null,
+            metadata: {
+              deployment_date: deployDate.toISOString(),
+              eligibility_start_at: eligibilityStartAt.toISOString(),
+            } as any,
+          },
+        });
+      }
+    }
+
     return true;
   }
 }

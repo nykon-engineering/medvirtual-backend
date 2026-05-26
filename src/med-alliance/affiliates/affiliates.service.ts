@@ -1234,7 +1234,7 @@ export class AffiliatesService {
   ): Promise<void> {
     const orgData = await this.prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { hubspot_id: true },
+      select: { hubspot_id: true, deployment_date: true },
     });
 
     if (orgData?.hubspot_id) {
@@ -1265,14 +1265,16 @@ export class AffiliatesService {
       (s) => s.payment_status === null || s.payment_status === 'succeeded',
     );
 
-    if (candidates.length === 0) return;
+    if (candidates.length === 0 && !orgData?.deployment_date) return;
 
-    const firstInvoiceDate = candidates[0].paid_at ?? now;
+    const firstInvoiceDate = candidates[0]?.paid_at ?? now;
+    // Prefer deployment_date from HubSpot as the anchor for eligibility calculations.
+    const anchorDate = orgData?.deployment_date ?? firstInvoiceDate;
     const eligibilityStartAt = new Date(
-      firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+      anchorDate.getTime() + THIRTY_DAYS_MS,
     );
     const daysSinceDeployment =
-      (now.getTime() - firstInvoiceDate.getTime()) / (1000 * 60 * 60 * 24);
+      (now.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24);
 
     const isExpired = daysSinceDeployment >= 365;
     const isEligible = !isExpired && daysSinceDeployment >= 30;
@@ -1281,7 +1283,8 @@ export class AffiliatesService {
       where: { id: organizationId },
       data: {
         referral_stage: 'deployed',
-        first_paid_invoice_at: firstInvoiceDate,
+        // Only set first_paid_invoice_at when there is an actual invoice (audit field — never set to synthetic 'now')
+        ...(candidates.length > 0 && { first_paid_invoice_at: firstInvoiceDate }),
         eligibility_start_at: eligibilityStartAt,
         med_alliance_block_reason: isExpired
           ? 'eligibility_expired: one-year window elapsed'
