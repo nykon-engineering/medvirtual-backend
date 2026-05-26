@@ -2,22 +2,22 @@ import { Module, Global } from '@nestjs/common';
 import { StripeService } from './stripe.service';
 import { StripeController } from './stripe.controller';
 import { PrismaModule } from '../prisma/prisma.module';
-import { BullModule } from '@nestjs/bullmq';
+import { InvoiceModule } from '../invoice/invoice.module';
 
 @Global()
 @Module({
   imports: [
     PrismaModule,
-    // Registering queues here is safe — BullModule.forRootAsync in AppModule
-    // provides a shared IORedis instance, so these registrations reuse that
-    // connection instead of opening new ones.
-    BullModule.registerQueue(
-      { name: 'invoice' },
-      { name: 'invoice-prebill-reconciliation' },
-    ),
+    // InvoiceModule exports the BullMQ queue tokens for 'invoice' and
+    // 'invoice-prebill-reconciliation', so StripeService can inject them
+    // via @InjectQueue without re-registering (no duplicate connections).
+    // No circular dependency: StripeModule is @Global, so InvoiceModule
+    // accesses StripeService via global DI without importing StripeModule.
+    InvoiceModule,
   ],
   providers: [StripeService],
   controllers: [StripeController],
   exports: [StripeService],
 })
 export class StripeModule {}
+

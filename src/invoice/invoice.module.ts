@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { InvoiceService } from './invoice.service';
 import { InvoiceController } from './invoice.controller';
 import { InvoiceWorker } from './invoice.worker';
@@ -24,6 +24,16 @@ import { HubstaffModule } from '../hubstaff/hubstaff.module';
   ],
   controllers: [InvoiceController],
   providers: [InvoiceService, InvoiceWorker, InvoiceStatsWorker, InvoiceReconciliationWorker, InvoicePrebillReconciliationWorker],
-  exports: [InvoiceService, InvoiceWorker, InvoiceStatsWorker, InvoiceReconciliationWorker, InvoicePrebillReconciliationWorker],
+  exports: [
+    InvoiceService,
+    InvoiceWorker,
+    InvoiceStatsWorker,
+    InvoiceReconciliationWorker,
+    InvoicePrebillReconciliationWorker,
+    // Export queue tokens so modules importing InvoiceModule can inject
+    // these queues without re-registering them (avoids duplicate connections)
+    getQueueToken('invoice'),
+    getQueueToken('invoice-prebill-reconciliation'),
+  ],
 })
 export class InvoiceModule {}
