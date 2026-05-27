@@ -68,9 +68,6 @@ export class AllianceNotificationsService {
   }
 
   private async getAdminEmails(): Promise<string[]> {
-    if (process.env.ENVIRONMENT === 'DEV') {
-      return ['paulo@regenta.ai'];
-    }
     const admins = await this.prisma.uSER.findMany({
       where: {
         role: { in: ['system_admin', 'system_super_admin'] },
