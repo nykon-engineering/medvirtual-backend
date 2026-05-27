@@ -413,6 +413,8 @@ export class CommissionsService {
       source: 'admin_action',
     });
 
+    /*
+    removed on 2026-05-27 asked By Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/12100540751
     const full = await this.prisma.affiliateCommission.findUnique({
       where: { id },
       select: {
@@ -431,6 +433,7 @@ export class CommissionsService {
         revertedByName: `${adminUser.first_name} ${adminUser.last_name}`.trim(),
       });
     }
+    */
 
     return updated;
   }
