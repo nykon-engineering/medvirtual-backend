@@ -15,7 +15,7 @@ export function referralStageChangedTemplate(
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
-  const ctaLink = `${process.env.FRONTEND_URL}/modules/alliance/partner/referred-companies`;
+  const ctaLink = `${process.env.FRONTEND_URL}/modules/alliance/partner/referred`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
   const stageLabel = (stage: string): string =>

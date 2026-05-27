@@ -15,7 +15,7 @@ export function adminPayoutRequestedTemplate(
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
-  const ctaLink = `${process.env.FRONTEND_URL}/modules/alliance/admin/payout-requests`;
+  const ctaLink = `${process.env.FRONTEND_URL}/med-alliance/payout-requests`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
   return `
