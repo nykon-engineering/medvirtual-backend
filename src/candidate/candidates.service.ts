@@ -4,6 +4,7 @@ import {
   forwardRef,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
@@ -78,6 +79,8 @@ const VA_SCORECARD_FIELDS = new Set([
 
 @Injectable()
 export class CandidatesService {
+  private readonly logger = new Logger(CandidatesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly google: GoogledriveService,
@@ -1687,34 +1690,82 @@ export class CandidatesService {
     if (!data.hireRequestId)
       throw new BadRequestException('Hire Request ID is required');
 
-    await this.prisma.panelCandidate.deleteMany({
-      where: {
-        candidate_id: data.candidateId,
-        panel: {
-          hire_request_id: data.hireRequestId,
-        },
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: data.candidateId },
+      select: {
+        hubspot_id: true,
+        pipeline_status_origin: true,
       },
     });
+    if (!candidate) throw new NotFoundException('Candidate not found');
 
-    //if no has more candidate, cancel panel
-    const lengthCandidates = await this.prisma.panelCandidate.count({
-      where: {
-        panel: {
-          hire_request_id: data.hireRequestId,
-        },
-      },
-    });
+    try {
+      let lengthCandidates = 0;
 
-    if (lengthCandidates === 0) {
-      //call the function hireRequest Update Status to cancel
-      await this.hireRequest.updateStatus(
-        data.hireRequestId,
-        { status: 'cancelled' },
-        user,
-      );
+      await this.prisma.$transaction(async (tx) => {
+        await tx.panelCandidate.deleteMany({
+          where: {
+            candidate_id: data.candidateId,
+            panel: {
+              hire_request_id: data.hireRequestId,
+            },
+          },
+        });
+
+        lengthCandidates = await tx.panelCandidate.count({
+          where: {
+            panel: {
+              hire_request_id: data.hireRequestId,
+            },
+          },
+        });
+
+        //check if the candidate is in other panels with status selected_by_client or blocked.
+        //if not, change pipeline_status to Available Candidates and update in hubspot
+        const thereOtherPanels = await tx.panelCandidate.findMany({
+          where: {
+            candidate_id: data.candidateId,
+            status: { in: ['selected_by_client', 'blocked'] },
+            panel: { hire_request_id: { not: data.hireRequestId } },
+          },
+          select: { id: true },
+        });
+
+        if (thereOtherPanels.length === 0) {
+          const pipelineStatus = Object.keys(dbToStageDictionary).find(
+            (key) => dbToStageDictionary[key] === 'Available Candidates',
+          );
+          const pipeline_treated =
+            candidate.pipeline_status_origin || pipelineStatus || '';
+
+          await tx.candidate.update({
+            where: { id: data.candidateId },
+            data: { pipeline_status: pipeline_treated },
+          });
+
+          await this.hubspot.updateOneCandidateFromHireRequest(
+            candidate.hubspot_id,
+            pipeline_treated,
+            user?.id,
+          );
+        }
+        
+      });
+
+      //if there are no more candidates in the panel, change hire request status to cancelled
+      if (lengthCandidates === 0) {
+        await this.hireRequest.updateStatus(
+          data.hireRequestId,
+          { status: 'cancelled' },
+          user,
+        );
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error('Error removing candidate from panel:', error);
+      return false;
     }
-
-    return true;
   }
 
   async processAllAvatars(): Promise<boolean> {
