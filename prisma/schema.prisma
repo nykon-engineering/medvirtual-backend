@@ -380,6 +380,7 @@ model HireRequest {
   status                            HireRequestStatus  @default(new)
   priority                          Priority           @default(medium)
   createdAt                         DateTime           @default(now())
+  updatedAt                         DateTime?          @updatedAt
   availability                      String
   contract_length                   String?
   expected_start_date               DateTime?
@@ -470,6 +471,7 @@ model CandidatePanel {
   scheduled_date  DateTime?
   decided_date    DateTime?
   createdAt       DateTime         @default(now())
+  updatedAt       DateTime?         @updatedAt
   readable        Boolean          @default(false)
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
@@ -486,6 +488,7 @@ model PanelCandidate {
   candidate_id    String
   status          PanelCandidateStatus @default(selected)
   createdAt       DateTime             @default(now())
+  updatedAt       DateTime?             @updatedAt
   createdByUserId String?
   candidate       Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
   panel           CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)

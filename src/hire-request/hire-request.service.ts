@@ -67,6 +67,22 @@ export class HireRequestService {
     '1087596819', // available part-time
   ];
 
+  private async buildCrossPanelSelectedMap(): Promise<Map<string, Set<string>>> {
+    const crossPanelSelected = await this.prisma.panelCandidate.findMany({
+      where: { status: { in: ['selected_by_client'] } },
+      select: { candidate_id: true, panel_id: true },
+    });
+
+    const map = new Map<string, Set<string>>();
+    for (const pc of crossPanelSelected) {
+      if (!map.has(pc.candidate_id)) {
+        map.set(pc.candidate_id, new Set());
+      }
+      map.get(pc.candidate_id)!.add(pc.panel_id);
+    }
+    return map;
+  }
+
   private selectPanels = {
     id: true,
     scheduled_date: true,
@@ -760,6 +776,11 @@ export class HireRequestService {
     const _pCfgs_A = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_A = buildConfigMap(_pCfgs_A);
 
+    const isOrgUser = user.role.includes('organization');
+    const crossPanelMap = isOrgUser
+      ? await this.buildCrossPanelSelectedMap()
+      : null;
+
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
         ...hr,
@@ -773,7 +794,18 @@ export class HireRequestService {
           interview_date: panel.interviews[0]?.scheduled_date || null,
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
-          panelCandidates: panel.panelCandidates.map((pc) => {
+          panelCandidates: panel.panelCandidates
+            .filter((pc) => {
+              if (!crossPanelMap) return true;
+              const panelSet = crossPanelMap.get(pc.candidate.id);
+              if (panelSet) {
+                const onlyInCurrentPanel =
+                  panelSet.size === 1 && panelSet.has(panel.id);
+                if (!onlyInCurrentPanel) return false;
+              }
+              return true;
+            })
+            .map((pc) => {
             const rates_A = computeCandidateRates(pc.candidate, _cfgMap_A);
             return {
               ...pc,
@@ -3230,19 +3262,7 @@ export class HireRequestService {
     const _pCfgs_E = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_E = buildConfigMap(_pCfgs_E);
 
-    const crossPanelSelected = await this.prisma.panelCandidate.findMany({
-      //where: { status: { in: ['selected_by_client', 'blocked'] } }, removed on 2026-05-28 when we decided to show all endorsed candidates refgardless if they are in other panels.
-      where: { status: { in: ['selected_by_client'] } },
-      select: { candidate_id: true, panel_id: true },
-    });
-
-    const candidateSelectedInPanels = new Map<string, Set<string>>();
-    for (const pc of crossPanelSelected) {
-      if (!candidateSelectedInPanels.has(pc.candidate_id)) {
-        candidateSelectedInPanels.set(pc.candidate_id, new Set());
-      }
-      candidateSelectedInPanels.get(pc.candidate_id)!.add(pc.panel_id);
-    }
+    const candidateSelectedInPanels = await this.buildCrossPanelSelectedMap();
 
     const result = panels.map((panel) => ({
       ...panel,
