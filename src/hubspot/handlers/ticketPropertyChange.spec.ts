@@ -28,13 +28,13 @@ const BASE_HR = {
 const BASE_HR_WITH_ORG: {
   hubspot_pairing_request_type: string | null;
   hubspot_numberVA: number | null;
-  request_role: string | null;
+  hubspot_role_type: string | null;
   availability: string | null;
   organization: { name: string };
 } = {
   hubspot_pairing_request_type: 'New Client',
   hubspot_numberVA: 2,
-  request_role: 'Medical Scribe',
+  hubspot_role_type: 'Medical Scribe',
   availability: 'full-time',
   organization: { name: 'Acme Health' },
 };
@@ -309,7 +309,7 @@ describe('HandlerTicketPropertyChange', () => {
     const triggerSyncTitle = async (hrData: Partial<{
       hubspot_pairing_request_type: string | null;
       hubspot_numberVA: number | null;
-      request_role: string | null;
+      hubspot_role_type: string | null;
       availability: string | null;
       organization: { name: string };
     }>) => {
@@ -352,8 +352,8 @@ describe('HandlerTicketPropertyChange', () => {
       expect(title).toBe('TEST HR - Acme Health - Medical Scribe - Full-Time');
     });
 
-    it('should omit request_role when null', async () => {
-      const title = await triggerSyncTitle({ request_role: null });
+    it('should omit hubspot_role_type when null', async () => {
+      const title = await triggerSyncTitle({ hubspot_role_type: null });
       expect(title).toBe('TEST HR - Acme Health - 2 - Full-Time');
     });
 
@@ -371,7 +371,7 @@ describe('HandlerTicketPropertyChange', () => {
       const title = await triggerSyncTitle({
         organization: { name: '' },
         hubspot_numberVA: null,
-        request_role: null,
+        hubspot_role_type: null,
         availability: null,
       });
       expect(title).toBe('TEST HR');
