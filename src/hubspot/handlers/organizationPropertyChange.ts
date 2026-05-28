@@ -133,7 +133,9 @@ export class HandlerOrganizationPropertyChange {
         });
       } else {
         const deployDate = value as Date;
-        const eligibilityStartAt = new Date(deployDate.getTime() + THIRTY_DAYS_MS);
+        const eligibilityStartAt = new Date(
+          deployDate.getTime() + THIRTY_DAYS_MS,
+        );
 
         if (deployDate > now) {
           // Future date: revert to referred/not_eligible
@@ -177,7 +179,8 @@ export class HandlerOrganizationPropertyChange {
             event: 'stage_changed',
             old_status: null,
             new_status: null,
-            reason: 'deployment_date synced from HubSpot deploy_date_of_first_va',
+            reason:
+              'deployment_date synced from HubSpot deploy_date_of_first_va',
             source: 'sync',
             actor_user_id: null,
             metadata: {

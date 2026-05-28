@@ -341,7 +341,10 @@ export class AllianceNotificationsService {
     try {
       const adminEmails = await this.getAdminEmails();
       const subject = `Daily commission review — ${payload.commissions.length} pending ($${payload.totalAmount.toFixed(2)})`;
-      const html = adminCommissionPendingSummaryTemplate(payload, resolvedTheme);
+      const html = adminCommissionPendingSummaryTemplate(
+        payload,
+        resolvedTheme,
+      );
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({

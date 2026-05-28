@@ -2093,7 +2093,9 @@ export class NotificationsService {
   }): Promise<void> {
     try {
       const theme = getEmailThemeByBusinessUnit(payload.businessUnit);
-      const inquiryType = payload.hasCandidate ? 'Viewed candidate' : 'General inquiry';
+      const inquiryType = payload.hasCandidate
+        ? 'Viewed candidate'
+        : 'General inquiry';
       const websiteDisplay = payload.websiteUrl.replace(/&#x2F;/g, '/');
 
       const optionalRows = [

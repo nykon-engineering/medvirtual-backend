@@ -1270,9 +1270,7 @@ export class AffiliatesService {
     const firstInvoiceDate = candidates[0]?.paid_at ?? now;
     // Prefer deployment_date from HubSpot as the anchor for eligibility calculations.
     const anchorDate = orgData?.deployment_date ?? firstInvoiceDate;
-    const eligibilityStartAt = new Date(
-      anchorDate.getTime() + THIRTY_DAYS_MS,
-    );
+    const eligibilityStartAt = new Date(anchorDate.getTime() + THIRTY_DAYS_MS);
     const daysSinceDeployment =
       (now.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24);
 
@@ -1284,7 +1282,9 @@ export class AffiliatesService {
       data: {
         referral_stage: 'deployed',
         // Only set first_paid_invoice_at when there is an actual invoice (audit field — never set to synthetic 'now')
-        ...(candidates.length > 0 && { first_paid_invoice_at: firstInvoiceDate }),
+        ...(candidates.length > 0 && {
+          first_paid_invoice_at: firstInvoiceDate,
+        }),
         eligibility_start_at: eligibilityStartAt,
         med_alliance_block_reason: isExpired
           ? 'eligibility_expired: one-year window elapsed'

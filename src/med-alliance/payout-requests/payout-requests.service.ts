@@ -868,7 +868,10 @@ export class PayoutRequestsService {
 
     if (request.affiliate) {
       void this.allianceNotifications.notifyPayoutCancelled(
-        { email: request.affiliate.email, first_name: request.affiliate.first_name ?? '' },
+        {
+          email: request.affiliate.email,
+          first_name: request.affiliate.first_name ?? '',
+        },
         {
           totalAmount: Number(request.requested_amount),
           cancellationReason: dto.reason ?? undefined,

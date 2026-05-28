@@ -1196,7 +1196,9 @@ export class CronService {
         id: true,
         commission_amount: true,
         organization: { select: { name: true } },
-        affiliate: { select: { email: true, first_name: true, last_name: true } },
+        affiliate: {
+          select: { email: true, first_name: true, last_name: true },
+        },
       },
     });
 

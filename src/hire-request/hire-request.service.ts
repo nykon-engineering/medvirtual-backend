@@ -67,7 +67,9 @@ export class HireRequestService {
     '1087596819', // available part-time
   ];
 
-  private async buildCrossPanelSelectedMap(): Promise<Map<string, Set<string>>> {
+  private async buildCrossPanelSelectedMap(): Promise<
+    Map<string, Set<string>>
+  > {
     const crossPanelSelected = await this.prisma.panelCandidate.findMany({
       where: { status: { in: ['selected_by_client'] } },
       select: { candidate_id: true, panel_id: true },
@@ -188,6 +190,22 @@ export class HireRequestService {
       },
     });
     return true;
+  }
+
+  private assertNoHiredCandidatesInPanel(
+    panelCandidates: Array<{
+      candidate: { id: string; pipeline_status: string | null };
+    }>,
+  ): void {
+    const hired = panelCandidates
+      .map((pc) => pc.candidate)
+      .filter((c) => dbToStageDictionary[Number(c.pipeline_status)] === 'Hired');
+
+    if (hired.length > 0) {
+      throw new BadRequestException(
+        `Cannot proceed: You must remove the hired candidate(s) from the panel before changing the status.`,
+      );
+    }
   }
 
   async verifyUnavailableCandidates(
@@ -806,29 +824,30 @@ export class HireRequestService {
               return true;
             })
             .map((pc) => {
-            const rates_A = computeCandidateRates(pc.candidate, _cfgMap_A);
-            return {
-              ...pc,
-              candidate: {
-                ...pc.candidate,
-                employment_type:
-                  changeLabelAvailability(
-                    dbToStageDictionary[Number(pc.candidate.employment_type)],
-                  ) || pc.candidate.employment_type,
-                ...rates_A,
-                avatar: pc.candidate.avatar_url
-                  ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
-                  : null,
-                panelCandidates:
-                  pc.candidate.panelCandidates?.map((pcc) => ({
-                    panel_id: pcc.panel.id,
-                    title: pcc.panel.hireRequest.title,
-                    organization_name: pcc.panel.hireRequest.organization.name,
-                    status: pcc.status,
-                  })) || [],
-              },
-            };
-          }),
+              const rates_A = computeCandidateRates(pc.candidate, _cfgMap_A);
+              return {
+                ...pc,
+                candidate: {
+                  ...pc.candidate,
+                  employment_type:
+                    changeLabelAvailability(
+                      dbToStageDictionary[Number(pc.candidate.employment_type)],
+                    ) || pc.candidate.employment_type,
+                  ...rates_A,
+                  avatar: pc.candidate.avatar_url
+                    ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                    : null,
+                  panelCandidates:
+                    pc.candidate.panelCandidates?.map((pcc) => ({
+                      panel_id: pcc.panel.id,
+                      title: pcc.panel.hireRequest.title,
+                      organization_name:
+                        pcc.panel.hireRequest.organization.name,
+                      status: pcc.status,
+                    })) || [],
+                },
+              };
+            }),
         })),
 
         assign_user_id: hr.assign_user_id
@@ -2774,10 +2793,15 @@ export class HireRequestService {
       },
       select: {
         id: true,
+        panelCandidates: {
+          select: { candidate: { select: { id: true, pipeline_status: true } } },
+        },
       },
     });
     if (!panelExists)
       throw new NotFoundException(`Panel for this hire request not found`);
+
+    this.assertNoHiredCandidatesInPanel(panelExists.panelCandidates);
 
     if (data.candidates_id.length > 0) {
       //add each candidate to the panel
@@ -2877,13 +2901,24 @@ export class HireRequestService {
 
     // === Transaction Prisma ===
     const { currentPanel } = await this.prisma.$transaction(async (tx) => {
-      let panel = await tx.candidatePanel.findFirst({
+      const existingPanel = await tx.candidatePanel.findFirst({
         where: { hire_request_id: data.hireRequest_id },
-        select: { id: true },
+        select: {
+          id: true,
+          panelCandidates: {
+            select: { candidate: { select: { id: true, pipeline_status: true } } },
+          },
+        },
       });
 
-      if (!panel) {
-        panel = await tx.candidatePanel.create({
+      if (existingPanel) {
+        this.assertNoHiredCandidatesInPanel(existingPanel.panelCandidates);
+      }
+
+      let panelId: string;
+
+      if (!existingPanel) {
+        const created = await tx.candidatePanel.create({
           data: {
             hire_request_id: data.hireRequest_id,
             readable: false,
@@ -2896,11 +2931,15 @@ export class HireRequestService {
         );
         if (!updatedRequest)
           throw new BadRequestException(`Hire request status not updated`);
+
+        panelId = created.id;
+      } else {
+        panelId = existingPanel.id;
       }
 
       //check existing candidates on the panel
       const existingCandidates = await tx.panelCandidate.findMany({
-        where: { panel_id: panel.id },
+        where: { panel_id: panelId },
         select: { candidate_id: true },
       });
       //filter data.candidates_id to find just candidates who will be add on the panel without duplicates
@@ -2917,7 +2956,7 @@ export class HireRequestService {
       if (candidatesToRemove.length > 0) {
         await tx.panelCandidate.deleteMany({
           where: {
-            panel_id: panel.id,
+            panel_id: panelId,
             candidate_id: { in: candidatesToRemove },
           },
         });
@@ -2927,13 +2966,13 @@ export class HireRequestService {
       await tx.panelCandidate.createMany({
         data: candidatesToAdd.map((candidateId) => ({
           candidate_id: candidateId,
-          panel_id: panel.id,
+          panel_id: panelId,
           createdByUserId: user.id,
         })),
       });
 
       return {
-        currentPanel: panel,
+        currentPanel: { id: panelId },
       };
     });
 
@@ -2962,14 +3001,22 @@ export class HireRequestService {
       where: {
         hire_request_id: data.hireRequest_id,
       },
-      include: {
-        panelCandidates: true,
+      select: {
+        id: true,
+        panelCandidates: {
+          select: {
+            candidate_id: true,
+            candidate: { select: { id: true, pipeline_status: true } },
+          },
+        },
       },
     });
 
     if (!panel) {
       throw new NotFoundException(`Panel for this hire request not found`);
     }
+
+    this.assertNoHiredCandidatesInPanel(panel.panelCandidates);
 
     //Pauli asked to remove this rule: https://regenta-company.monday.com/boards/9328303960/pulses/18070949162?notification=6971131519
     if (panel.panelCandidates.length < 1) {
@@ -3501,10 +3548,15 @@ export class HireRequestService {
       },
       select: {
         id: true,
+        panelCandidates: {
+          select: { candidate: { select: { id: true, pipeline_status: true } } },
+        },
       },
     });
     if (!panel)
       throw new NotFoundException(`Panel for this hire request not found`);
+
+    this.assertNoHiredCandidatesInPanel(panel.panelCandidates);
 
     // Here, I'm using the date_time because I'll use the dateToTimestamp later
     // and this function should receive a date in the format YYYY-MM-DD
@@ -3756,6 +3808,8 @@ export class HireRequestService {
     if (!panelExists)
       throw new NotFoundException(`Panel for this hire request not found`);
 
+    this.assertNoHiredCandidatesInPanel(panelExists.panelCandidates);
+
     const updatedDate = new Date(`${data.date_time}`);
 
     const hireRequestUpdated = await this.prisma.candidatePanel.update({
@@ -3945,10 +3999,15 @@ export class HireRequestService {
       },
       select: {
         id: true,
+        panelCandidates: {
+          select: { candidate: { select: { id: true, pipeline_status: true } } },
+        },
       },
     });
     if (!panelExists)
       throw new NotFoundException(`Panel for this hire request not found`);
+
+    this.assertNoHiredCandidatesInPanel(panelExists.panelCandidates);
 
     //check if winner exists inside the panel
     const winnerExists = await this.prisma.panelCandidate.findMany({
@@ -4088,7 +4147,7 @@ export class HireRequestService {
       await Promise.all(
         winnerExists.map(async (c) => {
           // if the candidate is already marked as hired, skip updating to avoid conflicts
-          if (c.candidate.pipeline_status === pipelineStatusHired) return; 
+          if (c.candidate.pipeline_status === pipelineStatusHired) return;
 
           await this.prisma.candidate.update({
             where: { id: c.candidate_id },

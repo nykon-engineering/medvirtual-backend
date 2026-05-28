@@ -310,26 +310,26 @@ export class HandlerOrganization {
           return true;
         })
         .map((pc) => {
-        const rates = computeCandidateRates(pc.candidate, _cfgMapA);
-        return {
-          ...pc,
-          candidate: {
-            ...pc.candidate,
-            employment_type:
-              changeLabelAvailability(
-                dbToStageDictionary[Number(pc.candidate.employment_type)],
-              ) || pc.candidate.employment_type,
-            approved_positions_pairing:
-              pc.candidate.approved_positions_pairing?.map(
-                getApprovedPositionLabel,
-              ) || [],
-            ...rates,
-            avatar: pc.candidate?.avatar_url
-              ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
-              : null,
-          },
-        };
-      }),
+          const rates = computeCandidateRates(pc.candidate, _cfgMapA);
+          return {
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              employment_type:
+                changeLabelAvailability(
+                  dbToStageDictionary[Number(pc.candidate.employment_type)],
+                ) || pc.candidate.employment_type,
+              approved_positions_pairing:
+                pc.candidate.approved_positions_pairing?.map(
+                  getApprovedPositionLabel,
+                ) || [],
+              ...rates,
+              avatar: pc.candidate?.avatar_url
+                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                : null,
+            },
+          };
+        }),
     }));
 
     result.awaitingDecision = awaitingDecisionSanitized;
