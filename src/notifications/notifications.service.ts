@@ -2078,4 +2078,88 @@ export class NotificationsService {
 
     return html;
   }
+
+  async notifyTalentPoolLeadNew(payload: {
+    ownerEmail: string;
+    leadName: string;
+    email: string;
+    organization: string;
+    websiteUrl: string;
+    languagePreference: string;
+    businessUnit: string;
+    hasCandidate: boolean;
+    mainNeed?: string;
+    additionalDetails?: string;
+  }): Promise<void> {
+    try {
+      const theme = getEmailThemeByBusinessUnit(payload.businessUnit);
+      const inquiryType = payload.hasCandidate ? 'Viewed candidate' : 'General inquiry';
+      const websiteDisplay = payload.websiteUrl.replace(/&#x2F;/g, '/');
+
+      const optionalRows = [
+        payload.mainNeed
+          ? `<tr>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666; width: 45%;">Main need</td>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.mainNeed}</td>
+             </tr>`
+          : '',
+        payload.additionalDetails
+          ? `<tr>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666; width: 45%;">Additional details</td>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.additionalDetails}</td>
+             </tr>`
+          : '',
+      ].join('');
+
+      const ctaLink = `${process.env.FRONTEND_URL}/talent-pool-leads`;
+
+      const html = this.buildEmail(
+        `<h2>New Talent Pool Lead</h2>
+         <p>A new inquiry was submitted through the ${payload.businessUnit} talent pool page.</p>
+         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666; width: 45%;">Name</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.leadName}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Email</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.email}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Organization</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.organization}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Website</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${websiteDisplay}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Bilingual EN/ES</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.languagePreference === 'yes' ? 'Yes' : 'No'}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Inquiry type</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${inquiryType}</td>
+           </tr>
+           ${optionalRows}
+         </table>
+         <div style="text-align: left; margin: 30px 0;">
+           <a href="${ctaLink}" class="cta-button">View Lead</a>
+         </div>`,
+        theme,
+      );
+
+      await this.sendMailWithPrefix({
+        from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+        to: [payload.ownerEmail],
+        subject: `New talent pool lead: ${payload.leadName} — ${payload.organization}`,
+        html,
+      });
+    } catch (err) {
+      console.warn(
+        `[talent-pool-lead] Failed to send new lead notification to ${payload.ownerEmail}:`,
+        err?.message || err,
+      );
+    }
+  }
 }

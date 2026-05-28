@@ -3920,6 +3920,10 @@ export class HireRequestService {
         `Pipeline status not found for Available Candidates`,
       );
 
+    const pipelineStatusHired = Object.keys(dbToStageDictionary).find(
+      (key) => dbToStageDictionary[key] === 'Hired',
+    );
+
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: {
         id: id,
@@ -3958,6 +3962,7 @@ export class HireRequestService {
         candidate: {
           select: {
             hubspot_id: true,
+            pipeline_status: true,
           },
         },
       },
@@ -4082,6 +4087,9 @@ export class HireRequestService {
     if (winnerExists) {
       await Promise.all(
         winnerExists.map(async (c) => {
+          // if the candidate is already marked as hired, skip updating to avoid conflicts
+          if (c.candidate.pipeline_status === pipelineStatusHired) return; 
+
           await this.prisma.candidate.update({
             where: { id: c.candidate_id },
             data: { pipeline_status: pipelineStatus },
