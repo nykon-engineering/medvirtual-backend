@@ -3231,7 +3231,8 @@ export class HireRequestService {
     const _cfgMap_E = buildConfigMap(_pCfgs_E);
 
     const crossPanelSelected = await this.prisma.panelCandidate.findMany({
-      where: { status: { in: ['selected_by_client', 'blocked'] } },
+      //where: { status: { in: ['selected_by_client', 'blocked'] } }, removed on 2026-05-28 when we decided to show all endorsed candidates refgardless if they are in other panels.
+      where: { status: { in: ['selected_by_client'] } },
       select: { candidate_id: true, panel_id: true },
     });
 
