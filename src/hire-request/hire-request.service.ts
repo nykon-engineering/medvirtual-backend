@@ -194,12 +194,20 @@ export class HireRequestService {
 
   private assertNoHiredCandidatesInPanel(
     panelCandidates: Array<{
-      candidate: { id: string; pipeline_status: string | null };
+      candidate: {
+        id: string;
+        pipeline_status: string | null;
+        panelCandidates: Array<{ status: string }>;
+      };
     }>,
   ): void {
     const hired = panelCandidates
       .map((pc) => pc.candidate)
-      .filter((c) => dbToStageDictionary[Number(c.pipeline_status)] === 'Hired');
+      .filter(
+        (c) =>
+          dbToStageDictionary[Number(c.pipeline_status)] === 'Hired' ||
+          c.panelCandidates.some((pcc) => pcc.status === 'selected_by_client'),
+      );
 
     if (hired.length > 0) {
       throw new BadRequestException(
@@ -2794,7 +2802,15 @@ export class HireRequestService {
       select: {
         id: true,
         panelCandidates: {
-          select: { candidate: { select: { id: true, pipeline_status: true } } },
+          select: {
+            candidate: {
+              select: {
+                id: true,
+                pipeline_status: true,
+                panelCandidates: { select: { status: true } },
+              },
+            },
+          },
         },
       },
     });
@@ -2906,7 +2922,15 @@ export class HireRequestService {
         select: {
           id: true,
           panelCandidates: {
-            select: { candidate: { select: { id: true, pipeline_status: true } } },
+            select: {
+              candidate: {
+                select: {
+                  id: true,
+                  pipeline_status: true,
+                  panelCandidates: { select: { status: true } },
+                },
+              },
+            },
           },
         },
       });
@@ -3006,7 +3030,13 @@ export class HireRequestService {
         panelCandidates: {
           select: {
             candidate_id: true,
-            candidate: { select: { id: true, pipeline_status: true } },
+            candidate: {
+              select: {
+                id: true,
+                pipeline_status: true,
+                panelCandidates: { select: { status: true } },
+              },
+            },
           },
         },
       },
@@ -3549,7 +3579,15 @@ export class HireRequestService {
       select: {
         id: true,
         panelCandidates: {
-          select: { candidate: { select: { id: true, pipeline_status: true } } },
+          select: {
+            candidate: {
+              select: {
+                id: true,
+                pipeline_status: true,
+                panelCandidates: { select: { status: true } },
+              },
+            },
+          },
         },
       },
     });
@@ -3799,6 +3837,7 @@ export class HireRequestService {
                 hubspot_id: true,
                 pipeline_status: true,
                 pipeline_status_origin: true,
+                panelCandidates: { select: { status: true } },
               },
             },
           },
@@ -4000,7 +4039,15 @@ export class HireRequestService {
       select: {
         id: true,
         panelCandidates: {
-          select: { candidate: { select: { id: true, pipeline_status: true } } },
+          select: {
+            candidate: {
+              select: {
+                id: true,
+                pipeline_status: true,
+                panelCandidates: { select: { status: true } },
+              },
+            },
+          },
         },
       },
     });

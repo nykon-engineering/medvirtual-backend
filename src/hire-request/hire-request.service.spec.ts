@@ -1014,7 +1014,7 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({
         id: 'panel1',
         panelCandidates: [
-          { candidate: { id: 'cand-hired', pipeline_status: '261214844' } },
+          { candidate: { id: 'cand-hired', pipeline_status: '261214844', panelCandidates: [] } },
         ],
       });
 
@@ -1103,7 +1103,15 @@ describe('HireRequestService', () => {
         select: {
           id: true,
           panelCandidates: {
-            select: { candidate: { select: { id: true, pipeline_status: true } } },
+            select: {
+              candidate: {
+                select: {
+                  id: true,
+                  pipeline_status: true,
+                  panelCandidates: { select: { status: true } },
+                },
+              },
+            },
           },
         },
       });
@@ -1113,7 +1121,7 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({
         id: 'panel1',
         panelCandidates: [
-          { candidate: { id: 'cand-hired', pipeline_status: '261214844' } },
+          { candidate: { id: 'cand-hired', pipeline_status: '261214844', panelCandidates: [] } },
         ],
       });
 
@@ -1584,7 +1592,7 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({
         id: 'panel1',
         panelCandidates: [
-          { candidate: { id: 'cand-hired', pipeline_status: '261214844' } },
+          { candidate: { id: 'cand-hired', pipeline_status: '261214844', panelCandidates: [] } },
         ],
       });
 
@@ -1639,6 +1647,7 @@ describe('HireRequestService', () => {
               hubspot_id: 'hub-hired',
               pipeline_status: '261214844',
               pipeline_status_origin: 'origin1',
+              panelCandidates: [],
             },
           },
           {
@@ -1647,6 +1656,7 @@ describe('HireRequestService', () => {
               hubspot_id: 'hub2',
               pipeline_status: '261075105',
               pipeline_status_origin: 'origin2',
+              panelCandidates: [],
             },
           },
         ],
@@ -1680,14 +1690,15 @@ describe('HireRequestService', () => {
               hubspot_id: 'hub1',
               pipeline_status: 'status1',
               pipeline_status_origin: 'origin1',
+              panelCandidates: [],
             },
           },
         ],
       });
-      
+
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue(null);
-  
+
       await expect(service.awaitingDecision(baseId, baseData as any, user))
         .rejects.toThrow(BadRequestException);
     });
@@ -1706,13 +1717,14 @@ describe('HireRequestService', () => {
               hubspot_id: 'hub1',
               pipeline_status: 'status1',
               pipeline_status_origin: 'origin1',
+              panelCandidates: [],
             },
           },
         ],
       });
       prismaMock.candidatePanel.update.mockResolvedValue({ id: 'panel1' });
       prismaMock.hireRequest.update.mockResolvedValue({ id: baseId });
-  
+
       const findOneMock = jest.spyOn(service, 'findOne').mockResolvedValue(true);
   
       const result = await service.awaitingDecision(baseId, baseData as any, user);
