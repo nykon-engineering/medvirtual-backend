@@ -327,6 +327,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
           let ownerEmail = '';
           if (process.env.ENVIRONMENT !== 'PROD') {
             ownerEmail = 'pauli@regenta.ai';
+            //ownerEmail = 'elizabeth.veloso@legalsoft.com';
           } else {
             const isBerry = businessUnit === 'Berry Virtual';
             const hasCandidate = !!createDto.candidate_id;

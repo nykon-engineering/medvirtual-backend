@@ -2113,7 +2113,7 @@ export class NotificationsService {
           : '',
       ].join('');
 
-      const ctaLink = `${process.env.FRONTEND_URL}/talent-pool-leads`;
+      const ctaLink = `${process.env.FRONTEND_URL}/tickets`;
 
       const html = this.buildEmail(
         `<h2>New Talent Pool Lead</h2>
