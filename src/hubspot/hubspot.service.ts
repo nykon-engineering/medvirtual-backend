@@ -417,6 +417,7 @@ export class HubspotService {
               subscriptionType: event.subscriptionType,
               objectId: event.objectId,
               propertyName: event.propertyName ?? undefined,
+              propertyValue: event.propertyValue ?? undefined,
             },
           });
         }
@@ -434,6 +435,8 @@ export class HubspotService {
             payload: {
               subscriptionType: event.subscriptionType,
               objectId: event.objectId,
+              propertyName: event.propertyName ?? undefined,
+              propertyValue: event.propertyValue ?? undefined,
             },
             errorCode: err.status?.toString() ?? err.code,
             errorMessage: err.message,
