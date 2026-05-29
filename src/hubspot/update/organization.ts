@@ -61,7 +61,11 @@ export class OrganizationUpdateService {
     return user && user.hubspot_id ? user.hubspot_id : null;
   }
 
-  async execute(data: any, actorUserId?: string, reason?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -95,7 +99,10 @@ export class OrganizationUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: Object.keys(hubspotProperties), ...(reason && { reason }) },
+        payload: {
+          fields: Object.keys(hubspotProperties),
+          ...(reason && { reason }),
+        },
       });
 
       return true;
@@ -167,7 +174,10 @@ export class OrganizationUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: ['referral_source', 'referral_partners_email'], ...(reason && { reason }) },
+        payload: {
+          fields: ['referral_source', 'referral_partners_email'],
+          ...(reason && { reason }),
+        },
       });
     } catch (error) {
       void this.audit.log({

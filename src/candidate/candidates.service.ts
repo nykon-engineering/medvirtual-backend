@@ -1749,7 +1749,6 @@ export class CandidatesService {
             user?.id,
           );
         }
-        
       });
 
       //if there are no more candidates in the panel, change hire request status to cancelled

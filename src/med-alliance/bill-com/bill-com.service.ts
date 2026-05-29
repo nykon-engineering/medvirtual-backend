@@ -13,6 +13,11 @@ interface LoginResponse {
   trusted: boolean;
 }
 
+export interface CreateBillResponse {
+  id: string;
+  paymentStatus: string;
+  approvalStatus: string;
+}
 @Injectable()
 export class BillComService {
   private readonly logger = new Logger(BillComService.name);
@@ -127,7 +132,8 @@ export class BillComService {
     description: string;
     invoiceNumber: string;
     invoiceDate: string;
-  }): Promise<{ billId: string }> {
+    billLineItems: { description: string }[];
+  }): Promise<CreateBillResponse> {
     const {
       vendorId,
       dueDate,
@@ -141,12 +147,13 @@ export class BillComService {
       'createBill',
       async (sessionId, devKey) => {
         const { billBaseUrl } = this.requireEnv();
-        const response = await axios.post<{ id: string }>(
+        const response = await axios.post<CreateBillResponse>(
           `${billBaseUrl}/bills`,
           {
             vendorId,
             dueDate,
-            billLineItems: [{ amount, description }],
+            description,
+            billLineItems: params.billLineItems, //the total amount will be the total of the line items
             invoice: { invoiceNumber, invoiceDate },
           },
           {
@@ -158,7 +165,11 @@ export class BillComService {
             timeout: 15000,
           },
         );
-        return { billId: response.data.id };
+        return {
+          id: response.data.id,
+          paymentStatus: response.data.paymentStatus,
+          approvalStatus: response.data.approvalStatus,
+        };
       },
     );
   }

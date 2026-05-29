@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { MailModule } from '../../mail/mail.module';
 import { PayoutRequestsModule } from '../payout-requests/payout-requests.module';
@@ -12,8 +12,8 @@ import { AllianceNotificationsModule } from '../notifications/notifications.modu
   imports: [
     PrismaModule,
     MailModule,
-    PayoutRequestsModule,
     AllianceNotificationsModule,
+    forwardRef(() => PayoutRequestsModule),
   ],
   providers: [BillComService, BillComPayoutService],
   controllers: [BillComWebhookController, BillComAdminController],

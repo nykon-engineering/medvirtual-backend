@@ -155,7 +155,10 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { alliance_commission: commissionPercent, ...(reason && { reason }) },
+        payload: {
+          alliance_commission: commissionPercent,
+          ...(reason && { reason }),
+        },
       });
     } catch (error) {
       if (error.response) {
@@ -218,7 +221,10 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: ['account_name', 'account_number'], ...(reason && { reason }) },
+        payload: {
+          fields: ['account_name', 'account_number'],
+          ...(reason && { reason }),
+        },
       });
     } catch (error) {
       if (error.response) {
@@ -274,7 +280,11 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: ['account_name', 'account_number'], cleared: true, ...(reason && { reason }) },
+        payload: {
+          fields: ['account_name', 'account_number'],
+          cleared: true,
+          ...(reason && { reason }),
+        },
       });
     } catch (error) {
       if (error.response) {

@@ -11,7 +11,11 @@ import { HubspotAuditService } from '../hubspot-audit.service';
 export class ContactDeleteService {
   constructor(private readonly audit: HubspotAuditService) {}
 
-  async execute(data: any, actorUserId?: string, reason?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;

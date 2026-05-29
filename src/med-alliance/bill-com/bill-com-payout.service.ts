@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { BillComService } from './bill-com.service';
+import { BillComService, CreateBillResponse } from './bill-com.service';
 import { USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import {
@@ -13,6 +13,16 @@ import {
   shapeAdminRequest,
 } from '../payout-requests/payout-request.selects';
 import { AllianceNotificationsService } from '../notifications/notifications.service';
+
+interface BillComPaymentPayload {
+  vendorId: string;
+  affiliateName: string;
+  affiliateEmail: string;
+  amount: number;
+  today: string;
+  duedate: string;
+  commissionsItems: { description: string; amount: number }[];
+}
 
 @Injectable()
 export class BillComPayoutService {
@@ -60,7 +70,116 @@ export class BillComPayoutService {
     return shapeAdminRequest(request);
   }
 
-  // Transitions approved → processing. Calls Bill.com createBill then createPayment.
+  async validateAndPreparePayment(id: string): Promise<BillComPaymentPayload> {
+    const request = await this.prisma.affiliatePayoutRequest.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        approved_amount: true,
+        requested_amount: true,
+        affiliate_profile_id: true,
+        commissions: {
+          select: {
+            commission: {
+              select: {
+                id: true,
+                commission_amount: true,
+                hubspotInvoiceSnapshot: {
+                  select: {
+                    hubspot_id: true,
+                    invoice_amount: true,
+                    createdAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!request) throw new NotFoundException('Payout request not found');
+
+    const commissionsItems = request.commissions.map((c) => ({
+      description: `Hubspot Invoice ID: ${c.commission.hubspotInvoiceSnapshot?.hubspot_id ?? 'Unknown'} | Hubspot Invoice Amount: ${c.commission.hubspotInvoiceSnapshot?.invoice_amount ?? 'Unknown'} | hubspot invoice Created At: ${c.commission.hubspotInvoiceSnapshot?.createdAt ?? 'Unknown'}`,
+      amount: parseFloat(String(c.commission.commission_amount ?? 0)),
+    }));
+
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: request.affiliate_profile_id },
+      select: {
+        user: {
+          select: {
+            first_name: true,
+            last_name: true,
+            email: true,
+            contact: {
+              select: { hubspot_billcom_vendor_id: true },
+            },
+          },
+        },
+      },
+    });
+
+    const vendorId = profile?.user?.contact?.hubspot_billcom_vendor_id as
+      | string
+      | undefined;
+    if (!vendorId) {
+      throw new BadRequestException(
+        'Bill.com vendor ID is missing for this affiliate. Cannot initiate Bill.com payment.',
+      );
+    }
+
+    const affiliateName =
+      `${profile?.user?.first_name ?? ''} ${profile?.user?.last_name ?? ''}`.trim() ||
+      profile?.user?.email ||
+      'Unknown affiliate';
+    const affiliateEmail = profile?.user?.email ?? 'Unknown email';
+    const amount = parseFloat(
+      String(request.approved_amount ?? request.requested_amount ?? 0),
+    );
+    const today = this.toDateString(new Date());
+    const duedate = this.toDateString(
+      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    );
+
+    return {
+      vendorId,
+      affiliateName,
+      affiliateEmail,
+      amount,
+      today,
+      duedate,
+      commissionsItems,
+    };
+  }
+
+  async createBillOnly(
+    payload: BillComPaymentPayload,
+    adminUser: USER,
+    id: string,
+  ): Promise<CreateBillResponse> {
+    const {
+      vendorId,
+      affiliateName,
+      affiliateEmail,
+      amount,
+      today,
+      duedate,
+      commissionsItems,
+    } = payload;
+
+    return this.billComService.createBill({
+      vendorId,
+      dueDate: duedate,
+      amount,
+      description: `Bill created by ${adminUser.first_name} ${adminUser.last_name} (${adminUser.email}) for affiliate ${affiliateName} (${affiliateEmail}) through the payout request id ${id}`,
+      invoiceNumber: id,
+      invoiceDate: today,
+      billLineItems: commissionsItems,
+    });
+  }
+
+  // Standalone endpoint: validate + call Bill.com + persist atomically for a single request.
   async initiatePayment(id: string, adminUser: USER) {
     const request = await this.prisma.affiliatePayoutRequest.findUnique({
       where: { id },
@@ -69,73 +188,50 @@ export class BillComPayoutService {
         status: true,
         approved_amount: true,
         requested_amount: true,
-        affiliate_profile_id: true,
+        commissions: { select: { commission_id: true } },
       },
     });
     if (!request) throw new NotFoundException('Payout request not found');
 
-    if (request.status !== 'approved') {
+    const payableStatuses = ['under_review', 'approved'];
+    if (!payableStatuses.includes(request.status)) {
       throw new BadRequestException(
-        `Payout request must be "approved" to initiate a Bill.com payment (current: "${request.status}").`,
+        `Payout request must be "under_review" or "approved" to initiate a Bill.com payment (current: "${request.status}").`,
       );
     }
 
-    const profile = await this.prisma.affiliateProfile.findUnique({
-      where: { id: request.affiliate_profile_id },
-      select: { payout_details: true },
-    });
+    const billPayload = await this.validateAndPreparePayment(id);
+    const responseBill = await this.createBillOnly(billPayload, adminUser, id);
 
-    const payoutDetails = profile?.payout_details as Record<
-      string,
-      unknown
-    > | null;
-    const vendorId = payoutDetails?.account_number as string | undefined;
-
-    if (!vendorId) {
-      throw new BadRequestException(
-        'Affiliate payout_details is missing "account_number". Cannot initiate Bill.com payment.',
-      );
-    }
-
-    const amount = parseFloat(
-      String(request.approved_amount ?? request.requested_amount ?? 0),
-    );
-    const today = this.toDateString(new Date());
-
-    const { billId } = await this.billComService.createBill({
-      vendorId,
-      dueDate: today,
-      amount,
-      description: 'Alliance commission payout',
-      invoiceNumber: id,
-      invoiceDate: today,
-    });
-
-    const { paymentId } = await this.billComService.createPayment({
-      vendorId,
-      billId,
-      amount,
-      processDate: today,
-    });
+    const commissionIds = request.commissions.map((c) => c.commission_id);
 
     await this.prisma.$transaction(async (tx) => {
       await tx.affiliatePayoutRequest.update({
         where: { id },
         data: {
           status: 'processing',
-          bill_com_payment_id: paymentId,
+          bill_com_billId: responseBill.id,
           bill_com_status: 'SCHEDULED',
+          bill_com_paymentStatus: responseBill.paymentStatus,
+          bill_com_approvalStatus: responseBill.approvalStatus,
           bill_com_error: null,
           payment_method: 'bill_com',
         },
       });
+
+      if (commissionIds.length > 0) {
+        await tx.affiliateCommission.updateMany({
+          where: { id: { in: commissionIds } },
+          data: { status: 'paid' },
+        });
+      }
     });
 
     await this.writeAuditLog({
       actorUserId: adminUser.id,
       entityId: id,
-      event: 'bill_com_payment_initiated',
-      oldStatus: 'approved',
+      event: 'bill_com_bill_initiated',
+      oldStatus: request.status,
       newStatus: 'processing',
       source: 'admin_action',
     });

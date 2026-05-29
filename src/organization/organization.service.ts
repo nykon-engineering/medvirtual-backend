@@ -1057,7 +1057,11 @@ export class OrganizationService {
       });
 
       //updateOrganizationInHubspot
-      await this.hubspot.updateOrganizationInHubspot(res, actorUserId, `Organization admin updated — HubSpot company owner synced`);
+      await this.hubspot.updateOrganizationInHubspot(
+        res,
+        actorUserId,
+        `Organization admin updated — HubSpot company owner synced`,
+      );
 
       return res;
     } catch (error) {
@@ -1161,7 +1165,11 @@ export class OrganizationService {
       });
 
       //updateOrganizationInHubspot
-      await this.hubspot.updateOrganizationInHubspot(res, undefined, `Admin assigned to organization — HubSpot company owner updated`);
+      await this.hubspot.updateOrganizationInHubspot(
+        res,
+        undefined,
+        `Admin assigned to organization — HubSpot company owner updated`,
+      );
 
       return res;
     } catch (error) {

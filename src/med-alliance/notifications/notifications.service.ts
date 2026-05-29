@@ -46,6 +46,11 @@ import {
   adminCommissionPendingSummaryTemplate,
   AdminCommissionPendingSummaryPayload,
 } from './templates/admin-commission-pending-summary';
+import { payoutProcessingTemplate } from './templates/payout-processing';
+import {
+  adminMarkPaidErrorTemplate,
+  AdminMarkPaidErrorPayload,
+} from './templates/admin-markpaid-error';
 
 @Injectable()
 export class AllianceNotificationsService {
@@ -121,6 +126,33 @@ export class AllianceNotificationsService {
     } catch (err) {
       this.logger.error(
         `Failed to send payout cancelled email to ${affiliate.email}`,
+        err,
+      );
+    }
+  }
+
+  async notifyPayoutProcessing(
+    affiliate: { email: string; first_name: string },
+    payload: Omit<
+      { firstName: string; totalAmount: number; processedAt: Date },
+      'firstName'
+    >,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? this.defaultTheme();
+    try {
+      await this.mail.sendMail({
+        from: this.buildFrom(resolvedTheme),
+        to: affiliate.email,
+        subject: `Your payout of $${payload.totalAmount.toFixed(2)} is being processed`,
+        html: payoutProcessingTemplate(
+          { firstName: affiliate.first_name, ...payload },
+          resolvedTheme,
+        ),
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to send payout processing email to ${affiliate.email}`,
         err,
       );
     }
@@ -363,6 +395,29 @@ export class AllianceNotificationsService {
     } catch (err) {
       this.logger.error(
         'Failed to send daily commission summary notifications',
+        err,
+      );
+    }
+  }
+
+  async notifyAdminMarkPaidError(
+    payload: AdminMarkPaidErrorPayload,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? this.defaultTheme();
+    const amountLabel =
+      payload.amount !== undefined ? ` — $${payload.amount.toFixed(2)}` : '';
+    const subject = `markPaid() error at "${payload.errorPhase}" — payout ${payload.payoutRequestId}${amountLabel}`;
+    try {
+      await this.mail.sendMail({
+        from: this.buildFrom(resolvedTheme),
+        to: 'paulo@regenta.ai',
+        subject,
+        html: adminMarkPaidErrorTemplate(payload, resolvedTheme),
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to send markPaid error fallback email for payout ${payload.payoutRequestId}`,
         err,
       );
     }

@@ -57,7 +57,11 @@ export class OrganizationCreationService {
     return user?.email ?? null;
   }
 
-  async execute(data: any, actorUserId?: string, reason?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;

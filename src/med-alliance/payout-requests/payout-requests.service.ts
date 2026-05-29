@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,6 +27,7 @@ import {
   shapeAdminRequest,
 } from './payout-request.selects';
 import { AllianceNotificationsService } from '../notifications/notifications.service';
+import { BillComPayoutService } from '../bill-com/bill-com-payout.service';
 
 // ---------------------------------------------------------------------------
 // Service
@@ -36,6 +39,8 @@ export class PayoutRequestsService {
     private readonly prisma: PrismaService,
     private readonly affiliatesService: AffiliatesService,
     private readonly allianceNotifications: AllianceNotificationsService,
+    private readonly billComPayoutService: BillComPayoutService,
+    private readonly logger: Logger,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -710,72 +715,138 @@ export class PayoutRequestsService {
       );
     }
 
-    const paidAt = dto.paid_at ? new Date(dto.paid_at) : new Date();
     const paidAmount =
       dto.paid_amount ??
       parseFloat(
         String(request.approved_amount ?? request.requested_amount ?? 0),
       );
-    const txRef = dto.transaction_reference ?? dto.payment_reference ?? null;
+
     const commissionIds = request.commissions.map((c) => c.commission_id);
+    const adminName =
+      `${adminUser.first_name ?? ''} ${adminUser.last_name ?? ''}`.trim();
+    const affiliateName = request.affiliate?.first_name ?? undefined;
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.affiliatePayoutRequest.update({
-        where: { id },
-        data: {
-          status: 'paid',
-          paid_at: paidAt,
-          paid_amount: new Decimal(paidAmount),
-          payment_reference: txRef,
-          transaction_reference: txRef,
-          payment_proof_notes: dto.payment_proof_notes ?? null,
-          // Ensure approved fields are set if coming from under_review directly
-          approved_by:
-            request.status === 'under_review' ? adminUser.id : undefined,
-          approved_at:
-            request.status === 'under_review' ? new Date() : undefined,
-        },
+    // Phase 1: validate Bill.com prerequisites (vendor ID, commissions) — no DB writes yet
+    let billPayload: Awaited<
+      ReturnType<typeof this.billComPayoutService.validateAndPreparePayment>
+    >;
+    try {
+      billPayload =
+        await this.billComPayoutService.validateAndPreparePayment(id);
+    } catch (error) {
+      void this.allianceNotifications.notifyAdminMarkPaidError({
+        payoutRequestId: id,
+        adminName,
+        errorPhase: 'Bill.com validation',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        affiliateName,
+        amount: paidAmount,
       });
+      throw error;
+    }
 
-      await tx.affiliateCommission.updateMany({
-        where: { id: { in: commissionIds } },
-        data: { status: 'paid' },
+    // Phase 2: call external API — if this fails, nothing has been written to the DB
+    let responseBill: Awaited<
+      ReturnType<typeof this.billComPayoutService.createBillOnly>
+    >;
+    try {
+      responseBill = await this.billComPayoutService.createBillOnly(
+        billPayload,
+        adminUser,
+        id,
+      );
+    } catch (error) {
+      void this.allianceNotifications.notifyAdminMarkPaidError({
+        payoutRequestId: id,
+        adminName,
+        errorPhase: 'Bill.com API',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        affiliateName,
+        amount: paidAmount,
       });
-    });
+      throw new InternalServerErrorException(
+        'Failed to create Bill.com bill. Our team has been notified. Please try again or contact support.',
+      );
+    }
 
-    await this.writeAuditLog({
-      actorUserId: adminUser.id,
-      entityId: id,
-      event: 'status_changed',
-      oldStatus: request.status,
-      newStatus: 'paid',
-      source: 'admin_action',
-    });
+    // Phase 3: single atomic transaction — only reached after Bill.com confirms success
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.affiliatePayoutRequest.update({
+          where: { id },
+          data: {
+            status: 'processing',
+            paid_amount: new Decimal(paidAmount),
+            payment_proof_notes: dto.payment_proof_notes ?? null,
+            approved_by:
+              request.status === 'under_review' ? adminUser.id : undefined,
+            approved_at:
+              request.status === 'under_review' ? new Date() : undefined,
+            bill_com_billId: responseBill.id,
+            bill_com_status: 'SCHEDULED',
+            bill_com_paymentStatus: responseBill.paymentStatus,
+            bill_com_approvalStatus: responseBill.approvalStatus,
+            bill_com_error: null,
+            payment_method: 'bill_com',
+          },
+        });
 
-    for (const commissionId of commissionIds) {
-      await this.prisma.medAllianceAuditLog.create({
-        data: {
-          actor_user_id: adminUser.id,
-          entity_type: 'commission',
-          entity_id: commissionId,
-          event: 'status_changed',
-          old_status: 'requested',
-          new_status: 'paid',
-          source: 'admin_action',
-          metadata: { payout_request_id: id } as any,
-        },
+        await tx.affiliateCommission.updateMany({
+          where: { id: { in: commissionIds } },
+          data: { status: 'paid' },
+        });
+
+        await tx.medAllianceAuditLog.create({
+          data: {
+            actor_user_id: adminUser.id,
+            entity_type: 'payout_request',
+            entity_id: id,
+            event: 'bill_com_bill_initiated',
+            old_status: request.status,
+            new_status: 'processing',
+            source: 'admin_action',
+          },
+        });
+
+        if (commissionIds.length > 0) {
+          await tx.medAllianceAuditLog.createMany({
+            data: commissionIds.map((commissionId) => ({
+              actor_user_id: adminUser.id,
+              entity_type: 'commission',
+              entity_id: commissionId,
+              event: 'status_changed',
+              old_status: 'requested',
+              new_status: 'paid',
+              source: 'admin_action',
+              metadata: { payout_request_id: id } as any,
+            })),
+          });
+        }
       });
+    } catch (error) {
+      void this.allianceNotifications.notifyAdminMarkPaidError({
+        payoutRequestId: id,
+        adminName,
+        errorPhase: 'Database transaction',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        affiliateName,
+        amount: paidAmount,
+        billComBillId: responseBill.id,
+      });
+      throw new InternalServerErrorException(
+        `Payment was submitted to Bill.com but could not be saved (Bill ID: ${responseBill.id}). Our team has been notified.`,
+      );
     }
 
     if (request.affiliate?.email) {
-      void this.allianceNotifications.notifyPayoutPaid(
+      void this.allianceNotifications.notifyPayoutProcessing(
         {
           email: request.affiliate.email,
           first_name: request.affiliate.first_name ?? '',
         },
         {
           totalAmount: paidAmount,
-          paidAt: paidAt,
+          processedAt: new Date(),
         },
       );
     }

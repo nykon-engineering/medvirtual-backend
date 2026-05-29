@@ -862,8 +862,11 @@ model AffiliatePayoutRequest {
   payment_reference     String?
   transaction_reference String?
   payment_proof_notes   String?
+  bill_com_billId       String?
   bill_com_payment_id   String?
   bill_com_status       String?
+  bill_com_paymentStatus String?
+  bill_com_approvalStatus String?
   bill_com_error        String?
   approved_by           String?
   approved_at           DateTime?

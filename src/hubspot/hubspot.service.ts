@@ -513,7 +513,11 @@ export class HubspotService {
           ? HubspotAuditSource.user_action
           : HubspotAuditSource.cron,
         success: true,
-        payload: { count: candidates.length, pipelineStatus, ...(reason && { reason }) },
+        payload: {
+          count: candidates.length,
+          pipelineStatus,
+          ...(reason && { reason }),
+        },
       });
       return true;
     } catch (error) {
@@ -609,7 +613,11 @@ export class HubspotService {
     actorUserId?: string,
     reason?: string,
   ): Promise<any> {
-    return await this.hireRequestCreationService.execute(data, actorUserId, reason);
+    return await this.hireRequestCreationService.execute(
+      data,
+      actorUserId,
+      reason,
+    );
   }
 
   async updateHireRequestInHubspot(
@@ -631,7 +639,11 @@ export class HubspotService {
     actorUserId?: string,
     reason?: string,
   ): Promise<any> {
-    return await this.organizationCreationService.execute(data, actorUserId, reason);
+    return await this.organizationCreationService.execute(
+      data,
+      actorUserId,
+      reason,
+    );
   }
 
   async updateOrganizationInHubspot(
@@ -639,7 +651,11 @@ export class HubspotService {
     actorUserId?: string,
     reason?: string,
   ): Promise<any> {
-    return await this.organizationUpdateService.execute(data, actorUserId, reason);
+    return await this.organizationUpdateService.execute(
+      data,
+      actorUserId,
+      reason,
+    );
   }
 
   async setCompanyAffiliateReferral(
@@ -656,7 +672,11 @@ export class HubspotService {
     );
   }
 
-  async createContactInHubspot(data: any, actorUserId?: string, reason?: string): Promise<any> {
+  async createContactInHubspot(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     return await this.contactCreationService.execute(data, actorUserId, reason);
   }
 
@@ -670,11 +690,19 @@ export class HubspotService {
     );
   }
 
-  async updateContactInHubspot(data: any, actorUserId?: string, reason?: string): Promise<any> {
+  async updateContactInHubspot(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     return await this.contactUpdateService.execute(data, actorUserId, reason);
   }
 
-  async deleteContactInHubspot(data: any, actorUserId?: string, reason?: string): Promise<any> {
+  async deleteContactInHubspot(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     return await this.contactDeleteService.execute(data, actorUserId, reason);
   }
 

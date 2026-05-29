@@ -234,7 +234,10 @@ export class HireRequestUpdateService {
         success: true,
         payload: specificField
           ? { specificField, ...(reason && { reason }) }
-          : { fields: Object.keys(hubspotProperties), ...(reason && { reason }) },
+          : {
+              fields: Object.keys(hubspotProperties),
+              ...(reason && { reason }),
+            },
       });
 
       return true;

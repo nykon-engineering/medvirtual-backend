@@ -12,7 +12,11 @@ import { HubspotAuditService } from '../hubspot-audit.service';
 export class ContactUpdateService {
   constructor(private readonly audit: HubspotAuditService) {}
 
-  async execute(data: any, actorUserId?: string, reason?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -47,7 +51,10 @@ export class ContactUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: Object.keys(hubspotProperties), ...(reason && { reason }) },
+        payload: {
+          fields: Object.keys(hubspotProperties),
+          ...(reason && { reason }),
+        },
       });
 
       return true;
