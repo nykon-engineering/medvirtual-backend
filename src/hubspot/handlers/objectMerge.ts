@@ -40,7 +40,7 @@ export class HandlerObjectMerge {
       });
       if (!primaryCandidate) {
         throw new BadRequestException(
-          `Primary company hubspotId=${event.primaryObjectId} not found in database.`,
+          `Primary candidate hubspotId=${event.primaryObjectId} not found in database.`,
         );
       }
 
@@ -48,20 +48,20 @@ export class HandlerObjectMerge {
         .map((id) => String(id))
         .filter((id) => id !== String(event.primaryObjectId));
 
-      const mergedCompanies = await this.prisma.candidate.findMany({
+      const mergedCandidates = await this.prisma.candidate.findMany({
         where: {
           hubspot_id: { in: otherMergedIds },
         },
       });
 
-      if (mergedCompanies.length === 0) {
+      if (mergedCandidates.length === 0) {
         throw new BadRequestException(
           `No merged companies found with the provided HubSpot IDs.`,
         );
       }
 
       let dataToUpdate: Record<string, any> = {};
-      for (const merged of mergedCompanies) {
+      for (const merged of mergedCandidates) {
         const partialUpdate = this.mergeCandidateData(primaryCandidate, merged);
 
         dataToUpdate = {
