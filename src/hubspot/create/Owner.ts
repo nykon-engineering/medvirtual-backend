@@ -1,12 +1,24 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
+import {
+  HubspotAuditAction,
+  HubspotAuditSource,
+  HubspotEntityType,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { HubspotAuditService } from '../hubspot-audit.service';
 
 @Injectable()
 export class OwnerCreationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: HubspotAuditService,
+  ) {}
 
-  async execute(data: any): Promise<any> {
+  async execute(data: any, actorUserId?: string): Promise<any> {
+    const source = actorUserId
+      ? HubspotAuditSource.user_action
+      : HubspotAuditSource.cron;
     try {
       const response = await axios.post(
         'https://api.hubapi.com/crm/v3/owners',
@@ -27,11 +39,22 @@ export class OwnerCreationService {
         },
       );
 
-      //onsole.log(' Response: ',response.data);
-      //update hireRequest with the hubspot_ticket_id
       await this.prisma.uSER.update({
         where: { id: data.id },
         data: { hubspot_id: response.data.id },
+      });
+
+      void this.audit.log({
+        actorUserId,
+        entityType: HubspotEntityType.owner,
+        entityId: data.id,
+        hubspotObjectId: response.data.id,
+        hubspotObjectType: 'owners',
+        action: HubspotAuditAction.CREATE,
+        source,
+        success: true,
+        payload: { email: data.email },
+        response: { id: response.data.id },
       });
 
       return true;
@@ -41,6 +64,17 @@ export class OwnerCreationService {
       } else {
         console.error('Connection error:', error.message);
       }
+      void this.audit.log({
+        actorUserId,
+        entityType: HubspotEntityType.owner,
+        entityId: data.id,
+        hubspotObjectType: 'owners',
+        action: HubspotAuditAction.CREATE,
+        source,
+        success: false,
+        errorCode: error.response?.status?.toString() ?? error.code,
+        errorMessage: error.message,
+      });
     }
   }
 }
