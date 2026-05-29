@@ -670,24 +670,25 @@ model TalentPoolLead {
 }
 
 model Contact {
-  id               String    @id @default(uuid())
-  user_id          String?    @unique
-  hubspot_id       String?   @unique
-  organization_id  String?
-  first_name       String?
-  last_name        String?
-  email            String?
-  phone            String?
-  job_title        String?
-  company_name     String?
-  business_unit    String?
-  account_type     String?
-  website_url      String?
-  type             String?
-  referral_source  String?
-  hubspot_owner_id String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                       String    @id @default(uuid())
+  user_id                  String?    @unique
+  hubspot_id               String?   @unique
+  organization_id          String?
+  first_name               String?
+  last_name                String?
+  email                    String?
+  phone                    String?
+  job_title                String?
+  company_name              String?
+  business_unit             String?
+  account_type              String?
+  website_url               String?
+  type                      String?
+  referral_source           String?
+  hubspot_owner_id          String?
+  hubspot_billcom_vendor_id String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   user             USER?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
   organization     Organization? @relation(fields: [organization_id], references: [id])

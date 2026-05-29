@@ -12,6 +12,7 @@ export const contactToDbDictionary: Record<string, string> = {
   type: 'type', //type
   referral_source: 'referral_source', //Referral Source Type
   hubspot_owner_id: 'hubspot_owner_id', // Contact Owner
+  billcom_vendor_id: 'hubspot_billcom_vendor_id', // Bill.com Vendor ID
 };
 
 export const dbToContactDictionary: Record<string, string> = Object.fromEntries(
