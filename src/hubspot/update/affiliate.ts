@@ -17,6 +17,7 @@ export class AffiliateUpdateService {
     hubspotId: string,
     actorUserId?: string,
     entityId?: string,
+    reason?: string,
   ): Promise<void> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -41,7 +42,7 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { hs_pipeline_stage: '1329693872' },
+        payload: { hs_pipeline_stage: '1329693872', ...(reason && { reason }) },
       });
     } catch (error) {
       if (error.response) {
@@ -63,6 +64,7 @@ export class AffiliateUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }
@@ -71,6 +73,7 @@ export class AffiliateUpdateService {
     hubspotId: string,
     actorUserId?: string,
     entityId?: string,
+    reason?: string,
   ): Promise<void> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -95,7 +98,7 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { hs_pipeline_stage: '1329693870' },
+        payload: { hs_pipeline_stage: '1329693870', ...(reason && { reason }) },
       });
     } catch (error) {
       if (error.response) {
@@ -117,6 +120,7 @@ export class AffiliateUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }
@@ -126,6 +130,7 @@ export class AffiliateUpdateService {
     commissionPercent: number,
     actorUserId?: string,
     entityId?: string,
+    reason?: string,
   ): Promise<void> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -150,7 +155,7 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { alliance_commission: commissionPercent },
+        payload: { alliance_commission: commissionPercent, ...(reason && { reason }) },
       });
     } catch (error) {
       if (error.response) {
@@ -172,6 +177,7 @@ export class AffiliateUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }
@@ -182,6 +188,7 @@ export class AffiliateUpdateService {
     accountNumber: string,
     actorUserId?: string,
     entityId?: string,
+    reason?: string,
   ): Promise<void> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -211,7 +218,7 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: ['account_name', 'account_number'] },
+        payload: { fields: ['account_name', 'account_number'], ...(reason && { reason }) },
       });
     } catch (error) {
       if (error.response) {
@@ -233,6 +240,7 @@ export class AffiliateUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }
@@ -241,6 +249,7 @@ export class AffiliateUpdateService {
     hubspotId: string,
     actorUserId?: string,
     entityId?: string,
+    reason?: string,
   ): Promise<void> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -265,7 +274,7 @@ export class AffiliateUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: ['account_name', 'account_number'], cleared: true },
+        payload: { fields: ['account_name', 'account_number'], cleared: true, ...(reason && { reason }) },
       });
     } catch (error) {
       if (error.response) {
@@ -287,6 +296,7 @@ export class AffiliateUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }

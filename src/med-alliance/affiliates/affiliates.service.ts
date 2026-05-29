@@ -727,6 +727,9 @@ export class AffiliatesService {
           await this.affiliateUpdateService.updateCommission(
             existing.hubspot_id,
             dto.commission_percent_default,
+            undefined,
+            undefined,
+            `Affiliate commission percentage updated`,
           );
         } catch (err) {
           console.error('[HubSpot] Failed to sync commission:', err);
@@ -745,6 +748,9 @@ export class AffiliatesService {
               existing.hubspot_id,
               String(details.account_name),
               String(details.account_number),
+              undefined,
+              undefined,
+              `Affiliate banking details updated`,
             );
           } catch (err) {
             console.error('[HubSpot] Failed to sync banking data:', err);
@@ -753,6 +759,9 @@ export class AffiliatesService {
           try {
             await this.affiliateUpdateService.clearBankingData(
               existing.hubspot_id,
+              undefined,
+              undefined,
+              `Affiliate banking details cleared`,
             );
           } catch (err) {
             console.error('[HubSpot] Failed to clear banking data:', err);
@@ -981,7 +990,7 @@ export class AffiliatesService {
     }
 
     if (profile.hubspot_id) {
-      await this.affiliateUpdateService.deactivate(profile.hubspot_id);
+      await this.affiliateUpdateService.deactivate(profile.hubspot_id, undefined, undefined, `Affiliate growth partner profile deactivated`);
     }
   }
 
@@ -1037,7 +1046,7 @@ export class AffiliatesService {
 
     if (profile.hubspot_id) {
       // Growth Partner still exists in HubSpot (deactivated via app) — just update the stage.
-      await this.affiliateUpdateService.reactivate(profile.hubspot_id);
+      await this.affiliateUpdateService.reactivate(profile.hubspot_id, undefined, undefined, `Affiliate growth partner profile reactivated`);
     } else {
       // Growth Partner was deleted in HubSpot — recreate it with all associations.
       // Fetch again so execute() receives status='active' for the correct pipeline stage.
@@ -1418,6 +1427,9 @@ export class AffiliatesService {
         try {
           await this.affiliateUpdateService.clearBankingData(
             profile.hubspot_id,
+            undefined,
+            undefined,
+            `Affiliate banking details cleared during profile reset`,
           );
         } catch (err) {
           console.error('[HubSpot] Failed to clear banking data:', err);

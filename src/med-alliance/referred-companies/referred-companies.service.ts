@@ -93,7 +93,7 @@ export class ReferredCompaniesService {
         });
         if (freshOrg?.hubspot_id) {
           await this.hubspot
-            .deleteCompanyInHubspot(freshOrg.hubspot_id, currentUser.id, org.id)
+            .deleteCompanyInHubspot(freshOrg.hubspot_id, currentUser.id, org.id, `Referred company deleted — HubSpot company record removed during rollback`)
             .catch((e) =>
               console.error('[rollback] Failed to delete HubSpot company:', e),
             );

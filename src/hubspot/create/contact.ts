@@ -37,7 +37,7 @@ export class ContactCreationService {
     return user && user.hubspot_id ? user.hubspot_id : null;
   }
 
-  async execute(data: any, actorUserId?: string): Promise<any> {
+  async execute(data: any, actorUserId?: string, reason?: string): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -101,7 +101,7 @@ export class ContactCreationService {
         action: HubspotAuditAction.CREATE,
         source,
         success: true,
-        payload: { email: data.email },
+        payload: { email: data.email, ...(reason && { reason }) },
         response: { id: response.data.id },
       });
 
@@ -122,6 +122,7 @@ export class ContactCreationService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }

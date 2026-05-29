@@ -481,6 +481,7 @@ export class HireRequestService {
       await this.hubspot.createHireRequestInHubspot(
         hireRequestWithSkills,
         user?.id,
+        `New hire request created by organization ${organizationSQL.name}`,
       );
     } catch (err) {
       console.warn(
@@ -1569,6 +1570,7 @@ export class HireRequestService {
       hubspotData,
       undefined,
       user?.id,
+      `Hire request ${id} updated by user`,
     );
 
     // Notify assignee via email when hire request is edited (non-blocking)
@@ -1698,6 +1700,8 @@ export class HireRequestService {
                 c.candidate.hubspot_id,
                 pipeline_treated,
                 user?.id,
+                undefined,
+                `Hire request ${id} was cancelled — candidate reverted to previous pipeline status`,
               );
             }
           }),
@@ -1777,6 +1781,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} status changed to cancelled`,
         );
 
         //Update cancel_date in hubspot
@@ -1784,6 +1789,7 @@ export class HireRequestService {
           dataForHubspot,
           'cancel_date',
           user?.id,
+          `Hire request ${id} status changed to cancelled — cancel_date synced`,
         );
       } catch (err) {
         console.warn(
@@ -1844,6 +1850,8 @@ export class HireRequestService {
               c.candidate.hubspot_id,
               pipeline_treated,
               user?.id,
+              undefined,
+              `Hire request ${id} was reopened as new — candidate reverted to previous pipeline status`,
             );
           }),
         );
@@ -1868,12 +1876,14 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} reopened as new`,
         );
 
         await this.hubspot.updateHireRequestInHubspot(
           dataForHubspot,
           'reopen_as_new',
           user?.id,
+          `Hire request ${id} reopened as new — reopen fields cleared`,
         );
         console.log('Hubspot hire request updated to New status');
       } catch (err) {
@@ -1921,6 +1931,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved back to sourcing`,
         );
       } catch (err) {
         console.warn(
@@ -1960,6 +1971,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved to for_review`,
         );
       } catch (err) {
         console.warn(
@@ -2000,6 +2012,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved from new to sourcing`,
         );
       } catch (err) {
         console.warn(
@@ -2079,6 +2092,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved from for_review to panel_ready`,
         );
       } catch (err) {
         console.warn(
@@ -2134,6 +2148,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved to placement_completed`,
         );
       } catch (err) {
         console.warn(
@@ -2206,6 +2221,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved from interview_scheduled to panel_ready`,
         );
       } catch (err) {
         console.warn(
@@ -2225,6 +2241,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved from interview_scheduled to panel_ready`,
         );
       } catch (err) {
         console.warn(
@@ -2276,6 +2293,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved from awaiting_decision to panel_ready`,
         );
       } catch (err) {
         console.warn(
@@ -2399,6 +2417,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved to interview_scheduled`,
         );
       } catch (err) {
         console.warn(
@@ -2451,6 +2470,7 @@ export class HireRequestService {
           dataForHubspot,
           undefined,
           user?.id,
+          `Hire request ${id} moved to awaiting_decision via status change`,
         );
       } catch (err) {
         console.warn(
@@ -2515,6 +2535,7 @@ export class HireRequestService {
           ? 'assign_staffing_coordinator'
           : 'assign_sourcing_id',
       user?.id,
+      `Hire request ${id} reassigned to new team member`,
     );
 
     // Notificação (não bloqueante)
@@ -2879,6 +2900,8 @@ export class HireRequestService {
         candidates,
         pipelineStatus,
         user?.id,
+        data.hireRequest_id,
+        `Panel confirmed for hire request ${data.hireRequest_id} — candidates set to Endorsed via Platform`,
       );
     if (!updateHubspot)
       throw new NotFoundException(
@@ -3132,6 +3155,8 @@ export class HireRequestService {
         c.hubspot_id,
         c.pipeline_status_origin || c.pipeline_status,
         user?.id,
+        undefined,
+        `Hire request ${data.hireRequest_id} marked as panel ready — candidate reverted to origin pipeline status`,
       );
     });
 
@@ -3146,6 +3171,7 @@ export class HireRequestService {
         dataForHubspot,
         undefined,
         user?.id,
+        `Hire request ${data.hireRequest_id} panel marked as ready — candidates endorsed`,
       );
     } catch (err) {
       console.warn(
@@ -3672,6 +3698,7 @@ export class HireRequestService {
         updateDateTime,
         undefined,
         user?.id,
+        `Interview scheduled for hire request — pairing date/time set`,
       );
     } catch (err) {
       console.error(
@@ -3771,6 +3798,7 @@ export class HireRequestService {
         updateDateTime,
         undefined,
         user?.id,
+        `Interview rescheduled for hire request — pairing date/time updated`,
       );
     } catch (err) {
       console.error(
@@ -3900,6 +3928,8 @@ export class HireRequestService {
         candidates,
         pipelineStatus,
         user?.id,
+        hireRequest.id,
+        `Hire request ${hireRequest.id} moved to awaiting decision — candidates blocked as Endorsed via Platform`,
       );
 
     try {
@@ -3913,6 +3943,7 @@ export class HireRequestService {
         dataForHubspot,
         undefined,
         user?.id,
+        `Hire request ${hireRequest.id} moved to awaiting decision`,
       );
     } catch (err) {
       console.warn(
@@ -4185,6 +4216,8 @@ export class HireRequestService {
             c.hubspot_id,
             pipeline_treated,
             user?.id,
+            undefined,
+            `Hire request ${hireRequest.id} — winner selected, non-selected candidate returned to available status`,
           );
         }),
       );
@@ -4204,6 +4237,8 @@ export class HireRequestService {
             c.candidate.hubspot_id,
             pipelineStatus,
             user?.id,
+            undefined,
+            `Hire request ${hireRequest.id} — candidate selected as winner and set to Endorsed via Platform`,
           );
         }),
       );
@@ -4244,6 +4279,7 @@ export class HireRequestService {
       dataForHubspot,
       undefined,
       user?.id,
+      `Hire request ${hireRequest.id} — winner selected, placement completed`,
     );
 
     //Update closed_date in hubspot
@@ -4251,6 +4287,7 @@ export class HireRequestService {
       dataForHubspot,
       'closed_date',
       user?.id,
+      `Hire request ${hireRequest.id} — closed_date synced after winner selection`,
     );
 
     // Fire placement completed notification (non-blocking)

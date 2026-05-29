@@ -46,6 +46,7 @@ export class HireRequestUpdateService {
     data: any,
     specificField?: string,
     actorUserId?: string,
+    reason?: string,
   ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -232,8 +233,8 @@ export class HireRequestUpdateService {
         source,
         success: true,
         payload: specificField
-          ? { specificField }
-          : { fields: Object.keys(hubspotProperties) },
+          ? { specificField, ...(reason && { reason }) }
+          : { fields: Object.keys(hubspotProperties), ...(reason && { reason }) },
       });
 
       return true;
@@ -254,6 +255,7 @@ export class HireRequestUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }

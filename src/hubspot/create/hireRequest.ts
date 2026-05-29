@@ -37,7 +37,7 @@ export class HireRequestCreationService {
     return user && user.hubspot_id ? user.hubspot_id : null;
   }
 
-  async execute(data: any, actorUserId?: string): Promise<any> {
+  async execute(data: any, actorUserId?: string, reason?: string): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -175,6 +175,7 @@ export class HireRequestCreationService {
         payload: {
           title: data.title,
           organizationId: data.organization?.hubspot_id,
+          ...(reason && { reason }),
         },
         response: { id: response.data.id },
       });
@@ -196,6 +197,7 @@ export class HireRequestCreationService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }

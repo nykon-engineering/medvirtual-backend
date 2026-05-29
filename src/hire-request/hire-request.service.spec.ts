@@ -1007,6 +1007,8 @@ describe('HireRequestService', () => {
         ]),
         expect.any(String),
         expect.anything(),
+        expect.anything(),
+        expect.any(String),
       );
     });
 
