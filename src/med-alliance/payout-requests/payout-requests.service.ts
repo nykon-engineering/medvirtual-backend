@@ -40,7 +40,6 @@ export class PayoutRequestsService {
     private readonly affiliatesService: AffiliatesService,
     private readonly allianceNotifications: AllianceNotificationsService,
     private readonly billComPayoutService: BillComPayoutService,
-    private readonly logger: Logger,
   ) {}
 
   // ---------------------------------------------------------------------------

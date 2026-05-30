@@ -1,6 +1,8 @@
-import { Body, Controller, HttpCode, Logger, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Logger, Post, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { BillComPayoutService } from './bill-com-payout.service';
+import { BillWebhookDto } from './dto/bill-com-webhook.dto';
+import { BillWebhookGuard } from './guards/bill-com-webhook.guard';
 
 const TERMINAL_SUCCESS_STATUSES = new Set(['PAID', 'COMPLETED', 'SUCCESS']);
 
@@ -13,6 +15,7 @@ export class BillComWebhookController {
 
   @Post('bill-com')
   @HttpCode(200)
+  @UseGuards(BillWebhookGuard)
   @ApiOperation({
     summary: 'Receive and process incoming Bill.com webhook events',
   })
@@ -20,13 +23,16 @@ export class BillComWebhookController {
     description: 'Payload sent by Bill.com for payment events',
   })
   @ApiResponse({ status: 200, description: 'Webhook received' })
-  async handleWebhook(@Body() payload: any): Promise<{ received: boolean }> {
+  async handleWebhook(@Body() payload: BillWebhookDto): Promise<{ received: boolean }> {
+    console.log('Received Bill.com webhook payload:', JSON.stringify(payload));
     try {
-      const eventType: string = payload?.eventType ?? payload?.type ?? '';
-      const paymentId: string = payload?.data?.id ?? '';
+    
+      /*
+      const eventType: string = payload?.metadata?.eventType ?? '';
+      const paymentId: string = payload?.payment?.id ?? '';
 
-      //here I'll check the x-bill-sha-signature header to verify authenticity
-      // Also I need to validate some datas, such as organizationID
+      // TODO: validate x-bill-sha-signature header for authenticity
+      // TODO: validate payload.metadata.organizationId matches expected org
       if (!paymentId) {
         this.logger.warn(
           'Bill.com webhook received with no payment ID, ignoring',
@@ -36,22 +42,19 @@ export class BillComWebhookController {
 
       if (
         eventType === 'payment.updated' &&
-        TERMINAL_SUCCESS_STATUSES.has(payload?.data?.status)
+        TERMINAL_SUCCESS_STATUSES.has(payload?.payment?.status)
       ) {
         await this.billComPayoutService.finalizeAsPaid(paymentId);
         return { received: true };
       }
 
       if (eventType === 'payment.failed') {
-        const errorMsg: string =
-          payload?.data?.errorMessage ??
-          payload?.data?.error ??
-          'Payment failed (no details provided)';
-        await this.billComPayoutService.markAsFailed(paymentId, errorMsg);
+        await this.billComPayoutService.markAsFailed(paymentId, 'Payment failed');
         return { received: true };
       }
 
       this.logger.log(`Bill.com webhook event "${eventType}" ignored`);
+      */
     } catch (err) {
       // Never return non-200 to Bill.com — it would trigger retries for a potentially
       // already-processed event.

@@ -36,7 +36,7 @@ export class BillComService {
     const organizationId = process.env.BILLCOM_ORGANIZATION_ID;
     const devKey = process.env.BILLCOM_DEV_KEY;
     const fundingAccountId = process.env.BILLCOM_FUNDING_ACCOUNT_ID;
-    const billBaseUrl = process.env.BILL_COM_BASE_URL;
+    const billBaseUrl = process.env.BILLCOM_BASE_URL;
 
     if (
       !username ||
@@ -47,7 +47,7 @@ export class BillComService {
       !billBaseUrl
     ) {
       throw new InternalServerErrorException(
-        'Bill.com credentials not configured. Set BILLCOM_USERNAME, BILLCOM_PASSWORD, BILLCOM_ORGANIZATION_ID, BILLCOM_DEV_KEY, BILLCOM_FUNDING_ACCOUNT_ID, BILL_COM_BASE_URL.',
+        'Bill.com credentials not configured. Set BILLCOM_USERNAME, BILLCOM_PASSWORD, BILLCOM_ORGANIZATION_ID, BILLCOM_DEV_KEY, BILLCOM_FUNDING_ACCOUNT_ID, BILLCOM_BASE_URL.',
       );
     }
 
