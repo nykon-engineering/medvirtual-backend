@@ -4,7 +4,7 @@ import { EmailTheme } from '../../../common/utils/email-templates/theme';
 export interface AdminPaymentFailedPayload {
   partnerName: string;
   amount: number;
-  billComPaymentId: string;
+  billIds: string;
   errorMsg: string;
   payoutRequestId: string;
 }
@@ -59,7 +59,7 @@ export function adminPaymentFailedTemplate(
           <table class="detail-table">
             <tr><td>Partner</td><td>${payload.partnerName}</td></tr>
             <tr><td>Amount</td><td>$${payload.amount.toFixed(2)}</td></tr>
-            <tr><td>Bill.com Payment ID</td><td>${payload.billComPaymentId}</td></tr>
+            <tr><td>Bill.com Payment ID</td><td>${payload.billIds}</td></tr>
             <tr><td>Payout Request ID</td><td>${payload.payoutRequestId}</td></tr>
             <tr>
               <td style="vertical-align: top; padding-top: 12px;">Error</td>

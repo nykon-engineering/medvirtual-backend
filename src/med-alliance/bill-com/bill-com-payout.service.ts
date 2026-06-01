@@ -289,9 +289,9 @@ export class BillComPayoutService {
   }
 
   // Called by webhook handler after Bill.com confirms the payment. Idempotent.
-  async finalizeAsPaid(billComPaymentId: string): Promise<void> {
+  async finalizeAsPaid(billIds: string[], transaction_reference: string): Promise<void> {
     const request = await this.prisma.affiliatePayoutRequest.findFirst({
-      where: { bill_com_payment_id: billComPaymentId },
+      where: { bill_com_billId: { in: billIds } },
       select: {
         id: true,
         status: true,
@@ -305,7 +305,7 @@ export class BillComPayoutService {
 
     if (!request) {
       this.logger.warn(
-        `finalizeAsPaid: no payout request found for bill_com_payment_id=${billComPaymentId}`,
+        `finalizeAsPaid: no payout request found for bill_com_billId in [${billIds.join(', ')}]`,
       );
       return;
     }
@@ -330,8 +330,8 @@ export class BillComPayoutService {
           paid_at: new Date(),
           paid_amount: new Decimal(paidAmount),
           bill_com_status: 'PAID',
-          transaction_reference: billComPaymentId,
-          payment_reference: billComPaymentId,
+          transaction_reference: transaction_reference,
+          payment_reference: transaction_reference,
         },
       });
 
@@ -365,11 +365,11 @@ export class BillComPayoutService {
 
   // Called by webhook handler when Bill.com reports a payment failure. Idempotent.
   async markAsFailed(
-    billComPaymentId: string,
+    billIds: string[],
     errorMsg: string,
   ): Promise<void> {
     const request = await this.prisma.affiliatePayoutRequest.findFirst({
-      where: { bill_com_payment_id: billComPaymentId },
+      where: { bill_com_billId: { in: billIds } },
       select: {
         id: true,
         status: true,
@@ -383,7 +383,7 @@ export class BillComPayoutService {
 
     if (!request) {
       this.logger.warn(
-        `markAsFailed: no payout request found for bill_com_payment_id=${billComPaymentId}`,
+        `markAsFailed: no payout request found for bill_com_billId in [${billIds.join(', ')}]`,
       );
       return;
     }
@@ -420,7 +420,7 @@ export class BillComPayoutService {
       parseFloat(
         String(request.approved_amount ?? request.requested_amount ?? 0),
       ),
-      billComPaymentId,
+      billIds.join(', '),
       errorMsg,
     );
   }
@@ -433,7 +433,7 @@ export class BillComPayoutService {
       email: string;
     } | null,
     amount: number,
-    billComPaymentId: string,
+    billIds: string,
     errorMsg: string,
   ): Promise<void> {
     const partnerName = affiliate
@@ -444,7 +444,7 @@ export class BillComPayoutService {
     void this.allianceNotifications.notifyAdminPaymentFailed({
       partnerName,
       amount,
-      billComPaymentId,
+      billIds,
       errorMsg,
       payoutRequestId,
     });

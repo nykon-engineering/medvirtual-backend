@@ -27,9 +27,11 @@ export class BillComWebhookController {
     console.log('Received Bill.com webhook payload:', JSON.stringify(payload));
     try {
     
-      /*
+      
       const eventType: string = payload?.metadata?.eventType ?? '';
       const paymentId: string = payload?.payment?.id ?? '';
+      const billIds: string[] = payload?.payment?.billIds ?? [];
+      const transaction_reference: string = payload?.payment?.transactionNumber ?? '';
 
       // TODO: validate x-bill-sha-signature header for authenticity
       // TODO: validate payload.metadata.organizationId matches expected org
@@ -42,19 +44,19 @@ export class BillComWebhookController {
 
       if (
         eventType === 'payment.updated' &&
-        TERMINAL_SUCCESS_STATUSES.has(payload?.payment?.status)
+        TERMINAL_SUCCESS_STATUSES.has(payload?.payment?.status!)
       ) {
-        await this.billComPayoutService.finalizeAsPaid(paymentId);
+        await this.billComPayoutService.finalizeAsPaid(billIds, transaction_reference);
         return { received: true };
       }
 
       if (eventType === 'payment.failed') {
-        await this.billComPayoutService.markAsFailed(paymentId, 'Payment failed');
+        await this.billComPayoutService.markAsFailed(billIds, 'Payment failed');
         return { received: true };
       }
 
       this.logger.log(`Bill.com webhook event "${eventType}" ignored`);
-      */
+      
     } catch (err) {
       // Never return non-200 to Bill.com — it would trigger retries for a potentially
       // already-processed event.
