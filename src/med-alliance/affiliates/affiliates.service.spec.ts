@@ -85,6 +85,12 @@ const mockProfile = {
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-01'),
   user: mockUser,
+  payout_details:{
+    method: 'ach',
+    account_name: 'John Doe',
+    account_number: '****1234',
+    billcom_vendor_id: null,
+  }
 };
 
 

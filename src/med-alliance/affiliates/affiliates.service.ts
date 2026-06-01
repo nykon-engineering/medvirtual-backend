@@ -776,10 +776,33 @@ export class AffiliatesService {
   async findOwn(currentUser: USER) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { user_id: currentUser.id },
-      include: { user: { select: USER_SELECT } },
+      include: { 
+        user: { 
+          select: {
+            ...USER_SELECT,
+            contact: { select: { hubspot_billcom_vendor_id: true }}
+          },
+         },
+     },
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
-    return profile;
+
+    const payoutDetails = (
+      profile.payout_details &&
+      typeof profile.payout_details === 'object' &&
+      !Array.isArray(profile.payout_details)
+    ) ? profile.payout_details as Record<string, unknown> : {};
+
+    const mappedfields = {
+      ...profile,
+      payout_details: {
+        account_name: (payoutDetails.account_name as string) ?? null,
+        account_number: (payoutDetails.account_number as string) ?? null,
+        method: (payoutDetails.method as string) ?? null,
+        billcom_vendor_id: profile.user?.contact?.hubspot_billcom_vendor_id ?? null,
+      },
+    };
+    return mappedfields;
   }
 
   // Self-enrollment: organization admin joins the Med Alliance Program.
