@@ -667,7 +667,12 @@ export class AffiliatesService {
               orderBy: { createdAt: 'desc' as const },
             },
             phone: true,
-            contact: { select: { company_name: true } },
+            contact: { 
+              select: { 
+                company_name: true,
+                hubspot_billcom_vendor_id: true,
+              } 
+            },
             organization: {
               select: {
                 id: true,

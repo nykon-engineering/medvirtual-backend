@@ -107,6 +107,7 @@ export class BillComPayoutService {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: request.affiliate_profile_id },
       select: {
+        status: true,
         user: {
           select: {
             first_name: true,
@@ -119,6 +120,17 @@ export class BillComPayoutService {
         },
       },
     });
+
+    if (!profile) {
+      throw new NotFoundException(
+        'Affiliate profile not found for this payout request. Cannot initiate Bill.com payment.',
+      );
+    }
+    if (profile.status !== 'active') {
+      throw new BadRequestException(
+        'Affiliate profile is not active. Cannot initiate Bill.com payment.',
+      );
+    }
 
     const vendorId = profile?.user?.contact?.hubspot_billcom_vendor_id as
       | string

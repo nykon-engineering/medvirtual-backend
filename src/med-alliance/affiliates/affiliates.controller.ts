@@ -321,6 +321,13 @@ export class AffiliatesController {
       ]),
     );
 
+    const payoutDetails: Record<string, unknown> =
+  profile.payout_details &&
+  typeof profile.payout_details === 'object' &&
+  !Array.isArray(profile.payout_details)
+    ? (profile.payout_details as Record<string, unknown>)
+    : {};
+
     const data = {
       id: profile.id,
       user_id: profile.user_id,
@@ -333,7 +340,10 @@ export class AffiliatesController {
       payout_preference_method: profile.payout_preference_method,
       payout_preference_reference: profile.payout_preference_reference,
       payout_preference_notes: profile.payout_preference_notes,
-      payout_details: profile.payout_details,
+      payout_details: {
+        ...payoutDetails,
+        billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
+      },
       banking_complete:
         !!profile.payout_details &&
         (profile.payout_details as Record<string, unknown>)?.method !==
