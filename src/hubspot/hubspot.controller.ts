@@ -18,16 +18,33 @@ import {
 } from '@nestjs/swagger';
 
 import { HubspotService } from './hubspot.service';
+import { HubspotAuditService } from './hubspot-audit.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { GetCandidatesDto } from './dto/get-candidates.dto';
+import { ListHubspotAuditLogsDto } from './dto/list-hubspot-audit-logs.dto';
 
 @ApiTags('hubspot')
 @ApiBearerAuth()
 @Controller('hubspot')
 export class HubspotController {
-  constructor(private readonly hubspotService: HubspotService) {}
+  constructor(
+    private readonly hubspotService: HubspotService,
+    private readonly hubspotAuditService: HubspotAuditService,
+  ) {}
+
+  @Get('admin/audit-logs')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'List all HubSpot audit logs (admin only)' })
+  @ApiQuery({ type: ListHubspotAuditLogsDto })
+  @ApiResponse({ status: 200, description: 'Audit logs retrieved successfully' })
+  async listAuditLogs(@Query() query: ListHubspotAuditLogsDto) {
+    const result = await this.hubspotAuditService.findAllLogs(query);
+    return { status: 200, message: 'Audit logs retrieved successfully', ...result };
+  }
 
   @Post('candidates')
   @UseGuards(AuthGuard, RolesGuard)

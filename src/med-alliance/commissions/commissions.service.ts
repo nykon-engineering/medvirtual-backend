@@ -6,9 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CommissionStatus, USER } from '@prisma/client';
+import { CommissionStatus, Prisma, USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
+import { ListMedAllianceAuditLogsDto } from './dto/list-med-alliance-audit-logs.dto';
 import {
   DecideCommissionDto,
   VoidCommissionDto,
@@ -837,5 +838,79 @@ export class CommissionsService {
         actorUser: { select: { id: true, first_name: true, last_name: true } },
       },
     });
+  }
+
+  async findAllAuditLogs(dto: ListMedAllianceAuditLogsDto) {
+    const {
+      page = 1,
+      limit = 20,
+      entity_type,
+      event,
+      source,
+      date_from,
+      date_to,
+      search,
+      sortOrder = 'desc',
+    } = dto;
+
+    const where: Prisma.MedAllianceAuditLogWhereInput = {
+      ...(entity_type && { entity_type }),
+      ...(source && { source }),
+      ...(event && { event: { contains: event, mode: 'insensitive' } }),
+      ...(date_from || date_to
+        ? {
+            createdAt: {
+              ...(date_from && { gte: new Date(date_from) }),
+              ...(date_to && {
+                lte: new Date(new Date(date_to).setHours(23, 59, 59, 999)),
+              }),
+            },
+          }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { entity_id: { contains: search, mode: 'insensitive' } },
+              { event: { contains: search, mode: 'insensitive' } },
+              { reason: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, data] = await Promise.all([
+      this.prisma.medAllianceAuditLog.count({ where }),
+      this.prisma.medAllianceAuditLog.findMany({
+        where,
+        orderBy: { createdAt: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          entity_type: true,
+          entity_id: true,
+          event: true,
+          old_status: true,
+          new_status: true,
+          reason: true,
+          source: true,
+          metadata: true,
+          createdAt: true,
+          actorUser: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 }

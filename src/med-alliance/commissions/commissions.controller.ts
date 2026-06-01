@@ -35,6 +35,7 @@ import {
   UpdateBaseAmountDto,
 } from './dto/decide-commission.dto';
 import { CreateFromInvoicesDto } from './dto/create-from-invoices.dto';
+import { ListMedAllianceAuditLogsDto } from './dto/list-med-alliance-audit-logs.dto';
 
 @ApiTags('med-alliance')
 @ApiBearerAuth()
@@ -377,6 +378,18 @@ export class CommissionsController {
       message: `${result.created} commission(s) created, ${result.skipped} skipped`,
       data: result,
     };
+  }
+
+  // GET /med-alliance/admin/audit-logs — Global audit log viewer.
+  @Get('admin/audit-logs')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({ summary: 'List all MedAlliance audit logs (global, admin only)' })
+  @ApiQuery({ type: ListMedAllianceAuditLogsDto })
+  @ApiResponse({ status: 200, description: 'Audit logs retrieved successfully' })
+  async listAllAuditLogs(@Query() query: ListMedAllianceAuditLogsDto) {
+    const result = await this.commissionsService.findAllAuditLogs(query);
+    return { status: 200, message: 'Audit logs retrieved successfully', ...result };
   }
 
   // GET /med-alliance/admin/commissions/:id/audit — Full audit timeline.
