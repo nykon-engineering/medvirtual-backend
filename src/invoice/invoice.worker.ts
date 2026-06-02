@@ -221,6 +221,7 @@ export class InvoiceWorker extends WorkerHost {
             due_date: due_date ? DateTime.fromISO(due_date, { zone: 'utc' }).toJSDate() : null,
             public_due_date: public_due_date ? DateTime.fromISO(public_due_date, { zone: 'utc' }).toJSDate() : null,
             is_prebill: is_prebill || false,
+            allow_fees: allowFees || false,
             created_by,
             subtotal: 0,
             total: 0,
@@ -398,6 +399,7 @@ export class InvoiceWorker extends WorkerHost {
           due_date: due_date ? DateTime.fromISO(due_date, { zone: 'utc' }).toJSDate() : null,
           public_due_date: public_due_date ? DateTime.fromISO(public_due_date, { zone: 'utc' }).toJSDate() : null,
           is_prebill: is_prebill || false, // Pre-bill flag from DTO
+          allow_fees: allowFees || false,
           created_by,
           subtotal: 0,
           total: 0,

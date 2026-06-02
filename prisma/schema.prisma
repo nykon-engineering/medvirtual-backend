@@ -1326,6 +1326,7 @@ model InvoiceVersion {
   billing_end_date      DateTime?
 
   is_prebill            Boolean              @default(false)
+  allow_fees            Boolean              @default(false)
 
   subtotal              Decimal              @db.Decimal(14,2) @default(0)
   tax_total             Decimal              @db.Decimal(14,2) @default(0)
