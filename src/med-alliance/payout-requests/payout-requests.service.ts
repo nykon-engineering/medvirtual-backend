@@ -725,7 +725,6 @@ export class PayoutRequestsService {
       `${adminUser.first_name ?? ''} ${adminUser.last_name ?? ''}`.trim();
     const affiliateName = request.affiliate?.first_name ?? undefined;
 
-    
     // Phase 1: validate Bill.com prerequisites (vendor ID, commissions) — no DB writes yet
     let billPayload: Awaited<
       ReturnType<typeof this.billComPayoutService.validateAndPreparePayment>

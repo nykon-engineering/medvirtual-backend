@@ -16,19 +16,25 @@ export class BillWebhookGuard implements CanActivate {
     const signature = request.headers['x-bill-sha-signature'];
 
     if (!signature) {
-      this.logger.warn('Bill.com webhook rejected: missing x-bill-sha-signature header');
+      this.logger.warn(
+        'Bill.com webhook rejected: missing x-bill-sha-signature header',
+      );
       throw new UnauthorizedException('Missing signature header');
     }
 
     const secret = process.env.BILLCOM_WEBHOOK_SECRET;
     if (!secret) {
-      this.logger.error('Bill.com webhook rejected: BILLCOM_WEBHOOK_SECRET env var is not set');
+      this.logger.error(
+        'Bill.com webhook rejected: BILLCOM_WEBHOOK_SECRET env var is not set',
+      );
       throw new UnauthorizedException('Webhook secret not configured');
     }
 
     const rawBody: Buffer | undefined = request.rawBody;
     if (!rawBody) {
-      this.logger.error('Bill.com webhook rejected: rawBody is missing — check express.json verify config');
+      this.logger.error(
+        'Bill.com webhook rejected: rawBody is missing — check express.json verify config',
+      );
       throw new UnauthorizedException('Raw body unavailable');
     }
 

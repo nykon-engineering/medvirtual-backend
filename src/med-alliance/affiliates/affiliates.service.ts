@@ -507,6 +507,7 @@ export class AffiliatesService {
                   last_name: true,
                   email: true,
                   job_title: true,
+                  hubspot_billcom_vendor_id: true,
                 },
               },
             },
@@ -667,11 +668,11 @@ export class AffiliatesService {
               orderBy: { createdAt: 'desc' as const },
             },
             phone: true,
-            contact: { 
-              select: { 
+            contact: {
+              select: {
                 company_name: true,
                 hubspot_billcom_vendor_id: true,
-              } 
+              },
             },
             organization: {
               select: {
@@ -781,22 +782,23 @@ export class AffiliatesService {
   async findOwn(currentUser: USER) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { user_id: currentUser.id },
-      include: { 
-        user: { 
+      include: {
+        user: {
           select: {
             ...USER_SELECT,
-            contact: { select: { hubspot_billcom_vendor_id: true }}
+            contact: { select: { hubspot_billcom_vendor_id: true } },
           },
-         },
-     },
+        },
+      },
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
 
-    const payoutDetails = (
+    const payoutDetails =
       profile.payout_details &&
       typeof profile.payout_details === 'object' &&
       !Array.isArray(profile.payout_details)
-    ) ? profile.payout_details as Record<string, unknown> : {};
+        ? (profile.payout_details as Record<string, unknown>)
+        : {};
 
     const mappedfields = {
       ...profile,
@@ -804,7 +806,8 @@ export class AffiliatesService {
         account_name: (payoutDetails.account_name as string) ?? null,
         account_number: (payoutDetails.account_number as string) ?? null,
         method: (payoutDetails.method as string) ?? null,
-        billcom_vendor_id: profile.user?.contact?.hubspot_billcom_vendor_id ?? null,
+        billcom_vendor_id:
+          profile.user?.contact?.hubspot_billcom_vendor_id ?? null,
       },
     };
     return mappedfields;

@@ -289,7 +289,10 @@ export class BillComPayoutService {
   }
 
   // Called by webhook handler after Bill.com confirms the payment. Idempotent.
-  async finalizeAsPaid(billIds: string[], transaction_reference: string): Promise<void> {
+  async finalizeAsPaid(
+    billIds: string[],
+    transaction_reference: string,
+  ): Promise<void> {
     const request = await this.prisma.affiliatePayoutRequest.findFirst({
       where: { bill_com_billId: { in: billIds } },
       select: {
@@ -364,10 +367,7 @@ export class BillComPayoutService {
   }
 
   // Called by webhook handler when Bill.com reports a payment failure. Idempotent.
-  async markAsFailed(
-    billIds: string[],
-    errorMsg: string,
-  ): Promise<void> {
+  async markAsFailed(billIds: string[], errorMsg: string): Promise<void> {
     const request = await this.prisma.affiliatePayoutRequest.findFirst({
       where: { bill_com_billId: { in: billIds } },
       select: {

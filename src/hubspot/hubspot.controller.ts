@@ -40,10 +40,17 @@ export class HubspotController {
   @HttpCode(200)
   @ApiOperation({ summary: 'List all HubSpot audit logs (admin only)' })
   @ApiQuery({ type: ListHubspotAuditLogsDto })
-  @ApiResponse({ status: 200, description: 'Audit logs retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Audit logs retrieved successfully',
+  })
   async listAuditLogs(@Query() query: ListHubspotAuditLogsDto) {
     const result = await this.hubspotAuditService.findAllLogs(query);
-    return { status: 200, message: 'Audit logs retrieved successfully', ...result };
+    return {
+      status: 200,
+      message: 'Audit logs retrieved successfully',
+      ...result,
+    };
   }
 
   @Post('candidates')

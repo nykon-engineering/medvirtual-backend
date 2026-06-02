@@ -67,7 +67,9 @@ export class ListHubspotAuditLogsDto {
   @IsDateString()
   date_to?: string;
 
-  @ApiPropertyOptional({ description: 'Search by entity_id, actor_label or error_message' })
+  @ApiPropertyOptional({
+    description: 'Search by entity_id, actor_label or error_message',
+  })
   @IsOptional()
   @IsString()
   search?: string;

@@ -384,12 +384,21 @@ export class CommissionsController {
   @Get('admin/audit-logs')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
-  @ApiOperation({ summary: 'List all MedAlliance audit logs (global, admin only)' })
+  @ApiOperation({
+    summary: 'List all MedAlliance audit logs (global, admin only)',
+  })
   @ApiQuery({ type: ListMedAllianceAuditLogsDto })
-  @ApiResponse({ status: 200, description: 'Audit logs retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Audit logs retrieved successfully',
+  })
   async listAllAuditLogs(@Query() query: ListMedAllianceAuditLogsDto) {
     const result = await this.commissionsService.findAllAuditLogs(query);
-    return { status: 200, message: 'Audit logs retrieved successfully', ...result };
+    return {
+      status: 200,
+      message: 'Audit logs retrieved successfully',
+      ...result,
+    };
   }
 
   // GET /med-alliance/admin/commissions/:id/audit — Full audit timeline.

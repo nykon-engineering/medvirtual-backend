@@ -39,6 +39,16 @@ import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 import { AssociateCompanyDto } from './dto/associate-company.dto';
 import { AssociationPreviewQueryDto } from './dto/association-preview-query.dto';
 
+function isBankingComplete(
+  payoutDetails: Record<string, unknown> | null | undefined,
+  billcomVendorId: string | null | undefined,
+): boolean {
+  if (!payoutDetails) return false;
+  if (payoutDetails.method === 'will_be_provided_later') return false;
+  if (payoutDetails.method === 'bill_com') return !!billcomVendorId;
+  return true;
+}
+
 @ApiTags('med-alliance')
 @ApiBearerAuth()
 @Controller('med-alliance')
@@ -144,10 +154,10 @@ export class AffiliatesController {
         payout_preference_reference: profile.payout_preference_reference,
         payout_preference_notes: profile.payout_preference_notes,
         payout_details: profile.payout_details,
-        banking_complete:
-          !!profile.payout_details &&
-          (profile.payout_details as Record<string, unknown>)?.method !==
-            'will_be_provided_later',
+        banking_complete: isBankingComplete(
+          profile.payout_details as Record<string, unknown> | null,
+          user?.contact?.hubspot_billcom_vendor_id ?? null,
+        ),
         linked_company: user?.organization?.name ?? null,
         linked_company_id: user?.organization?.id ?? null,
         referred_companies_count: user?._count?.referredOrganizations ?? 0,
@@ -322,11 +332,11 @@ export class AffiliatesController {
     );
 
     const payoutDetails: Record<string, unknown> =
-  profile.payout_details &&
-  typeof profile.payout_details === 'object' &&
-  !Array.isArray(profile.payout_details)
-    ? (profile.payout_details as Record<string, unknown>)
-    : {};
+      profile.payout_details &&
+      typeof profile.payout_details === 'object' &&
+      !Array.isArray(profile.payout_details)
+        ? (profile.payout_details as Record<string, unknown>)
+        : {};
 
     const data = {
       id: profile.id,
@@ -344,10 +354,10 @@ export class AffiliatesController {
         ...payoutDetails,
         billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
       },
-      banking_complete:
-        !!profile.payout_details &&
-        (profile.payout_details as Record<string, unknown>)?.method !==
-          'will_be_provided_later',
+      banking_complete: isBankingComplete(
+        payoutDetails,
+        user?.contact?.hubspot_billcom_vendor_id ?? null,
+      ),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
@@ -529,10 +539,10 @@ export class AffiliatesController {
       payout_preference_reference: profile.payout_preference_reference,
       payout_preference_notes: profile.payout_preference_notes,
       payout_details: profile.payout_details,
-      banking_complete:
-        !!profile.payout_details &&
-        (profile.payout_details as Record<string, unknown>)?.method !==
-          'will_be_provided_later',
+      banking_complete: isBankingComplete(
+        profile.payout_details as Record<string, unknown> | null,
+        user?.contact?.hubspot_billcom_vendor_id ?? null,
+      ),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
