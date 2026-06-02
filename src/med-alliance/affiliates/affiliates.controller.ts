@@ -39,14 +39,8 @@ import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 import { AssociateCompanyDto } from './dto/associate-company.dto';
 import { AssociationPreviewQueryDto } from './dto/association-preview-query.dto';
 
-function isBankingComplete(
-  payoutDetails: Record<string, unknown> | null | undefined,
-  billcomVendorId: string | null | undefined,
-): boolean {
-  if (!payoutDetails) return false;
-  if (payoutDetails.method === 'will_be_provided_later') return false;
-  if (payoutDetails.method === 'bill_com') return !!billcomVendorId;
-  return true;
+function isBankingComplete(billcomVendorId: string | null | undefined): boolean {
+  return !!billcomVendorId;
 }
 
 @ApiTags('med-alliance')
@@ -153,9 +147,11 @@ export class AffiliatesController {
         payout_preference_method: profile.payout_preference_method,
         payout_preference_reference: profile.payout_preference_reference,
         payout_preference_notes: profile.payout_preference_notes,
-        payout_details: profile.payout_details,
+        payout_details: {
+          billcom_vendor_id:
+            user?.contact?.hubspot_billcom_vendor_id ?? null,
+        },
         banking_complete: isBankingComplete(
-          profile.payout_details as Record<string, unknown> | null,
           user?.contact?.hubspot_billcom_vendor_id ?? null,
         ),
         linked_company: user?.organization?.name ?? null,
@@ -331,13 +327,6 @@ export class AffiliatesController {
       ]),
     );
 
-    const payoutDetails: Record<string, unknown> =
-      profile.payout_details &&
-      typeof profile.payout_details === 'object' &&
-      !Array.isArray(profile.payout_details)
-        ? (profile.payout_details as Record<string, unknown>)
-        : {};
-
     const data = {
       id: profile.id,
       user_id: profile.user_id,
@@ -351,11 +340,9 @@ export class AffiliatesController {
       payout_preference_reference: profile.payout_preference_reference,
       payout_preference_notes: profile.payout_preference_notes,
       payout_details: {
-        ...payoutDetails,
         billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
       },
       banking_complete: isBankingComplete(
-        payoutDetails,
         user?.contact?.hubspot_billcom_vendor_id ?? null,
       ),
       linked_company: user?.organization?.name ?? null,
@@ -538,9 +525,11 @@ export class AffiliatesController {
       payout_preference_method: profile.payout_preference_method,
       payout_preference_reference: profile.payout_preference_reference,
       payout_preference_notes: profile.payout_preference_notes,
-      payout_details: profile.payout_details,
+      payout_details: {
+        billcom_vendor_id:
+          user?.contact?.hubspot_billcom_vendor_id ?? null,
+      },
       banking_complete: isBankingComplete(
-        profile.payout_details as Record<string, unknown> | null,
         user?.contact?.hubspot_billcom_vendor_id ?? null,
       ),
       linked_company: user?.organization?.name ?? null,
@@ -770,10 +759,16 @@ export class AffiliatesController {
   })
   async findOwn(@CurrentUser() user: USER) {
     const data = await this.affiliatesService.findOwn(user);
+    const vendorId =
+      (data.payout_details as Record<string, unknown> | null)
+        ?.billcom_vendor_id ?? null;
     return {
       status: 200,
       message: 'Affiliate profile retrieved successfully',
-      data,
+      data: {
+        ...data,
+        banking_complete: isBankingComplete(vendorId as string | null),
+      },
     };
   }
 

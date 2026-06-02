@@ -793,19 +793,10 @@ export class AffiliatesService {
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
 
-    const payoutDetails =
-      profile.payout_details &&
-      typeof profile.payout_details === 'object' &&
-      !Array.isArray(profile.payout_details)
-        ? (profile.payout_details as Record<string, unknown>)
-        : {};
-
     const mappedfields = {
       ...profile,
+      banking_complete: !!profile.user?.contact?.hubspot_billcom_vendor_id,
       payout_details: {
-        account_name: (payoutDetails.account_name as string) ?? null,
-        account_number: (payoutDetails.account_number as string) ?? null,
-        method: (payoutDetails.method as string) ?? null,
         billcom_vendor_id:
           profile.user?.contact?.hubspot_billcom_vendor_id ?? null,
       },
