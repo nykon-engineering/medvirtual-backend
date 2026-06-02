@@ -1267,6 +1267,7 @@ model Invoice {
   // cycle identification for idempotency
   billing_start_date    DateTime
   billing_end_date      DateTime
+  is_custom             Boolean       @default(false)
 
   // unique reference for tracking
   reference             String?       @unique

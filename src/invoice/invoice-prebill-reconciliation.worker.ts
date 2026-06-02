@@ -191,11 +191,15 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
       const estimatedAmount = prebill.estimatedTotal;
       const actualAmount = actual.grand_total;
       const deltaAmount = actualAmount.sub(estimatedAmount);
+      const absAmount = deltaAmount.abs();
+
+      if (absAmount.isZero()) {
+        continue;
+      }
 
       // direction: credit if client owes more (actual > prebill), debit if client was overbilled
       const direction: LedgerDirection =
         deltaAmount.gte(0) ? LedgerDirection.debit : LedgerDirection.credit;
-      const absAmount = deltaAmount.abs();
 
       await this.prisma.$transaction(async (tx) => {
         // InvoiceLineReconciliation

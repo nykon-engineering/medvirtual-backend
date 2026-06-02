@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsDateString, IsOptional, IsArray, ValidateNested, IsBoolean } from 'class-validator';
+import { IsUUID, IsDateString, IsOptional, IsArray, ValidateNested, IsBoolean, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateInvoiceDto {
@@ -34,6 +34,36 @@ export class CreateInvoiceDto {
   @IsBoolean()
   @IsOptional()
   is_prebill?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isCustom?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  is_custom?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  allowFees?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  allow_fees?: boolean;
+
+  @ApiProperty({ example: 0, required: false })
+  @IsNumber()
+  @IsOptional()
+  ops?: number;
+
+  @ApiProperty({ example: 0, required: false })
+  @IsNumber()
+  @IsOptional()
+  fee?: number;
 }
 
 export class BulkCreateInvoiceDto {
@@ -69,4 +99,34 @@ export class BulkCreateInvoiceDto {
   @IsBoolean()
   @IsOptional()
   is_prebill?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  isCustom?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  is_custom?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  allowFees?: boolean;
+
+  @ApiProperty({ example: false, required: false })
+  @IsBoolean()
+  @IsOptional()
+  allow_fees?: boolean;
+
+  @ApiProperty({ example: 0, required: false })
+  @IsNumber()
+  @IsOptional()
+  ops?: number;
+
+  @ApiProperty({ example: 0, required: false })
+  @IsNumber()
+  @IsOptional()
+  fee?: number;
 }

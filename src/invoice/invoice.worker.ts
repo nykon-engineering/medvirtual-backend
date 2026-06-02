@@ -122,7 +122,7 @@ export class InvoiceWorker extends WorkerHost {
     }
 
     const payload = job.data;
-    const { job_id, organization_id, billing_start_date, billing_end_date, created_by, is_prebill } = payload;
+    const { job_id, organization_id, billing_start_date, billing_end_date, created_by, is_prebill, isCustom } = payload;
 
     try {
       // 1. Mark job as "processing"
@@ -143,11 +143,13 @@ export class InvoiceWorker extends WorkerHost {
         include: { invoiceConfiguration: true },
       });
 
-      if (!org || !org.invoiceConfiguration || !org.invoiceConfiguration.hubstaff_id) {
-        throw new Error('Organization not found or Hubstaff connection missing');
+      if (!org) {
+        throw new Error('Organization not found');
       }
 
-      const hubstaffOrgId = org.invoiceConfiguration.hubstaff_id;
+      if (!isCustom && (!org.invoiceConfiguration || !org.invoiceConfiguration.hubstaff_id)) {
+        throw new Error('Organization Hubstaff connection missing');
+      }
 
       // 4. Generate Invoice (Core Logic)
       const invoice = await this.generateInvoiceRecord(org, payload);
@@ -184,8 +186,59 @@ export class InvoiceWorker extends WorkerHost {
       due_date,
       public_due_date,
       is_prebill,
+      isCustom,
+      allowFees,
+      ops,
+      fee,
       created_by
     } = payload;
+
+    if (isCustom) {
+      return await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // 1. Create Invoice Header
+        const invoice = await tx.invoice.create({
+          data: {
+            organization_id,
+            status: InvoiceStatus.draft,
+            created_by,
+            billing_start_date: DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate(),
+            billing_end_date: DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate(),
+            reference: this.generateReference(),
+            is_custom: true,
+          },
+        });
+
+        // 2. Create Invoice Version (Draft)
+        const version = await tx.invoiceVersion.create({
+          data: {
+            invoice_id: invoice.id,
+            version_number: 1,
+            status: InvoiceVersionStatus.draft,
+            currency: org?.invoiceConfiguration?.billing_currency || 'USD',
+            billing_start_date: DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate(),
+            billing_end_date: DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate(),
+            issue_date: issue_date ? DateTime.fromISO(issue_date, { zone: 'utc' }).toJSDate() : null,
+            due_date: due_date ? DateTime.fromISO(due_date, { zone: 'utc' }).toJSDate() : null,
+            public_due_date: public_due_date ? DateTime.fromISO(public_due_date, { zone: 'utc' }).toJSDate() : null,
+            is_prebill: is_prebill || false,
+            created_by,
+            subtotal: 0,
+            total: 0,
+            discountType: 'dollar',
+            discountValue: 0,
+          },
+        });
+
+        // 3. Link Version to Invoice Header
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: { current_version_id: version.id },
+        });
+
+        return invoice;
+      });
+    }
+
     const hubstaffId = org.invoiceConfiguration.hubstaff_id;
 
     // Fetch project members to get names for snapshots
@@ -328,6 +381,7 @@ export class InvoiceWorker extends WorkerHost {
           billing_start_date: DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate(),
           billing_end_date: DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate(),
           reference: this.generateReference(),
+          is_custom: false,
         },
       });
 
@@ -527,13 +581,21 @@ export class InvoiceWorker extends WorkerHost {
             total_holiday_hours: new Decimal(totalHolidayHours),
             total_hours_payable: new Decimal(primaryHours),
             hourly_rate: hourlyRate,
-            final_total: lineTotal,
+            service_amount: lineTotal,
+            operations_cost: allowFees ? new Decimal(ops || 0) : new Decimal(0),
+            medvirtual_fees: allowFees ? new Decimal(fee || 0) : new Decimal(0),
+            final_total: allowFees
+              ? lineTotal.add(new Decimal(ops || 0)).add(new Decimal(fee || 0))
+              : lineTotal,
             is_full_time: isFullTime,
             created_by,
           },
         });
 
-        subtotal = subtotal.add(lineTotal);
+        const lineItemTotal = allowFees
+          ? lineTotal.add(new Decimal(ops || 0)).add(new Decimal(fee || 0))
+          : lineTotal;
+        subtotal = subtotal.add(lineItemTotal);
 
         if (hasOvertime) {
           await tx.invoiceLineItem.create({
