@@ -22,6 +22,8 @@ export const PAYOUT_REQUEST_SELECT = {
   bill_com_payment_id: true,
   bill_com_status: true,
   bill_com_error: true,
+  bill_com_paymentStatus: true,
+  bill_com_billId: true,
   createdAt: true,
   updatedAt: true,
   commissions: {

@@ -39,7 +39,9 @@ import { InviteUserForAffiliateDto } from './dto/invite-user-for-affiliate.dto';
 import { AssociateCompanyDto } from './dto/associate-company.dto';
 import { AssociationPreviewQueryDto } from './dto/association-preview-query.dto';
 
-function isBankingComplete(billcomVendorId: string | null | undefined): boolean {
+function isBankingComplete(
+  billcomVendorId: string | null | undefined,
+): boolean {
   return !!billcomVendorId;
 }
 
@@ -148,8 +150,7 @@ export class AffiliatesController {
         payout_preference_reference: profile.payout_preference_reference,
         payout_preference_notes: profile.payout_preference_notes,
         payout_details: {
-          billcom_vendor_id:
-            user?.contact?.hubspot_billcom_vendor_id ?? null,
+          billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
         },
         banking_complete: isBankingComplete(
           user?.contact?.hubspot_billcom_vendor_id ?? null,
@@ -526,8 +527,7 @@ export class AffiliatesController {
       payout_preference_reference: profile.payout_preference_reference,
       payout_preference_notes: profile.payout_preference_notes,
       payout_details: {
-        billcom_vendor_id:
-          user?.contact?.hubspot_billcom_vendor_id ?? null,
+        billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
       },
       banking_complete: isBankingComplete(
         user?.contact?.hubspot_billcom_vendor_id ?? null,

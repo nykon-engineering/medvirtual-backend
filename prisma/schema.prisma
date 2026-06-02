@@ -1250,3 +1250,11 @@ model HubspotAuditLog {
   @@index([success],                            map: "idx_hs_audit_success")
   @@index([createdAt],                          map: "idx_hs_audit_created_at")
 }
+
+model BillComCredential {
+  id           String   @id @default("singleton")
+  rememberMeId String
+  device       String
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+}

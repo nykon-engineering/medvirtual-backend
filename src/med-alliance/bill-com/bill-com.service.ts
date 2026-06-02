@@ -5,23 +5,27 @@ import {
   Logger,
 } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
+import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../../mail/mail.service';
+import { adminRememberMeExpiredTemplate } from '../notifications/templates/admin-remember-me-expired';
 
-interface LoginResponse {
-  sessionId: string;
-  organizationId: string;
-  userId: string;
-  trusted: boolean;
+export interface CreateBillAndPaymentResponse {
+  paymentId: string;
+  billId: string;
+  status: string;
+  confirmationNumber: string;
+  transactionNumber: string;
 }
 
-export interface CreateBillResponse {
-  id: string;
-  paymentStatus: string;
-  approvalStatus: string;
-}
 @Injectable()
 export class BillComService {
   private readonly logger = new Logger(BillComService.name);
   private cachedSessionId: string | null = null;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   private requireEnv(): {
     username: string;
@@ -65,10 +69,26 @@ export class BillComService {
     const { username, password, organizationId, devKey, billBaseUrl } =
       this.requireEnv();
 
+    const cred = await this.prisma.billComCredential.findUnique({
+      where: { id: 'singleton' },
+    });
+
     try {
-      const response = await axios.post<LoginResponse>(
+      const response = await axios.post<{
+        sessionId: string;
+        organizationId: string;
+        userId: string;
+        trusted: boolean;
+      }>(
         `${billBaseUrl}/login`,
-        { username, password, organizationId, devKey },
+        {
+          username,
+          password,
+          organizationId,
+          devKey,
+          ...(cred?.rememberMeId && { rememberMeId: cred.rememberMeId }),
+          ...(cred?.device && { device: cred.device }),
+        },
         { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
       );
       this.cachedSessionId = response.data.sessionId;
@@ -76,7 +96,27 @@ export class BillComService {
       return this.cachedSessionId;
     } catch (err) {
       this.cachedSessionId = null;
+      const axiosErr = err as AxiosError<any>;
+      if (axiosErr.response?.data?.errorCode === 'BDC_1109') {
+        this.logger.error(
+          'Bill.com rememberMeId has expired (BDC_1109). Sending alert email.',
+        );
+        void this.notifyRememberMeIdExpired();
+      }
       throw this.wrapError('login', err);
+    }
+  }
+
+  private async notifyRememberMeIdExpired(): Promise<void> {
+    try {
+      await this.mail.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: 'paulo@regenta.ai',
+        subject: '[Bill.com] rememberMeId expired — manual renewal required',
+        html: adminRememberMeExpiredTemplate(),
+      });
+    } catch (err) {
+      this.logger.error('Failed to send rememberMeId expiry alert email', err);
     }
   }
 
@@ -91,9 +131,19 @@ export class BillComService {
 
   private wrapError(operation: string, err: unknown): BadGatewayException {
     const axiosErr = err as AxiosError<any>;
+    const responseData = axiosErr.response?.data;
+    if (responseData) {
+      this.logger.error(
+        `Bill.com ${operation} raw error response: ${JSON.stringify(responseData)}`,
+      );
+    }
     const message =
-      axiosErr.response?.data?.message ??
-      axiosErr.response?.data?.error ??
+      responseData?.message ??
+      responseData?.error ??
+      responseData?.response_message ??
+      (Array.isArray(responseData?.errors)
+        ? responseData.errors.map((e: any) => e.message ?? JSON.stringify(e)).join('; ')
+        : undefined) ??
       axiosErr.message ??
       'Unknown Bill.com error';
     this.logger.error(`Bill.com ${operation} failed: ${message}`);
@@ -125,81 +175,39 @@ export class BillComService {
     }
   }
 
-  async createBill(params: {
+  async createBillAndPayment(params: {
     vendorId: string;
-    dueDate: string;
-    amount: number;
-    description: string;
-    invoiceNumber: string;
-    invoiceDate: string;
-    billLineItems: { description: string }[];
-  }): Promise<CreateBillResponse> {
-    const {
-      vendorId,
-      dueDate,
-      amount,
-      description,
-      invoiceNumber,
-      invoiceDate,
-    } = params;
-
-    return this.callWithSessionRetry(
-      'createBill',
-      async (sessionId, devKey) => {
-        const { billBaseUrl } = this.requireEnv();
-        const response = await axios.post<CreateBillResponse>(
-          `${billBaseUrl}/bills`,
-          {
-            vendorId,
-            dueDate,
-            description,
-            billLineItems: params.billLineItems, //the total amount will be the total of the line items
-            invoice: { invoiceNumber, invoiceDate },
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              devKey,
-              sessionId,
-            },
-            timeout: 15000,
-          },
-        );
-        return {
-          id: response.data.id,
-          paymentStatus: response.data.paymentStatus,
-          approvalStatus: response.data.approvalStatus,
-        };
-      },
-    );
-  }
-
-  async createPayment(params: {
-    vendorId: string;
-    billId: string;
     amount: number;
     processDate: string;
-  }): Promise<{ paymentId: string; status: string }> {
-    const { vendorId, billId, amount, processDate } = params;
+    description: string;
+  }): Promise<CreateBillAndPaymentResponse> {
+    const { vendorId, amount, processDate, description } = params;
     const { fundingAccountId, billBaseUrl } = this.requireEnv();
 
     return this.callWithSessionRetry(
-      'createPayment',
+      'createBillAndPayment',
       async (sessionId, devKey) => {
-        const response = await axios.post<{ id: string; status: string }>(
+        const response = await axios.post<{
+          id: string;
+          billId?: string;
+          billIds?: string[];
+          status: string;
+          confirmationNumber: string;
+          transactionNumber: string;
+        }>(
           `${billBaseUrl}/payments`,
           {
             vendorId,
-            billId,
+            amount,
             processDate,
+            description: description.substring(0, 70), // Bill.com may have a max length for description
             fundingAccount: {
               type: 'BANK_ACCOUNT',
               id: fundingAccountId,
             },
-            amount,
             processingOptions: {
+              createBill: true,
               requestPayFaster: false,
-              createBill: false,
               requestCheckDeliveryType: 'STANDARD',
             },
           },
@@ -212,7 +220,16 @@ export class BillComService {
             timeout: 15000,
           },
         );
-        return { paymentId: response.data.id, status: response.data.status };
+
+        const billId = response.data.billId ?? response.data.billIds?.[0] ?? '';
+
+        return {
+          paymentId: response.data.id,
+          billId,
+          status: response.data.status,
+          confirmationNumber: response.data.confirmationNumber, // Assuming payment ID can serve as confirmation number
+          transactionNumber: response.data.transactionNumber,
+        };
       },
     );
   }

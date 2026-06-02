@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { BillComService, CreateBillResponse } from './bill-com.service';
+import { BillComService } from './bill-com.service';
 import { USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import {
@@ -20,8 +20,6 @@ interface BillComPaymentPayload {
   affiliateEmail: string;
   amount: number;
   today: string;
-  duedate: string;
-  commissionsItems: { description: string; amount: number }[];
 }
 
 @Injectable()
@@ -78,31 +76,9 @@ export class BillComPayoutService {
         approved_amount: true,
         requested_amount: true,
         affiliate_profile_id: true,
-        commissions: {
-          select: {
-            commission: {
-              select: {
-                id: true,
-                commission_amount: true,
-                hubspotInvoiceSnapshot: {
-                  select: {
-                    hubspot_id: true,
-                    invoice_amount: true,
-                    createdAt: true,
-                  },
-                },
-              },
-            },
-          },
-        },
       },
     });
     if (!request) throw new NotFoundException('Payout request not found');
-
-    const commissionsItems = request.commissions.map((c) => ({
-      description: `Hubspot Invoice ID: ${c.commission.hubspotInvoiceSnapshot?.hubspot_id ?? 'Unknown'} | Hubspot Invoice Amount: ${c.commission.hubspotInvoiceSnapshot?.invoice_amount ?? 'Unknown'} | hubspot invoice Created At: ${c.commission.hubspotInvoiceSnapshot?.createdAt ?? 'Unknown'}`,
-      amount: parseFloat(String(c.commission.commission_amount ?? 0)),
-    }));
 
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: request.affiliate_profile_id },
@@ -149,10 +125,7 @@ export class BillComPayoutService {
     const amount = parseFloat(
       String(request.approved_amount ?? request.requested_amount ?? 0),
     );
-    const today = this.toDateString(new Date());
-    const duedate = this.toDateString(
-      new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    );
+    const today = this.toDateString(new Date(Date.now() + 24 * 60 * 60 * 1000));
 
     return {
       vendorId,
@@ -160,34 +133,21 @@ export class BillComPayoutService {
       affiliateEmail,
       amount,
       today,
-      duedate,
-      commissionsItems,
     };
   }
 
-  async createBillOnly(
+  async createBillAndPaymentForMarkPaid(
     payload: BillComPaymentPayload,
     adminUser: USER,
     id: string,
-  ): Promise<CreateBillResponse> {
-    const {
-      vendorId,
-      affiliateName,
-      affiliateEmail,
-      amount,
-      today,
-      duedate,
-      commissionsItems,
-    } = payload;
+  ) {
+    const { vendorId, affiliateName, affiliateEmail, amount, today } = payload;
 
-    return this.billComService.createBill({
+    return this.billComService.createBillAndPayment({
       vendorId,
-      dueDate: duedate,
       amount,
-      description: `Bill created by ${adminUser.first_name} ${adminUser.last_name} (${adminUser.email}) for affiliate ${affiliateName} (${affiliateEmail}) through the payout request id ${id}`,
-      invoiceNumber: id,
-      invoiceDate: today,
-      billLineItems: commissionsItems,
+      processDate: today,
+      description: `Bill created by ${adminUser.first_name} ${adminUser.last_name} for affiliate ${affiliateName} through the payout request id ${id}`,
     });
   }
 
@@ -213,7 +173,15 @@ export class BillComPayoutService {
     }
 
     const billPayload = await this.validateAndPreparePayment(id);
-    const responseBill = await this.createBillOnly(billPayload, adminUser, id);
+    const { vendorId, affiliateName, affiliateEmail, amount, today } =
+      billPayload;
+
+    const result = await this.billComService.createBillAndPayment({
+      vendorId,
+      amount,
+      processDate: today,
+      description: `Bill created by ${adminUser.first_name} ${adminUser.last_name} (${adminUser.email}) for affiliate ${affiliateName} (${affiliateEmail}) through the payout request id ${id}`,
+    });
 
     const commissionIds = request.commissions.map((c) => c.commission_id);
 
@@ -222,10 +190,9 @@ export class BillComPayoutService {
         where: { id },
         data: {
           status: 'processing',
-          bill_com_billId: responseBill.id,
-          bill_com_status: 'SCHEDULED',
-          bill_com_paymentStatus: responseBill.paymentStatus,
-          bill_com_approvalStatus: responseBill.approvalStatus,
+          bill_com_billId: result.billId,
+          bill_com_payment_id: result.paymentId,
+          bill_com_status: result.status,
           bill_com_error: null,
           payment_method: 'bill_com',
         },
@@ -242,7 +209,7 @@ export class BillComPayoutService {
     await this.writeAuditLog({
       actorUserId: adminUser.id,
       entityId: id,
-      event: 'bill_com_bill_initiated',
+      event: 'bill_com_payment_initiated',
       oldStatus: request.status,
       newStatus: 'processing',
       source: 'admin_action',
@@ -333,7 +300,8 @@ export class BillComPayoutService {
           paid_at: new Date(),
           paid_amount: new Decimal(paidAmount),
           bill_com_status: 'PAID',
-          transaction_reference: transaction_reference,
+          bill_com_paymentStatus: 'PAID',
+          //transaction_reference: transaction_reference, It was populated when we send the request to Bill.com
           payment_reference: transaction_reference,
         },
       });

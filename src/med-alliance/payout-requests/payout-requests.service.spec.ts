@@ -15,7 +15,7 @@ const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
 
 const mockBillComPayoutService = {
   validateAndPreparePayment: jest.fn(),
-  createBillOnly: jest.fn(),
+  createBillAndPaymentForMarkPaid: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -513,7 +513,13 @@ describe('PayoutRequestsService', () => {
       duedate: '2026-06-05',
       commissionsItems: [{ description: 'Invoice 123', amount: 150 }],
     };
-    const mockBillResponse = { id: 'bill-abc', paymentStatus: 'UNPAID', approvalStatus: 'UNASSIGNED' };
+    const mockBillResponse = {
+      paymentId: 'pay-abc',
+      billId: 'bill-abc',
+      status: 'SCHEDULED',
+      confirmationNumber: 'conf-abc',
+      transactionNumber: 'txn-abc',
+    };
 
     it('should throw NotFoundException when payout request does not exist', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
@@ -546,12 +552,12 @@ describe('PayoutRequestsService', () => {
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('should not write to DB when createBillOnly (Bill.com API) throws', async () => {
+    it('should not write to DB when createBillAndPaymentForMarkPaid (Bill.com API) throws', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
         makePayoutRequest({ status: 'approved', commissions: [{ commission_id: 'c-1' }] }),
       );
       mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillOnly.mockRejectedValue(new Error('Bill.com API error'));
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockRejectedValue(new Error('Bill.com API error'));
 
       await expect(service.markPaid('payout-1', {}, mockAdminUser)).rejects.toThrow();
 
@@ -568,7 +574,7 @@ describe('PayoutRequestsService', () => {
         .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
 
       mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillOnly.mockResolvedValue(mockBillResponse);
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
@@ -587,6 +593,9 @@ describe('PayoutRequestsService', () => {
           data: expect.objectContaining({
             status: 'processing',
             bill_com_billId: 'bill-abc',
+            bill_com_payment_id: 'conf-abc',
+            bill_com_status: 'SCHEDULED',
+            transaction_reference: 'txn-abc',
           }),
         }),
       );
@@ -605,7 +614,7 @@ describe('PayoutRequestsService', () => {
         .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
 
       mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillOnly.mockResolvedValue(mockBillResponse);
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
@@ -621,7 +630,7 @@ describe('PayoutRequestsService', () => {
 
       expect(txMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ event: 'bill_com_bill_initiated', new_status: 'processing' }),
+          data: expect.objectContaining({ event: 'bill_com_payment_initiated', new_status: 'processing' }),
         }),
       );
       expect(txMock.medAllianceAuditLog.createMany).toHaveBeenCalledWith(
@@ -642,7 +651,7 @@ describe('PayoutRequestsService', () => {
         .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
 
       mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillOnly.mockResolvedValue(mockBillResponse);
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },

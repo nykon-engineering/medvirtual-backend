@@ -745,15 +745,18 @@ export class PayoutRequestsService {
     }
 
     // Phase 2: call external API — if this fails, nothing has been written to the DB
-    let responseBill: Awaited<
-      ReturnType<typeof this.billComPayoutService.createBillOnly>
+    let billAndPaymentResult: Awaited<
+      ReturnType<
+        typeof this.billComPayoutService.createBillAndPaymentForMarkPaid
+      >
     >;
     try {
-      responseBill = await this.billComPayoutService.createBillOnly(
-        billPayload,
-        adminUser,
-        id,
-      );
+      billAndPaymentResult =
+        await this.billComPayoutService.createBillAndPaymentForMarkPaid(
+          billPayload,
+          adminUser,
+          id,
+        );
     } catch (error) {
       void this.allianceNotifications.notifyAdminMarkPaidError({
         payoutRequestId: id,
@@ -764,7 +767,7 @@ export class PayoutRequestsService {
         amount: paidAmount,
       });
       throw new InternalServerErrorException(
-        'Failed to create Bill.com bill. Our team has been notified. Please try again or contact support.',
+        'Failed to create Bill.com payment. Our team has been notified. Please try again or contact support.',
       );
     }
 
@@ -781,12 +784,13 @@ export class PayoutRequestsService {
               request.status === 'under_review' ? adminUser.id : undefined,
             approved_at:
               request.status === 'under_review' ? new Date() : undefined,
-            bill_com_billId: responseBill.id,
-            bill_com_status: 'SCHEDULED',
-            bill_com_paymentStatus: responseBill.paymentStatus,
-            bill_com_approvalStatus: responseBill.approvalStatus,
+            bill_com_billId: billAndPaymentResult.billId,
+            bill_com_paymentStatus: billAndPaymentResult.status,
+            bill_com_payment_id: billAndPaymentResult.confirmationNumber,
+            bill_com_status: billAndPaymentResult.status,
             bill_com_error: null,
             payment_method: 'bill_com',
+            transaction_reference: billAndPaymentResult.transactionNumber,
           },
         });
 
@@ -800,7 +804,7 @@ export class PayoutRequestsService {
             actor_user_id: adminUser.id,
             entity_type: 'payout_request',
             entity_id: id,
-            event: 'bill_com_bill_initiated',
+            event: 'bill_com_payment_initiated',
             old_status: request.status,
             new_status: 'processing',
             source: 'admin_action',
@@ -830,10 +834,10 @@ export class PayoutRequestsService {
         errorMessage: error instanceof Error ? error.message : String(error),
         affiliateName,
         amount: paidAmount,
-        billComBillId: responseBill.id,
+        billComBillId: billAndPaymentResult.billId,
       });
       throw new InternalServerErrorException(
-        `Payment was submitted to Bill.com but could not be saved (Bill ID: ${responseBill.id}). Our team has been notified.`,
+        `Payment was submitted to Bill.com but could not be saved (Bill ID: ${billAndPaymentResult.billId}). Our team has been notified.`,
       );
     }
 
