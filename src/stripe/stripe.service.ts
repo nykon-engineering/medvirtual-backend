@@ -1007,7 +1007,7 @@ export class StripeService implements OnModuleInit {
     }
 
     // Fire at the very start of the day after billing_end_date
-    const runAt = DateTime.fromJSDate(billingEndDate)
+    const runAt = DateTime.fromJSDate(billingEndDate, { zone: 'utc' })
       .plus({ days: 1 })
       .startOf('day')
       .toMillis();

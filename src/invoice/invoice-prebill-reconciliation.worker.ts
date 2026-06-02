@@ -280,8 +280,8 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
       .map((m: any) => (m.user_id ? String(m.user_id) : null))
       .filter((id): id is string => !!id);
 
-    const startOfPeriod = DateTime.fromISO(billingStartDate).startOf('day').toJSDate();
-    const endOfPeriod = DateTime.fromISO(billingEndDate).endOf('day').toJSDate();
+    const startOfPeriod = DateTime.fromISO(billingStartDate, { zone: 'utc' }).startOf('day').toJSDate();
+    const endOfPeriod = DateTime.fromISO(billingEndDate, { zone: 'utc' }).endOf('day').toJSDate();
 
     // --- Staff / candidate records (for rates) ---
     const staffRecords =
@@ -318,9 +318,9 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
     const uniqueUserIds = Array.from(
       new Set([...hubstaffUserIds, ...activities.map((a: any) => String(a.user_id))]),
     );
-    const startISO = DateTime.fromISO(billingStartDate).startOf('day').toISO() || undefined;
+    const startISO = DateTime.fromISO(billingStartDate, { zone: 'utc' }).startOf('day').toISO() || undefined;
     const endISO =
-      DateTime.fromISO(billingEndDate).plus({ days: 1 }).startOf('day').toISO() || undefined;
+      DateTime.fromISO(billingEndDate, { zone: 'utc' }).plus({ days: 1 }).startOf('day').toISO() || undefined;
 
     const ptoRequests =
       uniqueUserIds.length > 0
@@ -329,19 +329,19 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
     const approvedPtos = ptoRequests.filter((p: any) => p.status === 'approved');
 
     // --- Date / holiday helpers ---
-    const startJSDate = new Date(billingStartDate);
-    const endJSDate = new Date(billingEndDate);
+    const startJSDate = DateTime.fromISO(billingStartDate, { zone: 'utc' }).toJSDate();
+    const endJSDate = DateTime.fromISO(billingEndDate, { zone: 'utc' }).toJSDate();
 
     const allDaysList: DateTime[] = [];
-    let curDate = DateTime.fromJSDate(startJSDate).startOf('day');
-    const lastDate = DateTime.fromJSDate(endJSDate).startOf('day');
+    let curDate = DateTime.fromJSDate(startJSDate, { zone: 'utc' }).startOf('day');
+    const lastDate = DateTime.fromJSDate(endJSDate, { zone: 'utc' }).startOf('day');
     while (curDate.toMillis() <= lastDate.toMillis()) {
       allDaysList.push(curDate);
       curDate = curDate.plus({ days: 1 });
     }
 
-    const startYear = DateTime.fromISO(billingStartDate).year;
-    const endYear = DateTime.fromISO(billingEndDate).year;
+    const startYear = DateTime.fromISO(billingStartDate, { zone: 'utc' }).year;
+    const endYear = DateTime.fromISO(billingEndDate, { zone: 'utc' }).year;
     const holidayDates = new Set<string>();
     for (let y = startYear; y <= endYear; y++) {
       this.invoiceWorker.getHolidaysForYear(y).forEach((h) => holidayDates.add(h));
@@ -429,7 +429,7 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
 
           if (isFullTime) {
             const diffInDays =
-              DateTime.fromJSDate(endJSDate).diff(DateTime.fromJSDate(startJSDate), 'days').days + 1;
+              DateTime.fromJSDate(endJSDate, { zone: 'utc' }).diff(DateTime.fromJSDate(startJSDate, { zone: 'utc' }), 'days').days + 1;
             const baseSalary = diffInDays >= 27 ? monthlySalary : monthlySalary / 2;
             lineTotal = new Decimal(baseSalary);
             hourlyRate = primaryHours > 0 ? lineTotal.div(new Decimal(primaryHours)) : new Decimal(0);
@@ -454,7 +454,7 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
           const monthlySalary = Number(staff.salary);
           if (isFullTime) {
             const diffInDays =
-              DateTime.fromJSDate(endJSDate).diff(DateTime.fromJSDate(startJSDate), 'days').days + 1;
+              DateTime.fromJSDate(endJSDate, { zone: 'utc' }).diff(DateTime.fromJSDate(startJSDate, { zone: 'utc' }), 'days').days + 1;
             const baseSalary = diffInDays >= 27 ? monthlySalary : monthlySalary / 2;
             const deficit = requiredHours - actualHours;
             if (deficit > 10) {

@@ -43,8 +43,8 @@ export class InvoiceWorker extends WorkerHost {
 
   public getWorkdaysCount(startDate: Date, endDate: Date): number {
     let count = 0;
-    let curDate = DateTime.fromJSDate(startDate).startOf('day');
-    const lastDate = DateTime.fromJSDate(endDate).startOf('day');
+    let curDate = DateTime.fromJSDate(startDate, { zone: 'utc' }).startOf('day');
+    const lastDate = DateTime.fromJSDate(endDate, { zone: 'utc' }).startOf('day');
     while (curDate.toMillis() <= lastDate.toMillis()) {
       const dayOfWeek = curDate.weekday; // 1 = Monday, 7 = Sunday in Luxon
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
@@ -202,8 +202,8 @@ export class InvoiceWorker extends WorkerHost {
       .map((m: any) => m.user_id ? String(m.user_id) : null)
       .filter((id): id is string => !!id);
 
-    const startOfPeriod = DateTime.fromISO(billing_start_date).startOf('day').toJSDate();
-    const endOfPeriod = DateTime.fromISO(billing_end_date).endOf('day').toJSDate();
+    const startOfPeriod = DateTime.fromISO(billing_start_date, { zone: 'utc' }).startOf('day').toJSDate();
+    const endOfPeriod = DateTime.fromISO(billing_end_date, { zone: 'utc' }).endOf('day').toJSDate();
 
     // Fetch all staff by candidate's hubstaff_id, matching this organization
     const staffRecords = (hubstaffUserIds.length > 0) ? await this.prisma.staff.findMany({
@@ -243,8 +243,8 @@ export class InvoiceWorker extends WorkerHost {
 
     if (is_prebill) {
       // Pre-bill logic: Assume 8hrs per day for all project members
-      const startDate = new Date(billing_start_date);
-      const endDate = new Date(billing_end_date);
+      const startDate = DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate();
+      const endDate = DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate();
       const days = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
       const secondsPerMember = days * 8 * 3600;
 
@@ -291,8 +291,8 @@ export class InvoiceWorker extends WorkerHost {
     ]));
 
     // Fetch and filter approved PTOs
-    const startDateISO = DateTime.fromISO(billing_start_date).startOf('day').toISO() || undefined;
-    const endDateISO = DateTime.fromISO(billing_end_date).plus({ days: 1 }).startOf('day').toISO() || undefined;
+    const startDateISO = DateTime.fromISO(billing_start_date, { zone: 'utc' }).startOf('day').toISO() || undefined;
+    const endDateISO = DateTime.fromISO(billing_end_date, { zone: 'utc' }).plus({ days: 1 }).startOf('day').toISO() || undefined;
 
     const ptoRequests = (uniqueUserIdsForPto.length > 0)
       ? await this.hubstaff.getTimeOffRequests(uniqueUserIdsForPto, startDateISO, endDateISO)
@@ -301,18 +301,18 @@ export class InvoiceWorker extends WorkerHost {
     const approvedPtos = ptoRequests.filter(pto => pto.status === 'approved');
 
     // Define the list of all days in the billing period
-    const startJSDate = new Date(billing_start_date);
-    const endJSDate = new Date(billing_end_date);
-    let curDate = DateTime.fromJSDate(startJSDate).startOf('day');
-    const lastDate = DateTime.fromJSDate(endJSDate).startOf('day');
+    const startJSDate = DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate();
+    const endJSDate = DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate();
+    let curDate = DateTime.fromJSDate(startJSDate, { zone: 'utc' }).startOf('day');
+    const lastDate = DateTime.fromJSDate(endJSDate, { zone: 'utc' }).startOf('day');
     const allDaysList: DateTime[] = [];
     while (curDate.toMillis() <= lastDate.toMillis()) {
       allDaysList.push(curDate);
       curDate = curDate.plus({ days: 1 });
     }
 
-    const startYear = DateTime.fromISO(billing_start_date).year;
-    const endYear = DateTime.fromISO(billing_end_date).year;
+    const startYear = DateTime.fromISO(billing_start_date, { zone: 'utc' }).year;
+    const endYear = DateTime.fromISO(billing_end_date, { zone: 'utc' }).year;
     const holidayDates = new Set<string>();
     for (let y = startYear; y <= endYear; y++) {
       this.getHolidaysForYear(y).forEach(h => holidayDates.add(h));
@@ -325,8 +325,8 @@ export class InvoiceWorker extends WorkerHost {
           organization_id,
           status: InvoiceStatus.draft,
           created_by,
-          billing_start_date: new Date(billing_start_date),
-          billing_end_date: new Date(billing_end_date),
+          billing_start_date: DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate(),
+          billing_end_date: DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate(),
           reference: this.generateReference(),
         },
       });
@@ -338,11 +338,11 @@ export class InvoiceWorker extends WorkerHost {
           version_number: 1,
           status: InvoiceVersionStatus.draft,
           currency: org.invoiceConfiguration.billing_currency || 'USD',
-          billing_start_date: new Date(billing_start_date),
-          billing_end_date: new Date(billing_end_date),
-          issue_date: issue_date ? new Date(issue_date) : null,
-          due_date: due_date ? new Date(due_date) : null,
-          public_due_date: public_due_date ? new Date(public_due_date) : null,
+          billing_start_date: DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate(),
+          billing_end_date: DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate(),
+          issue_date: issue_date ? DateTime.fromISO(issue_date, { zone: 'utc' }).toJSDate() : null,
+          due_date: due_date ? DateTime.fromISO(due_date, { zone: 'utc' }).toJSDate() : null,
+          public_due_date: public_due_date ? DateTime.fromISO(public_due_date, { zone: 'utc' }).toJSDate() : null,
           is_prebill: is_prebill || false, // Pre-bill flag from DTO
           created_by,
           subtotal: 0,
@@ -450,8 +450,8 @@ export class InvoiceWorker extends WorkerHost {
             overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
 
             if (isFullTime) {
-              const startDT = DateTime.fromJSDate(startJSDate);
-              const endDT = DateTime.fromJSDate(endJSDate);
+              const startDT = DateTime.fromJSDate(startJSDate, { zone: 'utc' });
+              const endDT = DateTime.fromJSDate(endJSDate, { zone: 'utc' });
               const diffInDays = endDT.diff(startDT, 'days').days + 1;
               const isFullMonth = diffInDays >= 27;
 
@@ -480,8 +480,8 @@ export class InvoiceWorker extends WorkerHost {
 
             if (isFullTime) {
               // Full-Time staff logic
-              const startDT = DateTime.fromJSDate(startJSDate);
-              const endDT = DateTime.fromJSDate(endJSDate);
+              const startDT = DateTime.fromJSDate(startJSDate, { zone: 'utc' });
+              const endDT = DateTime.fromJSDate(endJSDate, { zone: 'utc' });
               const diffInDays = endDT.diff(startDT, 'days').days + 1;
               const isFullMonth = diffInDays >= 27;
 
