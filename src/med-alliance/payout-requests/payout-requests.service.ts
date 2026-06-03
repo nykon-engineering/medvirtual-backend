@@ -544,6 +544,7 @@ export class PayoutRequestsService {
       ),
     );
 
+
     let data = rows.map((r: any) => shapeAdminRequest(r, duplicateSet));
 
     // B6: post-filter risk_flag (computed field — can't filter in SQL)

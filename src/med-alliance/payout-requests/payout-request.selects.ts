@@ -68,6 +68,16 @@ export const ADMIN_SELECT = {
       payout_preference_reference: true,
       payout_preference_notes: true,
       createdAt: true,
+      user:{
+        select: {
+          contact:{
+            select:{
+              hubspot_billcom_vendor_id: true,
+            }
+            
+          }
+        }
+      }
     },
   },
   approvedBy: {
@@ -121,6 +131,17 @@ export function shapeAdminRequest(raw: any, allRequestedIds?: Set<string>) {
   const flags = computeRiskFlags(raw, allRequestedIds ?? new Set());
   return {
     ...raw,
+    affiliateProfile: raw.affiliateProfile
+      ? {
+          ...raw.affiliateProfile,
+          payout_details: {
+            ...raw.affiliateProfile.payout_details,
+            vendorId:
+              raw.affiliateProfile.user?.contact?.hubspot_billcom_vendor_id ??
+              undefined,
+          },
+        }
+      : raw.affiliateProfile,
     affiliate_name: raw.affiliate
       ? `${raw.affiliate.first_name} ${raw.affiliate.last_name}`.trim()
       : undefined,
