@@ -147,7 +147,7 @@ export class BillComPayoutService {
       vendorId,
       amount,
       processDate: today,
-      description: `Bill created by ${adminUser.first_name} ${adminUser.last_name} for affiliate ${affiliateName} through the payout request id ${id}`,
+      description: `Created by ${adminUser.first_name} ${adminUser.last_name} for affiliate ${affiliateName}`,
     });
   }
 
