@@ -25,6 +25,7 @@ import {
   ReferralSyncService,
   SyncResult,
 } from '../med-alliance/sync/referral-sync.service';
+import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 
 type Event = {
@@ -42,6 +43,7 @@ export class CronService {
     private readonly positionRateConfigService: PositionRateConfigService,
     private readonly payoutRequestsService: PayoutRequestsService,
     private readonly referralSync: ReferralSyncService,
+    private readonly commissionDetection: CommissionDetectionService,
     private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
@@ -1187,6 +1189,58 @@ export class CronService {
       syncResults,
       promotionErrors,
     };
+  }
+
+  async detectCommissionsByAffiliate(affiliateProfileId: string): Promise<{
+    processed: number;
+    created: number;
+    skipped: number;
+    failed: number;
+  }> {
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateProfileId },
+      select: { id: true, user_id: true },
+    });
+
+    if (!profile) {
+      throw new Error(`Affiliate profile not found: ${affiliateProfileId}`);
+    }
+
+    const orgs = await this.prisma.organization.findMany({
+      where: {
+        referred_by_affiliate_id: profile.user_id,
+        hubspotInvoiceSnapshots: {
+          some: { invoice_status: 'paid', invoice_amount: { gt: 0 } },
+        },
+      },
+      select: { id: true },
+    });
+
+    //console.log(orgs)
+
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const org of orgs) {
+      try {
+        const result = await this.commissionDetection.run(org.id);
+        //console.log(`detectCommissionsByAffiliate: org ${org.id} — created=${result.created} skipped=${result.skipped}`);
+        created += result.created;
+        skipped += result.skipped;
+      } catch (err) {
+        failed++;
+        console.error(
+          `detectCommissionsByAffiliate: error processing org ${org.id} — ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
+    console.log(
+      `detectCommissionsByAffiliate: affiliateProfileId=${affiliateProfileId} processed=${orgs.length} created=${created} skipped=${skipped} failed=${failed}`,
+    );
+
+    return { processed: orgs.length, created, skipped, failed };
   }
 
   async dailyCommissionSummary(): Promise<{ sent: boolean; count: number }> {

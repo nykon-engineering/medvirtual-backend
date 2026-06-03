@@ -232,6 +232,33 @@ export class CronController {
     };
   }
 
+  @Get('detect-commissions-by-affiliate')
+  @ApiOperation({
+    summary:
+      'Detect and create missing commissions for all organizations referred by a specific affiliate. Uses existing eligibility rules — safe to re-run (idempotent).',
+  })
+  @ApiQuery({
+    name: 'affiliate_profile_id',
+    required: true,
+    type: String,
+    description: 'UUID of the affiliate profile to process.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Commission detection completed',
+  })
+  async detectCommissionsByAffiliate(
+    @Query('affiliate_profile_id') affiliateProfileId: string,
+  ) {
+    const result =
+      await this.cron.detectCommissionsByAffiliate(affiliateProfileId);
+    return {
+      status: 200,
+      message: 'Commission detection completed',
+      data: result,
+    };
+  }
+
   @Get('sync-organizations-with-hubspot')
   @ApiOperation({
     summary:

@@ -9,6 +9,7 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 import { ReferralSyncService } from '../med-alliance/sync/referral-sync.service';
+import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 
 jest.mock('axios');
@@ -23,6 +24,7 @@ describe('CronService', () => {
   let positionRateConfigServiceMock: Record<string, jest.Mock>;
   let payoutRequestsServiceMock: Record<string, jest.Mock>;
   let referralSyncServiceMock: { run: jest.Mock };
+  let commissionDetectionServiceMock: { run: jest.Mock };
   let allianceNotificationsMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
@@ -76,6 +78,10 @@ describe('CronService', () => {
       run: jest.fn(),
     };
 
+    commissionDetectionServiceMock = {
+      run: jest.fn(),
+    };
+
     allianceNotificationsMock = {
       notifyCommissionEligible: jest.fn(),
       notifyAdminCommissionReverted: jest.fn(),
@@ -93,6 +99,7 @@ describe('CronService', () => {
         { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
         { provide: PayoutRequestsService, useValue: payoutRequestsServiceMock },
         { provide: ReferralSyncService, useValue: referralSyncServiceMock },
+        { provide: CommissionDetectionService, useValue: commissionDetectionServiceMock },
         { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
       ],
     }).compile();

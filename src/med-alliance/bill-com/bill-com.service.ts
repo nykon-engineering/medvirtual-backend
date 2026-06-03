@@ -142,7 +142,9 @@ export class BillComService {
       responseData?.error ??
       responseData?.response_message ??
       (Array.isArray(responseData?.errors)
-        ? responseData.errors.map((e: any) => e.message ?? JSON.stringify(e)).join('; ')
+        ? responseData.errors
+            .map((e: any) => e.message ?? JSON.stringify(e))
+            .join('; ')
         : undefined) ??
       axiosErr.message ??
       'Unknown Bill.com error';

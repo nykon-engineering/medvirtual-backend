@@ -24,6 +24,10 @@ import { AllianceNotificationsModule } from '../notifications/notifications.modu
     // EligibilityCheckService is used by HubspotMatchingService after a match is resolved
     EligibilityCheckService,
   ],
-  exports: [ReferralSyncService, InvoiceIngestionService],
+  exports: [
+    ReferralSyncService,
+    InvoiceIngestionService,
+    CommissionDetectionService,
+  ],
 })
 export class SyncModule {}
