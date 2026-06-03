@@ -2,6 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommissionsService } from './commissions.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
+
+const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
+  notifyCommissionEligible: jest.fn(),
+  notifyAdminCommissionReverted: jest.fn(),
+};
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -74,6 +80,7 @@ describe('CommissionsService', () => {
       providers: [
         CommissionsService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
       ],
     }).compile();
 

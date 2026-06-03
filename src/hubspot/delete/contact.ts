@@ -11,7 +11,11 @@ import { HubspotAuditService } from '../hubspot-audit.service';
 export class ContactDeleteService {
   constructor(private readonly audit: HubspotAuditService) {}
 
-  async execute(data: any, actorUserId?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -35,6 +39,7 @@ export class ContactDeleteService {
         action: HubspotAuditAction.DELETE,
         source,
         success: true,
+        payload: { ...(reason && { reason }) },
       });
 
       return true;
@@ -55,6 +60,7 @@ export class ContactDeleteService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }

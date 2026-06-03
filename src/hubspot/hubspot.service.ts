@@ -417,6 +417,7 @@ export class HubspotService {
               subscriptionType: event.subscriptionType,
               objectId: event.objectId,
               propertyName: event.propertyName ?? undefined,
+              propertyValue: event.propertyValue ?? undefined,
             },
           });
         }
@@ -434,6 +435,8 @@ export class HubspotService {
             payload: {
               subscriptionType: event.subscriptionType,
               objectId: event.objectId,
+              propertyName: event.propertyName ?? undefined,
+              propertyValue: event.propertyValue ?? undefined,
             },
             errorCode: err.status?.toString() ?? err.code,
             errorMessage: err.message,
@@ -480,6 +483,7 @@ export class HubspotService {
     pipelineStatus,
     actorUserId?: string,
     hireRequestId?: string,
+    reason?: string,
   ): Promise<boolean> {
     const objectType =
       process.env.HUBSPOT_CUSTOM_OBJECT ?? 'candidate_custom_object';
@@ -509,7 +513,11 @@ export class HubspotService {
           ? HubspotAuditSource.user_action
           : HubspotAuditSource.cron,
         success: true,
-        payload: { count: candidates.length, pipelineStatus },
+        payload: {
+          count: candidates.length,
+          pipelineStatus,
+          ...(reason && { reason }),
+        },
       });
       return true;
     } catch (error) {
@@ -525,6 +533,7 @@ export class HubspotService {
         success: false,
         errorCode: error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
       throw new BadRequestException(
         `Error updating data in HubSpot: ${error.message}`,
@@ -537,6 +546,7 @@ export class HubspotService {
     pipelineStatus: string,
     actorUserId?: string,
     source?: HubspotAuditSource,
+    reason?: string,
   ): Promise<boolean> {
     console.log(
       'Updating candidate in HubSpot with ID:',
@@ -575,7 +585,7 @@ export class HubspotService {
         action: HubspotAuditAction.UPDATE,
         source: auditSource,
         success: true,
-        payload: { pipelineStatus },
+        payload: { pipelineStatus, ...(reason && { reason }) },
       });
       return true;
     } catch (error) {
@@ -590,6 +600,7 @@ export class HubspotService {
         success: false,
         errorCode: error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
       throw new BadRequestException(
         `Error updating data in HubSpot: ${error.message}`,
@@ -600,50 +611,73 @@ export class HubspotService {
   async createHireRequestInHubspot(
     data: any,
     actorUserId?: string,
+    reason?: string,
   ): Promise<any> {
-    return await this.hireRequestCreationService.execute(data, actorUserId);
+    return await this.hireRequestCreationService.execute(
+      data,
+      actorUserId,
+      reason,
+    );
   }
 
   async updateHireRequestInHubspot(
     data: any,
     specificField?: string,
     actorUserId?: string,
+    reason?: string,
   ): Promise<any> {
     return await this.hireRequestUpdateService.execute(
       data,
       specificField,
       actorUserId,
+      reason,
     );
   }
 
   async createOrganizationInHubspot(
     data: any,
     actorUserId?: string,
+    reason?: string,
   ): Promise<any> {
-    return await this.organizationCreationService.execute(data, actorUserId);
+    return await this.organizationCreationService.execute(
+      data,
+      actorUserId,
+      reason,
+    );
   }
 
   async updateOrganizationInHubspot(
     data: any,
     actorUserId?: string,
+    reason?: string,
   ): Promise<any> {
-    return await this.organizationUpdateService.execute(data, actorUserId);
+    return await this.organizationUpdateService.execute(
+      data,
+      actorUserId,
+      reason,
+    );
   }
 
   async setCompanyAffiliateReferral(
     organizationId: string,
     affiliateUserId: string,
     actorUserId?: string,
+    reason?: string,
   ): Promise<void> {
     return this.organizationUpdateService.setAffiliateReferral(
       organizationId,
       affiliateUserId,
       actorUserId,
+      reason,
     );
   }
 
-  async createContactInHubspot(data: any, actorUserId?: string): Promise<any> {
-    return await this.contactCreationService.execute(data, actorUserId);
+  async createContactInHubspot(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
+    return await this.contactCreationService.execute(data, actorUserId, reason);
   }
 
   async createContactFromReferredCompanyInHubspot(
@@ -656,23 +690,33 @@ export class HubspotService {
     );
   }
 
-  async updateContactInHubspot(data: any, actorUserId?: string): Promise<any> {
-    return await this.contactUpdateService.execute(data, actorUserId);
+  async updateContactInHubspot(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
+    return await this.contactUpdateService.execute(data, actorUserId, reason);
   }
 
-  async deleteContactInHubspot(data: any, actorUserId?: string): Promise<any> {
-    return await this.contactDeleteService.execute(data, actorUserId);
+  async deleteContactInHubspot(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
+    return await this.contactDeleteService.execute(data, actorUserId, reason);
   }
 
   async deleteCompanyInHubspot(
     hubspotCompanyId: string,
     actorUserId?: string,
     entityId?: string,
+    reason?: string,
   ): Promise<boolean> {
     return await this.companyDeleteService.execute(
       hubspotCompanyId,
       actorUserId,
       entityId,
+      reason,
     );
   }
 

@@ -535,6 +535,7 @@ export class UserService {
         await this.hubspotService.updateContactInHubspot(
           userForHubspot,
           actorUserId,
+          `User profile updated — contact record synced to HubSpot`,
         );
       }
 
@@ -596,6 +597,7 @@ export class UserService {
       await this.hubspotService.deleteContactInHubspot(
         userForHubspot,
         actorUserId,
+        `User account deleted — contact record removed from HubSpot`,
       );
 
       // Use a transaction to handle all deletions atomically
@@ -1105,6 +1107,7 @@ export class UserService {
         await this.hubspotService.createContactInHubspot(
           newUserForHubspot,
           currentUser.id,
+          `New user invited to organization — contact record created in HubSpot`,
         );
       } catch (err) {
         console.error('Error creating contact in Hubspot:', err);

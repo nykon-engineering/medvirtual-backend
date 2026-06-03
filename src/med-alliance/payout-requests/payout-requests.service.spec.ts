@@ -1,8 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { PayoutRequestsService } from './payout-requests.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
+import { BillComPayoutService } from '../bill-com/bill-com-payout.service';
+
+const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
+  notifyAdminPayoutRequested: jest.fn(),
+  notifyPayoutPaid: jest.fn(),
+  notifyAdminMarkPaidError: jest.fn(),
+  notifyPayoutProcessing: jest.fn(),
+};
+
+const mockBillComPayoutService = {
+  validateAndPreparePayment: jest.fn(),
+  createBillAndPaymentForMarkPaid: jest.fn(),
+};
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -25,6 +39,7 @@ const mockPrisma = {
   },
   medAllianceAuditLog: {
     create: jest.fn(),
+    createMany: jest.fn(),
     findMany: jest.fn(),
   },
   $transaction: jest.fn(),
@@ -96,6 +111,9 @@ describe('PayoutRequestsService', () => {
         PayoutRequestsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AffiliatesService, useValue: mockAffiliatesService },
+        { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
+        { provide: BillComPayoutService, useValue: mockBillComPayoutService },
+        { provide: Logger, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() } },
       ],
     }).compile();
 
@@ -486,6 +504,23 @@ describe('PayoutRequestsService', () => {
   // markPaid
   // -------------------------------------------------------------------------
   describe('markPaid', () => {
+    const mockBillPayload = {
+      vendorId: 'vendor-1',
+      affiliateName: 'Jane Affiliate',
+      affiliateEmail: 'jane@example.com',
+      amount: 150,
+      today: '2026-05-29',
+      duedate: '2026-06-05',
+      commissionsItems: [{ description: 'Invoice 123', amount: 150 }],
+    };
+    const mockBillResponse = {
+      paymentId: 'pay-abc',
+      billId: 'bill-abc',
+      status: 'SCHEDULED',
+      confirmationNumber: 'conf-abc',
+      transactionNumber: 'txn-abc',
+    };
+
     it('should throw NotFoundException when payout request does not exist', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
 
@@ -494,7 +529,7 @@ describe('PayoutRequestsService', () => {
       ).rejects.toThrow(new NotFoundException('Payout request not found'));
     });
 
-    it('should throw BadRequestException when payout request is not in "approved" status', async () => {
+    it('should throw BadRequestException when payout request is not in a payable status', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
         makePayoutRequest({ status: 'requested' }),
       );
@@ -504,33 +539,63 @@ describe('PayoutRequestsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should mark payout request as paid and update commissions to "paid"', async () => {
+    it('should not write to DB when validateAndPreparePayment throws (vendor ID missing)', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest({ status: 'approved', commissions: [{ commission_id: 'c-1' }] }),
+      );
+      mockBillComPayoutService.validateAndPreparePayment.mockRejectedValue(
+        new BadRequestException('Bill.com vendor ID is missing for this affiliate.'),
+      );
+
+      await expect(service.markPaid('payout-1', {}, mockAdminUser)).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should not write to DB when createBillAndPaymentForMarkPaid (Bill.com API) throws', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest({ status: 'approved', commissions: [{ commission_id: 'c-1' }] }),
+      );
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockRejectedValue(new Error('Bill.com API error'));
+
+      await expect(service.markPaid('payout-1', {}, mockAdminUser)).rejects.toThrow();
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should set status to "processing" and store bill_com_billId in transaction on success', async () => {
       const commissionIds = ['commission-1'];
       mockPrisma.affiliatePayoutRequest.findUnique
         .mockResolvedValueOnce({
           ...makePayoutRequest({ status: 'approved' }),
           commissions: commissionIds.map((id) => ({ commission_id: id })),
         })
-        .mockResolvedValueOnce(makePayoutRequest({ status: 'paid', paid_at: new Date() }));
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
+
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+        medAllianceAuditLog: {
+          create: jest.fn().mockResolvedValue({}),
+          createMany: jest.fn().mockResolvedValue({}),
+        },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
-      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
-      const result = await service.markPaid(
-        'payout-1',
-        { payment_reference: 'WIRE-001' },
-        mockAdminUser,
-      );
+      await service.markPaid('payout-1', {}, mockAdminUser);
 
       expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            status: 'paid',
-            payment_reference: 'WIRE-001',
+            status: 'processing',
+            bill_com_billId: 'bill-abc',
+            bill_com_payment_id: 'conf-abc',
+            bill_com_status: 'SCHEDULED',
+            transaction_reference: 'txn-abc',
           }),
         }),
       );
@@ -540,55 +605,74 @@ describe('PayoutRequestsService', () => {
       });
     });
 
-    it('should use provided paid_at timestamp when given', async () => {
+    it('should write audit logs inside the transaction (payout_request + commissions)', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique
         .mockResolvedValueOnce({
           ...makePayoutRequest({ status: 'approved' }),
           commissions: [{ commission_id: 'commission-1' }],
         })
-        .mockResolvedValueOnce(makePayoutRequest({ status: 'paid' }));
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
+
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+        medAllianceAuditLog: {
+          create: jest.fn().mockResolvedValue({}),
+          createMany: jest.fn().mockResolvedValue({}),
+        },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
-      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
-      await service.markPaid(
-        'payout-1',
-        { paid_at: '2026-03-15' },
-        mockAdminUser,
-      );
+      await service.markPaid('payout-1', {}, mockAdminUser);
 
-      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+      expect(txMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
-            paid_at: new Date('2026-03-15'),
-          }),
+          data: expect.objectContaining({ event: 'bill_com_payment_initiated', new_status: 'processing' }),
+        }),
+      );
+      expect(txMock.medAllianceAuditLog.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.arrayContaining([
+            expect.objectContaining({ entity_id: 'commission-1', new_status: 'paid' }),
+          ]),
         }),
       );
     });
 
-    it('should write audit log entries for payout request and each commission', async () => {
+    it('should set approved_by and approved_at when coming from "under_review"', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique
         .mockResolvedValueOnce({
-          ...makePayoutRequest({ status: 'approved' }),
-          commissions: [{ commission_id: 'commission-1' }],
+          ...makePayoutRequest({ status: 'under_review' }),
+          commissions: [{ commission_id: 'c-1' }],
         })
-        .mockResolvedValueOnce(makePayoutRequest({ status: 'paid' }));
+        .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
+
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
+        medAllianceAuditLog: {
+          create: jest.fn().mockResolvedValue({}),
+          createMany: jest.fn().mockResolvedValue({}),
+        },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
-      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
       await service.markPaid('payout-1', {}, mockAdminUser);
 
-      // 1 for payout request + 1 per commission
-      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledTimes(2);
+      expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            approved_by: 'admin-1',
+            approved_at: expect.any(Date),
+          }),
+        }),
+      );
     });
   });
 
@@ -1589,6 +1673,8 @@ describe('PayoutRequestsService', () => {
         paid: 0,
         rejected: 0,
         cancelled: 0,
+        failed: 0,
+        processing: 0,
       });
     });
 

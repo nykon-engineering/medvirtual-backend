@@ -7,6 +7,11 @@ import { AffiliateCreationService } from '../../hubspot/create/affiliate';
 import { AffiliateUpdateService } from '../../hubspot/update/affiliate';
 import { HubspotService } from '../../hubspot/hubspot.service';
 import { InvoiceIngestionService } from '../sync/invoice-ingestion.service';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
+
+const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
+  notifyAdminPartnerRegistered: jest.fn(),
+};
 
 // ---------------------------------------------------------------------------
 // Prisma mock — only the tables touched by AffiliatesService
@@ -80,6 +85,10 @@ const mockProfile = {
   createdAt: new Date('2026-01-01'),
   updatedAt: new Date('2026-01-01'),
   user: mockUser,
+  payout_details:{
+    billcom_vendor_id: null,
+  },
+  banking_complete: false,
 };
 
 
@@ -97,6 +106,7 @@ describe('AffiliatesService', () => {
         { provide: AffiliateUpdateService , useValue: mockAffiliateUpdateService},
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: InvoiceIngestionService, useValue: mockInvoiceIngestionService },
+        { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
       ],
     }).compile();
 

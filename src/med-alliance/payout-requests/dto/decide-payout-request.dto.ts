@@ -43,24 +43,6 @@ export class DecidePayoutRequestDto {
 }
 
 export class MarkPayoutPaidDto {
-  // B2: transaction reference (was payment_reference — kept for backward compat)
-  @ApiPropertyOptional({
-    description: 'Transaction reference number from the payment processor',
-    example: 'TXN-2024-001234',
-  })
-  @IsOptional()
-  @IsString()
-  transaction_reference?: string;
-
-  /** @deprecated Use transaction_reference instead */
-  @ApiPropertyOptional({
-    description: 'Payment reference (deprecated, use transaction_reference)',
-    example: 'REF-001234',
-  })
-  @IsOptional()
-  @IsString()
-  payment_reference?: string;
-
   // B2: actual amount disbursed (may differ from approved_amount due to fees)
   @ApiPropertyOptional({
     description:
@@ -82,15 +64,6 @@ export class MarkPayoutPaidDto {
   @IsString()
   @MaxLength(5000)
   payment_proof_notes?: string;
-
-  // If omitted, defaults to current timestamp.
-  @ApiPropertyOptional({
-    description: 'Date when payment was made (defaults to current timestamp)',
-    example: '2024-03-15T10:30:00Z',
-  })
-  @IsOptional()
-  @IsDateString()
-  paid_at?: string;
 }
 
 export class CancelPayoutRequestDto {

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alliance Email Previews</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background: #1a1a2e; color: #eee; }
+
+    .page-header { background: #16213e; border-bottom: 2px solid #0f3460; padding: 24px 40px; position: sticky; top: 0; z-index: 100; }
+    .page-header h1 { margin: 0 0 6px; font-size: 22px; color: #e94560; }
+    .page-header p { margin: 0; font-size: 14px; color: #a0a0b0; }
+
+    .nav { display: flex; gap: 10px; flex-wrap: wrap; padding: 16px 40px; background: #16213e; border-bottom: 1px solid #0f3460; }
+    .nav a { color: #a0c4ff; text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 4px; border: 1px solid #0f3460; transition: background 0.15s; }
+    .nav a:hover { background: #0f3460; }
+
+    .section { padding: 40px; border-bottom: 1px solid #0f3460; }
+    .section-label { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 3px 10px; border-radius: 12px; margin-bottom: 8px; }
+    .label-partner { background: #1a4731; color: #69db7c; }
+    .label-admin { background: #3b1f1f; color: #ff8787; }
+
+    .email-meta { margin-bottom: 20px; }
+    .email-meta h2 { margin: 0 0 12px; font-size: 18px; color: #ffffff; }
+    .meta-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .meta-item { background: #0f3460; border-radius: 6px; padding: 10px 14px; font-size: 13px; }
+    .meta-item strong { color: #a0c4ff; display: block; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 3px; }
+    .meta-item span { color: #e0e0e0; }
+    .meta-item code { background: #1a2a4a; color: #ffd43b; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+    .email-frame { border: none; width: 100%; border-radius: 8px; background: #fff; display: block; }
+
+    .divider { height: 1px; background: linear-gradient(to right, transparent, #0f3460, transparent); margin: 40px 0; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Alliance Notifications — Email Previews</h1>
+  <p>8 transactional emails · 3 partner-facing · 5 admin-facing · Module: <code style="background:#0f3460;padding:2px 6px;border-radius:3px;font-size:12px;">src/med-alliance/notifications/</code></p>
+</div>
+
+<nav class="nav">
+  <a href="#commission-eligible">Commission Eligible</a>
+  <a href="#payout-paid">Payout Paid</a>
+  <a href="#referral-stage-changed">Referral Stage Changed</a>
+  <a href="#admin-commission-pending">Admin: Commission Pending</a>
+  <a href="#admin-payout-requested">Admin: Payout Requested</a>
+  <a href="#admin-referral-new">Admin: New Referral</a>
+  <a href="#admin-partner-registered">Admin: Partner Registered</a>
+  <a href="#admin-payment-failed">Admin: Payment Failed</a>
+</nav>
+
+<!-- ============================================================
+     1. COMMISSION ELIGIBLE
+     ============================================================ -->
+<div class="section" id="commission-eligible">
+  <span class="section-label label-partner">Partner</span>
+  <div class="email-meta">
+    <h2>Commission Eligible</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span>Admin calls <code>decide()</code> → sets commission to <code>eligible</code> in <code>commissions.service.ts</code></span></div>
+      <div class="meta-item"><strong>Recipient</strong><span>The affiliate (Growth Partner) who made the referral</span></div>
+      <div class="meta-item"><strong>Subject</strong><span>Your commission is ready — $[amount] from [Company]</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/commission-eligible.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/partner/earnings</code></span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your commission is ready</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo { text-align: left; margin-bottom: 30px; }
+    .logo img { max-width: 200px; height: auto; }
+    .greeting { color: #333333; font-size: 16px; margin-bottom: 20px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .highlight-box { background-color: #f0f9f0; border-left: 4px solid #01546B; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+    .highlight-box .amount { font-size: 28px; font-weight: 700; color: #01546B; }
+    .highlight-box .detail { font-size: 14px; color: #666666; margin-top: 4px; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
+    .sender { color: #333333; font-size: 16px; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo">
+          <img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" />
+        </div>
+        <div class="greeting">Hi Sarah,</div>
+        <div class="main-message">
+          <p>Great news — your commission from <strong>Sunrise Medical Group</strong> is now eligible for payout.</p>
+          <div class="highlight-box">
+            <div class="amount">$342.50</div>
+            <div class="detail">10% commission from Sunrise Medical Group</div>
+          </div>
+          <p>You can request a payout for this commission at any time from your earnings dashboard.</p>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">View My Earnings</a>
+        </div>
+        <div class="closing">Best,</div>
+        <div class="sender"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="580" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+<!-- ============================================================
+     2. PAYOUT PAID
+     ============================================================ -->
+<div class="section" id="payout-paid">
+  <span class="section-label label-partner">Partner</span>
+  <div class="email-meta">
+    <h2>Payout Paid</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span><code>PayoutRequestsService.markPaid()</code> (manual admin) OR <code>BillComPayoutService.finalizeAsPaid()</code> (Bill.com webhook)</span></div>
+      <div class="meta-item"><strong>Recipient</strong><span>The affiliate whose payout was processed</span></div>
+      <div class="meta-item"><strong>Subject</strong><span>Your payout of $[amount] has been processed</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/payout-paid.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/partner/payouts</code></span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo img { max-width: 200px; height: auto; margin-bottom: 30px; }
+    .greeting { color: #333333; font-size: 16px; margin-bottom: 20px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .highlight-box { background-color: #f0f9f0; border-left: 4px solid #01546B; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+    .highlight-box .amount { font-size: 28px; font-weight: 700; color: #01546B; }
+    .highlight-box .detail { font-size: 14px; color: #666666; margin-top: 4px; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo"><img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" /></div>
+        <div class="greeting">Hi Sarah,</div>
+        <div class="main-message">
+          <p>Your payout has been successfully processed.</p>
+          <div class="highlight-box">
+            <div class="amount">$1,025.00</div>
+            <div class="detail">Processed on May 20, 2025</div>
+          </div>
+          <p>You can view your full payout history in your partner dashboard.</p>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">View My Payouts</a>
+        </div>
+        <div style="color:#333;font-size:16px;margin:30px 0 10px;">Best,</div>
+        <div style="color:#333;font-size:16px;"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="520" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+<!-- ============================================================
+     3. REFERRAL STAGE CHANGED
+     ============================================================ -->
+<div class="section" id="referral-stage-changed">
+  <span class="section-label label-partner">Partner</span>
+  <div class="email-meta">
+    <h2>Referral Stage Changed</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span><code>ReferredCompaniesService.updateReferralStage()</code> after a stage update is saved</span></div>
+      <div class="meta-item"><strong>Recipient</strong><span>Affiliate linked to the referred organization via <code>org.referredByAffiliate</code></span></div>
+      <div class="meta-item"><strong>Subject</strong><span>[Company] has moved to [new stage]</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/referral-stage-changed.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/partner/referred-companies</code></span></div>
+      <div class="meta-item"><strong>Stage display</strong><span>Underscores replaced with spaces, each word capitalized. e.g. <code>in_negotiation</code> → <em>In Negotiation</em></span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo img { max-width: 200px; height: auto; margin-bottom: 30px; }
+    .greeting { color: #333333; font-size: 16px; margin-bottom: 20px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; }
+    .stage-box { display: flex; align-items: center; gap: 12px; background-color: #f8f9fa; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
+    .stage-pill { background-color: #e9ecef; color: #495057; padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+    .stage-pill.new { background-color: #01546B; color: #ffffff; }
+    .stage-arrow { font-size: 18px; color: #868e96; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo"><img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" /></div>
+        <div class="greeting">Hi Sarah,</div>
+        <div class="main-message">
+          <p><strong>Sunrise Medical Group</strong> has been moved to a new stage in the pipeline.</p>
+          <div class="stage-box">
+            <span class="stage-pill">In Negotiation</span>
+            <span class="stage-arrow">→</span>
+            <span class="stage-pill new">Contract Signed</span>
+          </div>
+          <p>Log in to your partner dashboard to see the full status of your referred companies.</p>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">View My Referrals</a>
+        </div>
+        <div style="color:#333;font-size:16px;margin:30px 0 10px;">Best,</div>
+        <div style="color:#333;font-size:16px;"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="520" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+<!-- ============================================================
+     4. ADMIN: COMMISSION PENDING
+     ============================================================ -->
+<div class="section" id="admin-commission-pending">
+  <span class="section-label label-admin">Admin</span>
+  <div class="email-meta">
+    <h2>Admin — Commission Pending Review</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span><code>CommissionDetectionService.run()</code> during HubSpot invoice sync cron — only when commission is created as <code>pending_admin_confirmation</code> (company already <code>eligible</code>)</span></div>
+      <div class="meta-item"><strong>Recipients</strong><span>All users with role <code>system_admin</code> or <code>system_super_admin</code></span></div>
+      <div class="meta-item"><strong>Subject</strong><span>Commission ready for review — [Company]</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/admin-commission-pending.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/admin/commissions</code></span></div>
+      <div class="meta-item"><strong>Note</strong><span>NOT sent for commissions created as <code>detected</code> (30-day stabilization window)</span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo img { max-width: 200px; height: auto; margin-bottom: 30px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .detail-table td { padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; }
+    .detail-table td:first-child { color: #666666; width: 45%; }
+    .detail-table td:last-child { font-weight: 600; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo"><img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" /></div>
+        <div class="main-message">
+          <p>A commission has been promoted to <strong>pending review</strong> and is waiting for your approval.</p>
+          <table class="detail-table">
+            <tr><td>Organization</td><td>Sunrise Medical Group</td></tr>
+            <tr><td>Affiliate</td><td>sarah.partner@email.com</td></tr>
+            <tr><td>Commission Amount</td><td>$342.50</td></tr>
+            <tr><td>Commission ID</td><td>clx1abc2def3ghi4jkl5</td></tr>
+          </table>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">Review Commissions</a>
+        </div>
+        <div style="color:#333;font-size:16px;margin:30px 0 10px;">Best,</div>
+        <div style="color:#333;font-size:16px;"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="500" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+<!-- ============================================================
+     5. ADMIN: PAYOUT REQUESTED
+     ============================================================ -->
+<div class="section" id="admin-payout-requested">
+  <span class="section-label label-admin">Admin</span>
+  <div class="email-meta">
+    <h2>Admin — Payout Requested</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span><code>PayoutRequestsService.create()</code> after a new payout request is saved</span></div>
+      <div class="meta-item"><strong>Recipients</strong><span>All users with role <code>system_admin</code> or <code>system_super_admin</code></span></div>
+      <div class="meta-item"><strong>Subject</strong><span>Payout request from [Partner] — $[amount]</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/admin-payout-requested.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/admin/payout-requests</code></span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo img { max-width: 200px; height: auto; margin-bottom: 30px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .detail-table td { padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; }
+    .detail-table td:first-child { color: #666666; width: 45%; }
+    .detail-table td:last-child { font-weight: 600; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo"><img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" /></div>
+        <div class="main-message">
+          <p>A partner has submitted a new payout request that requires your review.</p>
+          <table class="detail-table">
+            <tr><td>Partner</td><td>Sarah Johnson</td></tr>
+            <tr><td>Total Amount</td><td>$1,025.00</td></tr>
+            <tr><td>Commissions Included</td><td>3</td></tr>
+            <tr><td>Request ID</td><td>clx9xyz1abc2def3ghi4</td></tr>
+          </table>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">Review Payout Requests</a>
+        </div>
+        <div style="color:#333;font-size:16px;margin:30px 0 10px;">Best,</div>
+        <div style="color:#333;font-size:16px;"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="480" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+<!-- ============================================================
+     6. ADMIN: NEW REFERRAL
+     ============================================================ -->
+<div class="section" id="admin-referral-new">
+  <span class="section-label label-admin">Admin</span>
+  <div class="email-meta">
+    <h2>Admin — New Referral</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span><code>ReferredCompaniesService.create()</code> after a new referred company is created</span></div>
+      <div class="meta-item"><strong>Recipients</strong><span>All users with role <code>system_admin</code> or <code>system_super_admin</code></span></div>
+      <div class="meta-item"><strong>Subject</strong><span>New referral: [Company] referred by [Partner]</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/admin-referral-new.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/admin/pipeline</code></span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo img { max-width: 200px; height: auto; margin-bottom: 30px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .detail-table td { padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; }
+    .detail-table td:first-child { color: #666666; width: 45%; }
+    .detail-table td:last-child { font-weight: 600; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo"><img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" /></div>
+        <div class="main-message">
+          <p>A new company has been referred through the Med Alliance program.</p>
+          <table class="detail-table">
+            <tr><td>Company</td><td>Sunrise Medical Group</td></tr>
+            <tr><td>Referred by</td><td>Sarah Johnson</td></tr>
+            <tr><td>Company ID</td><td>clxorg1abc2def3ghi4jkl</td></tr>
+          </table>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">View Pipeline</a>
+        </div>
+        <div style="color:#333;font-size:16px;margin:30px 0 10px;">Best,</div>
+        <div style="color:#333;font-size:16px;"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="460" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+<!-- ============================================================
+     7. ADMIN: PARTNER REGISTERED
+     ============================================================ -->
+<div class="section" id="admin-partner-registered">
+  <span class="section-label label-admin">Admin</span>
+  <div class="email-meta">
+    <h2>Admin — Partner Registered</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span><code>AffiliatesService.create()</code> after a new affiliate profile is created (after invitation email)</span></div>
+      <div class="meta-item"><strong>Recipients</strong><span>All users with role <code>system_admin</code> or <code>system_super_admin</code></span></div>
+      <div class="meta-item"><strong>Subject</strong><span>New Alliance partner registered: [Name]</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/admin-partner-registered.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/admin/partners</code></span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo img { max-width: 200px; height: auto; margin-bottom: 30px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .detail-table td { padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; }
+    .detail-table td:first-child { color: #666666; width: 45%; }
+    .detail-table td:last-child { font-weight: 600; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo"><img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" /></div>
+        <div class="main-message">
+          <p>A new Growth Partner has joined the Med Alliance program.</p>
+          <table class="detail-table">
+            <tr><td>Name</td><td>Sarah Johnson</td></tr>
+            <tr><td>Email</td><td>sarah.partner@email.com</td></tr>
+            <tr><td>Profile ID</td><td>clxprof1abc2def3ghi4</td></tr>
+          </table>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">View Partners</a>
+        </div>
+        <div style="color:#333;font-size:16px;margin:30px 0 10px;">Best,</div>
+        <div style="color:#333;font-size:16px;"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="460" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+<!-- ============================================================
+     8. ADMIN: PAYMENT FAILED
+     ============================================================ -->
+<div class="section" id="admin-payment-failed">
+  <span class="section-label label-admin">Admin</span>
+  <div class="email-meta">
+    <h2>Admin — Bill.com Payment Failed</h2>
+    <div class="meta-grid">
+      <div class="meta-item"><strong>Trigger</strong><span><code>BillComPayoutService.markAsFailed()</code> when a Bill.com webhook reports payment failure</span></div>
+      <div class="meta-item"><strong>Recipients</strong><span>All users with role <code>system_admin</code> or <code>system_super_admin</code></span></div>
+      <div class="meta-item"><strong>Subject</strong><span>Bill.com payment failed — [Partner name] ($[amount])</span></div>
+      <div class="meta-item"><strong>Template file</strong><span><code>templates/admin-payment-failed.ts</code></span></div>
+      <div class="meta-item"><strong>CTA destination</strong><span><code>/modules/alliance/admin/payout-requests</code></span></div>
+      <div class="meta-item"><strong>Visual</strong><span>Red alert banner + monospace error box for the raw Bill.com error message</span></div>
+    </div>
+  </div>
+  <iframe class="email-frame" srcdoc='<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo img { max-width: 200px; height: auto; margin-bottom: 30px; }
+    .alert-banner { background-color: #fff5f5; border-left: 4px solid #e03131; padding: 14px 18px; border-radius: 0 8px 8px 0; margin-bottom: 20px; color: #c92a2a; font-weight: 600; font-size: 15px; }
+    .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
+    .detail-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .detail-table td { padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; }
+    .detail-table td:first-child { color: #666666; width: 45%; }
+    .detail-table td:last-child { font-weight: 600; }
+    .error-msg { background-color: #f8f9fa; border-radius: 6px; padding: 12px 16px; font-family: monospace; font-size: 13px; color: #495057; margin-top: 4px; word-break: break-all; }
+    .cta-button { display: inline-block; background-color: #01546B; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .footer { background-color: #f8f9fa; padding: 24px 30px; text-align: center; }
+    .footer p { color: #999999; font-size: 12px; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div class="content">
+        <div class="logo"><img src="https://staging.medvirtual.ai/logo.png" alt="MedVirtual Logo" /></div>
+        <div class="alert-banner">Action required: a Bill.com payment has failed</div>
+        <div class="main-message">
+          <p>A payout payment failed and requires your immediate attention.</p>
+          <table class="detail-table">
+            <tr><td>Partner</td><td>Sarah Johnson</td></tr>
+            <tr><td>Amount</td><td>$1,025.00</td></tr>
+            <tr><td>Bill.com Payment ID</td><td>pay_abc123def456</td></tr>
+            <tr><td>Payout Request ID</td><td>clxpayout1abc2def3gh</td></tr>
+            <tr>
+              <td style="vertical-align: top; padding-top: 12px;">Error</td>
+              <td><div class="error-msg">INSUFFICIENT_FUNDS: The payment could not be processed due to insufficient funds in the source account. Please verify account details and retry.</div></td>
+            </tr>
+          </table>
+        </div>
+        <div style="text-align: left; margin: 30px 0;">
+          <a href="#" class="cta-button">Review Payout Requests</a>
+        </div>
+        <div style="color:#333;font-size:16px;margin:30px 0 10px;">Best,</div>
+        <div style="color:#333;font-size:16px;"><strong>MedVirtual</strong> team</div>
+      </div>
+      <div class="footer"><p>© 2025 MedVirtual. All rights reserved.</p><p>This is an automated notification from MedVirtual.</p></div>
+    </div>
+  </div>
+</body>
+</html>' height="600" onload="this.style.height=(this.contentDocument.body.scrollHeight+40)+'px'"></iframe>
+</div>
+
+</body>
+</html>

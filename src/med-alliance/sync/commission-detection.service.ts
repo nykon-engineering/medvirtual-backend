@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../prisma/prisma.service';
 import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 // One year in milliseconds — used for the eligibility window and referral-age rule.
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
@@ -13,7 +14,10 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 export class CommissionDetectionService {
   private readonly logger = new Logger(CommissionDetectionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly allianceNotifications: AllianceNotificationsService,
+  ) {}
 
   /**
    * Phase B Step 2: for every eligible HubspotInvoiceSnapshot belonging to the
@@ -48,12 +52,14 @@ export class CommissionDetectionService {
       where: { id: organizationId },
       select: {
         id: true,
+        name: true,
         referred_by_affiliate_id: true,
         med_alliance_referral_status: true,
         med_alliance_block_reason: true,
         eligibility_start_at: true,
         first_paid_invoice_at: true,
         referral_stage: true,
+        deployment_date: true,
         createdAt: true,
       },
     });
@@ -115,7 +121,10 @@ export class CommissionDetectionService {
 
     // Load the affiliate's active profile to get the commission percentage.
     const profile = await this.prisma.affiliateProfile.findFirst({
-      where: { user_id: org.referred_by_affiliate_id, status: 'active' },
+      where: { 
+        user_id: org.referred_by_affiliate_id, 
+        status: { in: ['active', 'pending'] }
+      },
       select: { id: true, user_id: true, commission_percent_default: true },
     });
 
@@ -162,6 +171,7 @@ export class CommissionDetectionService {
     // Skip if already deployed or churned (idempotent).
     if (
       !org.first_paid_invoice_at &&
+      !org.deployment_date &&
       org.referral_stage !== 'deployed' &&
       org.referral_stage !== 'churned'
     ) {
@@ -196,6 +206,16 @@ export class CommissionDetectionService {
       ? 'pending_admin_confirmation'
       : 'detected';
 
+    // Fetch affiliate user once for notifications (only needed when commissions go to pending_admin_confirmation).
+    let affiliateUser: { email: string; first_name: string | null } | null =
+      null;
+    if (isEligibleNow) {
+      affiliateUser = await this.prisma.uSER.findUnique({
+        where: { id: affiliateUserId },
+        select: { email: true, first_name: true },
+      });
+    }
+
     // Create commissions for all candidate snapshots.
     let created = 0;
     let skipped = 0;
@@ -215,7 +235,7 @@ export class CommissionDetectionService {
           .div(100)
           .toDecimalPlaces(2);
 
-        await this.prisma.affiliateCommission.create({
+        const newCommission = await this.prisma.affiliateCommission.create({
           data: {
             affiliate_id: affiliateUserId,
             affiliate_profile_id: profile.id,
@@ -247,6 +267,15 @@ export class CommissionDetectionService {
             } as any,
           },
         });
+
+        if (isEligibleNow) {
+          void this.allianceNotifications.notifyAdminCommissionPending({
+            organizationName: org.name ?? organizationId,
+            affiliateName: affiliateUser?.email ?? affiliateUserId,
+            commissionAmount: parseFloat(String(commissionAmount)),
+            commissionId: newCommission.id,
+          });
+        }
 
         created++;
       } catch (err: any) {

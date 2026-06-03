@@ -176,6 +176,24 @@ export class CronController {
     };
   }
 
+  @Get('sync-invoice-due-dates')
+  @ApiOperation({
+    summary:
+      'Fetch hs_due_date from HubSpot for each invoice snapshot missing due_date and persist it',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Invoice due dates backfill completed',
+  })
+  async syncInvoiceDueDates() {
+    const result = await this.cron.syncInvoiceDueDates();
+    return {
+      status: 200,
+      message: 'Invoice due dates backfill completed',
+      data: result,
+    };
+  }
+
   @Get('promote-deployed-companies')
   @ApiOperation({
     summary:
@@ -190,6 +208,68 @@ export class CronController {
     return {
       status: 200,
       message: 'Deployed companies promotion completed',
+      data: result,
+    };
+  }
+
+  @Get('daily-commission-summary')
+  @ApiOperation({
+    summary:
+      'Send a daily summary email to admins listing all commissions pending review',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Daily commission summary sent successfully',
+  })
+  async dailyCommissionSummary() {
+    const result = await this.cron.dailyCommissionSummary();
+    return {
+      status: 200,
+      message: result.sent
+        ? `Daily commission summary sent (${result.count} commissions)`
+        : 'No pending commissions — email not sent',
+      data: result,
+    };
+  }
+
+  @Get('detect-commissions-by-affiliate')
+  @ApiOperation({
+    summary:
+      'Detect and create missing commissions for all organizations referred by a specific affiliate. Uses existing eligibility rules — safe to re-run (idempotent).',
+  })
+  @ApiQuery({
+    name: 'affiliate_profile_id',
+    required: true,
+    type: String,
+    description: 'UUID of the affiliate profile to process.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Commission detection completed',
+  })
+  async detectCommissionsByAffiliate(
+    @Query('affiliate_profile_id') affiliateProfileId: string,
+  ) {
+    const result =
+      await this.cron.detectCommissionsByAffiliate(affiliateProfileId);
+    return {
+      status: 200,
+      message: 'Commission detection completed',
+      data: result,
+    };
+  }
+
+  @Get('sync-hire-request-titles')
+  @ApiOperation({
+    summary:
+      'One-time sync: rebuild HireRequest titles that are missing hubspot_role_type, updating both DB and HubSpot',
+  })
+  @ApiResponse({ status: 200, description: 'Hire request title sync completed' })
+  async syncHireRequestTitles() {
+    const result = await this.cron.syncHireRequestTitles();
+    return {
+      status: 200,
+      message: 'Hire request title sync completed',
       data: result,
     };
   }

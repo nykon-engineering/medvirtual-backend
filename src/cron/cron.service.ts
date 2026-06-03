@@ -25,6 +25,8 @@ import {
   ReferralSyncService,
   SyncResult,
 } from '../med-alliance/sync/referral-sync.service';
+import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
+import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 
 type Event = {
   objectId?: string;
@@ -41,6 +43,8 @@ export class CronService {
     private readonly positionRateConfigService: PositionRateConfigService,
     private readonly payoutRequestsService: PayoutRequestsService,
     private readonly referralSync: ReferralSyncService,
+    private readonly commissionDetection: CommissionDetectionService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   async reRunPipeline(statusDto: reRunPipelineDto): Promise<boolean> {
@@ -868,6 +872,66 @@ export class CronService {
     return { updated, skipped, failed };
   }
 
+  async syncInvoiceDueDates(): Promise<{
+    updated: number;
+    skipped: number;
+    failed: number;
+  }> {
+    console.log('Starting syncInvoiceDueDates backfill...');
+
+    const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
+      where: { due_date: null },
+      select: { id: true, hubspot_id: true },
+    });
+
+    console.log(
+      `syncInvoiceDueDates: ${snapshots.length} snapshot(s) with null due_date`,
+    );
+
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const snapshot of snapshots) {
+      try {
+        const response = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/invoices/${snapshot.hubspot_id}?properties=hs_due_date`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
+        );
+
+        const dueDate: string | null =
+          response.data?.properties?.hs_due_date ?? null;
+
+        if (!dueDate) {
+          skipped++;
+          continue;
+        }
+
+        await this.prisma.hubspotInvoiceSnapshot.update({
+          where: { id: snapshot.id },
+          data: { due_date: new Date(dueDate) },
+        });
+
+        updated++;
+      } catch (err) {
+        console.error(
+          `syncInvoiceDueDates: failed for invoice ${snapshot.hubspot_id} — ${err instanceof Error ? err.message : err}`,
+        );
+        failed++;
+      }
+    }
+
+    console.log(
+      `syncInvoiceDueDates: updated=${updated}, skipped=${skipped}, failed=${failed}`,
+    );
+
+    return { updated, skipped, failed };
+  }
+
   async promoteDeployedCompanies(): Promise<{
     companiesPromoted: number;
     commissionsPromoted: number;
@@ -882,10 +946,22 @@ export class CronService {
     const orgs = await this.prisma.organization.findMany({
       where: {
         referral_stage: 'deployed' as any,
-        first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
         med_alliance_referral_status: 'not_eligible',
+        OR: [
+          { deployment_date: { lte: thirtyDaysAgo, gte: oneYearAgo } },
+          {
+            deployment_date: null,
+            first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+          },
+        ],
       },
-      select: { id: true, name: true, eligibility_start_at: true },
+      select: {
+        id: true,
+        name: true,
+        eligibility_start_at: true,
+        deployment_date: true,
+        first_paid_invoice_at: true,
+      },
     });
 
     let companiesPromoted = 0;
@@ -1013,10 +1089,8 @@ export class CronService {
     const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
     const now = new Date();
 
+    console.log('Organization ID provided:', organizationId);
 
-    console.log("Organization ID provided:", organizationId);
-    
-    
     let orgIds: string[];
 
     if (organizationId) {
@@ -1052,7 +1126,7 @@ export class CronService {
     // Promote deployed orgs that have passed the 30-day stabilization window
     const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
     const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
-    console.log("OrgsID to check for promotion:", orgIds);
+    console.log('OrgsID to check for promotion:', orgIds);
 
     const deployedOrgs = await this.prisma.organization.findMany({
       where: {
@@ -1064,7 +1138,7 @@ export class CronService {
       select: { id: true, name: true, eligibility_start_at: true },
     });
 
-    console.log("Deployed orgs eligible for promotion:", deployedOrgs);
+    console.log('Deployed orgs eligible for promotion:', deployedOrgs);
 
     let companiesPromoted = 0;
     let commissionsPromoted = 0;
@@ -1092,7 +1166,7 @@ export class CronService {
             where: { id: commission.id },
             data: { status: 'pending_admin_confirmation' },
           });
-          
+
           commissionsPromoted++;
         }
       } catch (err: any) {
@@ -1115,5 +1189,207 @@ export class CronService {
       syncResults,
       promotionErrors,
     };
+  }
+
+  async detectCommissionsByAffiliate(affiliateProfileId: string): Promise<{
+    processed: number;
+    created: number;
+    skipped: number;
+    failed: number;
+  }> {
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateProfileId },
+      select: { id: true, user_id: true },
+    });
+
+    if (!profile) {
+      throw new Error(`Affiliate profile not found: ${affiliateProfileId}`);
+    }
+
+    const orgs = await this.prisma.organization.findMany({
+      where: {
+        referred_by_affiliate_id: profile.user_id,
+        hubspotInvoiceSnapshots: {
+          some: { invoice_status: 'paid', invoice_amount: { gt: 0 } },
+        },
+      },
+      select: { id: true },
+    });
+
+    //console.log(orgs)
+
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const org of orgs) {
+      try {
+        const result = await this.commissionDetection.run(org.id);
+        //console.log(`detectCommissionsByAffiliate: org ${org.id} — created=${result.created} skipped=${result.skipped}`);
+        created += result.created;
+        skipped += result.skipped;
+      } catch (err) {
+        failed++;
+        console.error(
+          `detectCommissionsByAffiliate: error processing org ${org.id} — ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
+    console.log(
+      `detectCommissionsByAffiliate: affiliateProfileId=${affiliateProfileId} processed=${orgs.length} created=${created} skipped=${skipped} failed=${failed}`,
+    );
+
+    return { processed: orgs.length, created, skipped, failed };
+  }
+
+  async dailyCommissionSummary(): Promise<{ sent: boolean; count: number }> {
+    const commissions = await this.prisma.affiliateCommission.findMany({
+      where: { status: 'pending_admin_confirmation' },
+      select: {
+        id: true,
+        commission_amount: true,
+        organization: { select: { name: true } },
+        affiliate: {
+          select: { email: true, first_name: true, last_name: true },
+        },
+      },
+    });
+
+    if (commissions.length === 0) {
+      return { sent: false, count: 0 };
+    }
+
+    const items = commissions.map((c) => {
+      const u = c.affiliate;
+      const affiliateName = u
+        ? [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email
+        : 'Unknown';
+      return {
+        commissionId: c.id,
+        organizationName: c.organization?.name ?? 'Unknown',
+        affiliateName,
+        commissionAmount: Number(c.commission_amount),
+      };
+    });
+
+    const totalAmount = items.reduce((sum, i) => sum + i.commissionAmount, 0);
+
+    void this.allianceNotifications.notifyAdminDailyCommissionSummary({
+      commissions: items,
+      totalAmount,
+      reportDate: new Date(),
+    });
+
+    return { sent: true, count: commissions.length };
+  }
+
+  private buildHireRequestTitle(hr: {
+    hubspot_pairing_request_type?: string | null;
+    hubspot_numberVA?: number | null;
+    hubspot_role_type?: string | null;
+    availability?: string | null;
+    organization: { name: string };
+  }): string {
+    const isProduction = process.env.ENVIRONMENT === 'PROD';
+    const basePrefix = isProduction ? 'HR' : 'TEST HR';
+    const requestType = hr.hubspot_pairing_request_type || '';
+    const firstPrefix =
+      requestType === 'Upsell Agent'
+        ? 'UPS '
+        : requestType === 'Agent Replacement'
+          ? 'REP '
+          : '';
+
+    const parts: string[] = [(firstPrefix + basePrefix).trim()];
+
+    if (hr.organization?.name?.trim()) {
+      parts.push(hr.organization.name);
+    }
+
+    if (hr.hubspot_numberVA) {
+      parts.push(String(hr.hubspot_numberVA));
+    }
+
+    if (hr.hubspot_role_type?.trim()) {
+      parts.push(hr.hubspot_role_type);
+    }
+
+    if (hr.availability?.trim()) {
+      const formatted = hr.availability
+        .split('-')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join('-');
+      if (formatted.trim()) {
+        parts.push(formatted);
+      }
+    }
+
+    return parts.filter((p) => p?.trim()).join(' - ');
+  }
+
+  async syncHireRequestTitles(): Promise<{
+    updated: number;
+    skipped: number;
+    errors: number;
+    preview: { id: string; currentTitle: string | null; newTitle: string }[];
+  }> {
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: {
+        hubspot_role_type: { not: null },
+        hubspot_ticket_id: { not: null },
+      },
+      select: {
+        id: true,
+        title: true,
+        hubspot_ticket_id: true,
+        hubspot_pairing_request_type: true,
+        hubspot_numberVA: true,
+        hubspot_role_type: true,
+        availability: true,
+        organization: { select: { name: true } },
+      },
+    });
+
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+    const preview: { id: string; currentTitle: string | null; newTitle: string }[] = [];
+
+    for (const hr of hireRequests) {
+      if (hr.title && hr.title.split(' - ').length >= 5) {
+        skipped++;
+        continue;
+      }
+
+      const newTitle = this.buildHireRequestTitle(hr);
+      preview.push({ id: hr.id, currentTitle: hr.title, newTitle });
+
+      try {
+        await this.prisma.hireRequest.update({
+          where: { id: hr.id },
+          data: { title: newTitle },
+        });
+        await axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/tickets/${hr.hubspot_ticket_id}`,
+          { properties: { subject: newTitle } },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+        updated++;
+      } catch (e) {
+        errors++;
+        console.error(
+          `Error syncing HR ${hr.id}:`,
+          e.response?.data ?? e.message,
+        );
+      }
+    }
+
+    return { updated, skipped, errors, preview };
   }
 }

@@ -7,9 +7,15 @@ import { CommissionDetectionService } from './commission-detection.service';
 import { ReferralSyncService } from './referral-sync.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
 import { ReviewCasesModule } from '../review-cases/review-cases.module';
+import { AllianceNotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [PrismaModule, MailModule, ReviewCasesModule],
+  imports: [
+    PrismaModule,
+    MailModule,
+    ReviewCasesModule,
+    AllianceNotificationsModule,
+  ],
   providers: [
     HubspotMatchingService,
     InvoiceIngestionService,
@@ -18,6 +24,10 @@ import { ReviewCasesModule } from '../review-cases/review-cases.module';
     // EligibilityCheckService is used by HubspotMatchingService after a match is resolved
     EligibilityCheckService,
   ],
-  exports: [ReferralSyncService, InvoiceIngestionService],
+  exports: [
+    ReferralSyncService,
+    InvoiceIngestionService,
+    CommissionDetectionService,
+  ],
 })
 export class SyncModule {}

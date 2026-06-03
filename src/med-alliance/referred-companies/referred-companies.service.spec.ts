@@ -11,6 +11,12 @@ import { ReviewCasesService } from '../review-cases/review-cases.service';
 import { OrganizationService } from '../../organization/organization.service';
 import { HubspotService } from '../../hubspot/hubspot.service';
 import { ContactService } from '../../contacts/contacts.service';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
+
+const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
+  notifyAdminReferralNew: jest.fn(),
+  notifyReferralStageChanged: jest.fn(),
+};
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -124,6 +130,7 @@ describe('ReferredCompaniesService', () => {
         { provide: OrganizationService, useValue: mockOrganizationService},
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: ContactService, useValue: mockContactService },
+        { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
       ],
     }).compile();
 

@@ -9,6 +9,8 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
 import { ReferralSyncService } from '../med-alliance/sync/referral-sync.service';
+import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
+import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 
 jest.mock('axios');
 
@@ -22,6 +24,8 @@ describe('CronService', () => {
   let positionRateConfigServiceMock: Record<string, jest.Mock>;
   let payoutRequestsServiceMock: Record<string, jest.Mock>;
   let referralSyncServiceMock: { run: jest.Mock };
+  let commissionDetectionServiceMock: { run: jest.Mock };
+  let allianceNotificationsMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     prismaServiceMock = {
@@ -74,6 +78,16 @@ describe('CronService', () => {
       run: jest.fn(),
     };
 
+    commissionDetectionServiceMock = {
+      run: jest.fn(),
+    };
+
+    allianceNotificationsMock = {
+      notifyCommissionEligible: jest.fn(),
+      notifyAdminCommissionReverted: jest.fn(),
+      notifyAdminCommissionPendingSummary: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CronService,
@@ -85,6 +99,8 @@ describe('CronService', () => {
         { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
         { provide: PayoutRequestsService, useValue: payoutRequestsServiceMock },
         { provide: ReferralSyncService, useValue: referralSyncServiceMock },
+        { provide: CommissionDetectionService, useValue: commissionDetectionServiceMock },
+        { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
       ],
     }).compile();
 
@@ -325,10 +341,22 @@ describe('CronService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             med_alliance_referral_status: 'not_eligible',
-            first_paid_invoice_at: expect.objectContaining({
-              lte: expect.any(Date), // ≤ 30 days ago
-              gte: expect.any(Date), // ≥ 1 year ago
-            }),
+            referral_stage: 'deployed',
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                deployment_date: expect.objectContaining({
+                  lte: expect.any(Date),
+                  gte: expect.any(Date),
+                }),
+              }),
+              expect.objectContaining({
+                deployment_date: null,
+                first_paid_invoice_at: expect.objectContaining({
+                  lte: expect.any(Date),
+                  gte: expect.any(Date),
+                }),
+              }),
+            ]),
           }),
         }),
       );

@@ -45,6 +45,7 @@ import { OrganizationService } from '../../organization/organization.service';
 import { HubspotService } from '../../hubspot/hubspot.service';
 import { ContactService } from '../../contacts/contacts.service';
 import axios from 'axios';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ReferredCompaniesService {
@@ -57,14 +58,19 @@ export class ReferredCompaniesService {
     private readonly organizationService: OrganizationService,
     private readonly hubspot: HubspotService,
     private readonly contactService: ContactService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   async create(
     dto: CreateReferredCompanyDto | CreateOrganizationDto,
     currentUser: USER,
+    adminUser?: USER,
   ) {
     // Step 0: Validation — read-only, no rollback needed.
-    await this.affiliatesService.requireActiveProfile(currentUser.id);
+    const affiliateProfile = await this.affiliatesService.requireActiveProfile(
+      currentUser.id,
+    );
+    await this.verifyGrowthPartnerInHubspot(affiliateProfile.hubspot_id);
 
     const cleanupStack: Array<() => Promise<void>> = [];
 
@@ -87,7 +93,12 @@ export class ReferredCompaniesService {
         });
         if (freshOrg?.hubspot_id) {
           await this.hubspot
-            .deleteCompanyInHubspot(freshOrg.hubspot_id, currentUser.id, org.id)
+            .deleteCompanyInHubspot(
+              freshOrg.hubspot_id,
+              currentUser.id,
+              org.id,
+              `Referred company deleted — HubSpot company record removed during rollback`,
+            )
             .catch((e) =>
               console.error('[rollback] Failed to delete HubSpot company:', e),
             );
@@ -230,6 +241,20 @@ export class ReferredCompaniesService {
         }
       }
 
+      const affiliateName =
+        `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim() ||
+        currentUser.email;
+      const adminName = adminUser
+        ? `${adminUser.first_name ?? ''} ${adminUser.last_name ?? ''}`.trim() ||
+          adminUser.email
+        : undefined;
+      void this.allianceNotifications.notifyAdminReferralNew({
+        organizationName: newOrganization.name,
+        affiliateName,
+        referredCompanyId: newOrganization.id,
+        adminName,
+      });
+
       return softDuplicateWarning
         ? { ...newOrganization, warning: softDuplicateWarning }
         : newOrganization;
@@ -254,6 +279,29 @@ export class ReferredCompaniesService {
    * Executes the cleanup stack in reverse order (LIFO).
    * Each cleanup function has its own error handling so one failure does not block the rest.
    */
+  private async verifyGrowthPartnerInHubspot(
+    hubspotId: string | null,
+  ): Promise<void> {
+    if (!hubspotId) return;
+    try {
+      await axios.get(
+        `https://api.hubapi.com/crm/v3/objects/p20630393_growth_partners/${hubspotId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          },
+        },
+      );
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        throw new BadRequestException(
+          'Your Growth Partner profile could not be found. Please contact support to re-link your affiliate account before referring a company.',
+        );
+      }
+      // Other errors (network, rate limit) → do not block; let the flow continue.
+    }
+  }
+
   private async executeRollback(
     cleanupStack: Array<() => Promise<void>>,
   ): Promise<void> {
@@ -307,6 +355,7 @@ export class ReferredCompaniesService {
   async createAdminInitiated(
     affiliateId: string,
     dto: CreateReferredCompanyDto,
+    adminUser: USER,
   ) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateId },
@@ -324,7 +373,7 @@ export class ReferredCompaniesService {
     if (!affiliateUser)
       throw new NotFoundException('Affiliate user account not found');
 
-    return this.create(dto, affiliateUser);
+    return this.create(dto, affiliateUser, adminUser);
   }
 
   // ---------------------------------------------------------------------------
@@ -650,6 +699,7 @@ export class ReferredCompaniesService {
         med_alliance_referral_status: true,
         eligibility_start_at: true,
         first_paid_invoice_at: true,
+        deployment_date: true,
         med_alliance_block_reason: true,
         referral_stage: true,
         hubspot_id: true,
@@ -760,9 +810,11 @@ export class ReferredCompaniesService {
       where: { id },
       select: {
         id: true,
+        name: true,
         referral_stage: true,
         eligibility_start_at: true,
         referred_by_affiliate_id: true,
+        referredByAffiliate: { select: { email: true, first_name: true } },
       },
     });
     if (!org) throw new NotFoundException('Referred company not found');
@@ -802,6 +854,20 @@ export class ReferredCompaniesService {
           : undefined,
       },
     });
+
+    if (org.referredByAffiliate?.email) {
+      void this.allianceNotifications.notifyReferralStageChanged(
+        {
+          email: org.referredByAffiliate.email,
+          first_name: org.referredByAffiliate.first_name ?? '',
+        },
+        {
+          organizationName: org.name,
+          previousStage: org.referral_stage ?? 'referred',
+          newStage: dto.stage,
+        },
+      );
+    }
 
     return this.findOneForAdmin(id);
   }

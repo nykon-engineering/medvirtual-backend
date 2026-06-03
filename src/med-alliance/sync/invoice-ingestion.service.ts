@@ -11,6 +11,7 @@ export interface InvoiceRecord {
   invoice_amount: string;
   currency: string;
   paid_at: Date | null;
+  due_date: Date | null;
   raw_payload: any;
   hubspot_pdf_link: string | null;
 }
@@ -30,6 +31,7 @@ export class InvoiceIngestionService {
     'hs_payment_date', // paid_at equivalent — date payment was settled
     'hs_lastmodifieddate',
     'hs_pdf_download_link',
+    'hs_due_date',
   ].join(',');
 
   constructor(
@@ -146,6 +148,7 @@ export class InvoiceIngestionService {
           invoice_amount: props.hs_amount_billed ?? '0',
           currency: props.hs_currency_code ?? 'USD',
           paid_at: paidAt,
+          due_date: props.hs_due_date ? new Date(props.hs_due_date) : null,
           raw_payload: response.data,
           hubspot_pdf_link: props.hs_pdf_download_link ?? null,
         });
@@ -187,8 +190,7 @@ export class InvoiceIngestionService {
           },
         },
       );
-      const initiatedDate =
-        paymentResponse.data?.properties?.hs_initiated_date;
+      const initiatedDate = paymentResponse.data?.properties?.hs_initiated_date;
       return initiatedDate ? new Date(initiatedDate) : null;
     } catch (err) {
       this.logger.warn(
@@ -208,7 +210,6 @@ export class InvoiceIngestionService {
     organizationId: string,
     invoice: InvoiceRecord,
   ): Promise<'created' | 'updated' | 'skipped'> {
-
     const syncHash = this.computeSyncHash(invoice);
 
     const existing = await this.prisma.hubspotInvoiceSnapshot.findUnique({
@@ -236,6 +237,7 @@ export class InvoiceIngestionService {
           invoice_amount: invoice.invoice_amount,
           currency: invoice.currency,
           paid_at: invoice.paid_at,
+          due_date: invoice.due_date,
           sync_hash: syncHash,
           raw_payload: invoice.raw_payload,
           hubspot_pdf_link: invoice.hubspot_pdf_link,
@@ -256,6 +258,7 @@ export class InvoiceIngestionService {
         invoice_amount: invoice.invoice_amount,
         currency: invoice.currency,
         paid_at: invoice.paid_at,
+        due_date: invoice.due_date,
         sync_hash: syncHash,
         raw_payload: invoice.raw_payload,
         hubspot_pdf_link: invoice.hubspot_pdf_link,
@@ -293,6 +296,7 @@ export class InvoiceIngestionService {
       invoice.invoice_amount,
       invoice.currency,
       invoice.paid_at ? invoice.paid_at.toISOString() : '',
+      invoice.due_date ? invoice.due_date.toISOString() : '',
     ].join('|');
 
     return createHash('sha256').update(payload).digest('hex');

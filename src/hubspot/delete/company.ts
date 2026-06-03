@@ -15,6 +15,7 @@ export class CompanyDeleteService {
     hubspotCompanyId: string,
     actorUserId?: string,
     entityId?: string,
+    reason?: string,
   ): Promise<boolean> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
@@ -39,6 +40,7 @@ export class CompanyDeleteService {
         action: HubspotAuditAction.DELETE,
         source,
         success: true,
+        payload: { ...(reason && { reason }) },
       });
 
       return true;
@@ -59,6 +61,7 @@ export class CompanyDeleteService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
       return false;
     }

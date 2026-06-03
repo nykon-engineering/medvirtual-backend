@@ -281,32 +281,55 @@ export class HandlerOrganization {
       },
     });
 
+    const crossPanelSelected = await this.prisma.panelCandidate.findMany({
+      where: { status: { in: ['selected_by_client'] } },
+      select: { candidate_id: true, panel_id: true },
+    });
+
+    const candidateSelectedInPanels = new Map<string, Set<string>>();
+    for (const pc of crossPanelSelected) {
+      if (!candidateSelectedInPanels.has(pc.candidate_id)) {
+        candidateSelectedInPanels.set(pc.candidate_id, new Set());
+      }
+      candidateSelectedInPanels.get(pc.candidate_id)!.add(pc.panel_id);
+    }
+
     //change candidate employment_type and calculate salary
     const _pCfgsA = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMapA = buildConfigMap(_pCfgsA);
     const awaitingDecisionSanitized = awaitingDecision.map((item) => ({
       ...item,
-      panelCandidates: item.panelCandidates.map((pc) => {
-        const rates = computeCandidateRates(pc.candidate, _cfgMapA);
-        return {
-          ...pc,
-          candidate: {
-            ...pc.candidate,
-            employment_type:
-              changeLabelAvailability(
-                dbToStageDictionary[Number(pc.candidate.employment_type)],
-              ) || pc.candidate.employment_type,
-            approved_positions_pairing:
-              pc.candidate.approved_positions_pairing?.map(
-                getApprovedPositionLabel,
-              ) || [],
-            ...rates,
-            avatar: pc.candidate?.avatar_url
-              ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
-              : null,
-          },
-        };
-      }),
+      panelCandidates: item.panelCandidates
+        .filter((pc) => {
+          const panelSet = candidateSelectedInPanels.get(pc.candidate.id);
+          if (panelSet) {
+            const onlyInCurrentPanel =
+              panelSet.size === 1 && panelSet.has(item.id);
+            if (!onlyInCurrentPanel) return false;
+          }
+          return true;
+        })
+        .map((pc) => {
+          const rates = computeCandidateRates(pc.candidate, _cfgMapA);
+          return {
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              employment_type:
+                changeLabelAvailability(
+                  dbToStageDictionary[Number(pc.candidate.employment_type)],
+                ) || pc.candidate.employment_type,
+              approved_positions_pairing:
+                pc.candidate.approved_positions_pairing?.map(
+                  getApprovedPositionLabel,
+                ) || [],
+              ...rates,
+              avatar: pc.candidate?.avatar_url
+                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                : null,
+            },
+          };
+        }),
     }));
 
     result.awaitingDecision = awaitingDecisionSanitized;

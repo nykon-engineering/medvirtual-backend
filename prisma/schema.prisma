@@ -178,6 +178,8 @@ model Organization {
   eligibility_start_at         DateTime?
   // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
   first_paid_invoice_at        DateTime?
+  // Deployment date synced from HubSpot organization.deploy_date_of_first_va; preferred over first_paid_invoice_at for display.
+  deployment_date              DateTime?
   // Pipeline stage tracking where this referral is in the sales-to-deployment lifecycle.
   // 'deployed' starts the 30-day stabilization clock (eligibility_start_at); cron promotes to eligible after 30 days.
   referral_stage               ReferralStage?              @default(referred)
@@ -378,6 +380,7 @@ model HireRequest {
   status                            HireRequestStatus  @default(new)
   priority                          Priority           @default(medium)
   createdAt                         DateTime           @default(now())
+  updatedAt                         DateTime?          @updatedAt
   availability                      String
   contract_length                   String?
   expected_start_date               DateTime?
@@ -468,6 +471,7 @@ model CandidatePanel {
   scheduled_date  DateTime?
   decided_date    DateTime?
   createdAt       DateTime         @default(now())
+  updatedAt       DateTime?         @updatedAt
   readable        Boolean          @default(false)
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
@@ -484,6 +488,7 @@ model PanelCandidate {
   candidate_id    String
   status          PanelCandidateStatus @default(selected)
   createdAt       DateTime             @default(now())
+  updatedAt       DateTime?             @updatedAt
   createdByUserId String?
   candidate       Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
   panel           CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
@@ -665,24 +670,25 @@ model TalentPoolLead {
 }
 
 model Contact {
-  id               String    @id @default(uuid())
-  user_id          String?    @unique
-  hubspot_id       String?   @unique
-  organization_id  String?
-  first_name       String?
-  last_name        String?
-  email            String?
-  phone            String?
-  job_title        String?
-  company_name     String?
-  business_unit    String?
-  account_type     String?
-  website_url      String?
-  type             String?
-  referral_source  String?
-  hubspot_owner_id String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                       String    @id @default(uuid())
+  user_id                  String?    @unique
+  hubspot_id               String?   @unique
+  organization_id          String?
+  first_name               String?
+  last_name                String?
+  email                    String?
+  phone                    String?
+  job_title                String?
+  company_name              String?
+  business_unit             String?
+  account_type              String?
+  website_url               String?
+  type                      String?
+  referral_source           String?
+  hubspot_owner_id          String?
+  hubspot_billcom_vendor_id String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   user             USER?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
   organization     Organization? @relation(fields: [organization_id], references: [id])
@@ -767,6 +773,7 @@ model HubspotInvoiceSnapshot {
   invoice_amount Decimal   @db.Decimal(14, 2)
   currency       String    @default("USD") @db.VarChar(3)
   paid_at        DateTime?
+  due_date       DateTime?
   sync_hash      String?
   raw_payload    Json?
   hubspot_pdf_link String?
@@ -855,6 +862,12 @@ model AffiliatePayoutRequest {
   payment_reference     String?
   transaction_reference String?
   payment_proof_notes   String?
+  bill_com_billId       String?
+  bill_com_payment_id   String?
+  bill_com_status       String?
+  bill_com_paymentStatus String?
+  bill_com_approvalStatus String?
+  bill_com_error        String?
   approved_by           String?
   approved_at           DateTime?
   paid_at               DateTime?
@@ -1116,6 +1129,7 @@ enum PayoutMethod {
   paypal
   zelle
   other
+  bill_com
 }
 
 enum CommissionStatus {
@@ -1135,6 +1149,8 @@ enum PayoutRequestStatus {
   rejected
   paid
   cancelled
+  processing
+  failed
 }
 
 enum PayoutNoteType {
@@ -1233,4 +1249,12 @@ model HubspotAuditLog {
   @@index([source],                             map: "idx_hs_audit_source")
   @@index([success],                            map: "idx_hs_audit_success")
   @@index([createdAt],                          map: "idx_hs_audit_created_at")
+}
+
+model BillComCredential {
+  id           String   @id @default("singleton")
+  rememberMeId String
+  device       String
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
 }

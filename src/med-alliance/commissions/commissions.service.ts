@@ -6,9 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CommissionStatus, USER } from '@prisma/client';
+import { CommissionStatus, Prisma, USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ListCommissionsDto } from './dto/list-commissions.dto';
+import { ListMedAllianceAuditLogsDto } from './dto/list-med-alliance-audit-logs.dto';
 import {
   DecideCommissionDto,
   VoidCommissionDto,
@@ -17,6 +18,7 @@ import {
 } from './dto/decide-commission.dto';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 // Terminal statuses — transitions out of these are not allowed.
 const TERMINAL_STATUSES = ['paid', 'void', 'rejected'];
@@ -50,6 +52,7 @@ const COMMISSION_SELECT = {
       invoice_amount: true,
       currency: true,
       paid_at: true,
+      due_date: true,
       hubspot_pdf_link: true,
       lineItems: {
         select: {
@@ -90,7 +93,10 @@ const PAYOUT_LINKAGE_SELECT = {
 export class CommissionsService {
   private readonly logger = new Logger(CommissionsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly allianceNotifications: AllianceNotificationsService,
+  ) {}
 
   // ---------------------------------------------------------------------------
   // Shared: write an audit log entry for a commission transition.
@@ -302,6 +308,33 @@ export class CommissionsService {
       source: 'admin_action',
     });
 
+    if (newStatus === 'eligible') {
+      const full = await this.prisma.affiliateCommission.findUnique({
+        where: { id },
+        select: {
+          commission_amount: true,
+          commission_percent_snapshot: true,
+          affiliate: { select: { email: true, first_name: true } },
+          organization: { select: { name: true } },
+        },
+      });
+      if (full?.affiliate?.email) {
+        void this.allianceNotifications.notifyCommissionEligible(
+          {
+            email: full.affiliate.email,
+            first_name: full.affiliate.first_name ?? '',
+          },
+          {
+            organizationName: full.organization?.name ?? '',
+            commissionAmount: parseFloat(String(full.commission_amount ?? 0)),
+            commissionPercent: parseFloat(
+              String(full.commission_percent_snapshot ?? 0),
+            ),
+          },
+        );
+      }
+    }
+
     return updated;
   }
 
@@ -380,6 +413,28 @@ export class CommissionsService {
       newStatus: 'pending_admin_confirmation',
       source: 'admin_action',
     });
+
+    /*
+    removed on 2026-05-27 asked By Pauli: https://regenta-company.monday.com/boards/9328303960/pulses/12100540751
+    const full = await this.prisma.affiliateCommission.findUnique({
+      where: { id },
+      select: {
+        commission_amount: true,
+        affiliate: { select: { first_name: true, last_name: true } },
+        organization: { select: { name: true } },
+      },
+    });
+    if (full) {
+      void this.allianceNotifications.notifyAdminCommissionReverted({
+        organizationName: full.organization?.name ?? '',
+        affiliateName:
+          `${full.affiliate?.first_name ?? ''} ${full.affiliate?.last_name ?? ''}`.trim(),
+        commissionAmount: parseFloat(String(full.commission_amount ?? 0)),
+        commissionId: id,
+        revertedByName: `${adminUser.first_name} ${adminUser.last_name}`.trim(),
+      });
+    }
+    */
 
     return updated;
   }
@@ -783,5 +838,79 @@ export class CommissionsService {
         actorUser: { select: { id: true, first_name: true, last_name: true } },
       },
     });
+  }
+
+  async findAllAuditLogs(dto: ListMedAllianceAuditLogsDto) {
+    const {
+      page = 1,
+      limit = 20,
+      entity_type,
+      event,
+      source,
+      date_from,
+      date_to,
+      search,
+      sortOrder = 'desc',
+    } = dto;
+
+    const where: Prisma.MedAllianceAuditLogWhereInput = {
+      ...(entity_type && { entity_type }),
+      ...(source && { source }),
+      ...(event && { event: { contains: event, mode: 'insensitive' } }),
+      ...(date_from || date_to
+        ? {
+            createdAt: {
+              ...(date_from && { gte: new Date(date_from) }),
+              ...(date_to && {
+                lte: new Date(new Date(date_to).setHours(23, 59, 59, 999)),
+              }),
+            },
+          }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { entity_id: { contains: search, mode: 'insensitive' } },
+              { event: { contains: search, mode: 'insensitive' } },
+              { reason: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, data] = await Promise.all([
+      this.prisma.medAllianceAuditLog.count({ where }),
+      this.prisma.medAllianceAuditLog.findMany({
+        where,
+        orderBy: { createdAt: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+        select: {
+          id: true,
+          entity_type: true,
+          entity_id: true,
+          event: true,
+          old_status: true,
+          new_status: true,
+          reason: true,
+          source: true,
+          metadata: true,
+          createdAt: true,
+          actorUser: {
+            select: {
+              id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 }

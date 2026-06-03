@@ -57,7 +57,11 @@ export class OrganizationCreationService {
     return user?.email ?? null;
   }
 
-  async execute(data: any, actorUserId?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -133,7 +137,7 @@ export class OrganizationCreationService {
         action: HubspotAuditAction.CREATE,
         source,
         success: true,
-        payload: { name: data.name },
+        payload: { name: data.name, ...(reason && { reason }) },
         response: { id: response.data.id },
       });
 
@@ -154,6 +158,7 @@ export class OrganizationCreationService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }

@@ -37,7 +37,11 @@ export class HireRequestCreationService {
     return user && user.hubspot_id ? user.hubspot_id : null;
   }
 
-  async execute(data: any, actorUserId?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -46,7 +50,7 @@ export class HireRequestCreationService {
         data.salary_range_from && data.salary_range_to
           ? `${data.salary_range_from} - ${data.salary_range_to}`
           : '';
-      //console.log("Data arriving on HireRequestCreationService:", data);
+      //console.log("Data arriving on HireRequestCreationService:", data.other_shift_hours);
       const hrDescription = data.description ? data.description : '';
 
       const response = await axios.post(
@@ -62,9 +66,10 @@ export class HireRequestCreationService {
             pairing_request_type:
               data.hubspot_pairing_request_type || 'New Client',
             ticket_type: 'Agent Pairing Request',
-            business_unit: data.organization.business_unit === "Med Virtual" 
-              ? "MedVirtual" 
-              : data.organization.business_unit || 'MedVirtual', // we need to send one business unit
+            business_unit:
+              data.organization.business_unit === 'Med Virtual'
+                ? 'MedVirtual'
+                : data.organization.business_unit || 'MedVirtual', // we need to send one business unit
             company_name: data.organization.name,
             client_name: data.organization.name,
             company_url: data.organization.website_url || 'Not Specified',
@@ -116,7 +121,9 @@ export class HireRequestCreationService {
               data.background_requirements_of_candidate
                 ? data.background_requirements_of_candidate
                 : undefined,
-
+            other_shift_hours: data.other_shift_hours
+              ? data.other_shift_hours.toString()
+              : undefined,
             //ticketOwner
             hubspot_owner_id: data.assign_user_id
               ? await this.getOwnerId(
@@ -172,6 +179,7 @@ export class HireRequestCreationService {
         payload: {
           title: data.title,
           organizationId: data.organization?.hubspot_id,
+          ...(reason && { reason }),
         },
         response: { id: response.data.id },
       });
@@ -193,6 +201,7 @@ export class HireRequestCreationService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }

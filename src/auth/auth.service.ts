@@ -750,6 +750,9 @@ export class AuthService {
       if (existingAffiliate.hubspot_id) {
         await this.affiliateUpdateService.reactivate(
           existingAffiliate.hubspot_id,
+          undefined,
+          undefined,
+          `Affiliate account reactivated after signup completion`,
         );
       }
     }

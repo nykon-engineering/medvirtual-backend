@@ -17,6 +17,7 @@ export const hrTicketToDbDictionary: Record<string, string> = {
   tasks: 'hubspot_tasks',
   n2_monitors_required_: 'hubspot_n2_monitors_required',
   va_shift_hours: 'hubspot_va_shift_hours',
+  other_shift_hours: 'other_shift_hours',
   tools_familiarization: 'hubspot_tools_familiarization',
   training_request_notes_: 'hubspot_training_request_notes',
   camera_on_shift: 'hubspot_camera_on_during_shift',

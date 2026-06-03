@@ -12,7 +12,13 @@ let cachedServer;
 
 async function bootstrapServer(): Promise<any> {
   const expressApp = express();
-  expressApp.use(express.json());
+  expressApp.use(
+    express.json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   const app = await NestFactory.create(
     AppModule,
     new ExpressAdapter(expressApp),

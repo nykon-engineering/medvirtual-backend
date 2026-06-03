@@ -33,6 +33,7 @@ import { MedAllianceInvitation } from '../../common/utils/email-templates/med-al
 import { MedAllianceInvitationForOrgUsers } from '../../common/utils/email-templates/med-alliance-invitation-for-org-users';
 import { MedAllianceInviteSignup } from '../../common/utils/email-templates/med-alliance-invite-signup';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
 const USER_SELECT = {
@@ -55,6 +56,7 @@ export class AffiliatesService {
     private readonly affiliateUpdateService: AffiliateUpdateService,
     private readonly hubspot: HubspotService,
     private readonly invoiceIngestion: InvoiceIngestionService,
+    private readonly allianceNotifications: AllianceNotificationsService,
   ) {}
 
   // Shared helper: ensure a user has an active AffiliateProfile.
@@ -141,6 +143,14 @@ export class AffiliatesService {
         emailError,
       );
     }
+
+    const partnerName =
+      `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || user.email;
+    void this.allianceNotifications.notifyAdminPartnerRegistered({
+      partnerName,
+      partnerEmail: user.email,
+      affiliateProfileId: newAffiliateData.id,
+    });
 
     return newAffiliateData;
   }
@@ -274,6 +284,14 @@ export class AffiliatesService {
           'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
       );
     }
+
+    const partnerName =
+      `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || user.email;
+    void this.allianceNotifications.notifyAdminPartnerRegistered({
+      partnerName,
+      partnerEmail: user.email,
+      affiliateProfileId: newAffiliateData.id,
+    });
 
     return newAffiliateData;
   }
@@ -457,23 +475,17 @@ export class AffiliatesService {
       ];
     }
 
-    // Build user-level conditions (search + organization may both apply).
-    const userConditions: any = {};
     if (search) {
-      userConditions.OR = [
-        { first_name: { contains: search, mode: 'insensitive' } },
-        { last_name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+      where.OR = [
+        { full_name: { contains: search.trim(), mode: 'insensitive' } },
+        { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
       ];
     }
-    if (organization === 'with_org') {
-      userConditions.organization_id = { not: null };
-    } else if (organization === 'without_org') {
-      userConditions.organization_id = null;
-    }
 
-    if (Object.keys(userConditions).length > 0) {
-      where.user = userConditions;
+    if (organization === 'with_org') {
+      where.user = { organization_id: { not: null } };
+    } else if (organization === 'without_org') {
+      where.user = { organization_id: null };
     }
 
     const [data, total] = await this.prisma.$transaction([
@@ -495,6 +507,7 @@ export class AffiliatesService {
                   last_name: true,
                   email: true,
                   job_title: true,
+                  hubspot_billcom_vendor_id: true,
                 },
               },
             },
@@ -655,7 +668,12 @@ export class AffiliatesService {
               orderBy: { createdAt: 'desc' as const },
             },
             phone: true,
-            contact: { select: { company_name: true } },
+            contact: {
+              select: {
+                company_name: true,
+                hubspot_billcom_vendor_id: true,
+              },
+            },
             organization: {
               select: {
                 id: true,
@@ -715,6 +733,9 @@ export class AffiliatesService {
           await this.affiliateUpdateService.updateCommission(
             existing.hubspot_id,
             dto.commission_percent_default,
+            undefined,
+            undefined,
+            `Affiliate commission percentage updated`,
           );
         } catch (err) {
           console.error('[HubSpot] Failed to sync commission:', err);
@@ -733,6 +754,9 @@ export class AffiliatesService {
               existing.hubspot_id,
               String(details.account_name),
               String(details.account_number),
+              undefined,
+              undefined,
+              `Affiliate banking details updated`,
             );
           } catch (err) {
             console.error('[HubSpot] Failed to sync banking data:', err);
@@ -741,6 +765,9 @@ export class AffiliatesService {
           try {
             await this.affiliateUpdateService.clearBankingData(
               existing.hubspot_id,
+              undefined,
+              undefined,
+              `Affiliate banking details cleared`,
             );
           } catch (err) {
             console.error('[HubSpot] Failed to clear banking data:', err);
@@ -755,10 +782,26 @@ export class AffiliatesService {
   async findOwn(currentUser: USER) {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { user_id: currentUser.id },
-      include: { user: { select: USER_SELECT } },
+      include: {
+        user: {
+          select: {
+            ...USER_SELECT,
+            contact: { select: { hubspot_billcom_vendor_id: true } },
+          },
+        },
+      },
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
-    return profile;
+
+    const mappedfields = {
+      ...profile,
+      banking_complete: !!profile.user?.contact?.hubspot_billcom_vendor_id,
+      payout_details: {
+        billcom_vendor_id:
+          profile.user?.contact?.hubspot_billcom_vendor_id ?? null,
+      },
+    };
+    return mappedfields;
   }
 
   // Self-enrollment: organization admin joins the Med Alliance Program.
@@ -969,7 +1012,12 @@ export class AffiliatesService {
     }
 
     if (profile.hubspot_id) {
-      await this.affiliateUpdateService.deactivate(profile.hubspot_id);
+      await this.affiliateUpdateService.deactivate(
+        profile.hubspot_id,
+        undefined,
+        undefined,
+        `Affiliate growth partner profile deactivated`,
+      );
     }
   }
 
@@ -1025,7 +1073,12 @@ export class AffiliatesService {
 
     if (profile.hubspot_id) {
       // Growth Partner still exists in HubSpot (deactivated via app) — just update the stage.
-      await this.affiliateUpdateService.reactivate(profile.hubspot_id);
+      await this.affiliateUpdateService.reactivate(
+        profile.hubspot_id,
+        undefined,
+        undefined,
+        `Affiliate growth partner profile reactivated`,
+      );
     } else {
       // Growth Partner was deleted in HubSpot — recreate it with all associations.
       // Fetch again so execute() receives status='active' for the correct pipeline stage.
@@ -1085,6 +1138,7 @@ export class AffiliatesService {
         med_alliance_referral_status: true,
         eligibility_start_at: true,
         first_paid_invoice_at: true,
+        deployment_date: true,
       },
     });
     if (!org) throw new NotFoundException('Organization not found');
@@ -1138,6 +1192,8 @@ export class AffiliatesService {
           ? (organizationIndustryToDbDictionary[org.industry] ?? org.industry)
           : null,
         eligibility_start_at: org.eligibility_start_at?.toISOString() ?? null,
+        first_paid_invoice_at: org.first_paid_invoice_at?.toISOString() ?? null,
+        deployment_date: org.deployment_date?.toISOString() ?? null,
       },
       invoices: invoices.map((i) => ({
         id: i.id,
@@ -1219,7 +1275,7 @@ export class AffiliatesService {
   ): Promise<void> {
     const orgData = await this.prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { hubspot_id: true },
+      select: { hubspot_id: true, deployment_date: true },
     });
 
     if (orgData?.hubspot_id) {
@@ -1250,14 +1306,14 @@ export class AffiliatesService {
       (s) => s.payment_status === null || s.payment_status === 'succeeded',
     );
 
-    if (candidates.length === 0) return;
+    if (candidates.length === 0 && !orgData?.deployment_date) return;
 
-    const firstInvoiceDate = candidates[0].paid_at ?? now;
-    const eligibilityStartAt = new Date(
-      firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
-    );
+    const firstInvoiceDate = candidates[0]?.paid_at ?? now;
+    // Prefer deployment_date from HubSpot as the anchor for eligibility calculations.
+    const anchorDate = orgData?.deployment_date ?? firstInvoiceDate;
+    const eligibilityStartAt = new Date(anchorDate.getTime() + THIRTY_DAYS_MS);
     const daysSinceDeployment =
-      (now.getTime() - firstInvoiceDate.getTime()) / (1000 * 60 * 60 * 24);
+      (now.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24);
 
     const isExpired = daysSinceDeployment >= 365;
     const isEligible = !isExpired && daysSinceDeployment >= 30;
@@ -1266,7 +1322,10 @@ export class AffiliatesService {
       where: { id: organizationId },
       data: {
         referral_stage: 'deployed',
-        first_paid_invoice_at: firstInvoiceDate,
+        // Only set first_paid_invoice_at when there is an actual invoice (audit field — never set to synthetic 'now')
+        ...(candidates.length > 0 && {
+          first_paid_invoice_at: firstInvoiceDate,
+        }),
         eligibility_start_at: eligibilityStartAt,
         med_alliance_block_reason: isExpired
           ? 'eligibility_expired: one-year window elapsed'
@@ -1400,6 +1459,9 @@ export class AffiliatesService {
         try {
           await this.affiliateUpdateService.clearBankingData(
             profile.hubspot_id,
+            undefined,
+            undefined,
+            `Affiliate banking details cleared during profile reset`,
           );
         } catch (err) {
           console.error('[HubSpot] Failed to clear banking data:', err);

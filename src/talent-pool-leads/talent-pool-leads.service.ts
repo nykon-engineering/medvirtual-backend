@@ -327,6 +327,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
           let ownerEmail = '';
           if (process.env.ENVIRONMENT !== 'PROD') {
             ownerEmail = 'pauli@regenta.ai';
+            //ownerEmail = 'elizabeth.veloso@legalsoft.com';
           } else {
             const isBerry = businessUnit === 'Berry Virtual';
             const hasCandidate = !!createDto.candidate_id;
@@ -343,6 +344,19 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
             ownerEmail =
               emailPool[Math.floor(Math.random() * emailPool.length)];
           }
+          void this.notifications.notifyTalentPoolLeadNew({
+            ownerEmail,
+            leadName: sanitizedName,
+            email: normalizedEmail,
+            organization: sanitizedOrganization,
+            websiteUrl: sanitizedWebsiteUrl,
+            languagePreference: createDto.language_preference,
+            businessUnit,
+            hasCandidate: !!createDto.candidate_id,
+            mainNeed: sanitizedMainNeed ?? undefined,
+            additionalDetails: sanitizedAdditionalDetails ?? undefined,
+          });
+
           //console.log('Selected HubSpot owner email:', ownerEmail);
           const ownerId = await this.getOwnerId(ownerEmail);
 

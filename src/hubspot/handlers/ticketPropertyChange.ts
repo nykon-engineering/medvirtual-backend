@@ -17,7 +17,7 @@ export class HandlerTicketPropertyChange {
   private buildTitle(hr: {
     hubspot_pairing_request_type?: string | null;
     hubspot_numberVA?: number | null;
-    request_role?: string | null;
+    hubspot_role_type?: string | null;
     availability?: string | null;
     organization: { name: string };
   }): string {
@@ -41,8 +41,8 @@ export class HandlerTicketPropertyChange {
       parts.push(String(hr.hubspot_numberVA));
     }
 
-    if (hr.request_role?.trim()) {
-      parts.push(hr.request_role);
+    if (hr.hubspot_role_type?.trim()) {
+      parts.push(hr.hubspot_role_type);
     }
 
     if (hr.availability?.trim()) {
@@ -67,7 +67,7 @@ export class HandlerTicketPropertyChange {
       select: {
         hubspot_pairing_request_type: true,
         hubspot_numberVA: true,
-        request_role: true,
+        hubspot_role_type: true,
         availability: true,
         organization: { select: { name: true } },
       },

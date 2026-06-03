@@ -30,6 +30,7 @@ const SNAPSHOT_SELECT = {
   invoice_amount: true,
   currency: true,
   paid_at: true,
+  due_date: true,
   sync_hash: true,
   createdAt: true,
   updatedAt: true,

@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -19,169 +21,13 @@ import {
   UpdatePayoutNoteDto,
 } from './dto/decide-payout-request.dto';
 import { ListPayoutRequestsDto } from './dto/list-payout-requests.dto';
-
-// ---------------------------------------------------------------------------
-// Prisma select shapes
-// ---------------------------------------------------------------------------
-
-const PAYOUT_REQUEST_SELECT = {
-  id: true,
-  affiliate_id: true,
-  affiliate_profile_id: true,
-  status: true,
-  requested_amount: true,
-  approved_amount: true,
-  paid_amount: true,
-  payment_method: true,
-  payment_reference: true,
-  transaction_reference: true,
-  payment_proof_notes: true,
-  approved_by: true,
-  approved_at: true,
-  reviewed_by: true,
-  reviewed_at: true,
-  paid_at: true,
-  rejection_reason: true,
-  cancellation_reason: true,
-  cancelled_by: true,
-  cancelled_at: true,
-  createdAt: true,
-  updatedAt: true,
-  commissions: {
-    select: {
-      commission: {
-        select: {
-          id: true,
-          commission_amount: true,
-          base_amount_snapshot: true,
-          commission_percent_snapshot: true,
-          status: true,
-          admin_decision_reason: true,
-          organization: { select: { id: true, name: true } },
-          hubspotInvoiceSnapshot: {
-            select: {
-              id: true,
-              invoice_amount: true,
-              invoice_status: true,
-            },
-          },
-        },
-      },
-    },
-  },
-};
-
-const ADMIN_SELECT = {
-  ...PAYOUT_REQUEST_SELECT,
-  affiliate: {
-    select: {
-      id: true,
-      first_name: true,
-      last_name: true,
-      email: true,
-    },
-  },
-  affiliateProfile: {
-    select: {
-      id: true,
-      payout_details: true,
-      payout_preference_method: true,
-      payout_preference_reference: true,
-      payout_preference_notes: true,
-      createdAt: true,
-    },
-  },
-  approvedBy: {
-    select: { id: true, first_name: true, last_name: true },
-  },
-  reviewedBy: {
-    select: { id: true, first_name: true, last_name: true },
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Risk flag helpers (B4)
-// ---------------------------------------------------------------------------
-
-const AGING_DAYS = 14;
-
-function computeRiskFlags(
-  request: {
-    createdAt: Date;
-    affiliateProfile?: { banking_complete: boolean } | null;
-    affiliate_id: string;
-  },
-  allRequestedIds: Set<string>,
-): {
-  has_duplicate_risk: boolean;
-  has_missing_banking: boolean;
-  is_aging: boolean;
-} {
-  const ageMs = Date.now() - new Date(request.createdAt).getTime();
-  const ageDays = ageMs / (1000 * 60 * 60 * 24);
-
-  return {
-    has_duplicate_risk: allRequestedIds.has(request.affiliate_id),
-    has_missing_banking: !(request.affiliateProfile?.banking_complete ?? true),
-    is_aging: ageDays > AGING_DAYS,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Shape the admin response, adding risk flags + normalised commission fields
-// ---------------------------------------------------------------------------
-
-function shapeAdminRequest(raw: any, allRequestedIds?: Set<string>) {
-  const flags = computeRiskFlags(raw, allRequestedIds ?? new Set());
-  return {
-    ...raw,
-    affiliate_name: raw.affiliate
-      ? `${raw.affiliate.first_name} ${raw.affiliate.last_name}`.trim()
-      : undefined,
-    affiliate_email: raw.affiliate?.email ?? undefined,
-    commissions: (raw.commissions ?? []).map((c: any) => ({
-      id: c.commission.id,
-      organization_id: c.commission.organization?.id ?? null,
-      organization_name: c.commission.organization?.name ?? null,
-      base_amount: parseFloat(c.commission.base_amount_snapshot ?? '0'),
-      commission_percentage: parseFloat(
-        c.commission.commission_percent_snapshot ?? '0',
-      ),
-      commission_amount: parseFloat(c.commission.commission_amount ?? '0'),
-      decision: mapCommissionStatus(c.commission.status),
-      rejection_reason: c.commission.admin_decision_reason ?? null,
-      invoice_status:
-        c.commission.hubspotInvoiceSnapshot?.invoice_status ?? null,
-      invoice_amount: parseFloat(
-        String(c.commission.hubspotInvoiceSnapshot?.invoice_amount ?? '0'),
-      ),
-      created_at: c.commission.createdAt ?? null,
-    })),
-    requested_amount: parseFloat(raw.requested_amount ?? '0'),
-    approved_amount: raw.approved_amount
-      ? parseFloat(raw.approved_amount)
-      : null,
-    paid_amount: raw.paid_amount ? parseFloat(raw.paid_amount) : null,
-    requested_at: raw.createdAt,
-    updated_at: raw.updatedAt,
-    ...flags,
-  };
-}
-
-function mapCommissionStatus(status: string): string {
-  switch (status) {
-    case 'paid':
-      return 'approved_for_payout';
-    case 'requested':
-      return 'pending_review';
-    case 'eligible':
-      return 'pending_review';
-    case 'rejected':
-      return 'rejected_for_payout';
-    default:
-      return 'pending_review';
-  }
-}
+import {
+  ADMIN_SELECT,
+  PAYOUT_REQUEST_SELECT,
+  shapeAdminRequest,
+} from './payout-request.selects';
+import { AllianceNotificationsService } from '../notifications/notifications.service';
+import { BillComPayoutService } from '../bill-com/bill-com-payout.service';
 
 // ---------------------------------------------------------------------------
 // Service
@@ -192,6 +38,8 @@ export class PayoutRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly affiliatesService: AffiliatesService,
+    private readonly allianceNotifications: AllianceNotificationsService,
+    private readonly billComPayoutService: BillComPayoutService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -317,6 +165,16 @@ export class PayoutRequestsService {
         },
       });
     }
+
+    const affiliateName =
+      `${currentUser.first_name ?? ''} ${currentUser.last_name ?? ''}`.trim() ||
+      currentUser.email;
+    void this.allianceNotifications.notifyAdminPayoutRequested({
+      affiliateName,
+      totalAmount: parseFloat(String(requestedAmount)),
+      commissionCount: dto.commission_ids.length,
+      payoutRequestId: payoutRequest.id,
+    });
 
     return this.prisma.affiliatePayoutRequest.findUnique({
       where: { id: payoutRequest.id },
@@ -686,6 +544,7 @@ export class PayoutRequestsService {
       ),
     );
 
+
     let data = rows.map((r: any) => shapeAdminRequest(r, duplicateSet));
 
     // B6: post-filter risk_flag (computed field — can't filter in SQL)
@@ -844,6 +703,7 @@ export class PayoutRequestsService {
         approved_amount: true,
         requested_amount: true,
         commissions: { select: { commission_id: true } },
+        affiliate: { select: { email: true, first_name: true } },
       },
     });
     if (!request) throw new NotFoundException('Payout request not found');
@@ -855,61 +715,144 @@ export class PayoutRequestsService {
       );
     }
 
-    const paidAt = dto.paid_at ? new Date(dto.paid_at) : new Date();
     const paidAmount =
       dto.paid_amount ??
       parseFloat(
         String(request.approved_amount ?? request.requested_amount ?? 0),
       );
-    const txRef = dto.transaction_reference ?? dto.payment_reference ?? null;
+
     const commissionIds = request.commissions.map((c) => c.commission_id);
+    const adminName =
+      `${adminUser.first_name ?? ''} ${adminUser.last_name ?? ''}`.trim();
+    const affiliateName = request.affiliate?.first_name ?? undefined;
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.affiliatePayoutRequest.update({
-        where: { id },
-        data: {
-          status: 'paid',
-          paid_at: paidAt,
-          paid_amount: new Decimal(paidAmount),
-          payment_reference: txRef,
-          transaction_reference: txRef,
-          payment_proof_notes: dto.payment_proof_notes ?? null,
-          // Ensure approved fields are set if coming from under_review directly
-          approved_by:
-            request.status === 'under_review' ? adminUser.id : undefined,
-          approved_at:
-            request.status === 'under_review' ? new Date() : undefined,
+    // Phase 1: validate Bill.com prerequisites (vendor ID, commissions) — no DB writes yet
+    let billPayload: Awaited<
+      ReturnType<typeof this.billComPayoutService.validateAndPreparePayment>
+    >;
+    try {
+      billPayload =
+        await this.billComPayoutService.validateAndPreparePayment(id);
+    } catch (error) {
+      void this.allianceNotifications.notifyAdminMarkPaidError({
+        payoutRequestId: id,
+        adminName,
+        errorPhase: 'Bill.com validation',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        affiliateName,
+        amount: paidAmount,
+      });
+      throw error;
+    }
+
+    // Phase 2: call external API — if this fails, nothing has been written to the DB
+    let billAndPaymentResult: Awaited<
+      ReturnType<
+        typeof this.billComPayoutService.createBillAndPaymentForMarkPaid
+      >
+    >;
+    try {
+      billAndPaymentResult =
+        await this.billComPayoutService.createBillAndPaymentForMarkPaid(
+          billPayload,
+          adminUser,
+          id,
+        );
+    } catch (error) {
+      void this.allianceNotifications.notifyAdminMarkPaidError({
+        payoutRequestId: id,
+        adminName,
+        errorPhase: 'Bill.com API',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        affiliateName,
+        amount: paidAmount,
+      });
+      throw new InternalServerErrorException(
+        'Failed to create Bill.com payment. Our team has been notified. Please try again or contact support.',
+      );
+    }
+
+    // Phase 3: single atomic transaction — only reached after Bill.com confirms success
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.affiliatePayoutRequest.update({
+          where: { id },
+          data: {
+            status: 'processing',
+            paid_amount: new Decimal(paidAmount),
+            payment_proof_notes: dto.payment_proof_notes ?? null,
+            approved_by:
+              request.status === 'under_review' ? adminUser.id : undefined,
+            approved_at:
+              request.status === 'under_review' ? new Date() : undefined,
+            bill_com_billId: billAndPaymentResult.billId,
+            bill_com_paymentStatus: billAndPaymentResult.status,
+            bill_com_payment_id: billAndPaymentResult.confirmationNumber,
+            bill_com_status: billAndPaymentResult.status,
+            bill_com_error: null,
+            payment_method: 'bill_com',
+            transaction_reference: billAndPaymentResult.transactionNumber,
+          },
+        });
+
+        await tx.affiliateCommission.updateMany({
+          where: { id: { in: commissionIds } },
+          data: { status: 'paid' },
+        });
+
+        await tx.medAllianceAuditLog.create({
+          data: {
+            actor_user_id: adminUser.id,
+            entity_type: 'payout_request',
+            entity_id: id,
+            event: 'bill_com_payment_initiated',
+            old_status: request.status,
+            new_status: 'processing',
+            source: 'admin_action',
+          },
+        });
+
+        if (commissionIds.length > 0) {
+          await tx.medAllianceAuditLog.createMany({
+            data: commissionIds.map((commissionId) => ({
+              actor_user_id: adminUser.id,
+              entity_type: 'commission',
+              entity_id: commissionId,
+              event: 'status_changed',
+              old_status: 'requested',
+              new_status: 'paid',
+              source: 'admin_action',
+              metadata: { payout_request_id: id } as any,
+            })),
+          });
+        }
+      });
+    } catch (error) {
+      void this.allianceNotifications.notifyAdminMarkPaidError({
+        payoutRequestId: id,
+        adminName,
+        errorPhase: 'Database transaction',
+        errorMessage: error instanceof Error ? error.message : String(error),
+        affiliateName,
+        amount: paidAmount,
+        billComBillId: billAndPaymentResult.billId,
+      });
+      throw new InternalServerErrorException(
+        `Payment was submitted to Bill.com but could not be saved (Bill ID: ${billAndPaymentResult.billId}). Our team has been notified.`,
+      );
+    }
+
+    if (request.affiliate?.email) {
+      void this.allianceNotifications.notifyPayoutProcessing(
+        {
+          email: request.affiliate.email,
+          first_name: request.affiliate.first_name ?? '',
         },
-      });
-
-      await tx.affiliateCommission.updateMany({
-        where: { id: { in: commissionIds } },
-        data: { status: 'paid' },
-      });
-    });
-
-    await this.writeAuditLog({
-      actorUserId: adminUser.id,
-      entityId: id,
-      event: 'status_changed',
-      oldStatus: request.status,
-      newStatus: 'paid',
-      source: 'admin_action',
-    });
-
-    for (const commissionId of commissionIds) {
-      await this.prisma.medAllianceAuditLog.create({
-        data: {
-          actor_user_id: adminUser.id,
-          entity_type: 'commission',
-          entity_id: commissionId,
-          event: 'status_changed',
-          old_status: 'requested',
-          new_status: 'paid',
-          source: 'admin_action',
-          metadata: { payout_request_id: id } as any,
+        {
+          totalAmount: paidAmount,
+          processedAt: new Date(),
         },
-      });
+      );
     }
 
     return this.findOneForAdmin(id);
@@ -932,7 +875,9 @@ export class PayoutRequestsService {
       select: {
         id: true,
         status: true,
+        requested_amount: true,
         commissions: { select: { commission_id: true } },
+        affiliate: { select: { email: true, first_name: true } },
       },
     });
     if (!request) throw new NotFoundException('Payout request not found');
@@ -994,6 +939,19 @@ export class PayoutRequestsService {
           metadata: { payout_request_id: id } as any,
         },
       });
+    }
+
+    if (request.affiliate) {
+      void this.allianceNotifications.notifyPayoutCancelled(
+        {
+          email: request.affiliate.email,
+          first_name: request.affiliate.first_name ?? '',
+        },
+        {
+          totalAmount: Number(request.requested_amount),
+          cancellationReason: dto.reason ?? undefined,
+        },
+      );
     }
 
     return this.findOneForAdmin(id);
@@ -1281,6 +1239,8 @@ export class PayoutRequestsService {
       paid: 0,
       rejected: 0,
       cancelled: 0,
+      processing: 0,
+      failed: 0,
     };
 
     for (const row of counts) {

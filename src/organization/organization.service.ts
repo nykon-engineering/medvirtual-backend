@@ -945,6 +945,7 @@ export class OrganizationService {
         await this.hubspot.createOrganizationInHubspot(
           newOrganization,
           user?.id,
+          `New organization onboarded — company record created in HubSpot`,
         );
         // Referred companies have their own contact creation flow (createForReferredCompany in Step 6)
         if (!referred_by_affiliate_id) {
@@ -1056,7 +1057,11 @@ export class OrganizationService {
       });
 
       //updateOrganizationInHubspot
-      await this.hubspot.updateOrganizationInHubspot(res, actorUserId);
+      await this.hubspot.updateOrganizationInHubspot(
+        res,
+        actorUserId,
+        `Organization admin updated — HubSpot company owner synced`,
+      );
 
       return res;
     } catch (error) {
@@ -1160,7 +1165,11 @@ export class OrganizationService {
       });
 
       //updateOrganizationInHubspot
-      await this.hubspot.updateOrganizationInHubspot(res);
+      await this.hubspot.updateOrganizationInHubspot(
+        res,
+        undefined,
+        `Admin assigned to organization — HubSpot company owner updated`,
+      );
 
       return res;
     } catch (error) {

@@ -61,7 +61,11 @@ export class OrganizationUpdateService {
     return user && user.hubspot_id ? user.hubspot_id : null;
   }
 
-  async execute(data: any, actorUserId?: string): Promise<any> {
+  async execute(
+    data: any,
+    actorUserId?: string,
+    reason?: string,
+  ): Promise<any> {
     const source = actorUserId
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
@@ -95,7 +99,10 @@ export class OrganizationUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: Object.keys(hubspotProperties) },
+        payload: {
+          fields: Object.keys(hubspotProperties),
+          ...(reason && { reason }),
+        },
       });
 
       return true;
@@ -116,6 +123,7 @@ export class OrganizationUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
   }
@@ -124,6 +132,7 @@ export class OrganizationUpdateService {
     organizationId: string,
     affiliateUserId: string,
     actorUserId?: string,
+    reason?: string,
   ): Promise<void> {
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
@@ -165,7 +174,10 @@ export class OrganizationUpdateService {
         action: HubspotAuditAction.UPDATE,
         source,
         success: true,
-        payload: { fields: ['referral_source', 'referral_partners_email'] },
+        payload: {
+          fields: ['referral_source', 'referral_partners_email'],
+          ...(reason && { reason }),
+        },
       });
     } catch (error) {
       void this.audit.log({
@@ -179,6 +191,7 @@ export class OrganizationUpdateService {
         success: false,
         errorCode: error.response?.status?.toString() ?? error.code,
         errorMessage: error.message,
+        payload: { ...(reason && { reason }) },
       });
     }
 

@@ -950,34 +950,34 @@ describe('HubspotService => delegation methods', () => {
     hireRequestCreationServiceMock.execute.mockResolvedValue({ id: 'hs-ticket-1' });
     const result = await service.createHireRequestInHubspot({ title: 'req' }, 'user-1');
     expect(result).toEqual({ id: 'hs-ticket-1' });
-    expect(hireRequestCreationServiceMock.execute).toHaveBeenCalledWith({ title: 'req' }, 'user-1');
+    expect(hireRequestCreationServiceMock.execute).toHaveBeenCalledWith({ title: 'req' }, 'user-1', undefined);
   });
 
   it('updateHireRequestInHubspot should delegate to hireRequestUpdateService', async () => {
     hireRequestUpdateServiceMock.execute.mockResolvedValue({ id: 'hs-ticket-1' });
     const result = await service.updateHireRequestInHubspot({ id: 'r1' }, 'status', 'user-1');
     expect(result).toEqual({ id: 'hs-ticket-1' });
-    expect(hireRequestUpdateServiceMock.execute).toHaveBeenCalledWith({ id: 'r1' }, 'status', 'user-1');
+    expect(hireRequestUpdateServiceMock.execute).toHaveBeenCalledWith({ id: 'r1' }, 'status', 'user-1', undefined);
   });
 
   it('createOrganizationInHubspot should delegate to organizationCreationService', async () => {
     organizationCreationServiceMock.execute.mockResolvedValue({ id: 'hs-co-1' });
     const result = await service.createOrganizationInHubspot({ name: 'Clinic' }, 'user-1');
     expect(result).toEqual({ id: 'hs-co-1' });
-    expect(organizationCreationServiceMock.execute).toHaveBeenCalledWith({ name: 'Clinic' }, 'user-1');
+    expect(organizationCreationServiceMock.execute).toHaveBeenCalledWith({ name: 'Clinic' }, 'user-1', undefined);
   });
 
   it('updateOrganizationInHubspot should delegate to organizationUpdateService', async () => {
     organizationUpdateServiceMock.execute.mockResolvedValue(undefined);
     await service.updateOrganizationInHubspot({ id: 'org-1' }, 'user-1');
-    expect(organizationUpdateServiceMock.execute).toHaveBeenCalledWith({ id: 'org-1' }, 'user-1');
+    expect(organizationUpdateServiceMock.execute).toHaveBeenCalledWith({ id: 'org-1' }, 'user-1', undefined);
   });
 
   it('createContactInHubspot should delegate to contactCreationService', async () => {
     contactCreationServiceMock.execute.mockResolvedValue({ id: 'hs-ct-1' });
     const result = await service.createContactInHubspot({ email: 'a@b.com' }, 'user-1');
     expect(result).toEqual({ id: 'hs-ct-1' });
-    expect(contactCreationServiceMock.execute).toHaveBeenCalledWith({ email: 'a@b.com' }, 'user-1');
+    expect(contactCreationServiceMock.execute).toHaveBeenCalledWith({ email: 'a@b.com' }, 'user-1', undefined);
   });
 
   it('createContactFromReferredCompanyInHubspot should delegate to contactCreationFromCompanyService', async () => {
@@ -990,20 +990,20 @@ describe('HubspotService => delegation methods', () => {
   it('updateContactInHubspot should delegate to contactUpdateService', async () => {
     updateContactServiceMock.execute.mockResolvedValue(undefined);
     await service.updateContactInHubspot({ id: 'ct-1' }, 'user-1');
-    expect(updateContactServiceMock.execute).toHaveBeenCalledWith({ id: 'ct-1' }, 'user-1');
+    expect(updateContactServiceMock.execute).toHaveBeenCalledWith({ id: 'ct-1' }, 'user-1', undefined);
   });
 
   it('deleteContactInHubspot should delegate to contactDeleteService', async () => {
     deleteContactServiceMock.execute.mockResolvedValue(undefined);
     await service.deleteContactInHubspot({ id: 'ct-1' }, 'user-1');
-    expect(deleteContactServiceMock.execute).toHaveBeenCalledWith({ id: 'ct-1' }, 'user-1');
+    expect(deleteContactServiceMock.execute).toHaveBeenCalledWith({ id: 'ct-1' }, 'user-1', undefined);
   });
 
   it('deleteCompanyInHubspot should delegate to companyDeleteService', async () => {
     companyDeleteServiceMock.execute.mockResolvedValue(true);
     const result = await service.deleteCompanyInHubspot('hs-co-1', 'user-1', 'org-1');
     expect(result).toBe(true);
-    expect(companyDeleteServiceMock.execute).toHaveBeenCalledWith('hs-co-1', 'user-1', 'org-1');
+    expect(companyDeleteServiceMock.execute).toHaveBeenCalledWith('hs-co-1', 'user-1', 'org-1', undefined);
   });
 });
 
