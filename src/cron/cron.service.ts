@@ -1283,4 +1283,113 @@ export class CronService {
 
     return { sent: true, count: commissions.length };
   }
+
+  private buildHireRequestTitle(hr: {
+    hubspot_pairing_request_type?: string | null;
+    hubspot_numberVA?: number | null;
+    hubspot_role_type?: string | null;
+    availability?: string | null;
+    organization: { name: string };
+  }): string {
+    const isProduction = process.env.ENVIRONMENT === 'PROD';
+    const basePrefix = isProduction ? 'HR' : 'TEST HR';
+    const requestType = hr.hubspot_pairing_request_type || '';
+    const firstPrefix =
+      requestType === 'Upsell Agent'
+        ? 'UPS '
+        : requestType === 'Agent Replacement'
+          ? 'REP '
+          : '';
+
+    const parts: string[] = [(firstPrefix + basePrefix).trim()];
+
+    if (hr.organization?.name?.trim()) {
+      parts.push(hr.organization.name);
+    }
+
+    if (hr.hubspot_numberVA) {
+      parts.push(String(hr.hubspot_numberVA));
+    }
+
+    if (hr.hubspot_role_type?.trim()) {
+      parts.push(hr.hubspot_role_type);
+    }
+
+    if (hr.availability?.trim()) {
+      const formatted = hr.availability
+        .split('-')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join('-');
+      if (formatted.trim()) {
+        parts.push(formatted);
+      }
+    }
+
+    return parts.filter((p) => p?.trim()).join(' - ');
+  }
+
+  async syncHireRequestTitles(): Promise<{
+    updated: number;
+    skipped: number;
+    errors: number;
+    preview: { id: string; currentTitle: string | null; newTitle: string }[];
+  }> {
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where: {
+        hubspot_role_type: { not: null },
+        hubspot_ticket_id: { not: null },
+      },
+      select: {
+        id: true,
+        title: true,
+        hubspot_ticket_id: true,
+        hubspot_pairing_request_type: true,
+        hubspot_numberVA: true,
+        hubspot_role_type: true,
+        availability: true,
+        organization: { select: { name: true } },
+      },
+    });
+
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+    const preview: { id: string; currentTitle: string | null; newTitle: string }[] = [];
+
+    for (const hr of hireRequests) {
+      if (hr.title && hr.title.split(' - ').length >= 5) {
+        skipped++;
+        continue;
+      }
+
+      const newTitle = this.buildHireRequestTitle(hr);
+      preview.push({ id: hr.id, currentTitle: hr.title, newTitle });
+
+      try {
+        await this.prisma.hireRequest.update({
+          where: { id: hr.id },
+          data: { title: newTitle },
+        });
+        await axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/tickets/${hr.hubspot_ticket_id}`,
+          { properties: { subject: newTitle } },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+        updated++;
+      } catch (e) {
+        errors++;
+        console.error(
+          `Error syncing HR ${hr.id}:`,
+          e.response?.data ?? e.message,
+        );
+      }
+    }
+
+    return { updated, skipped, errors, preview };
+  }
 }

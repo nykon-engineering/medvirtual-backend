@@ -259,6 +259,21 @@ export class CronController {
     };
   }
 
+  @Get('sync-hire-request-titles')
+  @ApiOperation({
+    summary:
+      'One-time sync: rebuild HireRequest titles that are missing hubspot_role_type, updating both DB and HubSpot',
+  })
+  @ApiResponse({ status: 200, description: 'Hire request title sync completed' })
+  async syncHireRequestTitles() {
+    const result = await this.cron.syncHireRequestTitles();
+    return {
+      status: 200,
+      message: 'Hire request title sync completed',
+      data: result,
+    };
+  }
+
   @Get('sync-organizations-with-hubspot')
   @ApiOperation({
     summary:
