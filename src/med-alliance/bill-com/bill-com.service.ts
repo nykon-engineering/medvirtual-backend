@@ -200,7 +200,7 @@ export class BillComService {
             vendorId,
             amount,
             processDate,
-            description: description.substring(0, 70), // Bill.com may have a max length for description
+            description: description.substring(0, 250), // Bill.com may have a max length for description
             fundingAccount: {
               type: 'BANK_ACCOUNT',
               id: fundingAccountId,
