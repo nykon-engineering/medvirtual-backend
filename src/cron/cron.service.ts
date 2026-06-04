@@ -1354,7 +1354,11 @@ export class CronService {
     let updated = 0;
     let skipped = 0;
     let errors = 0;
-    const preview: { id: string; currentTitle: string | null; newTitle: string }[] = [];
+    const preview: {
+      id: string;
+      currentTitle: string | null;
+      newTitle: string;
+    }[] = [];
 
     for (const hr of hireRequests) {
       if (hr.title && hr.title.split(' - ').length >= 5) {

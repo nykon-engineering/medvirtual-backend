@@ -41,16 +41,56 @@ export class AffiliateCreationService {
     companyName?: string,
   ): Promise<void> {
     try {
+      let existingContactId: string | null = null;
+      if (growthPartnerHubspotId) {
+        const gpResponse = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_GROWTH_PARTNER_CUSTOM_OBJECT}/${growthPartnerHubspotId}?associations=contacts`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
+        );
+        existingContactId =
+          gpResponse.data.associations?.contacts?.results?.[0]?.id ?? null;
+      }
+
       const contactId = await this.ensureContact(
         userId,
         firstName,
         lastName,
         email,
-        null,
+        existingContactId,
         phone,
         companyName,
       );
+
+      if (contactId && existingContactId) {
+        await this.prisma.uSER.update({
+          where: { id: userId },
+          data: { hubspot_contact_id: contactId },
+        });
+        await this.prisma.contact.updateMany({
+          where: { user_id: userId, hubspot_id: null },
+          data: { hubspot_id: contactId },
+        });
+      }
+
+      // Link contact directly to AffiliateProfile regardless of whether it was new or reused
       if (contactId && growthPartnerHubspotId) {
+        const dbContact = await this.prisma.contact.findUnique({
+          where: { hubspot_id: contactId },
+          select: { id: true },
+        });
+        if (dbContact) {
+          await this.prisma.affiliateProfile.updateMany({
+            where: { hubspot_id: growthPartnerHubspotId, contact_id: null },
+            data: { contact_id: dbContact.id },
+          });
+        }
+      }
+
+      if (contactId && growthPartnerHubspotId && !existingContactId) {
         await axios.put(
           `https://api.hubapi.com/crm/v4/objects/p20630393_growth_partners/${growthPartnerHubspotId}/associations/contacts/${contactId}`,
           [{ associationCategory: 'USER_DEFINED', associationTypeId: 119 }],

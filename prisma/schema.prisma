@@ -690,8 +690,9 @@ model Contact {
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
 
-  user             USER?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  organization     Organization? @relation(fields: [organization_id], references: [id])
+  user             USER?            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  organization     Organization?    @relation(fields: [organization_id], references: [id])
+  affiliateProfiles AffiliateProfile[]
 
   @@index([user_id], map: "idx_contacts_user_id")
   @@index([hubspot_id], map: "idx_contacts_hubspot_id")
@@ -753,8 +754,11 @@ model AffiliateProfile {
   updatedAt                   DateTime        @updatedAt
 
   user           USER?                  @relation(fields: [user_id], references: [id])
+  contact        Contact?               @relation(fields: [contact_id], references: [id])
   commissions    AffiliateCommission[]
   payoutRequests AffiliatePayoutRequest[]
+
+  contact_id     String? 
 
   @@index([status], map: "idx_affiliate_profiles_status")
   @@index([user_id], map: "idx_affiliate_profiles_user_id")

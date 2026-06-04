@@ -5,6 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import axios from 'axios';
+import { mapContactToDb } from '../../common/utils/hubspot.util';
+import { contactToDbDictionary } from '../../common/dictionaries/contact-dictionary';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CommissionStatus, USER } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -495,6 +498,9 @@ export class AffiliatesService {
         take: limit,
         orderBy: { createdAt: sortOrder },
         include: {
+          contact: {
+            select: { hubspot_billcom_vendor_id: true },
+          },
           user: {
             select: {
               ...USER_SELECT,
@@ -651,6 +657,9 @@ export class AffiliatesService {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id },
       include: {
+        contact: {
+          select: { hubspot_billcom_vendor_id: true },
+        },
         user: {
           select: {
             ...USER_SELECT,
@@ -783,6 +792,7 @@ export class AffiliatesService {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { user_id: currentUser.id },
       include: {
+        contact: { select: { hubspot_billcom_vendor_id: true } },
         user: {
           select: {
             ...USER_SELECT,
@@ -793,12 +803,16 @@ export class AffiliatesService {
     });
     if (!profile) throw new NotFoundException('Affiliate profile not found');
 
+    const vendorId =
+      profile.contact?.hubspot_billcom_vendor_id ??
+      profile.user?.contact?.hubspot_billcom_vendor_id ??
+      null;
+
     const mappedfields = {
       ...profile,
-      banking_complete: !!profile.user?.contact?.hubspot_billcom_vendor_id,
+      banking_complete: !!vendorId,
       payout_details: {
-        billcom_vendor_id:
-          profile.user?.contact?.hubspot_billcom_vendor_id ?? null,
+        billcom_vendor_id: vendorId,
       },
     };
     return mappedfields;
@@ -1471,4 +1485,6 @@ export class AffiliatesService {
 
     return updated;
   }
+
+ 
 }

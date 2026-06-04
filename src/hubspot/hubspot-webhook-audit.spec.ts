@@ -52,6 +52,7 @@ import { CompanyDeleteService } from './delete/company';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
+import { HandlerAffiliateAssociationChange } from './handlers/affiliateAssociationChange';
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
 import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
@@ -102,6 +103,7 @@ const handlers = {
   affiliateCreation: makeMock(),
   affiliatePropertyChange: makeMock(),
   affiliateDeletion: makeMock(),
+  affiliateAssociationChange: makeMock(),
   invoiceCreation: makeMock(),
   invoicePropertyChange: makeMock(),
   invoiceAssociationChange: makeMock(),
@@ -164,6 +166,7 @@ async function buildModule(): Promise<HubspotService> {
       { provide: HandlerAffiliateCreation, useValue: handlers.affiliateCreation },
       { provide: HandlerAffiliatePropertyChange, useValue: handlers.affiliatePropertyChange },
       { provide: HandlerAffiliateDeletion, useValue: handlers.affiliateDeletion },
+      { provide: HandlerAffiliateAssociationChange, useValue: handlers.affiliateAssociationChange },
       { provide: HandlerInvoiceCreation, useValue: handlers.invoiceCreation },
       { provide: HandlerInvoicePropertyChange, useValue: handlers.invoicePropertyChange },
       { provide: HandlerInvoiceAssociationChange, useValue: handlers.invoiceAssociationChange },

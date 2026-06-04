@@ -264,7 +264,10 @@ export class CronController {
     summary:
       'One-time sync: rebuild HireRequest titles that are missing hubspot_role_type, updating both DB and HubSpot',
   })
-  @ApiResponse({ status: 200, description: 'Hire request title sync completed' })
+  @ApiResponse({
+    status: 200,
+    description: 'Hire request title sync completed',
+  })
   async syncHireRequestTitles() {
     const result = await this.cron.syncHireRequestTitles();
     return {

@@ -84,6 +84,9 @@ export class BillComPayoutService {
       where: { id: request.affiliate_profile_id },
       select: {
         status: true,
+        contact: {
+          select: { hubspot_billcom_vendor_id: true },
+        },
         user: {
           select: {
             first_name: true,
@@ -108,9 +111,8 @@ export class BillComPayoutService {
       );
     }
 
-    const vendorId = profile?.user?.contact?.hubspot_billcom_vendor_id as
-      | string
-      | undefined;
+    const vendorId = (profile?.contact?.hubspot_billcom_vendor_id ??
+      profile?.user?.contact?.hubspot_billcom_vendor_id) as string | undefined;
     if (!vendorId) {
       throw new BadRequestException(
         'Bill.com vendor ID is missing for this affiliate. Cannot initiate Bill.com payment.',

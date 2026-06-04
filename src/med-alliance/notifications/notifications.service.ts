@@ -74,8 +74,8 @@ export class AllianceNotificationsService {
 
   private async getAdminEmails(): Promise<string[]> {
     const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? ['hanieh@berryvirtual.com'] : ['pauli@regenta.ai'];    
-    
+    return isProduction ? ['hanieh@berryvirtual.com'] : ['pauli@regenta.ai'];
+
     //on 2026/06/03 Pauli ask me to replace this logic below to the logic above after Kimberly received the email about pending commission
     /*const admins = await this.prisma.uSER.findMany({
       where: {

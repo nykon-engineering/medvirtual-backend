@@ -137,6 +137,10 @@ export class AffiliatesController {
     const result = await this.affiliatesService.findAll(query);
     const data = result.data.map((profile) => {
       const user = profile.user as any;
+      const vendorId =
+        (profile as any).contact?.hubspot_billcom_vendor_id ??
+        user?.contact?.hubspot_billcom_vendor_id ??
+        null;
       return {
         id: profile.id,
         user_id: profile.user_id,
@@ -150,11 +154,9 @@ export class AffiliatesController {
         payout_preference_reference: profile.payout_preference_reference,
         payout_preference_notes: profile.payout_preference_notes,
         payout_details: {
-          billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
+          billcom_vendor_id: vendorId,
         },
-        banking_complete: isBankingComplete(
-          user?.contact?.hubspot_billcom_vendor_id ?? null,
-        ),
+        banking_complete: isBankingComplete(vendorId),
         linked_company: user?.organization?.name ?? null,
         linked_company_id: user?.organization?.id ?? null,
         referred_companies_count: user?._count?.referredOrganizations ?? 0,
@@ -319,7 +321,7 @@ export class AffiliatesController {
   async findOne(@Param('id') id: string) {
     const enriched = await this.affiliatesService.findOneEnriched(id);
     const profile = enriched.profile;
-    const user = enriched.user;
+    const user = (profile as any).user;
 
     const commsByOrgMap: Record<string, number> = Object.fromEntries(
       enriched.commsByOrg.map((r: any) => [
@@ -327,6 +329,11 @@ export class AffiliatesController {
         Number(r._sum.commission_amount ?? 0),
       ]),
     );
+
+    const vendorId =
+      (profile as any).contact?.hubspot_billcom_vendor_id ??
+      user?.contact?.hubspot_billcom_vendor_id ??
+      null;
 
     const data = {
       id: profile.id,
@@ -341,11 +348,9 @@ export class AffiliatesController {
       payout_preference_reference: profile.payout_preference_reference,
       payout_preference_notes: profile.payout_preference_notes,
       payout_details: {
-        billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
+        billcom_vendor_id: vendorId,
       },
-      banking_complete: isBankingComplete(
-        user?.contact?.hubspot_billcom_vendor_id ?? null,
-      ),
+      banking_complete: isBankingComplete(vendorId),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
@@ -514,6 +519,11 @@ export class AffiliatesController {
       ]),
     );
 
+    const vendorId =
+      (profile as any).contact?.hubspot_billcom_vendor_id ??
+      user?.contact?.hubspot_billcom_vendor_id ??
+      null;
+
     const data = {
       id: profile.id,
       user_id: profile.user_id,
@@ -527,11 +537,9 @@ export class AffiliatesController {
       payout_preference_reference: profile.payout_preference_reference,
       payout_preference_notes: profile.payout_preference_notes,
       payout_details: {
-        billcom_vendor_id: user?.contact?.hubspot_billcom_vendor_id ?? null,
+        billcom_vendor_id: vendorId,
       },
-      banking_complete: isBankingComplete(
-        user?.contact?.hubspot_billcom_vendor_id ?? null,
-      ),
+      banking_complete: isBankingComplete(vendorId),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
