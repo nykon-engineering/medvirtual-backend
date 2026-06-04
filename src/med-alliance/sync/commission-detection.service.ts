@@ -121,9 +121,9 @@ export class CommissionDetectionService {
 
     // Load the affiliate's active profile to get the commission percentage.
     const profile = await this.prisma.affiliateProfile.findFirst({
-      where: { 
-        user_id: org.referred_by_affiliate_id, 
-        status: { in: ['active', 'pending'] }
+      where: {
+        user_id: org.referred_by_affiliate_id,
+        status: { in: ['active', 'pending'] },
       },
       select: { id: true, user_id: true, commission_percent_default: true },
     });

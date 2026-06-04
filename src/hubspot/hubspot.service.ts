@@ -65,6 +65,7 @@ import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
+import { HandlerAffiliateAssociationChange } from './handlers/affiliateAssociationChange';
 
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
@@ -116,6 +117,7 @@ export class HubspotService {
     private readonly affiliateCreation: HandlerAffiliateCreation,
     private readonly affiliatePropertyChange: HandlerAffiliatePropertyChange,
     private readonly affiliateDeletion: HandlerAffiliateDeletion,
+    private readonly affiliateAssociationChange: HandlerAffiliateAssociationChange,
 
     private readonly invoiceCreation: HandlerInvoiceCreation,
     private readonly invoicePropertyChange: HandlerInvoicePropertyChange,
@@ -322,6 +324,13 @@ export class HubspotService {
             ) {
               //INVOICE_TO_COMPANY or COMPANY_TO_INVOICE
               await this.invoiceAssociationChange.execute(event);
+            }
+            if (
+              event.associationTypeId === '119' ||
+              event.associationTypeId === '120'
+            ) {
+              // GROWTH_PARTNER_TO_CONTACT or CONTACT_TO_GROWTH_PARTNER
+              await this.affiliateAssociationChange.execute(event);
             }
             break;
 

@@ -68,16 +68,18 @@ export const ADMIN_SELECT = {
       payout_preference_reference: true,
       payout_preference_notes: true,
       createdAt: true,
-      user:{
+      contact: {
+        select: { hubspot_billcom_vendor_id: true },
+      },
+      user: {
         select: {
-          contact:{
-            select:{
+          contact: {
+            select: {
               hubspot_billcom_vendor_id: true,
-            }
-            
-          }
-        }
-      }
+            },
+          },
+        },
+      },
     },
   },
   approvedBy: {
@@ -137,6 +139,7 @@ export function shapeAdminRequest(raw: any, allRequestedIds?: Set<string>) {
           payout_details: {
             ...raw.affiliateProfile.payout_details,
             vendorId:
+              raw.affiliateProfile.contact?.hubspot_billcom_vendor_id ??
               raw.affiliateProfile.user?.contact?.hubspot_billcom_vendor_id ??
               undefined,
           },

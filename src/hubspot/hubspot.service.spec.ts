@@ -29,6 +29,7 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
+import { HandlerAffiliateAssociationChange } from './handlers/affiliateAssociationChange';
 
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
@@ -191,6 +192,10 @@ const HandlerAffiliateDeletionMock = {
   execute: jest.fn(),
 };
 
+const HandlerAffiliateAssociationChangeMock = {
+  execute: jest.fn(),
+};
+
 const hireRequestCreationServiceMock = {
   execute: jest.fn(),
 };
@@ -327,6 +332,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
         {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
         {provide: HandlerAffiliateDeletion, useValue: HandlerAffiliateDeletionMock},
+        {provide: HandlerAffiliateAssociationChange, useValue: HandlerAffiliateAssociationChangeMock},
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
         {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
         {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
@@ -414,6 +420,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock},
         {provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock},
         {provide: HandlerAffiliateDeletion, useValue: HandlerAffiliateDeletionMock},
+        {provide: HandlerAffiliateAssociationChange, useValue: HandlerAffiliateAssociationChangeMock},
         {provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock},
         {provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock},
         {provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock},
@@ -513,6 +520,7 @@ function buildProviders(): any[] {
     { provide: HandlerAffiliateCreation, useValue: HandlerAffiliateCreationMock },
     { provide: HandlerAffiliatePropertyChange, useValue: HandlerAffiliatePropertyChangeMock },
     { provide: HandlerAffiliateDeletion, useValue: HandlerAffiliateDeletionMock },
+    { provide: HandlerAffiliateAssociationChange, useValue: HandlerAffiliateAssociationChangeMock },
     { provide: HandlerInvoiceCreation, useValue: HandlerInvoiceCreationMock },
     { provide: HandlerInvoicePropertyChange, useValue: HandlerInvoicePropertyChangeMock },
     { provide: HandlerInvoiceAssociationChange, useValue: HandlerInvoiceAssociationChangeMock },

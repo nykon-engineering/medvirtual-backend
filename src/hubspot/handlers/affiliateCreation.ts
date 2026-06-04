@@ -55,6 +55,7 @@ export class HandlerAffiliateCreation {
       }
 
       let userId: string | null = null;
+      let contactId: string | null = null;
       const associatedContact =
         getObject.data.associations?.contacts?.results?.[0];
 
@@ -68,8 +69,11 @@ export class HandlerAffiliateCreation {
           },
         });
 
-        if (contact && contact.user) {
-          userId = contact.user.id;
+        if (contact) {
+          contactId = contact.id;
+          if (contact.user) {
+            userId = contact.user.id;
+          }
         }
       }
 
@@ -82,6 +86,10 @@ export class HandlerAffiliateCreation {
 
       if (userId) {
         affiliateData.user = { connect: { id: userId } };
+      }
+
+      if (contactId) {
+        affiliateData.contact = { connect: { id: contactId } };
       }
 
       await this.prisma.affiliateProfile.create({
