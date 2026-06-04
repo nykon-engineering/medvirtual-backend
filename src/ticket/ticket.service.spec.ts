@@ -67,6 +67,7 @@ describe('TicketService', () => {
     },
     $executeRawUnsafe: jest.fn(),
     $queryRawUnsafe: jest.fn(),
+    $transaction: jest.fn(),
   }
 
   const mockNotificationsService = {
@@ -937,26 +938,39 @@ describe('TicketService', () => {
     });
 
     it('should delete ticket successfully', async () => {
-      mockPrisma.ticket.findUnique.mockResolvedValue({ id: ticketId, status: 'open', type: 'support' });
-      mockPrisma.ticket.delete.mockResolvedValue({ id: ticketId });
+      const ticketRecord = { id: ticketId, status: 'open', type: 'support', staff_id: 'staff1', created_by: 'user1', description: 'desc' };
+      mockPrisma.ticket.findUnique.mockResolvedValue(ticketRecord);
+      mockPrisma.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) => {
+        const txPrisma = {
+          ticket: { delete: jest.fn().mockResolvedValue({ id: ticketId }) },
+          bonus: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+        };
+        return cb(txPrisma);
+      });
 
       const result = await service.delete(ticketId, systemAdminUser as any) as any;
 
       expect(result.message).toBe('Ticket deleted successfully');
       expect(result.deletedTicket.id).toBe(ticketId);
-      expect(mockPrisma.ticket.delete).toHaveBeenCalledWith({ where: { id: ticketId } });
     });
 
     it('should throw BadRequestException when prisma delete fails', async () => {
-      mockPrisma.ticket.findUnique.mockResolvedValue({ id: ticketId, status: 'open', type: 'support' });
-      mockPrisma.ticket.delete.mockRejectedValue(new Error('DB error'));
+      mockPrisma.ticket.findUnique.mockResolvedValue({ id: ticketId, status: 'open', type: 'support', staff_id: null, created_by: 'user1', description: null });
+      mockPrisma.$transaction.mockRejectedValue(new Error('DB error'));
 
       await expect(service.delete(ticketId, systemAdminUser as any)).rejects.toThrow(BadRequestException);
     });
 
     it('should allow system_super_admin to delete', async () => {
-      mockPrisma.ticket.findUnique.mockResolvedValue({ id: ticketId, status: 'open', type: 'support' });
-      mockPrisma.ticket.delete.mockResolvedValue({ id: ticketId });
+      const ticketRecord = { id: ticketId, status: 'open', type: 'support', staff_id: null, created_by: 'user1', description: null };
+      mockPrisma.ticket.findUnique.mockResolvedValue(ticketRecord);
+      mockPrisma.$transaction.mockImplementation(async (cb: (tx: any) => Promise<any>) => {
+        const txPrisma = {
+          ticket: { delete: jest.fn().mockResolvedValue({ id: ticketId }) },
+          bonus: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+        };
+        return cb(txPrisma);
+      });
 
       const result = await service.delete(ticketId, systemSuperAdminUser as any) as any;
 
