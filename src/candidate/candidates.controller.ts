@@ -314,8 +314,6 @@ export class CandidatesController {
     return result;
   }
 
-
-
   @Get('candidate/:id')
   @ApiOperation({ summary: 'Get a specific candidate by ID' })
   @ApiParam({
@@ -628,15 +626,67 @@ export class CandidatesController {
     status: 429,
     description: 'Too many requests. Rate limit exceeded.',
   })
-  async getTalentPoolCandidateById(@Param('id') id: string) {
-    const candidate =
-      await this.candidatesService.getTalentPoolCandidateById(id);
+  async getTalentPoolCandidateById(
+    @Param('id') id: string
+  ) {
+    const candidate = await this.candidatesService.getTalentPoolCandidateById(
+      id,
+    );
     return {
       status: 200,
       message: 'Candidate retrieved successfully',
       data: candidate,
     };
   }
+
+  @Get('talent-pool-for-logged-user/:id')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per minute
+  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Get a specific candidate from talent pool by ID (public endpoint)',
+    description:
+      'Returns a specific candidate from the talent pool by ID without sensitive information. No authentication required. Rate limited to 10 requests per minute.',
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    type: String,
+    description: 'Candidate ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidate retrieved successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid candidate ID',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Candidate not found or not available in talent pool',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many requests. Rate limit exceeded.',
+  })
+  async getTalentPoolCandidateByIdForLoggedUser(
+    @Param('id') id: string,
+    @CurrentUser() user: USER,
+  ) {
+    const candidate = await this.candidatesService.getTalentPoolCandidateByIdForLoggedUser(
+      id,
+      user
+    );
+    return {
+      status: 200,
+      message: 'Candidate retrieved successfully',
+      data: candidate,
+    };
+  }
+  
+
 
   @Get('sync-business-unit-count')
   @HttpCode(200)

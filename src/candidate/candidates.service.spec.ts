@@ -251,6 +251,7 @@ describe('CandidatesService', () => {
             },
           },
         ],
+        existingInOtherClientPanel: true,
       };
 
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);

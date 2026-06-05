@@ -641,6 +641,9 @@ export class CandidatesService {
                 status: 'test',
               }))
             : [],
+          existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
+            (pc) => pc.panel.hireRequest.organization.id === organization_id,
+          ),
         };
       });
 
@@ -1189,6 +1192,9 @@ export class CandidatesService {
                 status: 'test',
               }))
             : [],
+          existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
+            (pc) => pc.panel.hireRequest.organization.id === organization_id,
+          ),
         };
       });
 
@@ -1363,6 +1369,9 @@ export class CandidatesService {
                 pc.panel?.hireRequest?.organization?.name || '',
             }))
           : [],
+      existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
+        (pc) => pc.panel?.hireRequest?.organization?.id === organization_id,
+      ),
     };
     return formattedCandidate;
   }
@@ -2597,8 +2606,21 @@ export class CandidatesService {
             id: true,
             status: true,
             panel: {
-              include: {
-                hireRequest: true,
+              select: {
+                hire_request_id: true,
+                hireRequest: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    organization: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -2646,6 +2668,178 @@ export class CandidatesService {
         candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
         [],
       ...rates3,
+    };
+
+    return candidateWithFullAvatarUrl;
+  }
+
+
+  async getTalentPoolCandidateByIdForLoggedUser(id: string, user: USER): Promise<any> {
+    // Validate ID
+    if (!id || id.trim() === '') {
+      throw new BadRequestException('Invalid candidate ID');
+    }
+
+    console.log(`Fetching candidate with ID: ${user}`);
+    const organizationId = user?.organization_id ?? null;
+
+    // Search candidate by ID without any filters
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: id.trim() },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        country: true,
+        employment_type: true,
+        hourly_pay_rate: true,
+        years_of_experience: true,
+        about_me: true,
+        specialization: true,
+        tools: true,
+        medical_tools: true,
+        avatar_url: true,
+        gender: true,
+        shift_block: true,
+        video_link: true,
+        // VA Score Card fields
+        active_listening_and_comprehension_demonstrated: true,
+        adaptability_to_different_client_personalities_and_workflows: true,
+        can_articulate_experience_clearly_to_clients: true,
+        can_multitask_between_systems_or_windows_efficiently: true,
+        client_readiness___fit_evaluator_notes: true,
+        comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+        comfortable_with_camera_on_setup: true,
+        communication_skills_evaluator_notes: true,
+        confident_on_video_and_phone_calls: true,
+        cultural_alignment_with_us_healthcare_environment: true,
+        demonstrates_problem_solving_and_tech_adaptability: true,
+        demonstrates_stability_and_commitment: true,
+        demonstrates_understanding_of_medical_terminology_and_procedures: true,
+        exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+        for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+        grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+        handles_feedback_constructively: true,
+        has_functioning_headset__webcam__and_backup_device: true,
+        knowledge_of_hipaa_compliance_and_confidentiality: true,
+        medical_knowledge_evaluator_notes: true,
+        no_medical_industry_experience: true,
+        positive_attitude_and_professional_demeanor: true,
+        prior_experience_in_healthcare_or_medical_va_roles: true,
+        professionalism___work_readiness_evaluator_notes: true,
+        punctual_and_responsive_during_recruitment_stages: true,
+        remote_work_discipline_and_time_management: true,
+        speaks_clearly_and_professionally: true,
+        stable_internet_connection__min__20_mbps_: true,
+        technical_competence_evaluator_notes: true,
+        tier_level: true,
+        total_points: true,
+        understands_workflow_in_medical_offices___telehealth_environments: true,
+        languages: {
+          select: {
+            name: true,
+          },
+        },
+        skills: {
+          select: {
+            skill_name: true,
+            skill_type: true,
+          },
+        },
+        educations: {
+          select: {
+            institution: true,
+            degree: true,
+            year: true,
+          },
+        },
+        experiences: {
+          orderBy: { start_date: Prisma.SortOrder.desc },
+          select: {
+            company: true,
+            position: true,
+            start_date: true,
+            end_date: true,
+            responsabilities: true,
+          },
+        },
+        approved_positions_pairing: true,
+        business_unit: true,
+        panelCandidates: {
+          select: {
+            id: true,
+            status: true,
+            panel: {
+              select: {
+                hire_request_id: true,
+                hireRequest: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    organization: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found');
+    }
+
+    // Construct full avatar URL and calculate salary
+    const AVATAR_BASE_URL =
+      'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+
+    // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
+    let employmentTypeValue = candidate.employment_type;
+    if (Array.isArray(employmentTypeValue)) {
+      employmentTypeValue = employmentTypeValue[0];
+    } else if (
+      typeof employmentTypeValue === 'string' &&
+      employmentTypeValue.includes(';')
+    ) {
+      employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+    }
+
+    // Apply the same transformation as in findOne and other places
+    const transformedEmploymentType =
+      changeLabelAvailability(
+        dbToStageDictionary[Number(employmentTypeValue)],
+      ) || employmentTypeValue;
+
+    const _pConfigs3 =
+      await this.positionRateConfigService.findAllUnpaginated();
+    const _configMap3 = buildConfigMap(_pConfigs3);
+    const rates3 = computeCandidateRates(candidate, _configMap3);
+
+    const candidateWithFullAvatarUrl = {
+      ...candidate,
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
+        : null,
+      employment_type: transformedEmploymentType,
+      approved_positions_pairing:
+        candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+        [],
+      ...rates3,
+      existingInOtherClientPanel: organizationId
+        ? (candidate.panelCandidates ?? []).some(
+            (pc) => pc.panel.hireRequest.organization.id === organizationId,
+          )
+        : false,
     };
 
     return candidateWithFullAvatarUrl;
