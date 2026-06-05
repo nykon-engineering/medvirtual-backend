@@ -176,6 +176,146 @@ export class CandidatesController {
     return result;
   }
 
+  //Endpoint that should be used only for alliance module
+  @Get('for-alliance')
+  @ApiOperation({
+    summary:
+      "Get all candidates for the current user's organization filtered by status",
+  })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    type: String,
+    description: 'Filter candidates by country of residence',
+    example: 'USA, France, Brazil',
+  })
+  @ApiQuery({
+    name: 'shift_block',
+    required: false,
+    type: String,
+    description: 'Filter candidates by shift block from hubspot',
+    example: 'Flexible, Full Time',
+  })
+  @ApiQuery({
+    name: 'availiability',
+    required: false,
+    type: String,
+    description: 'Filter candidates by avaliability',
+    example: 'Full-time, Part-time',
+  })
+  @ApiQuery({
+    name: 'monthly_compensation_from',
+    required: false,
+    type: String,
+    description: 'Filter candidates by monthly compensations start',
+    example: '1000',
+  })
+  @ApiQuery({
+    name: 'monthly_compensation_to',
+    required: false,
+    type: String,
+    description: 'Filter candidates by monthly compensations end',
+    example: '5000',
+  })
+  @ApiQuery({
+    name: 'years_of_experience',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by years of experience',
+    example: '5',
+  })
+  @ApiQuery({
+    name: 'specializations',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by specializations',
+    example: 'pediatric',
+  })
+  @ApiQuery({
+    name: 'skills',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by skills',
+    example: 'office, communication',
+  })
+  @ApiQuery({
+    name: 'languages',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by languages spoken',
+    example: 'English, Spanish',
+  })
+  @ApiQuery({
+    name: 'all',
+    required: false,
+    type: Boolean,
+    description: 'If true, returns all candidates without pagination',
+  })
+  @ApiQuery({
+    name: 'scorecard_fields',
+    required: false,
+    type: String,
+    description:
+      'Comma-separated list of VA score card fields to filter by (candidates must have a value for each field)',
+    example:
+      'speaks_clearly_and_professionally,stable_internet_connection__min__20_mbps_',
+  })
+  @ApiQuery({
+    name: 'tools',
+    required: false,
+    type: String,
+    description: 'Comma-separated list of tools to filter by (OR logic)',
+    example: 'Zoom,Google Workspace',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidates retrieved successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Failed to fetch candidates' })
+  @UseGuards(AuthGuard)
+  async findAllForAlliance(
+    @CurrentUser() user: USER,
+    @Query('country') country: string,
+    @Query('shift_block') shift_block: string,
+    @Query('availability') availability: string,
+    @Query('monthly_compensation_from') monthly_compensation_from: string,
+    @Query('monthly_compensation_to') monthly_compensation_to: string,
+    @Query('years_of_experience') years_of_experience: string,
+    @Query('specializations') specializations: string,
+    @Query('positions') positions: string,
+    @Query('skills') skills: string,
+    @Query('languages') languages: string,
+    @Query('page') page,
+    @Query('perPage') perPage,
+    @Query('search') search: string,
+    @Query('all') all: string,
+    @Query('scorecard_fields') scorecard_fields: string,
+    @Query('tools') tools: string,
+  ) {
+    const result = await this.candidatesService.findAllForAlliance(
+      user,
+      country,
+      shift_block,
+      availability,
+      monthly_compensation_from,
+      monthly_compensation_to,
+      years_of_experience,
+      specializations,
+      positions,
+      skills,
+      languages,
+      page,
+      perPage,
+      search,
+      all,
+      scorecard_fields,
+      tools,
+    );
+    return result;
+  }
+
+
+
   @Get('candidate/:id')
   @ApiOperation({ summary: 'Get a specific candidate by ID' })
   @ApiParam({
