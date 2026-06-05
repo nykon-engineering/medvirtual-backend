@@ -1284,6 +1284,72 @@ export class CronService {
     return { sent: true, count: commissions.length };
   }
 
+  async reconcileAffiliateContacts(): Promise<{
+    updated: number;
+    noContactInHubspot: number;
+    noContactInDb: number;
+    errors: string[];
+  }> {
+    /*
+    const affiliates = await this.prisma.$queryRaw<
+      { id: string; hubspot_id: string }[]
+    >`SELECT id, hubspot_id FROM "AffiliateProfile" WHERE hubspot_id IS NOT NULL AND contact_id IS NULL`;
+    */
+
+    const affiliates = await this.prisma.affiliateProfile.findMany({
+      where: { hubspot_id: { not: null }, contact_id: null },
+      select: { id: true, hubspot_id: true },
+    });
+    let updated = 0;
+    let noContactInHubspot = 0;
+    let noContactInDb = 0;
+    const errors: string[] = [];
+
+    for (const affiliate of affiliates) {
+      try {
+        const { data } = await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_GROWTH_PARTNER_CUSTOM_OBJECT}/${affiliate.hubspot_id}?associations=contacts`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
+        );
+
+        const associatedContact = data.associations?.contacts?.results?.[0];
+        if (!associatedContact) {
+          noContactInHubspot++;
+          continue;
+        }
+
+        const contact = await this.prisma.contact.findUnique({
+          where: { hubspot_id: String(associatedContact.id) },
+          select: { id: true },
+        });
+        if (!contact) {
+          noContactInDb++;
+          continue;
+        }
+
+        await this.prisma.affiliateProfile.update({
+          where: { id: affiliate.id },
+          data: { contact: { connect: { id: contact.id } } },
+        });
+        updated++;
+      } catch (err) {
+        errors.push(
+          `GP ${affiliate.hubspot_id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    console.log(
+      `reconcileAffiliateContacts: total=${affiliates.length} updated=${updated} noContactInHubspot=${noContactInHubspot} noContactInDb=${noContactInDb} errors=${errors.length}`,
+    );
+
+    return { updated, noContactInHubspot, noContactInDb, errors };
+  }
+
   private buildHireRequestTitle(hr: {
     hubspot_pairing_request_type?: string | null;
     hubspot_numberVA?: number | null;

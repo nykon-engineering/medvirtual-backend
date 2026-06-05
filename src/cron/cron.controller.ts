@@ -277,6 +277,24 @@ export class CronController {
     };
   }
 
+  @Get('reconcile-affiliate-contacts')
+  @ApiOperation({
+    summary:
+      'Fetch HubSpot associations for affiliate profiles missing a contact link and backfill contact_id',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Affiliate contact reconciliation completed',
+  })
+  async reconcileAffiliateContacts() {
+    const result = await this.cron.reconcileAffiliateContacts();
+    return {
+      status: 200,
+      message: 'Affiliate contact reconciliation completed',
+      data: result,
+    };
+  }
+
   @Get('sync-organizations-with-hubspot')
   @ApiOperation({
     summary:
