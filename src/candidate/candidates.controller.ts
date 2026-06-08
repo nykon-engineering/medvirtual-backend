@@ -555,9 +555,18 @@ export class CandidatesController {
       'Remove the last candidate from a panel and cancel the hire request atomically',
   })
   @ApiBody({ type: RemoveCandidateAndCancelDto })
-  @ApiResponse({ status: 200, description: 'Candidate removed and hire request cancelled' })
-  @ApiResponse({ status: 400, description: 'Validation error or invalid state' })
-  @ApiResponse({ status: 404, description: 'Candidate or hire request not found' })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidate removed and hire request cancelled',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error or invalid state',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Candidate or hire request not found',
+  })
   async removeCandidateAndCancel(
     @Body() data: RemoveCandidateAndCancelDto,
     @CurrentUser() user: USER,
@@ -652,12 +661,9 @@ export class CandidatesController {
     status: 429,
     description: 'Too many requests. Rate limit exceeded.',
   })
-  async getTalentPoolCandidateById(
-    @Param('id') id: string
-  ) {
-    const candidate = await this.candidatesService.getTalentPoolCandidateById(
-      id,
-    );
+  async getTalentPoolCandidateById(@Param('id') id: string) {
+    const candidate =
+      await this.candidatesService.getTalentPoolCandidateById(id);
     return {
       status: 200,
       message: 'Candidate retrieved successfully',
@@ -701,18 +707,17 @@ export class CandidatesController {
     @Param('id') id: string,
     @CurrentUser() user: USER,
   ) {
-    const candidate = await this.candidatesService.getTalentPoolCandidateByIdForLoggedUser(
-      id,
-      user
-    );
+    const candidate =
+      await this.candidatesService.getTalentPoolCandidateByIdForLoggedUser(
+        id,
+        user,
+      );
     return {
       status: 200,
       message: 'Candidate retrieved successfully',
       data: candidate,
     };
   }
-  
-
 
   @Get('sync-business-unit-count')
   @HttpCode(200)

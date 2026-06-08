@@ -7,7 +7,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { HireRequestStatus, PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
+import {
+  HireRequestStatus,
+  PanelStatus,
+  Prisma,
+  ProcessingStatus,
+  USER,
+} from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -530,6 +536,10 @@ export class CandidatesService {
         select: {
           id: true,
           status: true,
+          createdByUserId: true,
+          createdBy: {
+            select: { role: true },
+          },
           panel: {
             select: {
               hire_request_id: true,
@@ -643,7 +653,11 @@ export class CandidatesService {
               }))
             : [],
           existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
-            (pc) => pc.panel.hireRequest.organization.id === organization_id,
+            (pc) =>
+              pc.panel.hireRequest.organization.id === organization_id &&
+              pc.panel.hireRequest.status === 'interview_scheduled' &&
+              (pc.createdBy?.role === 'organization_admin' ||
+                pc.createdBy?.role === 'organization_super_admin'),
           ),
         };
       });
@@ -1081,6 +1095,10 @@ export class CandidatesService {
         select: {
           id: true,
           status: true,
+          createdByUserId: true,
+          createdBy: {
+            select: { role: true },
+          },
           panel: {
             select: {
               hire_request_id: true,
@@ -1194,7 +1212,11 @@ export class CandidatesService {
               }))
             : [],
           existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
-            (pc) => pc.panel.hireRequest.organization.id === organization_id,
+            (pc) =>
+              pc.panel.hireRequest.organization.id === organization_id &&
+              pc.panel.hireRequest.status === 'interview_scheduled' &&
+              (pc.createdBy?.role === 'organization_admin' ||
+                pc.createdBy?.role === 'organization_super_admin'),
           ),
         };
       });
@@ -1314,6 +1336,10 @@ export class CandidatesService {
       panelCandidates: {
         select: {
           id: true,
+          createdByUserId: true,
+          createdBy: {
+            select: { role: true },
+          },
           panel: {
             select: {
               hire_request_id: true,
@@ -1321,6 +1347,7 @@ export class CandidatesService {
                 select: {
                   id: true,
                   title: true,
+                  status: true,
                   organization: {
                     select: {
                       id: true,
@@ -1371,7 +1398,11 @@ export class CandidatesService {
             }))
           : [],
       existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
-        (pc) => pc.panel?.hireRequest?.organization?.id === organization_id,
+        (pc) =>
+          pc.panel?.hireRequest?.organization?.id === organization_id &&
+          pc.panel?.hireRequest?.status === 'interview_scheduled' &&
+          (pc.createdBy?.role === 'organization_admin' ||
+            pc.createdBy?.role === 'organization_super_admin'),
       ),
     };
     return formattedCandidate;
@@ -2429,7 +2460,8 @@ export class CandidatesService {
           pairing_session_outcome_reason: data.pairing_session_outcome_reason,
           count_of_candidates_invited_: data.count_of_candidates_invited_,
           count_of_candidates_attended_: data.count_of_candidates_attended_,
-          count_of_candidates_interviewed_: data.count_of_candidates_interviewed_,
+          count_of_candidates_interviewed_:
+            data.count_of_candidates_interviewed_,
           client_signed_contract_closing_ticket:
             data.client_signed_contract_closing_ticket,
         },
@@ -2728,6 +2760,10 @@ export class CandidatesService {
           select: {
             id: true,
             status: true,
+            createdByUserId: true,
+            createdBy: {
+              select: { role: true },
+            },
             panel: {
               select: {
                 hire_request_id: true,
@@ -2796,8 +2832,10 @@ export class CandidatesService {
     return candidateWithFullAvatarUrl;
   }
 
-
-  async getTalentPoolCandidateByIdForLoggedUser(id: string, user: USER): Promise<any> {
+  async getTalentPoolCandidateByIdForLoggedUser(
+    id: string,
+    user: USER,
+  ): Promise<any> {
     // Validate ID
     if (!id || id.trim() === '') {
       throw new BadRequestException('Invalid candidate ID');
@@ -2895,6 +2933,10 @@ export class CandidatesService {
           select: {
             id: true,
             status: true,
+            createdByUserId: true,
+            createdBy: {
+              select: { role: true },
+            },
             panel: {
               select: {
                 hire_request_id: true,
@@ -2960,7 +3002,11 @@ export class CandidatesService {
       ...rates3,
       existingInOtherClientPanel: organizationId
         ? (candidate.panelCandidates ?? []).some(
-            (pc) => pc.panel.hireRequest.organization.id === organizationId,
+            (pc) =>
+              pc.panel.hireRequest.organization.id === organizationId &&
+              pc.panel.hireRequest.status === 'interview_scheduled' &&
+              (pc.createdBy?.role === 'organization_admin' ||
+                pc.createdBy?.role === 'organization_super_admin'),
           )
         : false,
     };

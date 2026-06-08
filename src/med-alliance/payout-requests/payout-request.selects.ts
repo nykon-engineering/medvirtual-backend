@@ -68,16 +68,15 @@ export const ADMIN_SELECT = {
       payout_preference_reference: true,
       payout_preference_notes: true,
       createdAt: true,
-      user:{
+      user: {
         select: {
-          contact:{
-            select:{
+          contact: {
+            select: {
               hubspot_billcom_vendor_id: true,
-            }
-            
-          }
-        }
-      }
+            },
+          },
+        },
+      },
     },
   },
   approvedBy: {
