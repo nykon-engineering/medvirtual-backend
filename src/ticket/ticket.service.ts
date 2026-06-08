@@ -672,7 +672,6 @@ export class TicketService {
       }
 
       await this.prisma.$transaction(async (prisma) => {
-
         await prisma.ticket.delete({
           where: { id },
         });

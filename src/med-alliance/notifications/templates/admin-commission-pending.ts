@@ -51,7 +51,7 @@ export function adminCommissionPendingTemplate(
           <img src="${logo}" alt="${companyName} Logo" />
         </div>
         <div class="main-message">
-          <p>A commission has been promoted to <strong>pending review</strong> and is waiting for your approval.</p>
+          <p>A new commission is ready for your review. Please approve or reject it to keep the partner's earnings up to date.</p>
           <table class="detail-table">
             <tr><td>Organization</td><td>${payload.organizationName}</td></tr>
             <tr><td>Affiliate</td><td>${payload.affiliateName}</td></tr>

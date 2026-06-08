@@ -52,7 +52,7 @@ export function adminCommissionRevertedTemplate(
           <img src="${logo}" alt="${companyName} Logo" />
         </div>
         <div class="main-message">
-          <p>A commission has been manually <strong>reverted to pending review</strong> by an admin and requires your attention.</p>
+          <p>An admin has reverted a commission back to pending review. Please check the details below and take action.</p>
           <table class="detail-table">
             <tr><td>Organization</td><td>${payload.organizationName}</td></tr>
             <tr><td>Affiliate</td><td>${payload.affiliateName}</td></tr>
