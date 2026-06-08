@@ -7,7 +7,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
+import { HireRequestStatus, PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -37,6 +37,7 @@ import {
 } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { RemoveCandidateAndCancelDto } from './dto/remove-candidate-and-cancel.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
@@ -2241,7 +2242,7 @@ export class CandidatesService {
   async removeCandidate(
     data: RemoveCandidateDto,
     user: USER,
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; shouldPromptCancel: boolean }> {
     if (!data.candidateId)
       throw new BadRequestException('Candidate ID is required');
     if (!data.hireRequestId)
@@ -2256,21 +2257,39 @@ export class CandidatesService {
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
 
-    try {
-      let lengthCandidates = 0;
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id: data.hireRequestId },
+      select: { status: true },
+    });
+    if (!hireRequest) throw new NotFoundException('Hire request not found');
 
+    const PANEL_READY_OR_ABOVE: HireRequestStatus[] = [
+      'panel_ready',
+      'interview_scheduled',
+      'awaiting_decision',
+      'placement_completed',
+    ];
+
+    const currentCount = await this.prisma.panelCandidate.count({
+      where: { panel: { hire_request_id: data.hireRequestId } },
+    });
+    const wouldBeLastCandidate = currentCount === 1;
+
+    if (wouldBeLastCandidate) {
+      if (PANEL_READY_OR_ABOVE.includes(hireRequest.status)) {
+        throw new BadRequestException(
+          'Cannot remove the last candidate from a panel at this stage of the hire request',
+        );
+      }
+      // Status is below panel_ready — signal frontend to open cancel modal without removing
+      return { success: true, shouldPromptCancel: true };
+    }
+
+    try {
       await this.prisma.$transaction(async (tx) => {
         await tx.panelCandidate.deleteMany({
           where: {
             candidate_id: data.candidateId,
-            panel: {
-              hire_request_id: data.hireRequestId,
-            },
-          },
-        });
-
-        lengthCandidates = await tx.panelCandidate.count({
-          where: {
             panel: {
               hire_request_id: data.hireRequestId,
             },
@@ -2304,22 +2323,126 @@ export class CandidatesService {
             candidate.hubspot_id,
             pipeline_treated,
             user?.id,
+            undefined,
+            `Candidate removed from hire request ${data.hireRequestId} panel`,
           );
         }
       });
 
-      //if there are no more candidates in the panel, change hire request status to cancelled
-      if (lengthCandidates === 0) {
-        await this.hireRequest.updateStatus(
-          data.hireRequestId,
-          { status: 'cancelled' },
-          user,
-        );
-      }
+      return { success: true, shouldPromptCancel: false };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error('Error removing candidate from panel:', error);
+      return { success: false, shouldPromptCancel: false };
+    }
+  }
+
+  async removeCandidateAndCancel(
+    data: RemoveCandidateAndCancelDto,
+    user: USER,
+  ): Promise<boolean> {
+    if (!data.candidateId)
+      throw new BadRequestException('Candidate ID is required');
+    if (!data.hireRequestId)
+      throw new BadRequestException('Hire Request ID is required');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id: data.hireRequestId },
+      select: { status: true },
+    });
+    if (!hireRequest) throw new NotFoundException('Hire request not found');
+
+    const PANEL_READY_OR_ABOVE: HireRequestStatus[] = [
+      'panel_ready',
+      'interview_scheduled',
+      'awaiting_decision',
+      'placement_completed',
+    ];
+    if (PANEL_READY_OR_ABOVE.includes(hireRequest.status)) {
+      throw new BadRequestException(
+        'Cannot remove the last candidate from a panel at this stage of the hire request',
+      );
+    }
+
+    const currentCount = await this.prisma.panelCandidate.count({
+      where: { panel: { hire_request_id: data.hireRequestId } },
+    });
+    if (currentCount !== 1) {
+      throw new BadRequestException(
+        'This action is only allowed when removing the last candidate from a panel',
+      );
+    }
+
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: data.candidateId },
+      select: { hubspot_id: true, pipeline_status_origin: true },
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.panelCandidate.deleteMany({
+          where: {
+            candidate_id: data.candidateId,
+            panel: { hire_request_id: data.hireRequestId },
+          },
+        });
+
+        const thereOtherPanels = await tx.panelCandidate.findMany({
+          where: {
+            candidate_id: data.candidateId,
+            status: { in: ['selected_by_client', 'blocked'] },
+            panel: { hire_request_id: { not: data.hireRequestId } },
+          },
+          select: { id: true },
+        });
+
+        if (thereOtherPanels.length === 0) {
+          const pipelineStatus = Object.keys(dbToStageDictionary).find(
+            (key) => dbToStageDictionary[key] === 'Available Candidates',
+          );
+          const pipeline_treated =
+            candidate.pipeline_status_origin || pipelineStatus || '';
+
+          await tx.candidate.update({
+            where: { id: data.candidateId },
+            data: { pipeline_status: pipeline_treated },
+          });
+
+          await this.hubspot.updateOneCandidateFromHireRequest(
+            candidate.hubspot_id,
+            pipeline_treated,
+            user?.id,
+            undefined,
+            `Last candidate removed from hire request ${data.hireRequestId} panel — cancellation initiated`,
+          );
+        }
+      });
+
+      await this.hireRequest.updateStatus(
+        data.hireRequestId,
+        {
+          status: 'cancelled',
+          reason: data.reason,
+          staffing_coordinator: data.staffing_coordinator,
+          pairing_session_conducted: data.pairing_session_conducted,
+          pairing_session_outcome_reason: data.pairing_session_outcome_reason,
+          count_of_candidates_invited_: data.count_of_candidates_invited_,
+          count_of_candidates_attended_: data.count_of_candidates_attended_,
+          count_of_candidates_interviewed_: data.count_of_candidates_interviewed_,
+          client_signed_contract_closing_ticket:
+            data.client_signed_contract_closing_ticket,
+        },
+        user,
+      );
 
       return true;
     } catch (error) {
-      this.logger.error('Error removing candidate from panel:', error);
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error(
+        'Error removing last candidate and cancelling hire request:',
+        error,
+      );
       return false;
     }
   }

@@ -32,6 +32,7 @@ import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { RemoveCandidateAndCancelDto } from './dto/remove-candidate-and-cancel.dto';
 
 @ApiTags('candidates')
 @ApiBearerAuth()
@@ -543,6 +544,31 @@ export class CandidatesController {
     return {
       status: 200,
       message: 'Candidate removed successfully',
+      data: result,
+    };
+  }
+
+  @Post('remove-candidate-and-cancel')
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary:
+      'Remove the last candidate from a panel and cancel the hire request atomically',
+  })
+  @ApiBody({ type: RemoveCandidateAndCancelDto })
+  @ApiResponse({ status: 200, description: 'Candidate removed and hire request cancelled' })
+  @ApiResponse({ status: 400, description: 'Validation error or invalid state' })
+  @ApiResponse({ status: 404, description: 'Candidate or hire request not found' })
+  async removeCandidateAndCancel(
+    @Body() data: RemoveCandidateAndCancelDto,
+    @CurrentUser() user: USER,
+  ) {
+    const result = await this.candidatesService.removeCandidateAndCancel(
+      data,
+      user,
+    );
+    return {
+      status: 200,
+      message: 'Candidate removed and hire request cancelled successfully',
       data: result,
     };
   }
