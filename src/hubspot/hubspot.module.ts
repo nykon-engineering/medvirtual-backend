@@ -34,6 +34,7 @@ import { HandlerTicketPropertyChange } from './handlers/ticketPropertyChange';
 import { HandlerAffiliateCreation } from './handlers/affiliateCreation';
 import { HandlerAffiliatePropertyChange } from './handlers/affiliatePropertyChange';
 import { HandlerAffiliateDeletion } from './handlers/affiliateDeletion';
+import { HandlerAffiliateAssociationChange } from './handlers/affiliateAssociationChange';
 
 import { HandlerInvoiceCreation } from './handlers/invoiceCreation';
 import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
@@ -88,6 +89,7 @@ import { HubspotAuditService } from './hubspot-audit.service';
     HandlerAffiliateCreation,
     HandlerAffiliateDeletion,
     HandlerAffiliatePropertyChange,
+    HandlerAffiliateAssociationChange,
     HireRequestCreationService,
     HireRequestUpdateService,
     OrganizationCreationService,
