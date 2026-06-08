@@ -1362,6 +1362,7 @@ export class CandidatesService {
       },
     };
 
+    
     const candidate = await this.prisma.candidate.findUnique({
       where: {
         id: id,
