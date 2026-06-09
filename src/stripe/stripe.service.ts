@@ -9,6 +9,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
 import { isLocalMode } from '../common/bull.utils';
+import { PusherService } from '../pusher/pusher.service';
 
 @Injectable()
 export class StripeService implements OnModuleInit {
@@ -22,6 +23,7 @@ export class StripeService implements OnModuleInit {
     private readonly secretsService: SecretsService,
     @Inject('REDIS_CLIENT') private readonly redisClient: redis.RedisClientType,
     private readonly prisma: PrismaService,
+    private readonly pusherService: PusherService,
     @Optional() @InjectQueue('invoice') private readonly invoiceQueue: Queue | null,
     @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
   ) { }
@@ -472,6 +474,28 @@ export class StripeService implements OnModuleInit {
           break;
         default:
           break;
+      }
+
+      if (event.type.startsWith('invoice.')) {
+        try {
+          const stripeInvoice = event.data.object as any;
+          if (stripeInvoice.id) {
+            const internalInvoice = await this.prisma.invoice.findUnique({
+              where: { stripe_invoice_id: stripeInvoice.id },
+            });
+            if (internalInvoice) {
+              await this.pusherService.trigger(internalInvoice.id, 'invoice.status.update', {
+                invoiceId: internalInvoice.id,
+                status: internalInvoice.status,
+                stripe_status: internalInvoice.stripe_status,
+                event: event.type,
+              });
+              this.logger.log(`Triggered Pusher event 'invoice.status.update' for invoice ${internalInvoice.id}`);
+            }
+          }
+        } catch (err) {
+          this.logger.error(`Failed to trigger pusher event for ${event.type}: ${err.message}`);
+        }
       }
     }
   }
