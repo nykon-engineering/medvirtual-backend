@@ -212,9 +212,22 @@ export class StripeService implements OnModuleInit {
         case 'customer.created':
           // leave blank for now
           break;
-        case 'payment_intent.succeeded':
-          // leave blank for now
+        case 'payment_intent.succeeded': {
+          const paymentIntent = event.data.object as any;
+          if (paymentIntent.metadata?.refund === 'true' && paymentIntent.amount === 100) {
+            try {
+              this.logger.log(`Refunding $1 setup fee for PaymentIntent: ${paymentIntent.id}`);
+              await this.safeStripeCall(() =>
+                this.stripe.refunds.create({
+                  payment_intent: paymentIntent.id,
+                })
+              );
+            } catch (err) {
+              this.logger.error(`Failed to refund setup fee for PaymentIntent ${paymentIntent.id}: ${err.message}`);
+            }
+          }
           break;
+        }
         case 'invoice.paid': {
           this.logger.log(`Handling invoice.paid for Stripe ID: ${event.id}`);
           const paidInvoice = event.data.object as any;
@@ -463,12 +476,12 @@ export class StripeService implements OnModuleInit {
     }
   }
 
-  public async payInvoice(stripeInvoiceId: string): Promise<void> {
+  public async payInvoice(stripeInvoiceId: string, paymentMethodId?: string): Promise<void> {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
     }
     await this.safeStripeCall(() =>
-      this.stripe.invoices.pay(stripeInvoiceId)
+      this.stripe.invoices.pay(stripeInvoiceId, paymentMethodId ? { payment_method: paymentMethodId } : undefined)
     );
   }
 
@@ -980,6 +993,115 @@ export class StripeService implements OnModuleInit {
     );
     return { url: invoice.hosted_invoice_url || null };
   }
+
+  public async getCustomerPaymentMethods(organizationId: string) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not initialized');
+    }
+
+    const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
+      where: { organization_id: organizationId },
+    });
+
+    if (!invoiceConfig || !invoiceConfig.stripe_customer_id) {
+      throw new BadRequestException('Stripe customer ID not found for this organization');
+    }
+
+    const stripeCustomerId = invoiceConfig.stripe_customer_id;
+
+    const [methods, customer] = await Promise.all([
+      this.safeStripeCall(() =>
+        this.stripe.paymentMethods.list({ customer: stripeCustomerId }),
+      ),
+      this.safeStripeCall(() =>
+        this.stripe.customers.retrieve(stripeCustomerId),
+      ),
+    ]);
+
+    let defaultPaymentMethodId: string | null = null;
+    if (!customer.deleted) {
+      const invoiceSettings = (customer as any).invoice_settings || {};
+      defaultPaymentMethodId = invoiceSettings.default_payment_method as string | null;
+    }
+
+    return methods.data.map((method) => ({
+      ...method,
+      is_default: method.id === defaultPaymentMethodId,
+    }));
+  }
+
+  public async setDefaultCustomerPaymentMethod(organizationId: string, paymentMethodId: string) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not initialized');
+    }
+
+    const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
+      where: { organization_id: organizationId },
+    });
+
+    if (!invoiceConfig || !invoiceConfig.stripe_customer_id) {
+      throw new BadRequestException('Stripe customer ID not found for this organization');
+    }
+
+    return await this.safeStripeCall(() =>
+      this.stripe.customers.update(invoiceConfig.stripe_customer_id as string, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+      })
+    );
+  }
+
+  public async deleteCustomerPaymentMethod(organizationId: string, paymentMethodId: string) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not initialized');
+    }
+
+    // Verify it belongs to the org
+    const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
+      where: { organization_id: organizationId },
+    });
+
+    if (!invoiceConfig || !invoiceConfig.stripe_customer_id) {
+      throw new BadRequestException('Stripe customer ID not found for this organization');
+    }
+
+    const pm = await this.safeStripeCall(() => this.stripe.paymentMethods.retrieve(paymentMethodId));
+    if (pm.customer !== invoiceConfig.stripe_customer_id) {
+      throw new BadRequestException('Payment method does not belong to this customer');
+    }
+
+    await this.safeStripeCall(() => this.stripe.paymentMethods.detach(paymentMethodId));
+  }
+
+  public async createSetupIntent(organizationId: string, method: string = 'card') {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not initialized');
+    }
+
+    const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
+      where: { organization_id: organizationId },
+    });
+
+    if (!invoiceConfig || !invoiceConfig.stripe_customer_id) {
+      throw new BadRequestException('Stripe customer ID not found for this organization');
+    }
+
+    const paymentIntent = await this.safeStripeCall(() =>
+      this.stripe.paymentIntents.create({
+        amount: 100, // $1.00 fee to verify and save the card/bank
+        currency: 'usd',
+        customer: invoiceConfig.stripe_customer_id as string,
+        setup_future_usage: 'on_session',
+        payment_method_types: method === 'ach' ? ['us_bank_account'] : ['card'],
+        metadata: {
+          organizationId,
+          refund: 'true',
+        },
+      })
+    );
+
+    return { clientSecret: paymentIntent.client_secret };
+  }
+
 
   /**
    * Checks if the paid invoice was pre-billed.

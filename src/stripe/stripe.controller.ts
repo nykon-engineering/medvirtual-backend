@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Headers, BadRequestException, Get, UseGuards, Body, Param } from '@nestjs/common';
+import { Controller, Post, Req, Headers, BadRequestException, Get, UseGuards, Body, Param, Put, Delete } from '@nestjs/common';
 import { Request } from 'express';
 import { StripeService } from './stripe.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -27,12 +27,70 @@ export class StripeController {
   }
 
   @Get('stripe/invoices/:id/url')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard)
   async getInvoiceUrl(@Param('id') id: string) {
     if (!id) {
       throw new BadRequestException('Stripe invoice ID is required');
     }
     return this.stripeService.getInvoiceUrl(id);
+  }
+
+  @Post('stripe/invoices/:id/pay')
+  @UseGuards(AuthGuard)
+  async payInvoice(
+    @Param('id') id: string,
+    @Body('paymentMethodId') paymentMethodId?: string,
+  ) {
+    if (!id) {
+      throw new BadRequestException('Stripe invoice ID is required');
+    }
+    await this.stripeService.payInvoice(id, paymentMethodId);
+    return { success: true };
+  }
+
+  @Get('stripe/organizations/:organizationId/payment-methods')
+  @UseGuards(AuthGuard)
+  async getCustomerPaymentMethods(@Param('organizationId') organizationId: string) {
+    if (!organizationId) {
+      throw new BadRequestException('Organization ID is required');
+    }
+    return this.stripeService.getCustomerPaymentMethods(organizationId);
+  }
+
+  @Put('stripe/organizations/:organizationId/payment-methods/:paymentMethodId/default')
+  @UseGuards(AuthGuard)
+  async setDefaultPaymentMethod(
+    @Param('organizationId') organizationId: string,
+    @Param('paymentMethodId') paymentMethodId: string,
+  ) {
+    if (!organizationId || !paymentMethodId) {
+      throw new BadRequestException('Organization ID and Payment Method ID are required');
+    }
+    return this.stripeService.setDefaultCustomerPaymentMethod(organizationId, paymentMethodId);
+  }
+
+  @Delete('stripe/organizations/:organizationId/payment-methods/:paymentMethodId')
+  @UseGuards(AuthGuard)
+  async deletePaymentMethod(
+    @Param('organizationId') organizationId: string,
+    @Param('paymentMethodId') paymentMethodId: string,
+  ) {
+    if (!organizationId || !paymentMethodId) {
+      throw new BadRequestException('Organization ID and Payment Method ID are required');
+    }
+    return this.stripeService.deleteCustomerPaymentMethod(organizationId, paymentMethodId);
+  }
+
+  @Post('stripe/organizations/:organizationId/setup-intent')
+  @UseGuards(AuthGuard)
+  async createSetupIntent(
+    @Param('organizationId') organizationId: string,
+    @Body('method') method?: string,
+  ) {
+    if (!organizationId) {
+      throw new BadRequestException('Organization ID is required');
+    }
+    return this.stripeService.createSetupIntent(organizationId, method);
   }
 
   @Post('webhooks/stripe')
