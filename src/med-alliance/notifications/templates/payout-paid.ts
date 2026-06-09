@@ -56,12 +56,12 @@ export function payoutPaidTemplate(
         </div>
         <div class="greeting">Hi ${payload.firstName},</div>
         <div class="main-message">
-          <p>Your payout has been successfully processed.</p>
+          <p>Your payout has been sent! The funds are on their way and should arrive according to your payout method's typical timeline.</p>
           <div class="highlight-box">
             <div class="amount">$${payload.totalAmount.toFixed(2)}</div>
-            <div class="detail">Processed on ${paidDate}</div>
+            <div class="detail">Sent on ${paidDate}</div>
           </div>
-          <p>You can view your full payout history in your partner dashboard.</p>
+          <p>You can view this payment and your full payout history in your partner dashboard.</p>
         </div>
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">View My Payouts</a>

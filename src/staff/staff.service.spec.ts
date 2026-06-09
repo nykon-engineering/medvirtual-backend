@@ -619,7 +619,7 @@ describe('StaffService', () => {
     const mockStaffId = '123';
     const mockStaffData = { id: mockStaffId, status: 'termination-requested' };
     const mockUpdatedStaff = { id: mockStaffId, status: 'active' };
-    const mockFindOneResult = { id: mockStaffId, name: 'John Doe' };
+    const mockFindOneResult = { id: mockStaffId, name: 'John Doe', candidate: null };
 
     it('should throw BadRequestException if staffId is not provided', async () => {
       await expect(service.moveStaffBackToActive('')).rejects.toThrow(BadRequestException);

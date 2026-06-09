@@ -52,12 +52,12 @@ export function commissionEligibleTemplate(
         </div>
         <div class="greeting">Hi ${payload.firstName},</div>
         <div class="main-message">
-          <p>Great news — your commission from <strong>${payload.organizationName}</strong> is now eligible for payout.</p>
+          <p>Great news! Your commission from <strong>${payload.organizationName}</strong> is now eligible for payout. This means you can request a transfer to your account whenever you're ready.</p>
           <div class="highlight-box">
             <div class="amount">$${payload.commissionAmount.toFixed(2)}</div>
             <div class="detail">${payload.commissionPercent}% commission from ${payload.organizationName}</div>
           </div>
-          <p>You can request a payout for this commission at any time from your earnings dashboard.</p>
+          <p>Head to your earnings dashboard to request your payout — it only takes a moment.</p>
         </div>
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">View My Earnings</a>

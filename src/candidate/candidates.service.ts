@@ -7,7 +7,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
+import {
+  HireRequestStatus,
+  PanelStatus,
+  Prisma,
+  ProcessingStatus,
+  USER,
+} from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -37,6 +43,7 @@ import {
 } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { RemoveCandidateAndCancelDto } from './dto/remove-candidate-and-cancel.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
@@ -529,6 +536,10 @@ export class CandidatesService {
         select: {
           id: true,
           status: true,
+          createdByUserId: true,
+          createdBy: {
+            select: { role: true },
+          },
           panel: {
             select: {
               hire_request_id: true,
@@ -641,6 +652,572 @@ export class CandidatesService {
                 status: 'test',
               }))
             : [],
+          existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
+            (pc) =>
+              pc.panel.hireRequest.organization.id === organization_id &&
+              pc.panel.hireRequest.status === 'interview_scheduled' &&
+              (pc.createdBy?.role === 'organization_admin' ||
+                pc.createdBy?.role === 'organization_super_admin'),
+          ),
+        };
+      });
+
+      return {
+        data: candidatesWithScheduledInterview,
+        meta: getAllCandidates
+          ? {
+              total,
+              page: 1,
+              perPage: total,
+              totalPages: 1,
+              all: true,
+            }
+          : {
+              total,
+              page,
+              perPage,
+              totalPages: Math.ceil(Number(total) / perPage),
+              all: false,
+            },
+      };
+    } catch (error) {
+      throw new BadGatewayException(
+        'Failed to fetch candidates',
+        error.message,
+      );
+    }
+  }
+
+  //Function that should be used only for alliance module
+  async findAllForAlliance(
+    user: USER,
+    country?: string,
+    shift_block?: string,
+    availability?: string,
+    monthly_compensation_from?: string,
+    monthly_compensation_to?: string,
+    years_of_experience?: string,
+    specializations?: string,
+    positions?: string,
+    skills?: string,
+    languages?: string,
+    page?: number,
+    perPage?: number,
+    search?: string,
+    all?: string,
+    scorecard_fields?: string,
+    tools?: string,
+  ): Promise<any> {
+    // Check if all parameter is set to true
+    const getAllCandidates = all === 'true';
+
+    page = page ? Number(page) : 1;
+    perPage = perPage ? Number(perPage) : 10;
+
+    // If all=true, skip pagination (set skip=0, take=undefined)
+    const skip = getAllCandidates ? 0 : (page - 1) * perPage;
+    const take = getAllCandidates ? undefined : perPage;
+
+    if (!user || (user.role.includes('organization') && !user.organization_id))
+      throw new BadRequestException(
+        'The current user doent have an organization_id',
+      );
+
+    //if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
+
+    const { organization_id } = user;
+
+    const hourly_from = monthly_compensation_from
+      ? findHourlyPerRate(Number(monthly_compensation_from))
+      : undefined;
+    const hourly_to = monthly_compensation_to
+      ? findHourlyPerRate(Number(monthly_compensation_to))
+      : undefined;
+
+    const combinedFilters: Record<string, any>[] = [];
+    let positionsFilter: Record<string, any> | null = null;
+
+    const scorecardFilters: Record<string, any>[] = scorecard_fields
+      ? scorecard_fields
+          .split(',')
+          .map((f) => f.trim())
+          .filter((f) => VA_SCORECARD_FIELDS.has(f))
+          .flatMap((f) => [{ [f]: { not: null } }, { [f]: { not: 'false' } }])
+      : [];
+
+    const availabilityArray = availability
+      ? availability
+          .split(',')
+          .map((a) => a.trim())
+          .filter(Boolean)
+      : [];
+    const availabilityNumbers = availabilityArray
+      .map((a) => stageToDbDictionary[a])
+      .filter(Boolean)
+      .map((av) => String(av));
+
+    const languagesArray = languages
+      ? languages
+          .split(',')
+          .map((l) => l.trim())
+          .filter(Boolean)
+      : [];
+    const skillsArray = skills
+      ? skills
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const specializationArray = specializations
+      ? specializations
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const positionsArray = positions
+      ? positions
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
+    if (languagesArray.length) {
+      combinedFilters.push(
+        ...languagesArray.map((lang) => ({
+          languages: { some: { name: lang } },
+        })),
+      );
+    }
+
+    if (skillsArray.length) {
+      combinedFilters.push(
+        ...skillsArray.map((skill) => ({
+          skills: {
+            some: { skill_name: { contains: skill, mode: 'insensitive' } },
+          },
+        })),
+      );
+    }
+    if (specializationArray.length) {
+      combinedFilters.push(
+        ...specializationArray.map((spec) => ({
+          specialization: { contains: spec, mode: 'insensitive' },
+        })),
+      );
+    }
+    if (positionsArray.length) {
+      positionsFilter = {
+        OR: positionsArray.map((position) => ({
+          approved_positions_pairing: {
+            has: position,
+          },
+        })),
+      };
+    }
+
+    const toolsArray = tools
+      ? tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    if (toolsArray.length) {
+      combinedFilters.push({
+        OR: toolsArray.map((tool) => ({
+          tools: { contains: tool, mode: 'insensitive' as const },
+        })),
+      });
+    }
+
+    // Calculate limit date
+    let experienceFilter = {};
+    if (years_of_experience) {
+      const years = Number(years_of_experience);
+      const today = new Date();
+      const cutoffDate = new Date(
+        today.setFullYear(today.getFullYear() - years),
+      );
+
+      experienceFilter = {
+        experiences: {
+          some: {
+            start_date: { lte: cutoffDate },
+          },
+        },
+      };
+    }
+
+    const searchFilter = search
+      ? {
+          OR: [
+            {
+              first_name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              last_name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+          ],
+        }
+      : {};
+
+    const where = {
+      OR: [
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: organization_id,
+          pipeline_status: '261075105',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: null, // This allows candidates without an organization_id to be included
+          pipeline_status: '261075105',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: organization_id,
+          pipeline_status: '1087596819',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: null, // This allows candidates without an organization_id to be included
+          pipeline_status: '1087596819',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+      ],
+    };
+    const select = {
+      id: true,
+      first_name: true,
+      last_name: true,
+      name: true,
+      email: true,
+      country: true,
+      employment_type: true,
+      hourly_pay_rate: true,
+      years_of_experience: true,
+      pipeline_status: true, // This will be converted to name later
+      about_me: true,
+      specialization: true,
+      tools: true,
+      medical_tools: true,
+      processing_status: true,
+      processing_error: true,
+      avatar_url: true,
+      gender: true,
+      shift_block: true,
+      video_link: true,
+      // VA Score Card fields
+      active_listening_and_comprehension_demonstrated: true,
+      adaptability_to_different_client_personalities_and_workflows: true,
+      can_articulate_experience_clearly_to_clients: true,
+      can_multitask_between_systems_or_windows_efficiently: true,
+      client_readiness___fit_evaluator_notes: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+      comfortable_with_camera_on_setup: true,
+      communication_skills_evaluator_notes: true,
+      confident_on_video_and_phone_calls: true,
+      cultural_alignment_with_us_healthcare_environment: true,
+      demonstrates_problem_solving_and_tech_adaptability: true,
+      demonstrates_stability_and_commitment: true,
+      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+      exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+      for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+      grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+      handles_feedback_constructively: true,
+      has_functioning_headset__webcam__and_backup_device: true,
+      knowledge_of_hipaa_compliance_and_confidentiality: true,
+      medical_knowledge_evaluator_notes: true,
+      no_medical_industry_experience: true,
+      positive_attitude_and_professional_demeanor: true,
+      prior_experience_in_healthcare_or_medical_va_roles: true,
+      professionalism___work_readiness_evaluator_notes: true,
+      punctual_and_responsive_during_recruitment_stages: true,
+      remote_work_discipline_and_time_management: true,
+      speaks_clearly_and_professionally: true,
+      stable_internet_connection__min__20_mbps_: true,
+      technical_competence_evaluator_notes: true,
+      tier_level: true,
+      total_points: true,
+      understands_workflow_in_medical_offices___telehealth_environments: true,
+      languages: {
+        select: {
+          name: true,
+        },
+      },
+      skills: {
+        select: {
+          skill_name: true,
+        },
+      },
+      educations: {
+        select: {
+          institution: true,
+          degree: true,
+          year: true,
+        },
+      },
+      experiences: {
+        orderBy: { start_date: Prisma.SortOrder.desc },
+        select: {
+          company: true,
+          position: true,
+          start_date: true,
+          end_date: true,
+          responsabilities: true,
+        },
+      },
+      approved_positions_pairing: true,
+      business_unit: true,
+      selectedInInterviews: {
+        select: {
+          scheduled_date: true,
+        },
+      },
+      panelCandidates: {
+        select: {
+          id: true,
+          status: true,
+          createdByUserId: true,
+          createdBy: {
+            select: { role: true },
+          },
+          panel: {
+            select: {
+              hire_request_id: true,
+              hireRequest: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  organization: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    try {
+      const [candidates, total] = await this.prisma.$transaction([
+        this.prisma.candidate.findMany({
+          where,
+          skip,
+          take,
+          select,
+          orderBy: [
+            {
+              first_name: {
+                sort: 'asc',
+                nulls: 'last',
+              },
+            },
+            {
+              last_name: {
+                sort: 'asc',
+                nulls: 'last',
+              },
+            },
+          ],
+        }),
+        this.prisma.candidate.count({ where }),
+      ]);
+
+      candidates.forEach((candidate) => {
+        if (candidate.pipeline_status) {
+          const stageName =
+            dbToStageDictionary[Number(candidate.pipeline_status)];
+          candidate.pipeline_status = stageName || 'Unknown Stage';
+        }
+      });
+
+      const candidateIds = candidates.map((candidate) => candidate.id);
+
+      const interviewRequestTickets = await this.prisma.ticket.findMany({
+        where: {
+          organization: { is: { id: organization_id || undefined } },
+          type: 'interview',
+          status: {
+            in: ['new', 'in_progress'],
+          },
+          candidate_id: {
+            in: candidateIds,
+          },
+        },
+        select: {
+          candidate_id: true,
+        },
+      });
+
+      const candidatesWithInterviewScheduled = new Set(
+        interviewRequestTickets.map((ticket) => ticket.candidate_id),
+      );
+
+      const _pConfigs1 =
+        await this.positionRateConfigService.findAllUnpaginated();
+      const _configMap1 = buildConfigMap(_pConfigs1);
+
+      const candidatesWithScheduledInterview = candidates.map((candidate) => {
+        const rates = computeCandidateRates(candidate, _configMap1);
+        return {
+          ...candidate,
+          approved_positions_pairing:
+            (candidate.approved_positions_pairing &&
+              candidate.approved_positions_pairing.map((position) =>
+                getApprovedPositionLabel(position),
+              )) ||
+            [],
+          employment_type:
+            changeLabelAvailability(
+              dbToStageDictionary[Number(candidate.employment_type)],
+            ) || candidate.employment_type,
+          scheduledInterviewDate:
+            candidate.selectedInInterviews[0]?.scheduled_date || null,
+          hasInterviewScheduled: candidatesWithInterviewScheduled.has(
+            candidate.id,
+          ),
+          selectedInInterviews: undefined,
+          ...rates,
+          avatar: candidate.avatar_url
+            ? `${process.env.AVATAR_URL}${candidate.avatar_url}`
+            : null,
+          panelCandidates: candidate.panelCandidates
+            ? candidate.panelCandidates.map((pc) => ({
+                title: pc.panel.hireRequest.title,
+                organization_name: pc.panel.hireRequest.organization.name,
+                status: 'test',
+              }))
+            : [],
+          existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
+            (pc) =>
+              pc.panel.hireRequest.organization.id === organization_id &&
+              pc.panel.hireRequest.status === 'interview_scheduled' &&
+              (pc.createdBy?.role === 'organization_admin' ||
+                pc.createdBy?.role === 'organization_super_admin'),
+          ),
         };
       });
 
@@ -759,6 +1336,10 @@ export class CandidatesService {
       panelCandidates: {
         select: {
           id: true,
+          createdByUserId: true,
+          createdBy: {
+            select: { role: true },
+          },
           panel: {
             select: {
               hire_request_id: true,
@@ -766,6 +1347,7 @@ export class CandidatesService {
                 select: {
                   id: true,
                   title: true,
+                  status: true,
                   organization: {
                     select: {
                       id: true,
@@ -780,6 +1362,7 @@ export class CandidatesService {
       },
     };
 
+    
     const candidate = await this.prisma.candidate.findUnique({
       where: {
         id: id,
@@ -815,6 +1398,13 @@ export class CandidatesService {
                 pc.panel?.hireRequest?.organization?.name || '',
             }))
           : [],
+      existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
+        (pc) =>
+          pc.panel?.hireRequest?.organization?.id === organization_id &&
+          pc.panel?.hireRequest?.status === 'interview_scheduled' &&
+          (pc.createdBy?.role === 'organization_admin' ||
+            pc.createdBy?.role === 'organization_super_admin'),
+      ),
     };
     return formattedCandidate;
   }
@@ -1684,7 +2274,7 @@ export class CandidatesService {
   async removeCandidate(
     data: RemoveCandidateDto,
     user: USER,
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; shouldPromptCancel: boolean }> {
     if (!data.candidateId)
       throw new BadRequestException('Candidate ID is required');
     if (!data.hireRequestId)
@@ -1699,21 +2289,39 @@ export class CandidatesService {
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
 
-    try {
-      let lengthCandidates = 0;
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id: data.hireRequestId },
+      select: { status: true },
+    });
+    if (!hireRequest) throw new NotFoundException('Hire request not found');
 
+    const PANEL_READY_OR_ABOVE: HireRequestStatus[] = [
+      'panel_ready',
+      'interview_scheduled',
+      'awaiting_decision',
+      'placement_completed',
+    ];
+
+    const currentCount = await this.prisma.panelCandidate.count({
+      where: { panel: { hire_request_id: data.hireRequestId } },
+    });
+    const wouldBeLastCandidate = currentCount === 1;
+
+    if (wouldBeLastCandidate) {
+      if (PANEL_READY_OR_ABOVE.includes(hireRequest.status)) {
+        throw new BadRequestException(
+          'Cannot remove the last candidate from a panel at this stage of the hire request',
+        );
+      }
+      // Status is below panel_ready — signal frontend to open cancel modal without removing
+      return { success: true, shouldPromptCancel: true };
+    }
+
+    try {
       await this.prisma.$transaction(async (tx) => {
         await tx.panelCandidate.deleteMany({
           where: {
             candidate_id: data.candidateId,
-            panel: {
-              hire_request_id: data.hireRequestId,
-            },
-          },
-        });
-
-        lengthCandidates = await tx.panelCandidate.count({
-          where: {
             panel: {
               hire_request_id: data.hireRequestId,
             },
@@ -1747,22 +2355,127 @@ export class CandidatesService {
             candidate.hubspot_id,
             pipeline_treated,
             user?.id,
+            undefined,
+            `Candidate removed from hire request ${data.hireRequestId} panel`,
           );
         }
       });
 
-      //if there are no more candidates in the panel, change hire request status to cancelled
-      if (lengthCandidates === 0) {
-        await this.hireRequest.updateStatus(
-          data.hireRequestId,
-          { status: 'cancelled' },
-          user,
-        );
-      }
+      return { success: true, shouldPromptCancel: false };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error('Error removing candidate from panel:', error);
+      return { success: false, shouldPromptCancel: false };
+    }
+  }
+
+  async removeCandidateAndCancel(
+    data: RemoveCandidateAndCancelDto,
+    user: USER,
+  ): Promise<boolean> {
+    if (!data.candidateId)
+      throw new BadRequestException('Candidate ID is required');
+    if (!data.hireRequestId)
+      throw new BadRequestException('Hire Request ID is required');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id: data.hireRequestId },
+      select: { status: true },
+    });
+    if (!hireRequest) throw new NotFoundException('Hire request not found');
+
+    const PANEL_READY_OR_ABOVE: HireRequestStatus[] = [
+      'panel_ready',
+      'interview_scheduled',
+      'awaiting_decision',
+      'placement_completed',
+    ];
+    if (PANEL_READY_OR_ABOVE.includes(hireRequest.status)) {
+      throw new BadRequestException(
+        'Cannot remove the last candidate from a panel at this stage of the hire request',
+      );
+    }
+
+    const currentCount = await this.prisma.panelCandidate.count({
+      where: { panel: { hire_request_id: data.hireRequestId } },
+    });
+    if (currentCount !== 1) {
+      throw new BadRequestException(
+        'This action is only allowed when removing the last candidate from a panel',
+      );
+    }
+
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: data.candidateId },
+      select: { hubspot_id: true, pipeline_status_origin: true },
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.panelCandidate.deleteMany({
+          where: {
+            candidate_id: data.candidateId,
+            panel: { hire_request_id: data.hireRequestId },
+          },
+        });
+
+        const thereOtherPanels = await tx.panelCandidate.findMany({
+          where: {
+            candidate_id: data.candidateId,
+            status: { in: ['selected_by_client', 'blocked'] },
+            panel: { hire_request_id: { not: data.hireRequestId } },
+          },
+          select: { id: true },
+        });
+
+        if (thereOtherPanels.length === 0) {
+          const pipelineStatus = Object.keys(dbToStageDictionary).find(
+            (key) => dbToStageDictionary[key] === 'Available Candidates',
+          );
+          const pipeline_treated =
+            candidate.pipeline_status_origin || pipelineStatus || '';
+
+          await tx.candidate.update({
+            where: { id: data.candidateId },
+            data: { pipeline_status: pipeline_treated },
+          });
+
+          await this.hubspot.updateOneCandidateFromHireRequest(
+            candidate.hubspot_id,
+            pipeline_treated,
+            user?.id,
+            undefined,
+            `Last candidate removed from hire request ${data.hireRequestId} panel — cancellation initiated`,
+          );
+        }
+      });
+
+      await this.hireRequest.updateStatus(
+        data.hireRequestId,
+        {
+          status: 'cancelled',
+          reason: data.reason,
+          staffing_coordinator: data.staffing_coordinator,
+          pairing_session_conducted: data.pairing_session_conducted,
+          pairing_session_outcome_reason: data.pairing_session_outcome_reason,
+          count_of_candidates_invited_: data.count_of_candidates_invited_,
+          count_of_candidates_attended_: data.count_of_candidates_attended_,
+          count_of_candidates_interviewed_:
+            data.count_of_candidates_interviewed_,
+          client_signed_contract_closing_ticket:
+            data.client_signed_contract_closing_ticket,
+        },
+        user,
+      );
 
       return true;
     } catch (error) {
-      this.logger.error('Error removing candidate from panel:', error);
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error(
+        'Error removing last candidate and cancelling hire request:',
+        error,
+      );
       return false;
     }
   }
@@ -2048,9 +2761,26 @@ export class CandidatesService {
           select: {
             id: true,
             status: true,
+            createdByUserId: true,
+            createdBy: {
+              select: { role: true },
+            },
             panel: {
-              include: {
-                hireRequest: true,
+              select: {
+                hire_request_id: true,
+                hireRequest: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    organization: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -2098,6 +2828,188 @@ export class CandidatesService {
         candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
         [],
       ...rates3,
+    };
+
+    return candidateWithFullAvatarUrl;
+  }
+
+  async getTalentPoolCandidateByIdForLoggedUser(
+    id: string,
+    user: USER,
+  ): Promise<any> {
+    // Validate ID
+    if (!id || id.trim() === '') {
+      throw new BadRequestException('Invalid candidate ID');
+    }
+
+    console.log(`Fetching candidate with ID: ${user}`);
+    const organizationId = user?.organization_id ?? null;
+
+    // Search candidate by ID without any filters
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: id.trim() },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        country: true,
+        employment_type: true,
+        hourly_pay_rate: true,
+        years_of_experience: true,
+        about_me: true,
+        specialization: true,
+        tools: true,
+        medical_tools: true,
+        avatar_url: true,
+        gender: true,
+        shift_block: true,
+        video_link: true,
+        // VA Score Card fields
+        active_listening_and_comprehension_demonstrated: true,
+        adaptability_to_different_client_personalities_and_workflows: true,
+        can_articulate_experience_clearly_to_clients: true,
+        can_multitask_between_systems_or_windows_efficiently: true,
+        client_readiness___fit_evaluator_notes: true,
+        comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+        comfortable_with_camera_on_setup: true,
+        communication_skills_evaluator_notes: true,
+        confident_on_video_and_phone_calls: true,
+        cultural_alignment_with_us_healthcare_environment: true,
+        demonstrates_problem_solving_and_tech_adaptability: true,
+        demonstrates_stability_and_commitment: true,
+        demonstrates_understanding_of_medical_terminology_and_procedures: true,
+        exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+        for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+        grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+        handles_feedback_constructively: true,
+        has_functioning_headset__webcam__and_backup_device: true,
+        knowledge_of_hipaa_compliance_and_confidentiality: true,
+        medical_knowledge_evaluator_notes: true,
+        no_medical_industry_experience: true,
+        positive_attitude_and_professional_demeanor: true,
+        prior_experience_in_healthcare_or_medical_va_roles: true,
+        professionalism___work_readiness_evaluator_notes: true,
+        punctual_and_responsive_during_recruitment_stages: true,
+        remote_work_discipline_and_time_management: true,
+        speaks_clearly_and_professionally: true,
+        stable_internet_connection__min__20_mbps_: true,
+        technical_competence_evaluator_notes: true,
+        tier_level: true,
+        total_points: true,
+        understands_workflow_in_medical_offices___telehealth_environments: true,
+        languages: {
+          select: {
+            name: true,
+          },
+        },
+        skills: {
+          select: {
+            skill_name: true,
+            skill_type: true,
+          },
+        },
+        educations: {
+          select: {
+            institution: true,
+            degree: true,
+            year: true,
+          },
+        },
+        experiences: {
+          orderBy: { start_date: Prisma.SortOrder.desc },
+          select: {
+            company: true,
+            position: true,
+            start_date: true,
+            end_date: true,
+            responsabilities: true,
+          },
+        },
+        approved_positions_pairing: true,
+        business_unit: true,
+        panelCandidates: {
+          select: {
+            id: true,
+            status: true,
+            createdByUserId: true,
+            createdBy: {
+              select: { role: true },
+            },
+            panel: {
+              select: {
+                hire_request_id: true,
+                hireRequest: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    organization: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found');
+    }
+
+    // Construct full avatar URL and calculate salary
+    const AVATAR_BASE_URL =
+      'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+
+    // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
+    let employmentTypeValue = candidate.employment_type;
+    if (Array.isArray(employmentTypeValue)) {
+      employmentTypeValue = employmentTypeValue[0];
+    } else if (
+      typeof employmentTypeValue === 'string' &&
+      employmentTypeValue.includes(';')
+    ) {
+      employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+    }
+
+    // Apply the same transformation as in findOne and other places
+    const transformedEmploymentType =
+      changeLabelAvailability(
+        dbToStageDictionary[Number(employmentTypeValue)],
+      ) || employmentTypeValue;
+
+    const _pConfigs3 =
+      await this.positionRateConfigService.findAllUnpaginated();
+    const _configMap3 = buildConfigMap(_pConfigs3);
+    const rates3 = computeCandidateRates(candidate, _configMap3);
+
+    const candidateWithFullAvatarUrl = {
+      ...candidate,
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
+        : null,
+      employment_type: transformedEmploymentType,
+      approved_positions_pairing:
+        candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+        [],
+      ...rates3,
+      existingInOtherClientPanel: organizationId
+        ? (candidate.panelCandidates ?? []).some(
+            (pc) =>
+              pc.panel.hireRequest.organization.id === organizationId &&
+              pc.panel.hireRequest.status === 'interview_scheduled' &&
+              (pc.createdBy?.role === 'organization_admin' ||
+                pc.createdBy?.role === 'organization_super_admin'),
+          )
+        : false,
     };
 
     return candidateWithFullAvatarUrl;

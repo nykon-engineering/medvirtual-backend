@@ -661,6 +661,9 @@ export class TicketService {
           id: true,
           status: true,
           type: true,
+          staff_id: true,
+          created_by: true,
+          description: true,
         },
       });
 
@@ -668,8 +671,27 @@ export class TicketService {
         throw new BadRequestException('Ticket not found');
       }
 
-      await this.prisma.ticket.delete({
-        where: { id },
+      await this.prisma.$transaction(async (prisma) => {
+        await prisma.ticket.delete({
+          where: { id },
+        });
+
+        const bonusWhere: {
+          staff_id: string;
+          created_by: string;
+          description?: string;
+        } = {
+          staff_id: ticket.staff_id!,
+          created_by: ticket.created_by!,
+        };
+
+        if (ticket.description !== null) {
+          bonusWhere.description = ticket.description;
+        }
+
+        await prisma.bonus.deleteMany({
+          where: bonusWhere,
+        });
       });
 
       return {

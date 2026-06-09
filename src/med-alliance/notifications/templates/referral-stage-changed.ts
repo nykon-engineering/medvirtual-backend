@@ -8,6 +8,10 @@ export interface ReferralStageChangedPayload {
   newStage: string;
 }
 
+export function stageToLabel(stage: string): string {
+  return stage.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function referralStageChangedTemplate(
   payload: ReferralStageChangedPayload,
   theme?: EmailTheme,
@@ -18,8 +22,7 @@ export function referralStageChangedTemplate(
   const ctaLink = `${process.env.FRONTEND_URL}/modules/alliance/partner/referred`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
-  const stageLabel = (stage: string): string =>
-    stage.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const stageLabel = stageToLabel;
 
   return `
 <!DOCTYPE html>
@@ -56,13 +59,13 @@ export function referralStageChangedTemplate(
         </div>
         <div class="greeting">Hi ${payload.firstName},</div>
         <div class="main-message">
-          <p><strong>${payload.organizationName}</strong> has been moved to a new stage in the pipeline.</p>
+          <p>Good news — <strong>${payload.organizationName}</strong> has progressed to a new stage in the Med Alliance pipeline! Here's what changed:</p>
           <div class="stage-box">
             <span class="stage-pill">${stageLabel(payload.previousStage)}</span>
             <span class="stage-arrow">→</span>
             <span class="stage-pill new">${stageLabel(payload.newStage)}</span>
           </div>
-          <p>Log in to your partner dashboard to see the full status of your referred companies.</p>
+          <p>Log in to your partner dashboard to see the full status of all your referred companies and track their progress toward deployment.</p>
         </div>
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">View My Referrals</a>

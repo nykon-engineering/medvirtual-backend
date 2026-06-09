@@ -19,7 +19,7 @@ export function payoutCancelledTemplate(
 
   const reasonBlock = payload.cancellationReason
     ? `<div class="reason-box">
-        <div class="reason-label">Reason provided</div>
+        <div class="reason-label">Why it was cancelled</div>
         <div class="reason-text">${payload.cancellationReason}</div>
       </div>`
     : '';
@@ -61,13 +61,13 @@ export function payoutCancelledTemplate(
         </div>
         <div class="greeting">Hi ${payload.firstName},</div>
         <div class="main-message">
-          <p>Your payout request has been cancelled by our team.</p>
+          <p>We wanted to let you know that your recent payout request has been cancelled by our team.</p>
           <div class="highlight-box">
             <div class="amount">$${payload.totalAmount.toFixed(2)}</div>
             <div class="detail">Cancelled payout amount</div>
           </div>
           ${reasonBlock}
-          <p>The commissions included in this request have been returned to your available balance and are ready to be requested again.</p>
+          <p>The good news: all commissions from this request have been returned to your available balance. You can submit a new payout request for them at any time from your dashboard.</p>
         </div>
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">View My Payouts</a>
