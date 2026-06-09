@@ -484,7 +484,7 @@ export class StripeService implements OnModuleInit {
               where: { stripe_invoice_id: stripeInvoice.id },
             });
             if (internalInvoice) {
-              await this.pusherService.trigger(`invoice-${internalInvoice.id}`, 'invoice.status.update', {
+              await this.pusherService.trigger(`${internalInvoice.id}`, 'invoice.status.update', {
                 invoiceId: internalInvoice.id,
                 status: internalInvoice.status,
                 stripe_status: internalInvoice.stripe_status,
