@@ -4063,10 +4063,15 @@ export class HireRequestService {
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
     //check if panel exists
-    const panelExists = await this.prisma.candidatePanel.findFirst({
-      where: {
-        hire_request_id: hireRequest.id,
-      },
+    const panelId = await this.prisma.candidatePanel.findFirst({
+      where: { hire_request_id: hireRequest.id },
+      select: { id: true },
+    });
+    if (!panelId)
+      throw new NotFoundException(`Panel for this hire request not found`);
+
+    const panelExists = await this.prisma.candidatePanel.findUnique({
+      where: { id: panelId.id },
       select: {
         id: true,
         panelCandidates: {
@@ -4075,7 +4080,12 @@ export class HireRequestService {
               select: {
                 id: true,
                 pipeline_status: true,
-                panelCandidates: { select: { status: true } },
+                // Only check other panels — a candidate selected on THIS panel
+                // is the winner being replaced, not a blocker.
+                panelCandidates: {
+                  where: { panel_id: { not: panelId.id } },
+                  select: { status: true },
+                },
               },
             },
           },
