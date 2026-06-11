@@ -247,8 +247,6 @@ describe('CandidatesService', () => {
         panelCandidates: [
           {
             id: 'pc-1',
-            createdByUserId: 'user-1',
-            createdBy: { role: 'organization_admin' },
             panel: {
               hire_request_id: 'hr-1',
               hireRequest: {
@@ -357,10 +355,6 @@ describe('CandidatesService', () => {
           panelCandidates: {
             select: {
               id: true,
-              createdByUserId: true,
-              createdBy: {
-                select: { role: true },
-              },
               panel: {
                 select: {
                   hire_request_id: true,

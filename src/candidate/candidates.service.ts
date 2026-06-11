@@ -536,10 +536,6 @@ export class CandidatesService {
         select: {
           id: true,
           status: true,
-          createdByUserId: true,
-          createdBy: {
-            select: { role: true },
-          },
           panel: {
             select: {
               hire_request_id: true,
@@ -655,9 +651,7 @@ export class CandidatesService {
           existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
             (pc) =>
               pc.panel.hireRequest.organization.id === organization_id &&
-              pc.panel.hireRequest.status === 'interview_scheduled' &&
-              (pc.createdBy?.role === 'organization_admin' ||
-                pc.createdBy?.role === 'organization_super_admin'),
+              pc.panel.hireRequest.status === 'interview_scheduled',
           ),
         };
       });
@@ -1095,10 +1089,6 @@ export class CandidatesService {
         select: {
           id: true,
           status: true,
-          createdByUserId: true,
-          createdBy: {
-            select: { role: true },
-          },
           panel: {
             select: {
               hire_request_id: true,
@@ -1214,9 +1204,7 @@ export class CandidatesService {
           existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
             (pc) =>
               pc.panel.hireRequest.organization.id === organization_id &&
-              pc.panel.hireRequest.status === 'interview_scheduled' &&
-              (pc.createdBy?.role === 'organization_admin' ||
-                pc.createdBy?.role === 'organization_super_admin'),
+              pc.panel.hireRequest.status === 'interview_scheduled',
           ),
         };
       });
@@ -1336,10 +1324,6 @@ export class CandidatesService {
       panelCandidates: {
         select: {
           id: true,
-          createdByUserId: true,
-          createdBy: {
-            select: { role: true },
-          },
           panel: {
             select: {
               hire_request_id: true,
@@ -1401,9 +1385,7 @@ export class CandidatesService {
       existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
         (pc) =>
           pc.panel?.hireRequest?.organization?.id === organization_id &&
-          pc.panel?.hireRequest?.status === 'interview_scheduled' &&
-          (pc.createdBy?.role === 'organization_admin' ||
-            pc.createdBy?.role === 'organization_super_admin'),
+          pc.panel?.hireRequest?.status === 'interview_scheduled',
       ),
     };
     return formattedCandidate;
@@ -2761,10 +2743,6 @@ export class CandidatesService {
           select: {
             id: true,
             status: true,
-            createdByUserId: true,
-            createdBy: {
-              select: { role: true },
-            },
             panel: {
               select: {
                 hire_request_id: true,
@@ -2934,10 +2912,6 @@ export class CandidatesService {
           select: {
             id: true,
             status: true,
-            createdByUserId: true,
-            createdBy: {
-              select: { role: true },
-            },
             panel: {
               select: {
                 hire_request_id: true,
@@ -3005,9 +2979,7 @@ export class CandidatesService {
         ? (candidate.panelCandidates ?? []).some(
             (pc) =>
               pc.panel.hireRequest.organization.id === organizationId &&
-              pc.panel.hireRequest.status === 'interview_scheduled' &&
-              (pc.createdBy?.role === 'organization_admin' ||
-                pc.createdBy?.role === 'organization_super_admin'),
+              pc.panel.hireRequest.status === 'interview_scheduled',
           )
         : false,
     };
