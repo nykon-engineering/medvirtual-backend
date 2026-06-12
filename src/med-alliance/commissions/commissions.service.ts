@@ -712,7 +712,7 @@ export class CommissionsService {
         continue;
       }
 
-      if (org.referral_stage === 'churned') {
+      if (org.referral_stage === 'canceled') {
         skipped++;
         continue;
       }

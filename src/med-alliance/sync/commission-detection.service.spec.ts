@@ -379,11 +379,11 @@ describe.skip('CommissionDetectionService', () => {
     });
 
     // -----------------------------------------------------------------------
-    // Churned guard
+    // Canceled guard
     // -----------------------------------------------------------------------
-    it('should skip commission creation for churned org', async () => {
+    it('should skip commission creation for canceled org', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue(
-        makeOrg({ referral_stage: 'churned' }),
+        makeOrg({ referral_stage: 'canceled' }),
       );
       mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());
       mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([makeSnapshot()]);
@@ -394,12 +394,12 @@ describe.skip('CommissionDetectionService', () => {
       expect(mockPrisma.affiliateCommission.create).not.toHaveBeenCalled();
     });
 
-    it('should skip commission creation for newly churned org (no prior invoices)', async () => {
+    it('should skip commission creation for newly canceled org (no prior invoices)', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue(
         makeOrg({
           first_paid_invoice_at: null,
           eligibility_start_at: null,
-          referral_stage: 'churned',
+          referral_stage: 'canceled',
         }),
       );
       mockPrisma.affiliateProfile.findFirst.mockResolvedValue(makeProfile());

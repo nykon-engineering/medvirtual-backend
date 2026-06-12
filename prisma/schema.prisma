@@ -1118,7 +1118,7 @@ enum ReferralStage {
   in_negotiation
   contract_signed
   deployed
-  churned
+  canceled
 }
 
 enum AffiliateStatus {
