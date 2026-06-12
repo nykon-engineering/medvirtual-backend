@@ -668,12 +668,18 @@ describe('ReferredCompaniesService', () => {
       expect((result as any).referral_stage).toBe('contacted');
     });
 
-    it('should set eligibility_start_at when moving to "deployed" with no prior start', async () => {
+    it('should set eligibility_start_at to deployment_date + 30 days when moving to "deployed"', async () => {
+      const deploymentDate = new Date('2026-02-16T00:00:00.000Z');
+      const expectedEligibility = new Date(
+        deploymentDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+      );
+
       mockPrisma.organization.findUnique
         .mockResolvedValueOnce({
           id: 'org-1',
           referral_stage: 'contract_signed',
-          eligibility_start_at: null, // no clock started yet
+          eligibility_start_at: null,
+          deployment_date: deploymentDate,
           referred_by_affiliate_id: 'user-1',
         })
         .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'deployed' }));
@@ -690,10 +696,41 @@ describe('ReferredCompaniesService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             referral_stage: 'deployed',
-            eligibility_start_at: expect.any(Date),
+            eligibility_start_at: expectedEligibility,
           }),
         }),
       );
+    });
+
+    it('should fall back to now + 30 days when deployment_date is null and moving to "deployed"', async () => {
+      const before = Date.now();
+
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referral_stage: 'contract_signed',
+          eligibility_start_at: null,
+          deployment_date: null,
+          referred_by_affiliate_id: 'user-1',
+        })
+        .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'deployed' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'deployed' as any },
+        mockAdminUser,
+      );
+
+      const after = Date.now();
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      const eligibility: Date = updateData.eligibility_start_at;
+
+      expect(eligibility).toBeInstanceOf(Date);
+      expect(eligibility.getTime()).toBeGreaterThanOrEqual(before + THIRTY_DAYS_MS);
+      expect(eligibility.getTime()).toBeLessThanOrEqual(after + THIRTY_DAYS_MS);
     });
 
     it('should NOT overwrite eligibility_start_at when already set on move to "deployed"', async () => {

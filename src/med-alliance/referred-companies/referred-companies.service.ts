@@ -813,6 +813,7 @@ export class ReferredCompaniesService {
         name: true,
         referral_stage: true,
         eligibility_start_at: true,
+        deployment_date: true,
         referred_by_affiliate_id: true,
         referredByAffiliate: { select: { email: true, first_name: true } },
       },
@@ -823,10 +824,11 @@ export class ReferredCompaniesService {
 
     const dataUpdate: Record<string, unknown> = { referral_stage: dto.stage };
 
-    // Manually moving to deployed starts the eligibility clock: eligible 30 days from now.
+    // Use deployment_date as the anchor so the eligibility clock reflects the actual deploy, not the moment of manual stage update.
     if (dto.stage === 'deployed' && !org.eligibility_start_at) {
+      const anchor = org.deployment_date ?? new Date();
       dataUpdate.eligibility_start_at = new Date(
-        Date.now() + 30 * 24 * 60 * 60 * 1000,
+        anchor.getTime() + 30 * 24 * 60 * 60 * 1000,
       );
     }
 
