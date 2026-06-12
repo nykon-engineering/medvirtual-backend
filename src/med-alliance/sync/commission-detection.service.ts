@@ -168,12 +168,12 @@ export class CommissionDetectionService {
     }
 
     // First qualifying event: transition org to deployed stage and start the 30-day clock.
-    // Skip if already deployed or churned (idempotent).
+    // Skip if already deployed or canceled (idempotent).
     if (
       !org.first_paid_invoice_at &&
       !org.deployment_date &&
       org.referral_stage !== 'deployed' &&
-      org.referral_stage !== 'churned'
+      org.referral_stage !== 'canceled'
     ) {
       const firstInvoiceDate = candidates[0].paid_at ?? now;
       await this.markDeployed(organizationId, firstInvoiceDate);
@@ -185,10 +185,10 @@ export class CommissionDetectionService {
       org.first_paid_invoice_at = firstInvoiceDate;
     }
 
-    // Churned companies stop generating commissions.
-    if (org.referral_stage === 'churned') {
+    // Canceled companies stop generating commissions.
+    if (org.referral_stage === 'canceled') {
       this.logger.log(
-        `Org ${organizationId} is churned — skipping commission creation`,
+        `Org ${organizationId} is canceled — skipping commission creation`,
       );
       return { created: 0, skipped: 0 };
     }
