@@ -218,10 +218,10 @@ export class HandlerInvoicePropertyChange {
       return false;
     }
 
-    // Churned organizations should never be moved back into deployed by an invoice webhook.
-    if (org.referral_stage === 'churned') {
+    // Canceled organizations should never be moved back into deployed by an invoice webhook.
+    if (org.referral_stage === 'canceled') {
       console.log(
-        `Organization ${org.id} is churned. Skipping deployed transition.`,
+        `Organization ${org.id} is canceled. Skipping deployed transition.`,
       );
       return false;
     }
@@ -243,7 +243,7 @@ export class HandlerInvoicePropertyChange {
           id: org.id,
           referred_by_affiliate_id: { not: null },
           first_paid_invoice_at: null,
-          referral_stage: { notIn: ['deployed', 'churned'] },
+          referral_stage: { notIn: ['deployed', 'canceled'] },
           OR: [
             { med_alliance_block_reason: null },
             {
