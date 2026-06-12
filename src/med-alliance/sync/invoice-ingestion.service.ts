@@ -14,6 +14,7 @@ export interface InvoiceRecord {
   due_date: Date | null;
   raw_payload: any;
   hubspot_pdf_link: string | null;
+  invoice_number: string | null;
 }
 
 @Injectable()
@@ -32,6 +33,7 @@ export class InvoiceIngestionService {
     'hs_lastmodifieddate',
     'hs_pdf_download_link',
     'hs_due_date',
+    'hs_number',
   ].join(',');
 
   constructor(
@@ -151,6 +153,7 @@ export class InvoiceIngestionService {
           due_date: props.hs_due_date ? new Date(props.hs_due_date) : null,
           raw_payload: response.data,
           hubspot_pdf_link: props.hs_pdf_download_link ?? null,
+          invoice_number: props.hs_number ?? null,
         });
       } catch (err) {
         this.logger.error(
@@ -241,6 +244,7 @@ export class InvoiceIngestionService {
           sync_hash: syncHash,
           raw_payload: invoice.raw_payload,
           hubspot_pdf_link: invoice.hubspot_pdf_link,
+          invoice_number: invoice.invoice_number,
         },
       });
       return 'created';
@@ -262,6 +266,7 @@ export class InvoiceIngestionService {
         sync_hash: syncHash,
         raw_payload: invoice.raw_payload,
         hubspot_pdf_link: invoice.hubspot_pdf_link,
+        invoice_number: invoice.invoice_number,
       },
     });
 
@@ -297,6 +302,7 @@ export class InvoiceIngestionService {
       invoice.currency,
       invoice.paid_at ? invoice.paid_at.toISOString() : '',
       invoice.due_date ? invoice.due_date.toISOString() : '',
+      invoice.invoice_number ?? '',
     ].join('|');
 
     return createHash('sha256').update(payload).digest('hex');

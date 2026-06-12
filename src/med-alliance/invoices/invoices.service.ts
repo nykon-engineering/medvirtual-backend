@@ -17,6 +17,7 @@ export interface EligibleInvoiceRow {
   currency: string;
   paid_at: Date | null;
   hubspot_pdf_link: string | null;
+  invoice_number: string | null;
 }
 
 // Fields exposed to clients. raw_payload is intentionally excluded —
@@ -32,6 +33,7 @@ const SNAPSHOT_SELECT = {
   paid_at: true,
   due_date: true,
   sync_hash: true,
+  invoice_number: true,
   createdAt: true,
   updatedAt: true,
   // raw_payload intentionally omitted
@@ -206,6 +208,7 @@ export class InvoicesService {
         currency: true,
         paid_at: true,
         hubspot_pdf_link: true,
+        invoice_number: true,
         organization: { select: { name: true } },
       },
       orderBy: { paid_at: 'desc' },
@@ -225,6 +228,7 @@ export class InvoicesService {
         currency: s.currency,
         paid_at: s.paid_at,
         hubspot_pdf_link: s.hubspot_pdf_link,
+        invoice_number: s.invoice_number,
       }));
   }
 

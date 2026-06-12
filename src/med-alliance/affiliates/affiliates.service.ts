@@ -1485,6 +1485,4 @@ export class AffiliatesService {
 
     return updated;
   }
-
- 
 }
