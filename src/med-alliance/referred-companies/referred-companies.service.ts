@@ -13,14 +13,13 @@ import {
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Returns the effective eligibility status for display.
- * Applies both the 30-day stabilization gate and the one-year window check
- * at read-time so the UI stays accurate without requiring a cron to have run.
+ * Checks the one-year window at read-time so the UI stays accurate without requiring a cron.
  *
- * eligibilityStartAt is the deployment date — not the invoice date.
+ * eligibilityStartAt is already deployment_date + 30 days — the 30-day stabilization offset
+ * is baked into the field value, so this function only needs the upper-bound check.
  */
 function computeEffectiveStatus(
   stored: MedAllianceReferralStatus | null,
@@ -29,7 +28,6 @@ function computeEffectiveStatus(
   if (stored !== 'eligible') return stored;
   if (!eligibilityStartAt) return 'not_eligible';
   const elapsed = Date.now() - eligibilityStartAt.getTime();
-  if (elapsed < THIRTY_DAYS_MS) return 'not_eligible';
   if (elapsed > ONE_YEAR_MS) return 'not_eligible';
   return 'eligible';
 }

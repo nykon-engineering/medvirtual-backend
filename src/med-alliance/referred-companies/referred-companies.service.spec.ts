@@ -524,7 +524,9 @@ describe('ReferredCompaniesService', () => {
       });
     });
 
-    it('should return "not_eligible" when stored=eligible but deployed < 30 days ago', async () => {
+    it('should return "eligible" when stored=eligible and eligibility_start_at is in the past (< 30 days)', async () => {
+      // eligibility_start_at is already deployDate+30d, so even 10 days ago means
+      // the company has been past the stabilization window — status must be eligible.
       const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
       mockPrisma.organization.findUnique.mockResolvedValueOnce(
         makeOrgWithStatus('eligible', tenDaysAgo),
@@ -532,7 +534,7 @@ describe('ReferredCompaniesService', () => {
 
       const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
 
-      expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+      expect((result as any).med_alliance_referral_status).toBe('eligible');
     });
 
     it('should return "eligible" when stored=eligible and deployed > 30 days and < 1 year ago', async () => {
