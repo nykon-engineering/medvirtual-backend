@@ -70,7 +70,7 @@ export class HandlerOrganizationPropertyChange {
     }
 
     if (fieldUpdated === 'deployment_date') {
-      value = event.propertyValue ? new Date(event.propertyValue) : null;
+      value = event.propertyValue ? new Date(Number(event.propertyValue)) : null;
     }
 
     if (event.propertyName === 'hubspot_owner_id') {
