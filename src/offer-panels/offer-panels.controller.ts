@@ -1,8 +1,10 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
   Query,
+  Body,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -26,12 +28,60 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { OfferPanelsService } from './offer-panels.service';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
+import { CreateOfferPanelDto } from './dto/create-offer-panel.dto';
 
 @ApiTags('Offer Panels')
 @ApiBearerAuth()
 @Controller()
 export class OfferPanelsController {
   constructor(private readonly offerPanelsService: OfferPanelsService) {}
+
+  @Post('offer-panels')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create offer panels with fan-out (admin)' })
+  @ApiResponse({
+    status: 201,
+    description:
+      'One OfferPanel per recipient created. Returns array of created panels.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error — details in response body',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async create(@Body() dto: CreateOfferPanelDto, @CurrentUser() user: USER) {
+    const data = await this.offerPanelsService.create(dto, user);
+    return { status: 201, data };
+  }
+
+  // Static segment — must be declared BEFORE :id
+  @Get('offer-panels/contacts/search')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Search users and contacts for recipient picker (admin)',
+  })
+  @ApiQuery({
+    name: 'q',
+    required: true,
+    type: String,
+    description: 'Search term (name or email)',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Returns up to 20 results with recipient_type pre-set (client_user or company_contact)',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async searchContacts(@Query('q') q: string) {
+    const data = await this.offerPanelsService.searchContacts(q ?? '');
+    return { status: 200, data };
+  }
 
   @Get('offer-panels')
   @UseGuards(AuthGuard, RolesGuard)
@@ -60,7 +110,7 @@ export class OfferPanelsController {
   }
 
   // Static segments declared BEFORE :id to avoid route conflicts
-  @Get('offer-panels/my')
+  @Get('offer-panels/mine')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('organization_admin', 'organization_super_admin')
   @HttpCode(HttpStatus.OK)
@@ -68,7 +118,7 @@ export class OfferPanelsController {
   @ApiResponse({ status: 200, description: 'Panels retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async findMy(@CurrentUser() user: USER) {
+  async findMine(@CurrentUser() user: USER) {
     const data = await this.offerPanelsService.findForClientUser(user);
     return {
       status: 200,

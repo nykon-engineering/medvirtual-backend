@@ -2,11 +2,18 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { USER } from '@prisma/client';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
+import {
+  CreateOfferPanelDto,
+  RecipientDto,
+} from './dto/create-offer-panel.dto';
 
 const CANDIDATE_CARD_SELECT = {
   id: true,
@@ -101,7 +108,267 @@ export class OfferPanelsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly candidatesService: CandidatesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  async searchContacts(q: string): Promise<any[]> {
+    const term = q.trim();
+
+    const [users, contacts] = await Promise.all([
+      this.prisma.uSER.findMany({
+        where: {
+          role: { in: ['organization_admin', 'organization_super_admin'] },
+          OR: [
+            { first_name: { contains: term, mode: 'insensitive' } },
+            { last_name: { contains: term, mode: 'insensitive' } },
+            { email: { contains: term, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          organization: { select: { id: true, name: true } },
+        },
+        take: 20,
+      }),
+      this.prisma.contact.findMany({
+        where: {
+          organization_id: { not: null },
+          OR: [
+            { first_name: { contains: term, mode: 'insensitive' } },
+            { last_name: { contains: term, mode: 'insensitive' } },
+            { email: { contains: term, mode: 'insensitive' } },
+            { company_name: { contains: term, mode: 'insensitive' } },
+          ],
+        },
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          company_name: true,
+          user_id: true,
+          organization: { select: { id: true, name: true } },
+        },
+        take: 20,
+      }),
+    ]);
+
+    // Users take priority; track emails already covered
+    const seenEmails = new Set<string>();
+    const results: any[] = [];
+
+    for (const u of users) {
+      if (!u.email) continue;
+      seenEmails.add(u.email.toLowerCase());
+      results.push({
+        id: u.id,
+        name: `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim(),
+        email: u.email,
+        company_name: u.organization?.name ?? null,
+        company_id: u.organization?.id ?? null,
+        recipient_type: 'client_user',
+        user_id: u.id,
+      });
+    }
+
+    for (const c of contacts) {
+      if (!c.email) continue;
+      if (seenEmails.has(c.email.toLowerCase())) continue;
+      seenEmails.add(c.email.toLowerCase());
+      results.push({
+        id: c.id,
+        name: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(),
+        email: c.email,
+        company_name: c.company_name ?? c.organization?.name ?? null,
+        company_id: c.organization?.id ?? null,
+        recipient_type: c.user_id ? 'client_user' : 'company_contact',
+        user_id: c.user_id ?? null,
+      });
+    }
+
+    return results.slice(0, 20);
+  }
+
+  async create(dto: CreateOfferPanelDto, adminUser: USER): Promise<any[]> {
+    // --- Validation phase (no DB writes yet) ---
+    const errors: string[] = [];
+
+    // Validate candidates exist
+    const candidates = await this.prisma.candidate.findMany({
+      where: { id: { in: dto.candidateIds } },
+      select: { id: true },
+    });
+    const foundCandidateIds = new Set(candidates.map((c) => c.id));
+    const missingCandidates = dto.candidateIds.filter(
+      (id) => !foundCandidateIds.has(id),
+    );
+    if (missingCandidates.length > 0) {
+      errors.push(`Candidates not found: ${missingCandidates.join(', ')}`);
+    }
+
+    // Validate recipients and collect org names
+    const emailsSeen = new Set<string>();
+    const recipientMeta: Array<{
+      orgName: string | null;
+      resolvedUserId: string | null;
+    }> = [];
+
+    for (let i = 0; i < dto.recipients.length; i++) {
+      const r = dto.recipients[i];
+      const label = `Recipient ${i + 1} (${r.email})`;
+
+      // Duplicate email check
+      const emailKey = r.email.toLowerCase();
+      if (emailsSeen.has(emailKey)) {
+        errors.push(`${label}: duplicate email in batch`);
+      }
+      emailsSeen.add(emailKey);
+
+      let orgName: string | null = null;
+      let resolvedUserId: string | null = null;
+
+      if (r.type === 'client_user') {
+        if (!r.user_id) {
+          errors.push(`${label}: user_id is required for type client_user`);
+          recipientMeta.push({ orgName: null, resolvedUserId: null });
+          continue;
+        }
+        const user = await this.prisma.uSER.findUnique({
+          where: { id: r.user_id },
+          select: {
+            id: true,
+            role: true,
+            organization: { select: { name: true } },
+          },
+        });
+        if (!user) {
+          errors.push(`${label}: user_id ${r.user_id} not found`);
+        } else if (
+          user.role !== 'organization_admin' &&
+          user.role !== 'organization_super_admin'
+        ) {
+          errors.push(
+            `${label}: user must be an organization admin, got role '${user.role}'`,
+          );
+        } else {
+          orgName = user.organization?.name ?? null;
+          resolvedUserId = user.id;
+        }
+      } else if (r.type === 'company_contact') {
+        if (!r.company_id) {
+          errors.push(
+            `${label}: company_id is required for type company_contact`,
+          );
+          recipientMeta.push({ orgName: null, resolvedUserId: null });
+          continue;
+        }
+        const org = await this.prisma.organization.findUnique({
+          where: { id: r.company_id },
+          select: { name: true },
+        });
+        if (!org) {
+          errors.push(`${label}: company_id ${r.company_id} not found`);
+        } else {
+          orgName = org.name;
+        }
+      }
+      // type === 'email': no id needed, orgName stays null
+
+      recipientMeta.push({ orgName, resolvedUserId });
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException(errors);
+    }
+
+    // --- Creation phase ---
+    const createdPanels = await this.prisma.$transaction(async (tx) => {
+      const panels: any[] = [];
+
+      for (let i = 0; i < dto.recipients.length; i++) {
+        const r: RecipientDto = dto.recipients[i];
+        const { orgName } = recipientMeta[i];
+        const isPublic = r.type !== 'client_user';
+
+        const panel = await tx.offerPanel.create({
+          data: {
+            title: dto.title,
+            description: dto.description ?? null,
+            business_unit: dto.business_unit,
+            recipient_type: r.type,
+            recipient_user_id: r.type === 'client_user' ? r.user_id : null,
+            recipient_company_id:
+              r.type === 'company_contact' ? r.company_id : null,
+            recipient_name: r.name,
+            recipient_email: r.email,
+            recipient_org_name: orgName,
+            is_public: isPublic,
+            public_token: isPublic ? randomUUID() : null,
+            created_by_user_id: adminUser.id,
+            candidates: {
+              create: dto.candidateIds.map((cid) => ({ candidate_id: cid })),
+            },
+          },
+        });
+        panels.push(panel);
+      }
+
+      return panels;
+    });
+
+    // Fire notifications non-blocking after transaction
+    Promise.allSettled(
+      createdPanels.map((panel) => {
+        const isPublic = panel.is_public;
+        return isPublic
+          ? this.notificationsService.notifyOfferPanelCreatedPublic(panel.id)
+          : this.notificationsService.notifyOfferPanelCreatedClient(panel.id);
+      }),
+    );
+
+    return createdPanels;
+  }
+
+  async findByToken(token: string): Promise<any> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { public_token: token },
+      include: OFFER_PANEL_INCLUDE,
+    });
+
+    if (!panel) {
+      throw new NotFoundException('Offer panel not found');
+    }
+
+    const enrichedCandidates = await Promise.all(
+      panel.candidates.map((pc) =>
+        this.candidatesService.getTalentPoolCandidateById(pc.candidate_id),
+      ),
+    );
+
+    const result = { ...panel, candidates: enrichedCandidates };
+
+    // Best-effort view tracking — R17
+    setImmediate(async () => {
+      try {
+        const now = new Date();
+        await this.prisma.offerPanel.update({
+          where: { public_token: token },
+          data: {
+            last_viewed_at: now,
+            view_count: { increment: 1 },
+            ...(panel.status === 'sent' ? { status: 'viewed', viewed_at: now } : {}),
+          },
+        });
+      } catch {
+        // swallow
+      }
+    });
+
+    return result;
+  }
 
   async findOne(id: string, user: USER): Promise<any> {
     const panel = await this.prisma.offerPanel.findUnique({
@@ -151,13 +418,14 @@ export class OfferPanelsService {
   async findAll(
     query: QueryOfferPanelsDto,
   ): Promise<{ data: any[]; pagination: any }> {
-    const { search, status, recipient_type, page = 1, limit = 20 } = query;
+    const { search, status, recipient_type, client, page = 1, limit = 20 } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
 
     if (status) where.status = status;
     if (recipient_type) where.recipient_type = recipient_type;
+    if (client) where.recipient_org_name = { contains: client, mode: 'insensitive' };
 
     if (search) {
       where.OR = [

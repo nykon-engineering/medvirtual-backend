@@ -30,6 +30,14 @@ export class QueryOfferPanelsDto {
   @IsString()
   recipient_type?: OfferPanelRecipientType;
 
+  @ApiProperty({
+    description: 'Filter by recipient org name (partial match)',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  client?: string;
+
   @ApiProperty({ description: 'Page number', required: false, default: 1 })
   @IsOptional()
   @Type(() => Number)
