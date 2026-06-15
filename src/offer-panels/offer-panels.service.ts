@@ -348,26 +348,7 @@ export class OfferPanelsService {
       ),
     );
 
-    const result = { ...panel, candidates: enrichedCandidates };
-
-    // Best-effort view tracking — R17
-    setImmediate(async () => {
-      try {
-        const now = new Date();
-        await this.prisma.offerPanel.update({
-          where: { public_token: token },
-          data: {
-            last_viewed_at: now,
-            view_count: { increment: 1 },
-            ...(panel.status === 'sent' ? { status: 'viewed', viewed_at: now } : {}),
-          },
-        });
-      } catch {
-        // swallow
-      }
-    });
-
-    return result;
+    return { ...panel, candidates: enrichedCandidates };
   }
 
   async findOne(id: string, user: USER): Promise<any> {
@@ -413,6 +394,310 @@ export class OfferPanelsService {
       },
     });
     return panels;
+  }
+
+  // R17 — called explicitly by POST /viewed endpoints; not inline in GET
+  async trackView(panelId: string, user?: USER): Promise<void> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: { status: true, recipient_user_id: true },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    if (
+      user &&
+      panel.recipient_user_id &&
+      panel.recipient_user_id !== user.id
+    ) {
+      throw new ForbiddenException('Access denied to this offer panel');
+    }
+
+    const now = new Date();
+    await this.prisma.offerPanel.update({
+      where: { id: panelId },
+      data: {
+        last_viewed_at: now,
+        view_count: { increment: 1 },
+        ...(panel.status === 'sent' ? { status: 'viewed', viewed_at: now } : {}),
+      },
+    });
+  }
+
+  async trackViewByToken(token: string): Promise<void> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { public_token: token },
+      select: { id: true, status: true },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    const now = new Date();
+    await this.prisma.offerPanel.update({
+      where: { id: panel.id },
+      data: {
+        last_viewed_at: now,
+        view_count: { increment: 1 },
+        ...(panel.status === 'sent' ? { status: 'viewed', viewed_at: now } : {}),
+      },
+    });
+  }
+
+  async removeCandidate(
+    panelId: string,
+    candidateId: string,
+    clientUser: USER,
+  ): Promise<{ deleted: boolean; panel?: any }> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: { status: true, recipient_user_id: true },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    if (panel.recipient_user_id !== clientUser.id) {
+      throw new ForbiddenException('Access denied to this offer panel');
+    }
+    if (panel.status === 'accepted' || panel.status === 'declined') {
+      throw new BadRequestException('Cannot modify a decided offer panel');
+    }
+
+    const deleted = await this.prisma.offerPanelCandidate.deleteMany({
+      where: { offer_panel_id: panelId, candidate_id: candidateId },
+    });
+    if (deleted.count === 0) {
+      throw new NotFoundException('Candidate not in this panel');
+    }
+
+    const remaining = await this.prisma.offerPanelCandidate.count({
+      where: { offer_panel_id: panelId },
+    });
+
+    if (remaining === 0) {
+      await this.prisma.offerPanel.delete({ where: { id: panelId } });
+      return { deleted: true };
+    }
+
+    const updated = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      include: OFFER_PANEL_INCLUDE,
+    });
+    return { deleted: false, panel: updated };
+  }
+
+  async decline(panelId: string, clientUser: USER): Promise<void> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: { status: true, recipient_user_id: true },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    if (panel.recipient_user_id !== clientUser.id) {
+      throw new ForbiddenException('Access denied to this offer panel');
+    }
+    if (panel.status === 'declined') return; // idempotent (E8)
+    if (panel.status === 'accepted') {
+      throw new BadRequestException('Cannot decline an already accepted offer panel');
+    }
+
+    await this.prisma.offerPanel.update({
+      where: { id: panelId },
+      data: { status: 'declined', decided_at: new Date() },
+    });
+
+    setImmediate(() => {
+      this.notificationsService
+        .notifyAdminOfferPanelDeclined(panelId)
+        .catch(() => {});
+    });
+  }
+
+  async declineByToken(token: string): Promise<void> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { public_token: token },
+      select: { id: true, status: true },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    if (panel.status === 'declined') return; // idempotent (E8)
+    if (panel.status === 'accepted') {
+      throw new BadRequestException('Cannot decline an already accepted offer panel');
+    }
+
+    await this.prisma.offerPanel.update({
+      where: { id: panel.id },
+      data: { status: 'declined', decided_at: new Date() },
+    });
+
+    setImmediate(() => {
+      this.notificationsService
+        .notifyAdminOfferPanelDeclined(panel.id)
+        .catch(() => {});
+    });
+  }
+
+  async acceptByClientUser(
+    panelId: string,
+    clientUser: USER,
+  ): Promise<{ hireRequest: any }> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        status: true,
+        recipient_user_id: true,
+        title: true,
+        created_by_user_id: true,
+      },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    if (panel.recipient_user_id !== clientUser.id) {
+      throw new ForbiddenException('Access denied to this offer panel');
+    }
+    if (panel.status === 'declined') {
+      throw new BadRequestException('Cannot accept a declined offer panel');
+    }
+
+    // Idempotency (E8): return existing hire request if already accepted
+    if (panel.status === 'accepted') {
+      const existing = await this.prisma.hireRequest.findFirst({
+        where: {
+          org_id: clientUser.organization_id ?? undefined,
+          createdByUserId: panel.created_by_user_id,
+          title: panel.title,
+          status: 'panel_ready',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      return { hireRequest: existing };
+    }
+
+    const candidateRows = await this.prisma.offerPanelCandidate.findMany({
+      where: { offer_panel_id: panelId },
+      select: { candidate_id: true },
+    });
+
+    const hireRequest = await this.prisma.$transaction(async (tx) => {
+      const hr = await tx.hireRequest.create({
+        data: {
+          org_id: clientUser.organization_id ?? '',
+          title: panel.title,
+          availability: 'Full-time',
+          status: 'panel_ready',
+          createdByUserId: panel.created_by_user_id,
+          assign_user_id: panel.created_by_user_id,
+          panels: {
+            create: {
+              status: 'created',
+              readable: true,
+              panelCandidates: {
+                create: candidateRows.map((r) => ({
+                  candidate_id: r.candidate_id,
+                  status: 'selected',
+                  createdByUserId: panel.created_by_user_id,
+                })),
+              },
+            },
+          },
+        },
+      });
+
+      await tx.offerPanel.update({
+        where: { id: panelId },
+        data: { status: 'accepted', decided_at: new Date() },
+      });
+
+      return hr;
+    });
+
+    setImmediate(() => {
+      this.notificationsService
+        .notifyAdminOfferPanelAccepted(panelId)
+        .catch(() => {});
+    });
+
+    return { hireRequest };
+  }
+
+  async acceptByToken(token: string): Promise<{ ticket: any }> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { public_token: token },
+      select: {
+        id: true,
+        status: true,
+        title: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_company_id: true,
+        created_by_user_id: true,
+      },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    if (panel.status === 'declined') {
+      throw new BadRequestException('Cannot accept a declined offer panel');
+    }
+
+    // Idempotency (E8)
+    if (panel.status === 'accepted') {
+      const existing = await this.prisma.ticket.findFirst({
+        where: { offer_panel_id: panel.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      return { ticket: existing };
+    }
+
+    const ticket = await this.prisma.$transaction(async (tx) => {
+      const t = await tx.ticket.create({
+        data: {
+          type: 'interview',
+          title: panel.title,
+          description: `Offer Panel accepted by ${panel.recipient_name} (${panel.recipient_email})`,
+          priority: 'medium',
+          offer_panel_id: panel.id,
+          org_id: panel.recipient_company_id ?? null,
+          created_by: panel.created_by_user_id,
+        },
+      });
+
+      await tx.offerPanel.update({
+        where: { id: panel.id },
+        data: { status: 'accepted', decided_at: new Date() },
+      });
+
+      return t;
+    });
+
+    setImmediate(() => {
+      this.notificationsService
+        .notifyAdminOfferPanelAccepted(panel.id)
+        .catch(() => {});
+    });
+
+    return { ticket };
+  }
+
+  async update(
+    id: string,
+    dto: { title?: string; description?: string },
+  ): Promise<any> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    return this.prisma.offerPanel.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  async remove(id: string): Promise<void> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    await this.prisma.offerPanel.delete({ where: { id } });
   }
 
   async findAll(
