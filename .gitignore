@@ -67,3 +67,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .codex/
 AGENTS.md
 CLAUDE.md
+
+#assistant_docs
+assistant_docs/
+
+#scripts
+/scripts/
