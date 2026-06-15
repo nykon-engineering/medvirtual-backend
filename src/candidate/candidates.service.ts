@@ -88,6 +88,11 @@ const VA_SCORECARD_FIELDS = new Set([
 export class CandidatesService {
   private readonly logger = new Logger(CandidatesService.name);
 
+  static readonly UNAVAILABLE_PIPELINE_STATUSES = [
+    '261214844', // Hired
+    '261173428', // Lost
+  ];
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly google: GoogledriveService,
@@ -1410,7 +1415,48 @@ export class CandidatesService {
     });
     if (!updatedCandidate)
       throw new BadGatewayException('Failed to update candidate');
+
+    // R9 — remove from all OfferPanels when candidate becomes unavailable
+    if (
+      data.pipeline_status &&
+      CandidatesService.UNAVAILABLE_PIPELINE_STATUSES.includes(
+        data.pipeline_status,
+      )
+    ) {
+      await this.removeFromOfferPanels(id);
+    }
+
     return updatedCandidate;
+  }
+
+  async removeFromOfferPanels(candidateId: string): Promise<void> {
+    const affected = await this.prisma.offerPanelCandidate.findMany({
+      where: { candidate_id: candidateId },
+      select: { offer_panel_id: true },
+    });
+
+    if (affected.length === 0) return;
+
+    const panelIds = [...new Set(affected.map((r) => r.offer_panel_id))];
+
+    await this.prisma.offerPanelCandidate.deleteMany({
+      where: { candidate_id: candidateId },
+    });
+
+    let deletedPanels = 0;
+    for (const panelId of panelIds) {
+      const remaining = await this.prisma.offerPanelCandidate.count({
+        where: { offer_panel_id: panelId },
+      });
+      if (remaining === 0) {
+        await this.prisma.offerPanel.delete({ where: { id: panelId } });
+        deletedPanels++;
+      }
+    }
+
+    this.logger.log(
+      `R9: candidate ${candidateId} removed from ${panelIds.length} offer panel(s); ${deletedPanels} panel(s) deleted`,
+    );
   }
 
   private async updateStatus(
@@ -2023,6 +2069,11 @@ export class CandidatesService {
     });
     if (!updatedCandidate)
       throw new BadGatewayException('Failed to update candidate status');
+
+    // R9 — remove from all OfferPanels when candidate becomes unavailable
+    if (CandidatesService.UNAVAILABLE_PIPELINE_STATUSES.includes(stageName)) {
+      await this.removeFromOfferPanels(id);
+    }
 
     return updatedCandidate;
   }
