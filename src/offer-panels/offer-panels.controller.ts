@@ -164,7 +164,9 @@ export class OfferPanelsController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('organization_admin', 'organization_super_admin')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Track that the client viewed an offer panel (R17)' })
+  @ApiOperation({
+    summary: 'Track that the client viewed an offer panel (R17)',
+  })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, description: 'View tracked' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -181,23 +183,39 @@ export class OfferPanelsController {
   @Roles('organization_admin', 'organization_super_admin')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Remove a candidate from the offer panel (R7). Deletes panel if last candidate removed (R8).',
+    summary:
+      'Remove a candidate from the offer panel (R7). Deletes panel if last candidate removed (R8).',
   })
   @ApiParam({ name: 'id', type: String, description: 'Offer panel ID' })
-  @ApiParam({ name: 'candidateId', type: String, description: 'Candidate ID to remove' })
+  @ApiParam({
+    name: 'candidateId',
+    type: String,
+    description: 'Candidate ID to remove',
+  })
   @ApiResponse({
     status: 200,
-    description: '{ deleted: true } when panel deleted (R8); { deleted: false, panel } otherwise',
+    description:
+      '{ deleted: true } when panel deleted (R8); { deleted: false, panel } otherwise',
   })
-  @ApiResponse({ status: 400, description: 'Cannot modify a decided offer panel' })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot modify a decided offer panel',
+  })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Offer panel or candidate not found' })
+  @ApiResponse({
+    status: 404,
+    description: 'Offer panel or candidate not found',
+  })
   async removeCandidate(
     @Param('id') id: string,
     @Param('candidateId') candidateId: string,
     @CurrentUser() user: USER,
   ) {
-    const result = await this.offerPanelsService.removeCandidate(id, candidateId, user);
+    const result = await this.offerPanelsService.removeCandidate(
+      id,
+      candidateId,
+      user,
+    );
     return { status: 200, data: result };
   }
 
@@ -206,7 +224,10 @@ export class OfferPanelsController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('organization_admin', 'organization_super_admin')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Decline an offer panel (R6). Notifies the admin (R12). Idempotent.' })
+  @ApiOperation({
+    summary:
+      'Decline an offer panel (R6). Notifies the admin (R12). Idempotent.',
+  })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, description: 'Declined successfully' })
   @ApiResponse({ status: 400, description: 'Cannot decline an accepted panel' })
@@ -223,10 +244,14 @@ export class OfferPanelsController {
   @Roles('organization_admin', 'organization_super_admin')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Accept offer panel → creates HireRequest in panel_ready (R4/R11). Notifies admin (R12). Idempotent.',
+    summary:
+      'Accept offer panel → creates HireRequest in panel_ready (R4/R11). Notifies admin (R12). Idempotent.',
   })
   @ApiParam({ name: 'id', type: String })
-  @ApiResponse({ status: 200, description: 'Accepted. Returns the created HireRequest.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Accepted. Returns the created HireRequest.',
+  })
   @ApiResponse({ status: 400, description: 'Cannot accept a declined panel' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Offer panel not found' })
@@ -256,7 +281,9 @@ export class OfferPanelsController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_admin', 'system_super_admin')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Hard delete an offer panel (admin). No recipient notification.' })
+  @ApiOperation({
+    summary: 'Hard delete an offer panel (admin). No recipient notification.',
+  })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 204, description: 'Deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })

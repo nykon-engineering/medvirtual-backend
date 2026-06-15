@@ -1,13 +1,16 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { HubspotService } from '../hubspot/hubspot.service';
 import { USER } from '@prisma/client';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
 import {
@@ -105,11 +108,46 @@ const OFFER_PANEL_INCLUDE = {
 
 @Injectable()
 export class OfferPanelsService {
+  private readonly logger = new Logger(OfferPanelsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly candidatesService: CandidatesService,
     private readonly notificationsService: NotificationsService,
+    private readonly hubspot: HubspotService,
   ) {}
+
+  private async retryHubspot<T>(
+    fn: () => Promise<T>,
+    retries = 3,
+    delay = 500,
+  ): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      if (
+        retries > 0 &&
+        axios.isAxiosError(err) &&
+        err.response?.status === 429
+      ) {
+        await new Promise((r) => setTimeout(r, delay));
+        return this.retryHubspot(fn, retries - 1, delay * 2);
+      }
+      throw err;
+    }
+  }
+
+  private async warnIfNoHubspotOwner(userId: string): Promise<void> {
+    const user = await this.prisma.uSER.findUnique({
+      where: { id: userId },
+      select: { hubspot_id: true },
+    });
+    if (!user?.hubspot_id) {
+      this.logger.warn(
+        `R11 E11: user ${userId} has no hubspot_id — HireRequest HubSpot ticket will have no owner`,
+      );
+    }
+  }
 
   async searchContacts(q: string): Promise<any[]> {
     const term = q.trim();
@@ -418,7 +456,9 @@ export class OfferPanelsService {
       data: {
         last_viewed_at: now,
         view_count: { increment: 1 },
-        ...(panel.status === 'sent' ? { status: 'viewed', viewed_at: now } : {}),
+        ...(panel.status === 'sent'
+          ? { status: 'viewed', viewed_at: now }
+          : {}),
       },
     });
   }
@@ -436,7 +476,9 @@ export class OfferPanelsService {
       data: {
         last_viewed_at: now,
         view_count: { increment: 1 },
-        ...(panel.status === 'sent' ? { status: 'viewed', viewed_at: now } : {}),
+        ...(panel.status === 'sent'
+          ? { status: 'viewed', viewed_at: now }
+          : {}),
       },
     });
   }
@@ -494,7 +536,9 @@ export class OfferPanelsService {
     }
     if (panel.status === 'declined') return; // idempotent (E8)
     if (panel.status === 'accepted') {
-      throw new BadRequestException('Cannot decline an already accepted offer panel');
+      throw new BadRequestException(
+        'Cannot decline an already accepted offer panel',
+      );
     }
 
     await this.prisma.offerPanel.update({
@@ -518,7 +562,9 @@ export class OfferPanelsService {
 
     if (panel.status === 'declined') return; // idempotent (E8)
     if (panel.status === 'accepted') {
-      throw new BadRequestException('Cannot decline an already accepted offer panel');
+      throw new BadRequestException(
+        'Cannot decline an already accepted offer panel',
+      );
     }
 
     await this.prisma.offerPanel.update({
@@ -543,6 +589,7 @@ export class OfferPanelsService {
         status: true,
         recipient_user_id: true,
         title: true,
+        description: true,
         created_by_user_id: true,
       },
     });
@@ -611,6 +658,50 @@ export class OfferPanelsService {
       this.notificationsService
         .notifyAdminOfferPanelAccepted(panelId)
         .catch(() => {});
+    });
+
+    // R11 — sync HireRequest to HubSpot with correct owner (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        await this.warnIfNoHubspotOwner(panel.created_by_user_id);
+
+        const org = await this.prisma.organization.findUnique({
+          where: { id: clientUser.organization_id ?? '' },
+          select: {
+            name: true,
+            hubspot_id: true,
+            business_unit: true,
+            website_url: true,
+          },
+        });
+
+        const payload = {
+          id: hireRequest.id,
+          title: panel.title,
+          description: panel.description ?? '',
+          availability: 'Full-time',
+          priority: 'medium',
+          organization: org ?? {
+            name: '',
+            hubspot_id: null,
+            business_unit: 'MedVirtual',
+            website_url: '',
+          },
+          assign_user_id: [{ id: panel.created_by_user_id }],
+        };
+
+        await this.retryHubspot(() =>
+          this.hubspot.createHireRequestInHubspot(
+            payload as any,
+            panel.created_by_user_id,
+            'HireRequest created from offer panel accept',
+          ),
+        );
+      } catch (err) {
+        this.logger.error(
+          `R11: HubSpot sync failed for HR ${hireRequest.id}: ${err?.message}`,
+        );
+      }
     });
 
     return { hireRequest };
@@ -703,14 +794,22 @@ export class OfferPanelsService {
   async findAll(
     query: QueryOfferPanelsDto,
   ): Promise<{ data: any[]; pagination: any }> {
-    const { search, status, recipient_type, client, page = 1, limit = 20 } = query;
+    const {
+      search,
+      status,
+      recipient_type,
+      client,
+      page = 1,
+      limit = 20,
+    } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
 
     if (status) where.status = status;
     if (recipient_type) where.recipient_type = recipient_type;
-    if (client) where.recipient_org_name = { contains: client, mode: 'insensitive' };
+    if (client)
+      where.recipient_org_name = { contains: client, mode: 'insensitive' };
 
     if (search) {
       where.OR = [

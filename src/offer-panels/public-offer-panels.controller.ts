@@ -1,4 +1,11 @@
-import { Controller, Get, Post, Param, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { OfferPanelsService } from './offer-panels.service';
@@ -12,7 +19,11 @@ export class PublicOfferPanelsController {
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get public offer panel by token (no auth, R13)' })
-  @ApiParam({ name: 'token', type: String, description: 'Unguessable public token' })
+  @ApiParam({
+    name: 'token',
+    type: String,
+    description: 'Unguessable public token',
+  })
   @ApiResponse({
     status: 200,
     description:
@@ -28,8 +39,14 @@ export class PublicOfferPanelsController {
   @Post('public/offer-panels/:token/viewed')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Track that the public recipient viewed the offer panel (R17)' })
-  @ApiParam({ name: 'token', type: String, description: 'Unguessable public token' })
+  @ApiOperation({
+    summary: 'Track that the public recipient viewed the offer panel (R17)',
+  })
+  @ApiParam({
+    name: 'token',
+    type: String,
+    description: 'Unguessable public token',
+  })
   @ApiResponse({ status: 200, description: 'View tracked' })
   @ApiResponse({ status: 404, description: 'Token not found' })
   async trackView(@Param('token') token: string) {
@@ -41,8 +58,15 @@ export class PublicOfferPanelsController {
   @Post('public/offer-panels/:token/decline')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Decline a public offer panel (R6). Notifies admin (R12). Idempotent.' })
-  @ApiParam({ name: 'token', type: String, description: 'Unguessable public token' })
+  @ApiOperation({
+    summary:
+      'Decline a public offer panel (R6). Notifies admin (R12). Idempotent.',
+  })
+  @ApiParam({
+    name: 'token',
+    type: String,
+    description: 'Unguessable public token',
+  })
   @ApiResponse({ status: 200, description: 'Declined successfully' })
   @ApiResponse({ status: 400, description: 'Cannot decline an accepted panel' })
   @ApiResponse({ status: 404, description: 'Token not found' })
@@ -56,10 +80,18 @@ export class PublicOfferPanelsController {
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Accept a public offer panel → creates interview Ticket (R5). Notifies admin (R12). Idempotent.',
+    summary:
+      'Accept a public offer panel → creates interview Ticket (R5). Notifies admin (R12). Idempotent.',
   })
-  @ApiParam({ name: 'token', type: String, description: 'Unguessable public token' })
-  @ApiResponse({ status: 200, description: 'Accepted. Returns the created Ticket.' })
+  @ApiParam({
+    name: 'token',
+    type: String,
+    description: 'Unguessable public token',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Accepted. Returns the created Ticket.',
+  })
   @ApiResponse({ status: 400, description: 'Cannot accept a declined panel' })
   @ApiResponse({ status: 404, description: 'Token not found' })
   async accept(@Param('token') token: string) {
