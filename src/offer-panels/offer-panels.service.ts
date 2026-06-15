@@ -738,7 +738,7 @@ export class OfferPanelsService {
     const ticket = await this.prisma.$transaction(async (tx) => {
       const t = await tx.ticket.create({
         data: {
-          type: 'interview',
+          type: 'offer_panel',
           title: panel.title,
           description: `Offer Panel accepted by ${panel.recipient_name} (${panel.recipient_email})`,
           priority: 'medium',
