@@ -2230,7 +2230,7 @@ export class NotificationsService {
     if (!panel || !panel.public_token) return false;
 
     const theme = getEmailThemeByBusinessUnit(panel.business_unit);
-    const panelUrl = `${process.env.FRONTEND_URL}/public/offer-panels/${panel.public_token}`;
+    const panelUrl = `${process.env.FRONTEND_URL}/modules/public/offer-panel/${panel.public_token}`;
     const adminName = `${panel.createdBy.first_name} ${panel.createdBy.last_name}`;
 
     const html = this.buildEmail(
