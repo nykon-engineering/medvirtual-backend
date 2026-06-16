@@ -2191,8 +2191,7 @@ export class NotificationsService {
       : `Hi ${panel.recipient_name},`;
 
     const html = this.buildEmail(
-      `<p>${greeting}</p>
-      <p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review.</p>
+      `<p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review.</p>
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
         <h3 style="margin-top: 0; color: #333;">${panel.title}</h3>
         ${panel.description ? `<p>${panel.description}</p>` : ''}
@@ -2234,8 +2233,7 @@ export class NotificationsService {
     const adminName = `${panel.createdBy.first_name} ${panel.createdBy.last_name}`;
 
     const html = this.buildEmail(
-      `<p>Hi ${panel.recipient_name},</p>
-      <p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review — no account needed.</p>
+      `<p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review — no account needed.</p>
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
         <h3 style="margin-top: 0; color: #333;">${panel.title}</h3>
         ${panel.description ? `<p>${panel.description}</p>` : ''}
@@ -2277,8 +2275,7 @@ export class NotificationsService {
       : '';
 
     const html = this.buildEmail(
-      `<p>Hi ${panel.createdBy.first_name},</p>
-      <p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>accepted</strong> the offer panel you sent.</p>
+      `<p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>accepted</strong> the offer panel you sent.</p>
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
         <p><strong>Panel:</strong> ${panel.title}</p>
         <p><strong>Recipient:</strong> ${panel.recipient_name} (${panel.recipient_email})</p>
@@ -2319,8 +2316,7 @@ export class NotificationsService {
       : '';
 
     const html = this.buildEmail(
-      `<p>Hi ${panel.createdBy.first_name},</p>
-      <p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>declined</strong> the offer panel you sent.</p>
+      `<p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>declined</strong> the offer panel you sent.</p>
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
         <p><strong>Panel:</strong> ${panel.title}</p>
         <p><strong>Recipient:</strong> ${panel.recipient_name} (${panel.recipient_email})</p>
