@@ -170,7 +170,7 @@ export class InvoiceService {
   }
 
   async findAll(query: ListInvoicesDto) {
-    const { status, search, organizationIds, billingMode } = query;
+    const { status, search, organizationIds, billingMode, startDate, endDate } = query;
     const where: Prisma.InvoiceWhereInput = {};
 
     if (status) {
@@ -187,6 +187,14 @@ export class InvoiceService {
       where.currentVersion = {
         is_prebill: billingMode === 'prebill',
       };
+    }
+
+    if (startDate) {
+      where.billing_start_date = { gte: new Date(startDate) };
+    }
+
+    if (endDate) {
+      where.billing_end_date = { lte: new Date(endDate) };
     }
 
     if (search) {
@@ -1200,6 +1208,184 @@ export class InvoiceService {
     }
 
     return { success: true };
+  }
+
+  private escapeCsv(val: any): string {
+    if (val === null || val === undefined) {
+      return '';
+    }
+    let str = String(val);
+    str = str.replace(/"/g, '""');
+    if (str.includes(',') || str.includes('\n') || str.includes('"')) {
+      return `"${str}"`;
+    }
+    return str;
+  }
+
+  private formatDate(date?: Date | null): string {
+    if (!date) return '';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    const day = d.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  }
+
+  private formatStatus(status?: string | null): string {
+    if (!status) return '';
+    return status
+      .split(/[_-]/)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  private formatInvoiceNumber(num?: string | null): string {
+    if (!num) return '';
+    if (/^0+\d+$/.test(num)) {
+      return `="${num}"`;
+    }
+    return num;
+  }
+
+  async generateInvoicesCsv(type: 'summary' | 'verbose', startDate?: string, endDate?: string): Promise<string> {
+    const where: Prisma.InvoiceWhereInput = {};
+
+    if (startDate) {
+      where.billing_start_date = { gte: new Date(startDate) };
+    }
+
+    if (endDate) {
+      where.billing_end_date = { lte: new Date(endDate) };
+    }
+
+    const invoices = await this.prisma.invoice.findMany({
+      where,
+      include: {
+        organization: true,
+        currentVersion: {
+          include: {
+            line_items: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (type === 'verbose') {
+      const headers = [
+        'Invoice ID',
+        'Invoice Number',
+        'Reference',
+        'Invoice Status',
+        'Stripe Invoice ID',
+        'Stripe Invoice Number',
+        'Organization Name',
+        'Billing Start Date',
+        'Billing End Date',
+        'Line Item Type',
+        'Line Item Category',
+        'Line Item Title',
+        'Line Item Units',
+        'Line Item Rate',
+        'Line Item Subtotal',
+        'Line Item Tax',
+        'Line Item Adjustment Type',
+        'Line Item Adjustment Value',
+        'Line Item Adjustment Amount',
+        'Line Item Total',
+        'Line Item Description',
+      ];
+
+      const rows: string[][] = [headers];
+
+      for (const inv of invoices) {
+        const lineItems = inv.currentVersion?.line_items || [];
+        
+        const baseData = [
+          inv.id,
+          this.formatInvoiceNumber(inv.invoice_number),
+          inv.reference || '',
+          this.formatStatus(inv.status),
+          inv.stripe_invoice_id || '',
+          this.formatInvoiceNumber(inv.stripe_invoice_number),
+          inv.organization?.name || '',
+          this.formatDate(inv.billing_start_date),
+          this.formatDate(inv.billing_end_date),
+        ];
+
+        if (lineItems.length > 0) {
+          for (const item of lineItems) {
+            rows.push([
+              ...baseData,
+              this.formatStatus(item.type),
+              this.formatStatus(item.category),
+              item.worker_name_snapshot || item.description || '',
+              item.effective_worked_hours ? item.effective_worked_hours.toString() : '0',
+              item.hourly_rate ? item.hourly_rate.toString() : '0',
+              item.subtotal_before_adjustment ? item.subtotal_before_adjustment.toString() : '0',
+              '0',
+              this.formatStatus(item.adjustment_type),
+              item.adjustment_value ? item.adjustment_value.toString() : '0',
+              item.adjustment_amount ? item.adjustment_amount.toString() : '0',
+              item.final_total ? item.final_total.toString() : '0',
+              item.description || '',
+            ]);
+          }
+        }
+      }
+
+      return rows.map((r) => r.map((cell) => this.escapeCsv(cell)).join(',')).join('\n');
+    } else {
+      const headers = [
+        'Invoice ID',
+        'Invoice Number',
+        'Reference',
+        'Status',
+        'Stripe Invoice ID',
+        'Stripe Invoice Number',
+        'Stripe Status',
+        'Organization Name',
+        'Billing Start Date',
+        'Billing End Date',
+        'Due Date',
+        'Subtotal',
+        'Tax Total',
+        'Total',
+        'Discount Value',
+        'Discount Type',
+        'Currency',
+        'Created At',
+      ];
+
+      const rows: string[][] = [headers];
+
+      for (const inv of invoices) {
+        rows.push([
+          inv.id,
+          this.formatInvoiceNumber(inv.invoice_number),
+          inv.reference || '',
+          this.formatStatus(inv.status),
+          inv.stripe_invoice_id || '',
+          this.formatInvoiceNumber(inv.stripe_invoice_number),
+          this.formatStatus(inv.stripe_status),
+          inv.organization?.name || '',
+          this.formatDate(inv.billing_start_date),
+          this.formatDate(inv.billing_end_date),
+          this.formatDate(inv.currentVersion?.due_date),
+          inv.currentVersion?.subtotal ? inv.currentVersion.subtotal.toString() : '0',
+          inv.currentVersion?.tax_total ? inv.currentVersion.tax_total.toString() : '0',
+          inv.currentVersion?.total ? inv.currentVersion.total.toString() : '0',
+          inv.currentVersion?.discountValue ? inv.currentVersion.discountValue.toString() : '0',
+          this.formatStatus((inv.currentVersion as any)?.discountType),
+          inv.currentVersion?.currency || 'USD',
+          this.formatDate(inv.createdAt),
+        ]);
+      }
+
+      return rows.map((r) => r.map((cell) => this.escapeCsv(cell)).join(',')).join('\n');
+    }
   }
 }
 

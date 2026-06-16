@@ -24,4 +24,14 @@ export class ListInvoicesDto {
   @IsEnum(['arrears', 'prebill'])
   @IsOptional()
   billingMode?: 'arrears' | 'prebill';
+
+  @ApiProperty({ required: false, description: 'Filter by billing start date (gte)' })
+  @IsString()
+  @IsOptional()
+  startDate?: string;
+
+  @ApiProperty({ required: false, description: 'Filter by billing end date (lte)' })
+  @IsString()
+  @IsOptional()
+  endDate?: string;
 }

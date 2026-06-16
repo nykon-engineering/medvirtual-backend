@@ -76,6 +76,23 @@ export class InvoiceController {
     });
   }
 
+  @Get('report')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Generate and download CSV report of invoices' })
+  async downloadReport(
+    @Res() res: Response,
+    @Query('type') type: 'summary' | 'verbose' = 'summary',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const csvContent = await this.invoiceService.generateInvoicesCsv(type, startDate, endDate);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="invoices_report_${type}.csv"`);
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    return res.send(csvContent);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Fetch a single invoice by ID' })
   async findOne(@Param('id') id: string) {
