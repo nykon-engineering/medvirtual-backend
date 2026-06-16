@@ -296,7 +296,26 @@ describe('TicketService', () => {
                 }
               }
             }
-          }
+          },
+          offerPanel: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              status: true,
+              business_unit: true,
+              recipient_name: true,
+              recipient_email: true,
+              recipient_org_name: true,
+              recipient_type: true,
+              view_count: true,
+              viewed_at: true,
+              decided_at: true,
+              public_token: true,
+              is_public: true,
+              createdAt: true,
+            },
+          },
         }
       });
     });

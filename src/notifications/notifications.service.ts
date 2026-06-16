@@ -2164,4 +2164,174 @@ export class NotificationsService {
       );
     }
   }
+
+  async notifyOfferPanelCreatedClient(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        recipientUser: { select: { first_name: true } },
+        createdBy: { select: { first_name: true, last_name: true } },
+        _count: { select: { candidates: true } },
+      },
+    });
+    if (!panel) return false;
+
+    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const panelUrl = `${process.env.FRONTEND_URL}/modules/talent/client`;
+    const adminName = `${panel.createdBy.first_name} ${panel.createdBy.last_name}`;
+    const greeting = panel.recipientUser?.first_name
+      ? `Hi ${panel.recipientUser.first_name},`
+      : `Hi ${panel.recipient_name},`;
+
+    const html = this.buildEmail(
+      `<p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review.</p>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <h3 style="margin-top: 0; color: #333;">${panel.title}</h3>
+        ${panel.description ? `<p>${panel.description}</p>` : ''}
+      </div>
+      <p>Log in to your portal to review the candidates and let us know what you think.</p>
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">Review Candidates</a>
+      </div>`,
+      theme,
+    );
+
+    return this.sendMailWithPrefix({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.recipient_email,
+      subject: `Your candidate panel is ready — ${panel.title}`,
+      html,
+    });
+  }
+
+  async notifyOfferPanelCreatedPublic(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        public_token: true,
+        createdBy: { select: { first_name: true, last_name: true } },
+        _count: { select: { candidates: true } },
+      },
+    });
+    if (!panel || !panel.public_token) return false;
+
+    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const panelUrl = `${process.env.FRONTEND_URL}/modules/public/offer-panel/${panel.public_token}`;
+    const adminName = `${panel.createdBy.first_name} ${panel.createdBy.last_name}`;
+
+    const html = this.buildEmail(
+      `<p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review — no account needed.</p>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <h3 style="margin-top: 0; color: #333;">${panel.title}</h3>
+        ${panel.description ? `<p>${panel.description}</p>` : ''}
+      </div>
+      <p>Click the button below to view the candidates and let us know your decision.</p>
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">View Candidates</a>
+      </div>`,
+      theme,
+    );
+
+    return this.sendMailWithPrefix({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.recipient_email,
+      subject: `Your candidate panel is ready — ${panel.title}`,
+      html,
+    });
+  }
+
+  async notifyAdminOfferPanelAccepted(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        createdBy: { select: { email: true, first_name: true } },
+      },
+    });
+    if (!panel?.createdBy?.email) return false;
+
+    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const panelUrl = `${process.env.FRONTEND_URL}/offer-panels?panel=${panel.id}`;
+    const orgLabel = panel.recipient_org_name
+      ? ` from ${panel.recipient_org_name}`
+      : '';
+
+    const html = this.buildEmail(
+      `<p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>accepted</strong> the offer panel you sent.</p>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <p><strong>Panel:</strong> ${panel.title}</p>
+        <p><strong>Recipient:</strong> ${panel.recipient_name} (${panel.recipient_email})</p>
+      </div>
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">View Offer Panel</a>
+      </div>`,
+      theme,
+    );
+
+    return this.sendMailWithPrefix({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.createdBy.email,
+      subject: `Offer panel accepted — ${panel.title}`,
+      html,
+    });
+  }
+
+  async notifyAdminOfferPanelDeclined(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        createdBy: { select: { email: true, first_name: true } },
+      },
+    });
+    if (!panel?.createdBy?.email) return false;
+
+    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const panelUrl = `${process.env.FRONTEND_URL}/offer-panels?panel=${panel.id}`;
+    const orgLabel = panel.recipient_org_name
+      ? ` from ${panel.recipient_org_name}`
+      : '';
+
+    const html = this.buildEmail(
+      `<p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>declined</strong> the offer panel you sent.</p>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <p><strong>Panel:</strong> ${panel.title}</p>
+        <p><strong>Recipient:</strong> ${panel.recipient_name} (${panel.recipient_email})</p>
+      </div>
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">View Offer Panel</a>
+      </div>`,
+      theme,
+    );
+
+    return this.sendMailWithPrefix({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.createdBy.email,
+      subject: `Offer panel declined — ${panel.title}`,
+      html,
+    });
+  }
 }

@@ -26,6 +26,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { SqsModule } from './sqs/sqs.module';
 import { PositionRateConfigModule } from './position-rate-config/position-rate-config.module';
 import { MedAllianceModule } from './med-alliance/med-alliance.module';
+import { OfferPanelsModule } from './offer-panels/offer-panels.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
     SqsModule,
     PositionRateConfigModule,
     MedAllianceModule,
+    OfferPanelsModule,
   ],
   controllers: [AppController],
   providers: [
