@@ -75,11 +75,15 @@ export class HireRequestCreationService {
             company_url: data.organization.website_url || 'Not Specified',
             va_deployment_type:
               data.availability === 'part-time' ? 'Part-Time' : 'Full-Time',
-            hs_ticket_priority: data.priority.toUpperCase(),
+            hs_ticket_priority: data.priority
+              ? data.priority.toUpperCase()
+              : undefined,
             va_type: data.hubspot_role_type,
             contract_amount: data.hubspot_contract_amount,
             language: data.hubspot_language,
-            number_of_vas: data.hubspot_numberVA.toString(),
+            number_of_vas: data.hubspot_numberVA
+              ? data.hubspot_numberVA.toString()
+              : undefined,
             va_pay_rate_range: pay_range.toString(),
             tasks: data.hubspot_tasks ? data.hubspot_tasks : undefined,
             n2_monitors_required_: data.hubspot_n2_monitors_required,

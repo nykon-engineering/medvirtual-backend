@@ -157,4 +157,40 @@ describe('HireRequestCreationService', () => {
       await expect(service.execute(baseData)).resolves.not.toThrow();
     });
   });
+
+  // ── Reduced payload (e.g. offer-panel accept flow) ─────────────────────────────
+
+  describe('execute() — reduced payload without optional toString() fields', () => {
+    const reducedData = {
+      id: 'hr-uuid-002',
+      title: 'VA Request from offer panel',
+      description: 'Need a VA',
+      availability: 'Full-time',
+      priority: undefined,
+      hubspot_numberVA: undefined,
+      organization: {
+        name: 'Org Inc',
+        hubspot_id: 'hs-company-123',
+        website_url: 'https://org.com',
+        business_unit: 'MedVirtual',
+      },
+      assign_user_id: [{ id: 'user-abc' }],
+    };
+
+    beforeEach(() => {
+      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-ticket-999' } });
+      prismaMock.hireRequest.update.mockResolvedValueOnce({});
+    });
+
+    it('does not throw when priority and hubspot_numberVA are undefined', async () => {
+      await expect(service.execute(reducedData)).resolves.toBe(true);
+    });
+
+    it('sends hs_ticket_priority and number_of_vas as undefined instead of crashing', async () => {
+      await service.execute(reducedData);
+      const [, body] = mockedAxios.post.mock.calls[0];
+      expect((body as any).properties.hs_ticket_priority).toBeUndefined();
+      expect((body as any).properties.number_of_vas).toBeUndefined();
+    });
+  });
 });

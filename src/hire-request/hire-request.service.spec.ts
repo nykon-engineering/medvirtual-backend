@@ -12,6 +12,7 @@ import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto
 import { HubspotService } from '../hubspot/hubspot.service';
 import { OpenaiService } from '../openai/openai.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { OfferPanelsService } from '../offer-panels/offer-panels.service';
 
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
@@ -105,6 +106,10 @@ const positionRateConfigMock = {
   findAllUnpaginated: jest.fn().mockResolvedValue([]),
 };
 
+const offerPanelsServiceMock = {
+  removeCandidateFromAllPanels: jest.fn(),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
@@ -120,6 +125,7 @@ describe('HireRequestService', () => {
         { provide: NotificationsService, useValue: notificationsServiceMock },
         { provide: OpenaiService, useValue: openAIServiceMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigMock },
+        { provide: OfferPanelsService, useValue: offerPanelsServiceMock },
       ],
     }).compile();
 
@@ -1922,6 +1928,7 @@ describe('HireRequestService', () => {
       expect(prismaMock.hireRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ status: 'placement_completed' }) }),
       );
+      expect(offerPanelsServiceMock.removeCandidateFromAllPanels).toHaveBeenCalledWith('cand1');
     });
   });
   

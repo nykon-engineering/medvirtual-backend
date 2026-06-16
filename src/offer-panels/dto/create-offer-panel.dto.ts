@@ -17,15 +17,15 @@ import { OfferPanelRecipientType } from '@prisma/client';
 export class RecipientDto {
   @ApiProperty({ enum: OfferPanelRecipientType })
   @IsEnum(OfferPanelRecipientType)
-  type: OfferPanelRecipientType;
+  recipient_type: OfferPanelRecipientType;
 
   @ApiPropertyOptional({ description: 'Required when type = client_user' })
-  @ValidateIf((o) => o.type === 'client_user')
+  @ValidateIf((o) => o.recipient_type === 'client_user')
   @IsUUID()
   user_id?: string;
 
   @ApiPropertyOptional({ description: 'Required when type = company_contact' })
-  @ValidateIf((o) => o.type === 'company_contact')
+  @ValidateIf((o) => o.recipient_type === 'company_contact')
   @IsUUID()
   company_id?: string;
 

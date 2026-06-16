@@ -1,4 +1,6 @@
 import {
+  forwardRef,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -11,12 +13,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { HireRequestService } from '../hire-request/hire-request.service';
 import { USER } from '@prisma/client';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
 import {
   CreateOfferPanelDto,
   RecipientDto,
 } from './dto/create-offer-panel.dto';
+import { buildHireRequestTitle } from '../common/utils/hireRequestTitle.util';
 
 const CANDIDATE_CARD_SELECT = {
   id: true,
@@ -112,9 +116,13 @@ export class OfferPanelsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => CandidatesService))
     private readonly candidatesService: CandidatesService,
     private readonly notificationsService: NotificationsService,
+    @Inject(forwardRef(() => HubspotService))
     private readonly hubspot: HubspotService,
+    @Inject(forwardRef(() => HireRequestService))
+    private readonly hireRequestService: HireRequestService,
   ) {}
 
   // Maps the flat recipient_* columns onto the nested `recipient` shape the
@@ -296,7 +304,7 @@ export class OfferPanelsService {
       let orgName: string | null = null;
       let resolvedUserId: string | null = null;
 
-      if (r.type === 'client_user') {
+      if (r.recipient_type === 'client_user') {
         if (!r.user_id) {
           errors.push(`${label}: user_id is required for type client_user`);
           recipientMeta.push({ orgName: null, resolvedUserId: null });
@@ -323,7 +331,7 @@ export class OfferPanelsService {
           orgName = user.organization?.name ?? null;
           resolvedUserId = user.id;
         }
-      } else if (r.type === 'company_contact') {
+      } else if (r.recipient_type === 'company_contact') {
         if (!r.company_id) {
           errors.push(
             `${label}: company_id is required for type company_contact`,
@@ -357,17 +365,18 @@ export class OfferPanelsService {
       for (let i = 0; i < dto.recipients.length; i++) {
         const r: RecipientDto = dto.recipients[i];
         const { orgName } = recipientMeta[i];
-        const isPublic = r.type !== 'client_user';
+        const isPublic = r.recipient_type !== 'client_user';
 
         const panel = await tx.offerPanel.create({
           data: {
             title: dto.title,
             description: dto.description ?? null,
             business_unit: dto.business_unit,
-            recipient_type: r.type,
-            recipient_user_id: r.type === 'client_user' ? r.user_id : null,
+            recipient_type: r.recipient_type,
+            recipient_user_id:
+              r.recipient_type === 'client_user' ? r.user_id : null,
             recipient_company_id:
-              r.type === 'company_contact' ? r.company_id : null,
+              r.recipient_type === 'company_contact' ? r.company_id : null,
             recipient_name: r.name,
             recipient_email: r.email,
             recipient_org_name: orgName,
@@ -583,6 +592,27 @@ export class OfferPanelsService {
     };
   }
 
+  async removeCandidateFromAllPanels(candidateId: string): Promise<void> {
+    const panelLinks = await this.prisma.offerPanelCandidate.findMany({
+      where: { candidate_id: candidateId },
+      select: { offer_panel_id: true },
+    });
+
+    for (const { offer_panel_id } of panelLinks) {
+      await this.prisma.offerPanelCandidate.deleteMany({
+        where: { offer_panel_id, candidate_id: candidateId },
+      });
+
+      const remaining = await this.prisma.offerPanelCandidate.count({
+        where: { offer_panel_id },
+      });
+
+      if (remaining === 0) {
+        await this.prisma.offerPanel.delete({ where: { id: offer_panel_id } });
+      }
+    }
+  }
+
   async decline(panelId: string, clientUser: USER): Promise<void> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { id: panelId },
@@ -638,6 +668,57 @@ export class OfferPanelsService {
     });
   }
 
+  private pickMostCommonApprovedPosition(
+    approvedPositionsByCandidate: (string[] | null)[],
+  ): string | null {
+    const positions = approvedPositionsByCandidate.flatMap(
+      (positions) => positions ?? [],
+    );
+
+    const counts = new Map<string, number>();
+    for (const position of positions) {
+      if (!position) continue;
+      counts.set(position, (counts.get(position) ?? 0) + 1);
+    }
+
+    let best: string | null = null;
+    let bestCount = 0;
+    for (const position of positions) {
+      if (!position) continue;
+      const count = counts.get(position) ?? 0;
+      if (count > bestCount) {
+        bestCount = count;
+        best = position;
+      }
+    }
+
+    return best;
+  }
+
+  // va_type is a closed HubSpot picklist — approved_positions_pairing values don't always
+  // match it exactly, so we validate against HubSpot's live options before sending.
+  private async resolveHubspotVaType(
+    approvedPosition: string | null,
+  ): Promise<string | null> {
+    if (!approvedPosition) return null;
+
+    try {
+      const vaTypes: Array<{ label: string; value: string }> =
+        await this.hireRequestService.getVATypes();
+      const isValidOption = vaTypes.some(
+        (option) =>
+          option.value === approvedPosition ||
+          option.label === approvedPosition,
+      );
+      return isValidOption ? approvedPosition : null;
+    } catch (err) {
+      this.logger.warn(
+        `Failed to fetch HubSpot va_type options: ${(err as Error)?.message}`,
+      );
+      return null;
+    }
+  }
+
   async acceptByClientUser(
     panelId: string,
     clientUser: USER,
@@ -667,7 +748,6 @@ export class OfferPanelsService {
         where: {
           org_id: clientUser.organization_id ?? undefined,
           createdByUserId: panel.created_by_user_id,
-          title: panel.title,
           status: 'panel_ready',
         },
         orderBy: { createdAt: 'desc' },
@@ -677,18 +757,46 @@ export class OfferPanelsService {
 
     const candidateRows = await this.prisma.offerPanelCandidate.findMany({
       where: { offer_panel_id: panelId },
-      select: { candidate_id: true },
+      select: {
+        candidate_id: true,
+        candidate: { select: { approved_positions_pairing: true } },
+      },
+    });
+
+    const hubspot_role_type = this.pickMostCommonApprovedPosition(
+      candidateRows.map((r) => r.candidate.approved_positions_pairing),
+    );
+    const hubspot_numberVA = candidateRows.length;
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: clientUser.organization_id ?? '' },
+      select: {
+        name: true,
+        hubspot_id: true,
+        business_unit: true,
+        website_url: true,
+      },
+    });
+
+    const title = buildHireRequestTitle({
+      hubspot_pairing_request_type: null,
+      hubspot_numberVA,
+      hubspot_role_type,
+      availability: 'Full-time',
+      organization: { name: org?.name ?? '' },
     });
 
     const hireRequest = await this.prisma.$transaction(async (tx) => {
       const hr = await tx.hireRequest.create({
         data: {
           org_id: clientUser.organization_id ?? '',
-          title: panel.title,
+          title,
           availability: 'Full-time',
           status: 'panel_ready',
           createdByUserId: panel.created_by_user_id,
           assign_user_id: panel.created_by_user_id,
+          hubspot_role_type,
+          hubspot_numberVA,
           panels: {
             create: {
               status: 'created',
@@ -724,22 +832,17 @@ export class OfferPanelsService {
       try {
         await this.warnIfNoHubspotOwner(panel.created_by_user_id);
 
-        const org = await this.prisma.organization.findUnique({
-          where: { id: clientUser.organization_id ?? '' },
-          select: {
-            name: true,
-            hubspot_id: true,
-            business_unit: true,
-            website_url: true,
-          },
-        });
+        const hubspot_va_type =
+          await this.resolveHubspotVaType(hubspot_role_type);
 
         const payload = {
           id: hireRequest.id,
-          title: panel.title,
+          title,
           description: panel.description ?? '',
           availability: 'Full-time',
           priority: 'medium',
+          hubspot_role_type: hubspot_va_type,
+          hubspot_numberVA,
           organization: org ?? {
             name: '',
             hubspot_id: null,
