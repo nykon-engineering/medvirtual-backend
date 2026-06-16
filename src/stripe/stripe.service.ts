@@ -1,4 +1,4 @@
-import { Inject, Injectable, OnModuleInit, Logger, BadRequestException, Optional } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Logger, BadRequestException, Optional, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SecretsService } from '../secrets/secrets.service';
 import Stripe = require('stripe');
@@ -10,6 +10,7 @@ import { Queue } from 'bullmq';
 import { DateTime } from 'luxon';
 import { isLocalMode } from '../common/bull.utils';
 import { PusherService } from '../pusher/pusher.service';
+import { InvoiceService } from '../invoice/invoice.service';
 
 @Injectable()
 export class StripeService implements OnModuleInit {
@@ -26,6 +27,7 @@ export class StripeService implements OnModuleInit {
     private readonly pusherService: PusherService,
     @Optional() @InjectQueue('invoice') private readonly invoiceQueue: Queue | null,
     @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
+    @Inject(forwardRef(() => InvoiceService)) private readonly invoiceService: InvoiceService,
   ) { }
 
   async onModuleInit() {
@@ -308,6 +310,13 @@ export class StripeService implements OnModuleInit {
 
             // Schedule prebill reconciliation if this was a pre-billed invoice
             await this.schedulePrebillReconciliationIfNeeded(internalInvoice.id);
+
+            // Send invoice email to organization superadmin
+            try {
+              await this.invoiceService.sendInvoiceToSuperadmin(internalInvoice.id);
+            } catch (err) {
+              this.logger.error(`Failed to send invoice email to superadmin: ${err.message}`, err.stack);
+            }
           }
           break;
         }
@@ -382,6 +391,13 @@ export class StripeService implements OnModuleInit {
                 },
               });
             }
+
+            // Send invoice email to organization superadmin
+            try {
+              await this.invoiceService.sendInvoiceToSuperadmin(internalInvoice.id);
+            } catch (err) {
+              this.logger.error(`Failed to send invoice email to superadmin: ${err.message}`, err.stack);
+            }
           }
           break;
         }
@@ -427,6 +443,13 @@ export class StripeService implements OnModuleInit {
                 event: `Invoice ${internalInvoice.reference} has been marked as published`,
               },
             });
+
+            // Send invoice to organization superadmin
+            try {
+              await this.invoiceService.sendInvoiceToSuperadmin(internalInvoice.id);
+            } catch (err) {
+              this.logger.error(`Failed to send invoice email to superadmin: ${err.message}`, err.stack);
+            }
 
             // 3. Collection attempt
             const now = Date.now();

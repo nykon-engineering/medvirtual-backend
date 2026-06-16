@@ -12,11 +12,13 @@ import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
 import { Decimal } from '@prisma/client/runtime/library';
 
 import { StripeService } from '../stripe/stripe.service';
+import { MailService } from '../mail/mail.service';
+import { getInvoiceEmail } from '../common/utils/email-templates/invoice-email';
 import { chromium, Browser as PlaywrightBrowser } from 'playwright';
 import { PDFDocument } from 'pdf-lib';
 const pdf = require('pdf-parse');
 import * as jwt from 'jsonwebtoken';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import * as path from 'path';
 
 @Injectable()
@@ -29,6 +31,7 @@ export class InvoiceService {
     @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
     private readonly configService: ConfigService,
     private readonly stripeService: StripeService,
+    private readonly mailService: MailService,
   ) { }
 
   async createInvoice(dto: CreateInvoiceDto, userId: string) {
@@ -419,6 +422,14 @@ export class InvoiceService {
             status: TicketStatus.closed,
           },
         });
+      }
+    }
+
+    if (status === InvoiceStatus.approved) {
+      try {
+        await this.sendInvoiceToSuperadmin(id);
+      } catch (err) {
+        this.logger.error(`Failed to send approved invoice email to superadmin: ${err.message}`, err.stack);
       }
     }
 
@@ -1055,6 +1066,131 @@ export class InvoiceService {
     this.logger.log(`Manually triggered prebill reconciliation for invoice ${invoiceId}`);
 
     return { status: 'queued', invoiceId };
+  }
+
+  async sendInvoiceEmail(invoiceId: string, email: string, fullName: string) {
+    const invoice = await this.findOne(invoiceId);
+    if (!invoice) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const businessUnit = invoice.organization?.business_unit || 'MedVirtual';
+    const invoiceReference = (invoice.invoice_number
+      ? invoice.reference?.replace(/[A-Z]{5}$/, invoice.invoice_number)
+      : invoice.reference || invoice.id) || invoice.id;
+
+    const version = invoice.currentVersion;
+    const amount = `${version?.currency || 'USD'} ${Number(version?.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    
+    // Format due date nicely
+    const dueDate = version?.due_date 
+      ? new Date(version.due_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      : 'N/A';
+
+    // Generate invoice PDF
+    const filePath = await this.generateInvoicePdf(invoiceId);
+    if (!filePath || !existsSync(filePath)) {
+      throw new BadRequestException('Failed to generate PDF for invoice');
+    }
+
+    try {
+      const pdfBuffer = readFileSync(filePath);
+
+      // Determine template based on status
+      const { subject, html } = getInvoiceEmail(invoice.status, {
+        fullName,
+        invoiceReference,
+        amount,
+        dueDate,
+        businessUnit,
+        invoiceId,
+      });
+
+      const isProduction = process.env.ENVIRONMENT === 'PROD';
+      const fromDomain = businessUnit === 'Berry Virtual' ? 'berryvirtual.com' : 'medvirtual.ai';
+      const fromName = businessUnit === 'Berry Virtual' ? 'Berry Virtual Billing' : 'MedVirtual Billing';
+      const rawFrom = `${fromName} <noreply@${fromDomain}>`;
+      const from = isProduction ? rawFrom : `[DEV] ${rawFrom}`;
+
+      await this.mailService.sendMailWithAttachments({
+        from,
+        to: email,
+        subject,
+        html,
+        attachments: [
+          {
+            filename: `${invoiceReference}.pdf`,
+            content: pdfBuffer,
+          },
+        ],
+      });
+
+      this.logger.log(`Invoice email sent successfully to ${email} for invoice ${invoiceId}`);
+    } finally {
+      // Clean up the generated PDF file
+      if (filePath && existsSync(filePath)) {
+        try {
+          unlinkSync(filePath);
+        } catch (err) {
+          this.logger.error(`Failed to delete temporary PDF file ${filePath}: ${err.message}`);
+        }
+      }
+    }
+
+    return { success: true };
+  }
+
+  async sendInvoiceToSuperadmin(invoiceId: string) {
+    const invoice = await this.findOne(invoiceId);
+    if (!invoice) {
+      throw new BadRequestException('Invoice not found');
+    }
+
+    const orgId = invoice.organization_id;
+    if (!orgId) {
+      throw new BadRequestException('Invoice is not linked to any organization');
+    }
+
+    // Find the superadmin of the organization
+    let superadmin = await this.prisma.uSER.findFirst({
+      where: {
+        organization_id: orgId,
+        role: 'organization_super_admin',
+        status: 'active',
+      },
+    });
+
+    if (!superadmin) {
+      // Fallback 1: any active organization admin
+      superadmin = await this.prisma.uSER.findFirst({
+        where: {
+          organization_id: orgId,
+          role: 'organization_admin',
+          status: 'active',
+        },
+      });
+    }
+
+    if (!superadmin && invoice.organization) {
+      // Fallback 2: organization owner or admin fields
+      const ownerId = invoice.organization.owner_id;
+      const adminId = invoice.organization.admin_id;
+
+      const fallbackUserId = ownerId || adminId;
+      if (fallbackUserId) {
+        superadmin = await this.prisma.uSER.findUnique({
+          where: { id: fallbackUserId },
+        });
+      }
+    }
+
+    if (!superadmin) {
+      this.logger.error(`No superadmin or admin found for organization ${orgId} to send invoice ${invoiceId}`);
+      throw new BadRequestException('No superadmin/admin found for the organization');
+    }
+
+    const fullName = `${superadmin.first_name || ''} ${superadmin.last_name || ''}`.trim() || 'Valued Client';
+    return await this.sendInvoiceEmail(invoiceId, superadmin.email, fullName);
   }
 }
 

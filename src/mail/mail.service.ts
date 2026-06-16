@@ -50,4 +50,64 @@ export class MailService {
       throw new BadRequestException(`Failed to send email: ${error.message}`);
     }
   }
+
+  async sendMailWithAttachments(options: {
+    from: string;
+    to: string | string[];
+    cc?: string | string[];
+    bcc?: string | string[];
+    subject: string;
+    html: string;
+    attachments: Array<{
+      filename: string;
+      content: Buffer;
+    }>;
+    headers?: any;
+    tags?: any;
+  }): Promise<boolean> {
+    try {
+      if (!process.env.RESEND_API_KEY) {
+        throw new BadRequestException('RESEND_API_KEY is not set in environment variables');
+      }
+
+      if (!options || !options.from || !options.to || !options.subject || !options.html) {
+        throw new BadRequestException('Invalid email options provided');
+      }
+
+      const resend = new Resend(process.env.RESEND_API_KEY);
+
+      const emailData = {
+        from: options.from,
+        to: options.to,
+        cc: options.cc,
+        bcc: options.bcc,
+        subject: options.subject,
+        html: options.html,
+        attachments: options.attachments,
+        headers: options.headers || {},
+        tags: options.tags || [
+          { name: 'type', value: 'general' },
+          { name: 'source', value: 'medvirtual' }
+        ],
+      };
+
+      const result = await resend.emails.send(emailData);
+
+      if (!result || !result.data) {
+        this.logger.error(`Failed to send email with attachments to ${options.to}: ${result?.error?.message || 'Unknown error'}`);
+        throw new BadRequestException('Failed to send email with attachments');
+      }
+
+      this.logger.log(`Email with attachments sent successfully to ${options.to} with ID: ${result.data.id}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Error sending email with attachments to ${options.to}:`, error);
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      
+      throw new BadRequestException(`Failed to send email: ${error.message}`);
+    }
+  }
 }

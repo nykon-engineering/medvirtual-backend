@@ -9,6 +9,7 @@ import { InvoicePrebillReconciliationWorker } from './invoice-prebill-reconcilia
 import { PrismaModule } from '../prisma/prisma.module';
 import { PusherModule } from '../pusher/pusher.module';
 import { HubstaffModule } from '../hubstaff/hubstaff.module';
+import { MailModule } from '../mail/mail.module';
 import { isLocalModeSync } from '../common/bull.utils';
 
 const LOCAL = isLocalModeSync();
@@ -22,6 +23,7 @@ const workerProviders = LOCAL
     PrismaModule,
     PusherModule,
     HubstaffModule,
+    MailModule,
     ...(LOCAL
       ? []
       : [

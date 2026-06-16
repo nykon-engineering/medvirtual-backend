@@ -169,4 +169,14 @@ export class InvoiceController {
   async triggerPrebillReconciliation(@Param('id') id: string) {
     return await this.invoiceService.triggerPrebillReconciliation(id);
   }
+
+  @Post(':id/send-email')
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({ summary: 'Send invoice email to a specific user with PDF attachment' })
+  async sendInvoiceEmail(
+    @Param('id') id: string,
+    @Body() dto: { email: string; fullName: string },
+  ) {
+    return await this.invoiceService.sendInvoiceEmail(id, dto.email, dto.fullName);
+  }
 }
