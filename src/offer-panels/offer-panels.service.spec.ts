@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
+import { HireRequestService } from '../hire-request/hire-request.service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,6 +123,14 @@ const mockHubspotService = {
   createHireRequestInHubspot: jest.fn().mockResolvedValue({}),
 };
 
+const mockHireRequestService = {
+  getVATypes: jest.fn().mockResolvedValue([
+    { label: 'Nurse', value: 'Nurse' },
+    { label: 'Book Keeper', value: 'Book Keeper' },
+    { label: 'Jr Bookkeeper', value: 'Jr Bookkeeper' },
+  ]),
+};
+
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
@@ -139,6 +148,7 @@ describe('OfferPanelsService', () => {
         { provide: CandidatesService, useValue: mockCandidatesService },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: HubspotService, useValue: mockHubspotService },
+        { provide: HireRequestService, useValue: mockHireRequestService },
       ],
     }).compile();
 
@@ -279,7 +289,7 @@ describe('OfferPanelsService', () => {
       candidateIds: ['cand-1'],
       recipients: [
         {
-          type: 'client_user' as const,
+          recipient_type: 'client_user' as const,
           user_id: 'user-org-1',
           email: 'jane@sunrise.com',
           name: 'Jane Client',
@@ -323,8 +333,8 @@ describe('OfferPanelsService', () => {
       const dto = {
         ...validDto,
         recipients: [
-          { type: 'email' as const, email: 'same@x.com', name: 'A' },
-          { type: 'email' as const, email: 'same@x.com', name: 'B' },
+          { recipient_type: 'email' as const, email: 'same@x.com', name: 'A' },
+          { recipient_type: 'email' as const, email: 'same@x.com', name: 'B' },
         ],
       };
 
@@ -337,7 +347,7 @@ describe('OfferPanelsService', () => {
       const dto = {
         ...validDto,
         recipients: [
-          { type: 'client_user' as const, email: 'jane@sunrise.com', name: 'Jane' },
+          { recipient_type: 'client_user' as const, email: 'jane@sunrise.com', name: 'Jane' },
         ],
       };
 
@@ -370,7 +380,7 @@ describe('OfferPanelsService', () => {
       const dto = {
         ...validDto,
         recipients: [
-          { type: 'company_contact' as const, email: 'contact@co.com', name: 'Contact' },
+          { recipient_type: 'company_contact' as const, email: 'contact@co.com', name: 'Contact' },
         ],
       };
 
@@ -385,7 +395,7 @@ describe('OfferPanelsService', () => {
         ...validDto,
         recipients: [
           {
-            type: 'company_contact' as const,
+            recipient_type: 'company_contact' as const,
             company_id: 'org-missing',
             email: 'contact@co.com',
             name: 'Contact',
@@ -410,7 +420,7 @@ describe('OfferPanelsService', () => {
       const dto = {
         ...validDto,
         recipients: [
-          { type: 'email' as const, email: 'prospect@co.com', name: 'Prospect' },
+          { recipient_type: 'email' as const, email: 'prospect@co.com', name: 'Prospect' },
         ],
       };
 
@@ -744,6 +754,55 @@ describe('OfferPanelsService', () => {
   });
 
   // -------------------------------------------------------------------------
+  // removeCandidateFromAllPanels
+  // -------------------------------------------------------------------------
+
+  describe('removeCandidateFromAllPanels', () => {
+    it('removes the candidate from every panel it appears in', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { offer_panel_id: 'panel-1' },
+        { offer_panel_id: 'panel-2' },
+      ]);
+      mockPrisma.offerPanelCandidate.deleteMany.mockResolvedValue({ count: 1 });
+      mockPrisma.offerPanelCandidate.count.mockResolvedValue(2);
+
+      await service.removeCandidateFromAllPanels('cand-1');
+
+      expect(mockPrisma.offerPanelCandidate.deleteMany).toHaveBeenCalledWith({
+        where: { offer_panel_id: 'panel-1', candidate_id: 'cand-1' },
+      });
+      expect(mockPrisma.offerPanelCandidate.deleteMany).toHaveBeenCalledWith({
+        where: { offer_panel_id: 'panel-2', candidate_id: 'cand-1' },
+      });
+      expect(mockPrisma.offerPanel.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes a panel that becomes empty after removing the candidate', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { offer_panel_id: 'panel-1' },
+      ]);
+      mockPrisma.offerPanelCandidate.deleteMany.mockResolvedValue({ count: 1 });
+      mockPrisma.offerPanelCandidate.count.mockResolvedValue(0);
+      mockPrisma.offerPanel.delete.mockResolvedValue({});
+
+      await service.removeCandidateFromAllPanels('cand-1');
+
+      expect(mockPrisma.offerPanel.delete).toHaveBeenCalledWith({
+        where: { id: 'panel-1' },
+      });
+    });
+
+    it('does nothing when the candidate is not present in any panel', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([]);
+
+      await service.removeCandidateFromAllPanels('cand-1');
+
+      expect(mockPrisma.offerPanelCandidate.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.offerPanel.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // decline
   // -------------------------------------------------------------------------
 
@@ -854,7 +913,15 @@ describe('OfferPanelsService', () => {
 
     beforeEach(() => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(panelData);
-      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([{ candidate_id: 'cand-1' }]);
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['RN'] } },
+      ]);
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        name: 'Sunrise Clinic',
+        hubspot_id: 'hs-org-1',
+        business_unit: 'MedVirtual',
+        website_url: 'https://sunrise.example.com',
+      });
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         const txPrisma = {
           hireRequest: { create: jest.fn().mockResolvedValue(hireRequestData) },
@@ -862,6 +929,11 @@ describe('OfferPanelsService', () => {
         };
         return fn(txPrisma);
       });
+      mockHireRequestService.getVATypes.mockResolvedValue([
+        { label: 'Nurse', value: 'Nurse' },
+        { label: 'Book Keeper', value: 'Book Keeper' },
+        { label: 'Jr Bookkeeper', value: 'Jr Bookkeeper' },
+      ]);
     });
 
     it('creates a HireRequest and returns it', async () => {
@@ -906,6 +978,177 @@ describe('OfferPanelsService', () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
       await expect(service.acceptByClientUser('panel-1', client)).rejects.toThrow(NotFoundException);
+    });
+
+    it('sets hubspot_role_type to the most common approved position across candidates', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['RN'] } },
+        { candidate_id: 'cand-2', candidate: { approved_positions_pairing: ['LPN'] } },
+        { candidate_id: 'cand-3', candidate: { approved_positions_pairing: ['RN'] } },
+      ]);
+
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+
+      expect(createArgs.data.hubspot_role_type).toBe('RN');
+      expect(createArgs.data.hubspot_numberVA).toBe(3);
+      expect(createArgs.data.title).toContain('RN');
+      expect(createArgs.data.title).toContain('Sunrise Clinic');
+    });
+
+    it('breaks approved position ties by picking the first one encountered', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['LPN'] } },
+        { candidate_id: 'cand-2', candidate: { approved_positions_pairing: ['RN'] } },
+      ]);
+
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+
+      expect(createArgs.data.hubspot_role_type).toBe('LPN');
+    });
+
+    it('sets hubspot_role_type to null when no candidate has approved positions', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: [] } },
+      ]);
+
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+
+      expect(createArgs.data.hubspot_role_type).toBeNull();
+    });
+
+    it('counts every approved position across all candidates when a candidate has multiple', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['RN', 'LPN'] } },
+        { candidate_id: 'cand-2', candidate: { approved_positions_pairing: ['LPN'] } },
+      ]);
+
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+
+      expect(createArgs.data.hubspot_role_type).toBe('LPN');
+    });
+
+    it('sends the approved position as va_type to HubSpot when it matches a valid option', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['Nurse'] } },
+      ]);
+
+      await service.acceptByClientUser('panel-1', client);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHireRequestService.getVATypes).toHaveBeenCalled();
+      expect(mockHubspotService.createHireRequestInHubspot).toHaveBeenCalled();
+      const lastCallIndex =
+        mockHubspotService.createHireRequestInHubspot.mock.calls.length - 1;
+      const [payload] =
+        mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
+      expect(payload.hubspot_role_type).toBe('Nurse');
+    });
+
+    it('sends null as va_type to HubSpot when the approved position has no matching HubSpot option, but keeps the title/DB value', async () => {
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['Bookkeeper'] } },
+      ]);
+
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(createArgs.data.hubspot_role_type).toBe('Bookkeeper');
+      const lastCallIndex =
+        mockHubspotService.createHireRequestInHubspot.mock.calls.length - 1;
+      const [payload] =
+        mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
+      expect(payload.hubspot_role_type).toBeNull();
+      expect(payload.title).toContain('Bookkeeper');
+    });
+
+    it('falls back to null va_type when fetching HubSpot va_type options fails', async () => {
+      mockHireRequestService.getVATypes.mockRejectedValueOnce(new Error('network error'));
+      mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
+        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['Nurse'] } },
+      ]);
+
+      await service.acceptByClientUser('panel-1', client);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHubspotService.createHireRequestInHubspot).toHaveBeenCalled();
+      const lastCallIndex =
+        mockHubspotService.createHireRequestInHubspot.mock.calls.length - 1;
+      const [payload] =
+        mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
+      expect(payload.hubspot_role_type).toBeNull();
     });
   });
 

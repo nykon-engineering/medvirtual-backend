@@ -34,6 +34,7 @@ import {
   findHourlyPerRate,
 } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { OfferPanelsService } from '../offer-panels/offer-panels.service';
 import {
   changeLabelAvailability,
   mapHRTicketToDb,
@@ -52,6 +53,8 @@ export class HireRequestService {
     private readonly notifications: NotificationsService,
     private readonly openai: OpenaiService,
     private readonly positionRateConfigService: PositionRateConfigService,
+    @Inject(forwardRef(() => OfferPanelsService))
+    private readonly offerPanelsService: OfferPanelsService,
   ) {}
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split('T');
@@ -4249,6 +4252,9 @@ export class HireRequestService {
             user?.id,
             undefined,
             `Hire request ${hireRequest.id} — candidate selected as winner and set to Endorsed via Platform`,
+          );
+          await this.offerPanelsService.removeCandidateFromAllPanels(
+            c.candidate_id,
           );
         }),
       );

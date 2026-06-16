@@ -21,7 +21,7 @@ import { PositionRateConfigModule } from '../position-rate-config/position-rate-
     S3Module,
     OpenaiModule,
     MailModule,
-    HireRequestModule,
+    forwardRef(() => HireRequestModule),
     NotificationsModule,
     PositionRateConfigModule,
   ],
