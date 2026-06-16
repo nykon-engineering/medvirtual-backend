@@ -117,6 +117,35 @@ export class OfferPanelsService {
     private readonly hubspot: HubspotService,
   ) {}
 
+  // Maps the flat recipient_* columns onto the nested `recipient` shape the
+  // frontend expects (OfferPanelRecipient in lib/offer-panels/types.ts).
+  private withRecipient<T extends Record<string, any>>(
+    panel: T,
+  ): T & { recipient: Record<string, any> } {
+    return {
+      ...panel,
+      recipient: {
+        recipient_type: panel.recipient_type,
+        id: panel.recipient_user_id ?? null,
+        user_id: panel.recipient_user_id ?? null,
+        company_id: panel.recipient_company_id ?? null,
+        company_name: panel.recipient_org_name ?? null,
+        name: panel.recipient_name,
+        email: panel.recipient_email,
+      },
+    };
+  }
+
+  // Loads the full TalentPoolCandidate shape (rates, avatar URL, labels...)
+  // for a list of candidate IDs, matching what findOne/findByToken already do.
+  private async enrichCandidates(candidateIds: string[]): Promise<any[]> {
+    return Promise.all(
+      candidateIds.map((id) =>
+        this.candidatesService.getTalentPoolCandidateById(id),
+      ),
+    );
+  }
+
   private async retryHubspot<T>(
     fn: () => Promise<T>,
     retries = 3,
@@ -151,7 +180,6 @@ export class OfferPanelsService {
 
   async searchContacts(q: string): Promise<any[]> {
     const term = q.trim();
-
     const [users, contacts] = await Promise.all([
       this.prisma.uSER.findMany({
         where: {
@@ -367,7 +395,11 @@ export class OfferPanelsService {
       }),
     );
 
-    return createdPanels;
+    const enrichedCandidates = await this.enrichCandidates(dto.candidateIds);
+
+    return createdPanels.map((panel) =>
+      this.withRecipient({ ...panel, candidates: enrichedCandidates }),
+    );
   }
 
   async findByToken(token: string): Promise<any> {
@@ -386,7 +418,7 @@ export class OfferPanelsService {
       ),
     );
 
-    return { ...panel, candidates: enrichedCandidates };
+    return this.withRecipient({ ...panel, candidates: enrichedCandidates });
   }
 
   async findOne(id: string, user: USER): Promise<any> {
@@ -411,10 +443,10 @@ export class OfferPanelsService {
       }),
     );
 
-    return {
+    return this.withRecipient({
       ...panel,
       candidates: enrichedCandidates,
-    };
+    });
   }
 
   async findForClientUser(clientUser: USER): Promise<any[]> {
@@ -428,10 +460,19 @@ export class OfferPanelsService {
         createdBy: {
           select: { id: true, first_name: true, last_name: true, email: true },
         },
+        candidates: { select: { candidate_id: true } },
         _count: { select: { candidates: true } },
       },
     });
-    return panels;
+
+    return Promise.all(
+      panels.map(async (panel) => {
+        const enrichedCandidates = await this.enrichCandidates(
+          panel.candidates.map((pc) => pc.candidate_id),
+        );
+        return this.withRecipient({ ...panel, candidates: enrichedCandidates });
+      }),
+    );
   }
 
   // R17 — called explicitly by POST /viewed endpoints; not inline in GET
@@ -519,9 +560,27 @@ export class OfferPanelsService {
 
     const updated = await this.prisma.offerPanel.findUnique({
       where: { id: panelId },
-      include: OFFER_PANEL_INCLUDE,
+      include: {
+        createdBy: {
+          select: { id: true, first_name: true, last_name: true, email: true },
+        },
+        recipientUser: {
+          select: { id: true, first_name: true, last_name: true, email: true },
+        },
+        recipientCompany: { select: { id: true, name: true } },
+        candidates: { select: { candidate_id: true } },
+      },
     });
-    return { deleted: false, panel: updated };
+    if (!updated) throw new NotFoundException('Offer panel not found');
+
+    const enrichedCandidates = await this.enrichCandidates(
+      updated.candidates.map((pc) => pc.candidate_id),
+    );
+
+    return {
+      deleted: false,
+      panel: this.withRecipient({ ...updated, candidates: enrichedCandidates }),
+    };
   }
 
   async decline(panelId: string, clientUser: USER): Promise<void> {
@@ -775,10 +834,19 @@ export class OfferPanelsService {
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
 
-    return this.prisma.offerPanel.update({
+    const updated = await this.prisma.offerPanel.update({
       where: { id },
       data: dto,
+      include: {
+        candidates: { select: { candidate_id: true } },
+      },
     });
+
+    const enrichedCandidates = await this.enrichCandidates(
+      updated.candidates.map((pc) => pc.candidate_id),
+    );
+
+    return this.withRecipient({ ...updated, candidates: enrichedCandidates });
   }
 
   async remove(id: string): Promise<void> {
@@ -842,6 +910,7 @@ export class OfferPanelsService {
               email: true,
             },
           },
+          candidates: { select: { candidate_id: true } },
           recipientCompany: { select: { id: true, name: true } },
           _count: { select: { candidates: true } },
         },
@@ -849,8 +918,18 @@ export class OfferPanelsService {
       this.prisma.offerPanel.count({ where }),
     ]);
 
+    // enhance the result to align with frontend types
+    const enhancedData = await Promise.all(
+      data.map(async (panel) => {
+        const enrichedCandidates = await this.enrichCandidates(
+          panel.candidates.map((pc) => pc.candidate_id),
+        );
+        return this.withRecipient({ ...panel, candidates: enrichedCandidates });
+      }),
+    );
+
     return {
-      data,
+      data: enhancedData,
       pagination: {
         page,
         limit,
