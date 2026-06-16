@@ -1151,8 +1151,8 @@ export class InvoiceService {
       throw new BadRequestException('Invoice is not linked to any organization');
     }
 
-    // Find the superadmin of the organization
-    let superadmin = await this.prisma.uSER.findFirst({
+    // Find all active superadmins of the organization
+    let usersToNotify = await this.prisma.uSER.findMany({
       where: {
         organization_id: orgId,
         role: 'organization_super_admin',
@@ -1160,9 +1160,9 @@ export class InvoiceService {
       },
     });
 
-    if (!superadmin) {
-      // Fallback 1: any active organization admin
-      superadmin = await this.prisma.uSER.findFirst({
+    if (usersToNotify.length === 0) {
+      // Fallback 1: any active organization admins
+      usersToNotify = await this.prisma.uSER.findMany({
         where: {
           organization_id: orgId,
           role: 'organization_admin',
@@ -1171,26 +1171,35 @@ export class InvoiceService {
       });
     }
 
-    if (!superadmin && invoice.organization) {
+    if (usersToNotify.length === 0 && invoice.organization) {
       // Fallback 2: organization owner or admin fields
       const ownerId = invoice.organization.owner_id;
       const adminId = invoice.organization.admin_id;
 
-      const fallbackUserId = ownerId || adminId;
-      if (fallbackUserId) {
-        superadmin = await this.prisma.uSER.findUnique({
-          where: { id: fallbackUserId },
+      const fallbackUserIds = [ownerId, adminId].filter((id): id is string => !!id);
+      if (fallbackUserIds.length > 0) {
+        usersToNotify = await this.prisma.uSER.findMany({
+          where: { id: { in: fallbackUserIds } },
         });
       }
     }
 
-    if (!superadmin) {
+    if (usersToNotify.length === 0) {
       this.logger.error(`No superadmin or admin found for organization ${orgId} to send invoice ${invoiceId}`);
       throw new BadRequestException('No superadmin/admin found for the organization');
     }
 
-    const fullName = `${superadmin.first_name || ''} ${superadmin.last_name || ''}`.trim() || 'Valued Client';
-    return await this.sendInvoiceEmail(invoiceId, superadmin.email, fullName);
+    // Send emails sequentially to avoid file system collisions on PDF generation/deletion
+    for (const user of usersToNotify) {
+      const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Valued Client';
+      try {
+        await this.sendInvoiceEmail(invoiceId, user.email, fullName);
+      } catch (err) {
+        this.logger.error(`Failed to send invoice email to ${user.email}: ${err.message}`, err.stack);
+      }
+    }
+
+    return { success: true };
   }
 }
 
