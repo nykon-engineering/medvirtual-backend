@@ -11,7 +11,7 @@ import {
   ValidateNested,
   ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { OfferPanelRecipientType } from '@prisma/client';
 
 export class RecipientDto {
@@ -49,6 +49,12 @@ export class CreateOfferPanelDto {
   description?: string;
 
   @ApiProperty({ enum: ['MedVirtual', 'Berry Virtual'] })
+  @Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    const normalized = value.trim();
+    if (normalized === 'BerryVirtual') return 'Berry Virtual';
+    return normalized;
+  })
   @IsIn(['MedVirtual', 'Berry Virtual'])
   business_unit: string;
 
