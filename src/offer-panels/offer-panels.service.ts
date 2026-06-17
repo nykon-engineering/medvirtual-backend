@@ -189,12 +189,13 @@ export class OfferPanelsService {
     }
   }
 
-  async searchContacts(q: string): Promise<any[]> {
+  async searchContacts(q: string, businessUnit: string): Promise<any[]> {
     const term = q.trim();
     const [users, contacts] = await Promise.all([
       this.prisma.uSER.findMany({
         where: {
           role: { in: ['organization_admin', 'organization_super_admin'] },
+          organization: { business_unit: businessUnit },
           OR: [
             { first_name: { contains: term, mode: 'insensitive' } },
             { last_name: { contains: term, mode: 'insensitive' } },
@@ -212,7 +213,11 @@ export class OfferPanelsService {
       }),
       this.prisma.contact.findMany({
         where: {
-          organization_id: { not: null },
+          user_id: { not: null },
+          user: {
+            role: { in: ['organization_admin', 'organization_super_admin'] },
+            organization: { business_unit: businessUnit },
+          },
           OR: [
             { first_name: { contains: term, mode: 'insensitive' } },
             { last_name: { contains: term, mode: 'insensitive' } },
@@ -916,8 +921,8 @@ export class OfferPanelsService {
       const t = await tx.ticket.create({
         data: {
           type: 'offer_panel',
-          title: panel.title,
-          description: `Offer Panel accepted by ${panel.recipient_name}`,
+          title: 'Offer panel accepted',
+          description: `The offer panel ${panel.title} was accepted by ${panel.recipient_name}`,
           priority: 'medium',
           offer_panel_id: panel.id,
           org_id: panel.recipient_company_id ?? null,

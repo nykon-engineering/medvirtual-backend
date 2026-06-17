@@ -180,16 +180,16 @@ describe('OfferPanelsService', () => {
           last_name: 'Jones',
           email: 'bob@org.com',
           company_name: 'BobCo',
-          user_id: null,
+          user_id: 'u2',
           organization: { id: 'org-2', name: 'BobCo' },
         },
       ]);
 
-      const results = await service.searchContacts('test');
+      const results = await service.searchContacts('test', 'MedVirtual');
 
       expect(results).toHaveLength(2);
       expect(results[0].recipient_type).toBe('client_user');
-      expect(results[1].recipient_type).toBe('company_contact');
+      expect(results[1].recipient_type).toBe('client_user');
     });
 
     it('deduplicates contacts that share an email with a user (user takes priority)', async () => {
@@ -214,7 +214,7 @@ describe('OfferPanelsService', () => {
         },
       ]);
 
-      const results = await service.searchContacts('shared');
+      const results = await service.searchContacts('shared', 'MedVirtual');
 
       expect(results).toHaveLength(1);
       expect(results[0].id).toBe('u1');
@@ -241,7 +241,7 @@ describe('OfferPanelsService', () => {
       mockPrisma.uSER.findMany.mockResolvedValue(manyUsers);
       mockPrisma.contact.findMany.mockResolvedValue(manyContacts);
 
-      const results = await service.searchContacts('user');
+      const results = await service.searchContacts('user', 'MedVirtual');
 
       expect(results).toHaveLength(20);
     });
@@ -252,7 +252,7 @@ describe('OfferPanelsService', () => {
       ]);
       mockPrisma.contact.findMany.mockResolvedValue([]);
 
-      const results = await service.searchContacts('no');
+      const results = await service.searchContacts('no', 'MedVirtual');
 
       expect(results).toHaveLength(0);
     });
@@ -271,7 +271,7 @@ describe('OfferPanelsService', () => {
         },
       ]);
 
-      const results = await service.searchContacts('joe');
+      const results = await service.searchContacts('joe', 'MedVirtual');
 
       expect(results[0].recipient_type).toBe('client_user');
       expect(results[0].user_id).toBe('u-linked');

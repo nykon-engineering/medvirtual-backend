@@ -74,6 +74,12 @@ export class OfferPanelsController {
     type: String,
     description: 'Search term (name or email)',
   })
+  @ApiQuery({
+    name: 'business_unit',
+    required: true,
+    enum: ['MedVirtual', 'Berry Virtual'],
+    description: 'Business unit to filter results',
+  })
   @ApiResponse({
     status: 200,
     description:
@@ -81,8 +87,14 @@ export class OfferPanelsController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async searchContacts(@Query('q') q: string) {
-    const data = await this.offerPanelsService.searchContacts(q ?? '');
+  async searchContacts(
+    @Query('q') q: string,
+    @Query('business_unit') businessUnit: string,
+  ) {
+    const data = await this.offerPanelsService.searchContacts(
+      q ?? '',
+      businessUnit,
+    );
     return { status: 200, data };
   }
 
