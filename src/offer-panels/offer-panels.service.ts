@@ -902,7 +902,7 @@ export class OfferPanelsService {
         data: {
           type: 'offer_panel',
           title: panel.title,
-          description: `Offer Panel accepted by ${panel.recipient_name} (${panel.recipient_email})`,
+          description: `Offer Panel accepted by ${panel.recipient_name}`,
           priority: 'medium',
           offer_panel_id: panel.id,
           org_id: panel.recipient_company_id ?? null,
