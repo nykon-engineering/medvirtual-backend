@@ -2206,7 +2206,7 @@ export class NotificationsService {
     return this.sendMailWithPrefix({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
-      subject: `Your candidate panel is ready — ${panel.title}`,
+      subject: `New candidates selected for you`,
       html,
     });
   }
@@ -2248,7 +2248,7 @@ export class NotificationsService {
     return this.sendMailWithPrefix({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
-      subject: `Your candidate panel is ready — ${panel.title}`,
+      subject: `We hand-picked candidates for you`,
       html,
     });
   }
@@ -2289,7 +2289,7 @@ export class NotificationsService {
     return this.sendMailWithPrefix({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.createdBy.email,
-      subject: `Offer panel accepted — ${panel.title}`,
+      subject: `Your offer was accepted`,
       html,
     });
   }
@@ -2330,7 +2330,7 @@ export class NotificationsService {
     return this.sendMailWithPrefix({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.createdBy.email,
-      subject: `Offer panel declined — ${panel.title}`,
+      subject: `Your offer was declined`,
       html,
     });
   }
