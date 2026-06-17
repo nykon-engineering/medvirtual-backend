@@ -439,7 +439,9 @@ model HireRequest {
   assign_sourcing_id                String?
   old_status                        HireRequestStatus?
   staff_to_be_replaced_id           String?
+  offer_panel_id                    String?            @unique
   staff_to_be_replaced              Staff?             @relation("StaffToBeReplaced", fields: [staff_to_be_replaced_id], references: [id])
+  offerPanel                        OfferPanel?        @relation(fields: [offer_panel_id], references: [id])
   panels                            CandidatePanel[]
   assigned_sourcing                 USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
   assigned_staffing                 USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
@@ -1315,6 +1317,7 @@ model OfferPanel {
   recipientCompany Organization?           @relation("OfferPanelRecipientCompany", fields: [recipient_company_id], references: [id])
   candidates       OfferPanelCandidate[]
   tickets          Ticket[]
+  hireRequest      HireRequest?
 
   @@index([status],               map: "idx_offer_panels_status")
   @@index([created_by_user_id],   map: "idx_offer_panels_created_by")

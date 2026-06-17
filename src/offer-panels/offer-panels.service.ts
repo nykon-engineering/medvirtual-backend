@@ -108,6 +108,9 @@ const OFFER_PANEL_INCLUDE = {
       candidate: { select: CANDIDATE_CARD_SELECT },
     },
   },
+  hireRequest: {
+    select: { id: true, status: true, title: true, createdAt: true },
+  },
 } as const;
 
 @Injectable()
@@ -471,6 +474,9 @@ export class OfferPanelsService {
         },
         candidates: { select: { candidate_id: true } },
         _count: { select: { candidates: true } },
+        hireRequest: {
+          select: { id: true, status: true, title: true, createdAt: true },
+        },
       },
     });
 
@@ -745,12 +751,7 @@ export class OfferPanelsService {
     // Idempotency (E8): return existing hire request if already accepted
     if (panel.status === 'accepted') {
       const existing = await this.prisma.hireRequest.findFirst({
-        where: {
-          org_id: clientUser.organization_id ?? undefined,
-          createdByUserId: panel.created_by_user_id,
-          status: 'panel_ready',
-        },
-        orderBy: { createdAt: 'desc' },
+        where: { offer_panel_id: panelId },
       });
       return { hireRequest: existing };
     }
@@ -768,18 +769,29 @@ export class OfferPanelsService {
     );
     const hubspot_numberVA = candidateRows.length;
 
-    const org = await this.prisma.organization.findUnique({
-      where: { id: clientUser.organization_id ?? '' },
-      select: {
-        name: true,
-        hubspot_id: true,
-        business_unit: true,
-        website_url: true,
-      },
-    });
+    const [org, activeStaffCount] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: clientUser.organization_id ?? '' },
+        select: {
+          name: true,
+          hubspot_id: true,
+          business_unit: true,
+          website_url: true,
+        },
+      }),
+      this.prisma.staff.count({
+        where: {
+          organization_id: clientUser.organization_id ?? undefined,
+          status: { notIn: ['terminated', 'inactive'] },
+          terminated_date: null,
+        },
+      }),
+    ]);
+
+    const pairingRequestType = activeStaffCount > 0 ? 'Upsell Agent' : null;
 
     const title = buildHireRequestTitle({
-      hubspot_pairing_request_type: null,
+      hubspot_pairing_request_type: pairingRequestType,
       hubspot_numberVA,
       hubspot_role_type,
       availability: 'Full-time',
@@ -797,6 +809,8 @@ export class OfferPanelsService {
           assign_user_id: panel.created_by_user_id,
           hubspot_role_type,
           hubspot_numberVA,
+          hubspot_pairing_request_type: pairingRequestType,
+          offer_panel_id: panelId,
           panels: {
             create: {
               status: 'created',
@@ -843,6 +857,7 @@ export class OfferPanelsService {
           priority: 'medium',
           hubspot_role_type: hubspot_va_type,
           hubspot_numberVA,
+          hubspot_pairing_request_type: pairingRequestType,
           organization: org ?? {
             name: '',
             hubspot_id: null,
@@ -1016,6 +1031,9 @@ export class OfferPanelsService {
           candidates: { select: { candidate_id: true } },
           recipientCompany: { select: { id: true, name: true } },
           _count: { select: { candidates: true } },
+          hireRequest: {
+            select: { id: true, status: true, title: true, createdAt: true },
+          },
         },
       }),
       this.prisma.offerPanel.count({ where }),
