@@ -105,6 +105,9 @@ const mockPrisma = {
     create: jest.fn(),
     findFirst: jest.fn(),
   },
+  staff: {
+    count: jest.fn(),
+  },
   $transaction: jest.fn(),
 };
 
@@ -922,6 +925,7 @@ describe('OfferPanelsService', () => {
         business_unit: 'MedVirtual',
         website_url: 'https://sunrise.example.com',
       });
+      mockPrisma.staff.count.mockResolvedValue(0);
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         const txPrisma = {
           hireRequest: { create: jest.fn().mockResolvedValue(hireRequestData) },
@@ -941,6 +945,72 @@ describe('OfferPanelsService', () => {
 
       expect(result.hireRequest).toBeDefined();
       expect(result.hireRequest.id).toBe('hr-1');
+    });
+
+    it('links offer_panel_id on the created HireRequest', async () => {
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+
+      expect(createArgs.data.offer_panel_id).toBe('panel-1');
+    });
+
+    it('sets hubspot_pairing_request_type to null when org has no active staff', async () => {
+      mockPrisma.staff.count.mockResolvedValue(0);
+
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+
+      expect(createArgs.data.hubspot_pairing_request_type).toBeNull();
+      expect(createArgs.data.title).not.toContain('UPS');
+    });
+
+    it('sets hubspot_pairing_request_type to "Upsell Agent" when org has active staff', async () => {
+      mockPrisma.staff.count.mockResolvedValue(2);
+
+      let createArgs: any;
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const txPrisma = {
+          hireRequest: {
+            create: jest.fn((args: any) => {
+              createArgs = args;
+              return Promise.resolve(hireRequestData);
+            }),
+          },
+          offerPanel: { update: jest.fn().mockResolvedValue({}) },
+        };
+        return fn(txPrisma);
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+
+      expect(createArgs.data.hubspot_pairing_request_type).toBe('Upsell Agent');
+      expect(createArgs.data.title).toContain('UPS');
     });
 
     it('throws ForbiddenException when user is not the recipient', async () => {
