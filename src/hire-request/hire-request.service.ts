@@ -575,7 +575,17 @@ export class HireRequestService {
     //this code was updated for the switch above
     // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search
-      ? { title: { contains: search, mode: 'insensitive' as const } }
+      ? {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' as const } },
+            {
+              hubspot_ticket_id: {
+                contains: search,
+                mode: 'insensitive' as const,
+              },
+            },
+          ],
+        }
       : {};
 
     // Add business unit filter if provided
