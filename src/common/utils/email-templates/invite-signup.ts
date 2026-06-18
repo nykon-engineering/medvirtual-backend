@@ -137,13 +137,17 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
       <div class="greeting">Hi,</div>
     
       <div class="main-message">
-        You have been invited to join our healthcare platform. Just click the button below to easily and securely create your account :)
+        You have been invited to join the MedVirtual platform. Please click the button below to easily and securely activate your account.
       </div>
 
       <div style="text-align: left; margin: 30px 0;">
         <a href="${inviteLink}" class="cta-button">
           Activate My Account
         </a>
+      </div>
+
+      <div class="main-message">
+        Once activated, you can manage your hired staff, submit new hire requests, and explore our candidate pool to source the right support for your team.
       </div>
 
       <strong>⏰ Important:</strong> This invitation will expire in 48 hours for security reasons.
