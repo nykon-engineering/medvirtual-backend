@@ -702,8 +702,8 @@ export class InvoiceWorker extends WorkerHost {
                 ? InvoiceLineCategory.reconciliation_debit
                 : InvoiceLineCategory.reconciliation_credit,
               description: isDebit
-                ? `Reconciliation adjustment (underbill from prior period)`
-                : `Reconciliation credit (overbill from prior period)`,
+                ? `Invoice Adjustment - Overtime`
+                : `Invoice Adjustment - Unworked Hours`,
               effective_worked_hours: new Decimal(0),
               total_hours_payable: new Decimal(0),
               hourly_rate: new Decimal(0),
