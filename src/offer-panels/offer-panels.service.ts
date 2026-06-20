@@ -1065,6 +1065,22 @@ export class OfferPanelsService {
     };
   }
 
+  async findByCandidateId(candidateId: string) {
+    return this.prisma.offerPanel.findMany({
+      where: {
+        candidates: { some: { candidate_id: candidateId } },
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        recipient_name: true,
+        recipient_type: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   // Allows admin to see any panel; client can only see panels addressed to them.
   private assertAccess(panel: any, user: USER): void {
     const isAdmin =
