@@ -56,7 +56,12 @@ export class NotificationsService {
     return this.mail.sendMail({ ...options, from });
   }
 
-  private buildEmail(htmlInner: string, theme?: any): string {
+  private buildEmail(
+    htmlInner: string,
+    theme?: any,
+    greeting?: string,
+    closing?: string,
+  ): string {
     const primaryColor = theme?.primaryColor || '#01546B';
     const companyName = theme?.companyName || 'MedVirtual';
 
@@ -178,13 +183,13 @@ export class NotificationsService {
               <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
         </div>
       
-      <div class="greeting">Hi,</div>
+      <div class="greeting">${greeting ?? 'Hi,'}</div>
       
       <div class="main-message">
         ${htmlInner}
       </div>
       
-      <div class="closing">Best,</div>
+      <div class="closing">${closing ?? 'Best,'}</div>
       <div class="sender">
         <strong>${companyName}</strong> team
       </div>
@@ -2222,7 +2227,7 @@ export class NotificationsService {
         recipient_name: true,
         recipient_email: true,
         public_token: true,
-        createdBy: { select: { first_name: true, last_name: true } },
+        createdBy: { select: { first_name: true } },
         _count: { select: { candidates: true } },
       },
     });
@@ -2230,25 +2235,25 @@ export class NotificationsService {
 
     const theme = getEmailThemeByBusinessUnit(panel.business_unit);
     const panelUrl = `${process.env.FRONTEND_URL}/modules/public/offer-panel/${panel.public_token}`;
-    const adminName = `${panel.createdBy.first_name} ${panel.createdBy.last_name}`;
+    const candidateCount = panel._count.candidates;
+    const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
 
     const html = this.buildEmail(
-      `<p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review — no account needed.</p>
-      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
-        <h3 style="margin-top: 0; color: #333;">${panel.title}</h3>
-        ${panel.description ? `<p>${panel.description}</p>` : ''}
-      </div>
-      <p>Click the button below to view the candidates and let us know your decision.</p>
+      `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
+      <p>Take a look at their profiles whenever you're ready.</p>
       <div style="text-align: left; margin: 30px 0;">
-        <a href="${panelUrl}" class="cta-button">View Candidates</a>
-      </div>`,
+        <a href="${panelUrl}" class="cta-button">View candidates</a>
+      </div>
+      <p style="color: #555555; font-size: 15px;">Like what you see? Let us know who you'd like to move forward with, right from the panel. Prefer to pass? You can decline there too.</p>`,
       theme,
+      'Hi there,',
+      'Cheers,',
     );
 
     return this.sendMailWithPrefix({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
-      subject: `We hand-picked candidates for you`,
+      subject: `${candidateLabel} picked for you — ${theme.companyName}`,
       html,
     });
   }
