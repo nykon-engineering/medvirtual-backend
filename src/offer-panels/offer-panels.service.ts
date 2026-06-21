@@ -157,6 +157,21 @@ export class OfferPanelsService {
     );
   }
 
+  // Returns the number of other active offer panels (sent or viewed) that also
+  // contain this candidate, excluding the current panel.
+  private async countOtherPanels(
+    candidateId: string,
+    excludePanelId: string,
+  ): Promise<number> {
+    return this.prisma.offerPanelCandidate.count({
+      where: {
+        candidate_id: candidateId,
+        offer_panel_id: { not: excludePanelId },
+        offerPanel: { status: { in: ['sent', 'viewed'] } },
+      },
+    });
+  }
+
   private async retryHubspot<T>(
     fn: () => Promise<T>,
     retries = 3,
@@ -430,9 +445,11 @@ export class OfferPanelsService {
     }
 
     const enrichedCandidates = await Promise.all(
-      panel.candidates.map((pc) =>
-        this.candidatesService.getTalentPoolCandidateById(pc.candidate_id),
-      ),
+      panel.candidates.map(async (pc) => {
+        const enriched = await this.candidatesService.getTalentPoolCandidateById(pc.candidate_id);
+        const howManyClientsAreViewing = await this.countOtherPanels(pc.candidate_id, panel.id);
+        return { ...enriched, howManyClientsAreViewing };
+      }),
     );
 
     return this.withRecipient({ ...panel, candidates: enrichedCandidates });
@@ -452,11 +469,9 @@ export class OfferPanelsService {
 
     const enrichedCandidates = await Promise.all(
       panel.candidates.map(async (pc) => {
-        const enriched =
-          await this.candidatesService.getTalentPoolCandidateById(
-            pc.candidate_id,
-          );
-        return enriched;
+        const enriched = await this.candidatesService.getTalentPoolCandidateById(pc.candidate_id);
+        const howManyClientsAreViewing = await this.countOtherPanels(pc.candidate_id, panel.id);
+        return { ...enriched, howManyClientsAreViewing };
       }),
     );
 
@@ -487,8 +502,12 @@ export class OfferPanelsService {
 
     return Promise.all(
       panels.map(async (panel) => {
-        const enrichedCandidates = await this.enrichCandidates(
-          panel.candidates.map((pc) => pc.candidate_id),
+        const enrichedCandidates = await Promise.all(
+          panel.candidates.map(async (pc) => {
+            const enriched = await this.candidatesService.getTalentPoolCandidateById(pc.candidate_id);
+            const howManyClientsAreViewing = await this.countOtherPanels(pc.candidate_id, panel.id);
+            return { ...enriched, howManyClientsAreViewing };
+          }),
         );
         return this.withRecipient({ ...panel, candidates: enrichedCandidates });
       }),
