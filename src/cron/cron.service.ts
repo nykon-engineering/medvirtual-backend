@@ -946,12 +946,22 @@ export class CronService {
     const orgs = await this.prisma.organization.findMany({
       where: {
         referral_stage: 'deployed' as any,
-        med_alliance_referral_status: 'not_eligible',
-        OR: [
-          { deployment_date: { lte: thirtyDaysAgo, gte: oneYearAgo } },
+        referred_by_affiliate_id: { not: null }, // deploy only orgs which were referred by an affiliate
+        AND: [
           {
-            deployment_date: null,
-            first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+            OR: [
+              { med_alliance_referral_status: 'not_eligible' as any },
+              { med_alliance_referral_status: null },
+            ],
+          },
+          {
+            OR: [
+              { deployment_date: { lte: thirtyDaysAgo, gte: oneYearAgo } },
+              {
+                deployment_date: null,
+                first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+              },
+            ],
           },
         ],
       },
@@ -971,6 +981,10 @@ export class CronService {
 
     for (const org of orgs) {
       try {
+        console.log(
+          `Evaluating org ${org.id} (${org.name}) for promotion: deployment_date=${org.deployment_date}, first_paid_invoice_at=${org.first_paid_invoice_at}`,
+        );
+        
         await this.prisma.organization.update({
           where: { id: org.id },
           data: {
@@ -1033,6 +1047,7 @@ export class CronService {
             : 'N/A',
           commissionsPromoted: detected.length,
         });
+        
       } catch (err: any) {
         const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
         console.error(msg);
