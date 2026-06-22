@@ -132,7 +132,7 @@ export class InvoiceIngestionService {
             },
           },
         );
-
+        
         const props = response.data?.properties ?? {};
 
         const paymentResults: Array<{ id: string }> =
@@ -214,7 +214,7 @@ export class InvoiceIngestionService {
     invoice: InvoiceRecord,
   ): Promise<'created' | 'updated' | 'skipped'> {
     const syncHash = this.computeSyncHash(invoice);
-
+    console.log('Computed sync hash for invoice', invoice.hubspot_id, syncHash);
     const existing = await this.prisma.hubspotInvoiceSnapshot.findUnique({
       where: { hubspot_id: invoice.hubspot_id },
       select: {
@@ -229,6 +229,7 @@ export class InvoiceIngestionService {
         },
       },
     });
+    console.log('Existing snapshot for invoice', invoice.hubspot_id, existing);
 
     if (!existing) {
       await this.prisma.hubspotInvoiceSnapshot.create({

@@ -206,6 +206,7 @@ export class OfferPanelsService {
 
   async searchContacts(q: string, businessUnit: string): Promise<any[]> {
     const term = q.trim();
+    businessUnit = businessUnit === 'BerryVirtual' ? 'Berry Virtual' : businessUnit;
     const [users, contacts] = await Promise.all([
       this.prisma.uSER.findMany({
         where: {
