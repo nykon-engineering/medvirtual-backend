@@ -21,6 +21,7 @@ import { ADMIN_ROLES, AFFILIATE_ROLES, ORGANIZATION_ROLES } from '../constants';
 import { CreateReferredCompanyDto } from './dto/create-referred-company.dto';
 import { ListReferredCompaniesDto } from './dto/list-referred-companies.dto';
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
+import { ApproveEligibilityDto } from './dto/approve-eligibility.dto';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -271,6 +272,29 @@ export class ReferredCompaniesController {
       message: 'Pipeline stage updated successfully',
       data,
     };
+  }
+
+  // PATCH /med-alliance/admin/referred-companies/:id/approve-eligibility
+  // Manually approves eligibility for a referred company with a required reason.
+  @Patch('admin/referred-companies/:id/approve-eligibility')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary: 'Manually approve eligibility for a referred company (admin)',
+  })
+  @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
+  @ApiBody({ type: ApproveEligibilityDto })
+  @ApiResponse({ status: 200, description: 'Eligibility approved' })
+  @ApiResponse({ status: 400, description: 'Already eligible or not a referral' })
+  @ApiResponse({ status: 404, description: 'Referred company not found' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  async approveEligibility(
+    @Param('id') id: string,
+    @Body() dto: ApproveEligibilityDto,
+    @CurrentUser() admin: USER,
+  ) {
+    const data = await this.service.approveEligibility(id, dto, admin);
+    return { status: 200, message: 'Eligibility approved', data };
   }
 
   // POST /med-alliance/admin/referred-companies/:id/eligibility-check

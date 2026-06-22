@@ -11,6 +11,7 @@ import {
   USER,
 } from '@prisma/client';
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
+import { ApproveEligibilityDto } from './dto/approve-eligibility.dto';
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -699,6 +700,7 @@ export class ReferredCompaniesService {
         first_paid_invoice_at: true,
         deployment_date: true,
         med_alliance_block_reason: true,
+        med_alliance_approval_note: true,
         referral_stage: true,
         hubspot_id: true,
         hubspot_sync_status: true,
@@ -793,6 +795,71 @@ export class ReferredCompaniesService {
         eligibility_start_at,
       ),
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: manually approve eligibility for a referred company.
+  // Sets med_alliance_referral_status = 'eligible' with a required reason.
+  // Computes eligibility_start_at if not already set so the 1-year window works.
+  // ---------------------------------------------------------------------------
+  async approveEligibility(
+    id: string,
+    dto: ApproveEligibilityDto,
+    admin: USER,
+  ) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        referred_by_affiliate_id: true,
+        med_alliance_referral_status: true,
+        eligibility_start_at: true,
+        deployment_date: true,
+      },
+    });
+
+    if (!org) throw new NotFoundException('Referred company not found');
+    if (!org.referred_by_affiliate_id)
+      throw new BadRequestException('Not a referred company');
+    if (org.med_alliance_referral_status === 'eligible')
+      throw new BadRequestException('Company is already eligible');
+
+    // Determine eligibility_start_at anchor for the 1-year window.
+    // Priority: existing value → deployment_date → now (admin approval date).
+    const eligibilityStartAt =
+      org.eligibility_start_at ??
+      org.deployment_date ??
+      new Date();
+
+    const oldStatus = org.med_alliance_referral_status;
+
+    await this.prisma.organization.update({
+      where: { id },
+      data: {
+        med_alliance_referral_status: 'eligible',
+        med_alliance_block_reason: null,
+        med_alliance_approval_note: dto.reason,
+        eligibility_start_at: eligibilityStartAt,
+      },
+    });
+
+    await this.prisma.medAllianceAuditLog.create({
+      data: {
+        entity_type: 'referred_company',
+        entity_id: id,
+        event: 'eligibility_manually_approved',
+        old_status: oldStatus,
+        new_status: 'eligible',
+        reason: dto.reason,
+        source: 'admin_action',
+        actor_user_id: admin.id,
+        metadata: {
+          eligibility_start_at: eligibilityStartAt.toISOString(),
+        } as any,
+      },
+    });
+
+    return this.findOneForAdmin(id);
   }
 
   // ---------------------------------------------------------------------------

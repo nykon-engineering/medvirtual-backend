@@ -14,7 +14,7 @@ import { AllianceNotificationsService } from '../med-alliance/notifications/noti
 
 jest.mock('axios');
 
-describe.skip('CronService', () => {
+describe('CronService', () => {
   let service: CronService;
   let prismaServiceMock: any;
   let candidatesServiceMock: { processData: jest.Mock };
@@ -340,21 +340,31 @@ describe.skip('CronService', () => {
       expect(prismaServiceMock.organization.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            med_alliance_referral_status: 'not_eligible',
             referral_stage: 'deployed',
-            OR: expect.arrayContaining([
+            referred_by_affiliate_id: { not: null },
+            AND: expect.arrayContaining([
               expect.objectContaining({
-                deployment_date: expect.objectContaining({
-                  lte: expect.any(Date),
-                  gte: expect.any(Date),
-                }),
+                OR: expect.arrayContaining([
+                  { med_alliance_referral_status: 'not_eligible' },
+                  { med_alliance_referral_status: null },
+                ]),
               }),
               expect.objectContaining({
-                deployment_date: null,
-                first_paid_invoice_at: expect.objectContaining({
-                  lte: expect.any(Date),
-                  gte: expect.any(Date),
-                }),
+                OR: expect.arrayContaining([
+                  expect.objectContaining({
+                    deployment_date: expect.objectContaining({
+                      lte: expect.any(Date),
+                      gte: expect.any(Date),
+                    }),
+                  }),
+                  expect.objectContaining({
+                    deployment_date: null,
+                    first_paid_invoice_at: expect.objectContaining({
+                      lte: expect.any(Date),
+                      gte: expect.any(Date),
+                    }),
+                  }),
+                ]),
               }),
             ]),
           }),

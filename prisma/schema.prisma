@@ -177,6 +177,8 @@ model Organization {
   med_alliance_referral_status MedAllianceReferralStatus?
   // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
   med_alliance_block_reason    String?
+  // Admin note recorded when eligibility is manually approved
+  med_alliance_approval_note   String?
   // Anchor timestamp that starts the one-year eligibility window; set when the first paid invoice is received;
   // cleared when the window expires so the status reflects not_eligible correctly.
   eligibility_start_at         DateTime?
