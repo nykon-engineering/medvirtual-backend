@@ -2190,28 +2190,28 @@ export class NotificationsService {
 
     const theme = getEmailThemeByBusinessUnit(panel.business_unit);
     const panelUrl = `${process.env.FRONTEND_URL}/modules/talent/client`;
-    const adminName = `${panel.createdBy.first_name} ${panel.createdBy.last_name}`;
+    const candidateCount = panel._count.candidates;
+    const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
     const greeting = panel.recipientUser?.first_name
       ? `Hi ${panel.recipientUser.first_name},`
       : `Hi ${panel.recipient_name},`;
 
     const html = this.buildEmail(
-      `<p><strong>${adminName}</strong> has handpicked ${panel._count.candidates} candidate${panel._count.candidates !== 1 ? 's' : ''} for you to review.</p>
-      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
-        <h3 style="margin-top: 0; color: #333;">${panel.title}</h3>
-        ${panel.description ? `<p>${panel.description}</p>` : ''}
-      </div>
-      <p>Log in to your portal to review the candidates and let us know what you think.</p>
+      `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
+      <p>Take a look at their profiles whenever you're ready.</p>
       <div style="text-align: left; margin: 30px 0;">
-        <a href="${panelUrl}" class="cta-button">Review Candidates</a>
-      </div>`,
+        <a href="${panelUrl}" class="cta-button">View candidates</a>
+      </div>
+      <p style="color: #555555; font-size: 15px;">Like what you see? Let us know who you'd like to move forward with, right from the panel. Prefer to pass? You can decline there too.</p>`,
       theme,
+      greeting,
+      'Cheers,',
     );
 
     return this.sendMailWithPrefix({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
-      subject: `New candidates selected for you`,
+      subject: `${candidateLabel} picked for you — ${theme.companyName}`,
       html,
     });
   }
