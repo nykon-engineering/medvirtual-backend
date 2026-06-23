@@ -952,6 +952,7 @@ export class CronService {
             OR: [
               { med_alliance_referral_status: 'not_eligible' as any },
               { med_alliance_referral_status: null },
+              // Exclude pending_confirmation — those are already waiting for admin review
             ],
           },
           {
@@ -985,10 +986,12 @@ export class CronService {
           `Evaluating org ${org.id} (${org.name}) for promotion: deployment_date=${org.deployment_date}, first_paid_invoice_at=${org.first_paid_invoice_at}`,
         );
         
+        // Set to pending_confirmation — a Super Admin must manually confirm or block.
+        // Commission promotion happens only when the admin confirms eligibility.
         await this.prisma.organization.update({
           where: { id: org.id },
           data: {
-            med_alliance_referral_status: 'eligible',
+            med_alliance_referral_status: 'pending_confirmation' as any,
             med_alliance_block_reason: null,
           },
         });
@@ -996,10 +999,10 @@ export class CronService {
           data: {
             entity_type: 'referred_company',
             entity_id: org.id,
-            event: 'eligibility_activated',
+            event: 'eligibility_pending_confirmation',
             old_status: 'not_eligible',
-            new_status: 'eligible',
-            reason: '30-day deployment window elapsed',
+            new_status: 'pending_confirmation',
+            reason: '30-day deployment window elapsed — awaiting Super Admin confirmation',
             source: 'cron',
             actor_user_id: null,
             metadata: {
@@ -1008,32 +1011,6 @@ export class CronService {
           },
         });
         companiesPromoted++;
-
-        const detected = await this.prisma.affiliateCommission.findMany({
-          where: { organization_id: org.id, status: 'detected' },
-          select: { id: true },
-        });
-        for (const commission of detected) {
-          await this.prisma.affiliateCommission.update({
-            where: { id: commission.id },
-            data: { status: 'pending_admin_confirmation' },
-          });
-          await this.prisma.medAllianceAuditLog.create({
-            data: {
-              entity_type: 'commission',
-              entity_id: commission.id,
-              event: 'status_changed',
-              old_status: 'detected',
-              new_status: 'pending_admin_confirmation',
-              reason:
-                '30-day deployment window elapsed — promoted for admin review',
-              source: 'cron',
-              actor_user_id: null,
-              metadata: { organization_id: org.id } as any,
-            },
-          });
-          commissionsPromoted++;
-        }
 
         promotedEntries.push({
           orgId: org.id,
@@ -1045,7 +1022,7 @@ export class CronService {
                 day: 'numeric',
               })
             : 'N/A',
-          commissionsPromoted: detected.length,
+          commissionsPromoted: 0,
         });
         
       } catch (err: any) {
@@ -1148,6 +1125,7 @@ export class CronService {
         id: { in: orgIds },
         referral_stage: 'deployed' as any,
         first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
+        // Only pick up not_eligible — skip pending_confirmation (already waiting for admin)
         med_alliance_referral_status: 'not_eligible',
       },
       select: { id: true, name: true, eligibility_start_at: true },
@@ -1156,34 +1134,22 @@ export class CronService {
     console.log('Deployed orgs eligible for promotion:', deployedOrgs);
 
     let companiesPromoted = 0;
-    let commissionsPromoted = 0;
+    const commissionsPromoted = 0;
     const promotionErrors: string[] = [];
 
     for (const org of deployedOrgs) {
       try {
+        // Set to pending_confirmation — Super Admin must confirm or block.
+        // Commission promotion happens only when the admin confirms eligibility.
         await this.prisma.organization.update({
           where: { id: org.id },
           data: {
-            med_alliance_referral_status: 'eligible',
+            med_alliance_referral_status: 'pending_confirmation' as any,
             med_alliance_block_reason: null,
           },
         });
 
         companiesPromoted++;
-
-        const detected = await this.prisma.affiliateCommission.findMany({
-          where: { organization_id: org.id, status: 'detected' },
-          select: { id: true },
-        });
-
-        for (const commission of detected) {
-          await this.prisma.affiliateCommission.update({
-            where: { id: commission.id },
-            data: { status: 'pending_admin_confirmation' },
-          });
-
-          commissionsPromoted++;
-        }
       } catch (err: any) {
         const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
         console.error(`syncOrganizationsWithHubspot: ${msg}`);

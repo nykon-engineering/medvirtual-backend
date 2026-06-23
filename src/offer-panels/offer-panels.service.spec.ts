@@ -276,6 +276,47 @@ describe('OfferPanelsService', () => {
       expect(results[0].recipient_type).toBe('client_user');
       expect(results[0].user_id).toBe('u-linked');
     });
+
+    it('passes AND token filters when query contains multiple words', async () => {
+      mockPrisma.uSER.findMany.mockResolvedValue([
+        {
+          id: 'u1',
+          first_name: 'Paulo',
+          last_name: 'Melo',
+          email: 'paulo@org.com',
+          organization: { id: 'org-1', name: 'Clinic' },
+        },
+      ]);
+      mockPrisma.contact.findMany.mockResolvedValue([]);
+
+      const results = await service.searchContacts('Paulo Melo', 'MedVirtual');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe('Paulo Melo');
+
+      const userCall = mockPrisma.uSER.findMany.mock.calls[0][0];
+      expect(userCall.where.AND).toHaveLength(2);
+      expect(userCall.where.AND[0].OR).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ first_name: expect.objectContaining({ contains: 'Paulo' }) }),
+        ]),
+      );
+      expect(userCall.where.AND[1].OR).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ last_name: expect.objectContaining({ contains: 'Melo' }) }),
+        ]),
+      );
+    });
+
+    it('uses a single AND entry for single-word queries (same shape as before)', async () => {
+      mockPrisma.uSER.findMany.mockResolvedValue([]);
+      mockPrisma.contact.findMany.mockResolvedValue([]);
+
+      await service.searchContacts('alice', 'MedVirtual');
+
+      const userCall = mockPrisma.uSER.findMany.mock.calls[0][0];
+      expect(userCall.where.AND).toHaveLength(1);
+    });
   });
 
   // -------------------------------------------------------------------------

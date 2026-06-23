@@ -2,8 +2,6 @@ generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
-
-
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
@@ -1195,6 +1193,7 @@ enum MedAllianceEntityType {
 enum MedAllianceReferralStatus {
   eligible
   not_eligible
+  pending_confirmation
 }
 
 // MA-006 — Reason why a review case was opened

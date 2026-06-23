@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
 import { ApproveEligibilityDto } from './dto/approve-eligibility.dto';
+import { BlockEligibilityDto } from './dto/block-eligibility.dto';
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -798,9 +799,9 @@ export class ReferredCompaniesService {
   }
 
   // ---------------------------------------------------------------------------
-  // Admin: manually approve eligibility for a referred company.
-  // Sets med_alliance_referral_status = 'eligible' with a required reason.
-  // Computes eligibility_start_at if not already set so the 1-year window works.
+  // Admin: confirm eligibility for a company in pending_confirmation state.
+  // backfill=true  → promote detected commissions to pending_admin_confirmation.
+  // backfill=false → void detected commissions and re-anchor eligibility_start_at to now.
   // ---------------------------------------------------------------------------
   async approveEligibility(
     id: string,
@@ -824,12 +825,13 @@ export class ReferredCompaniesService {
     if (org.med_alliance_referral_status === 'eligible')
       throw new BadRequestException('Company is already eligible');
 
-    // Determine eligibility_start_at anchor for the 1-year window.
-    // Priority: existing value → deployment_date → now (admin approval date).
-    const eligibilityStartAt =
-      org.eligibility_start_at ??
-      org.deployment_date ??
-      new Date();
+    const now = new Date();
+
+    // backfill=true: preserve existing anchor so the 1-year window is correct.
+    // backfill=false: re-anchor to today so only future invoices generate commission.
+    const eligibilityStartAt = dto.backfill
+      ? (org.eligibility_start_at ?? org.deployment_date ?? now)
+      : now;
 
     const oldStatus = org.med_alliance_referral_status;
 
@@ -843,18 +845,175 @@ export class ReferredCompaniesService {
       },
     });
 
+    // Commission effect based on backfill choice.
+    const detectedCommissions = await this.prisma.affiliateCommission.findMany({
+      where: { organization_id: id, status: 'detected' },
+      select: { id: true },
+    });
+
+    for (const commission of detectedCommissions) {
+      await this.prisma.affiliateCommission.update({
+        where: { id: commission.id },
+        data: { status: dto.backfill ? 'pending_admin_confirmation' : 'void' },
+      });
+    }
+
     await this.prisma.medAllianceAuditLog.create({
       data: {
         entity_type: 'referred_company',
         entity_id: id,
-        event: 'eligibility_manually_approved',
+        event: 'eligibility_confirmed',
         old_status: oldStatus,
         new_status: 'eligible',
         reason: dto.reason,
         source: 'admin_action',
         actor_user_id: admin.id,
         metadata: {
+          backfill: dto.backfill,
           eligibility_start_at: eligibilityStartAt.toISOString(),
+          commissions_affected: detectedCommissions.length,
+        } as any,
+      },
+    });
+
+    return this.findOneForAdmin(id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: block eligibility — mark company as not_eligible with a required reason.
+  // Voids all detected + pending_admin_confirmation commissions.
+  // ---------------------------------------------------------------------------
+  async blockEligibility(
+    id: string,
+    dto: BlockEligibilityDto,
+    admin: USER,
+  ) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        referred_by_affiliate_id: true,
+        med_alliance_referral_status: true,
+      },
+    });
+
+    if (!org) throw new NotFoundException('Referred company not found');
+    if (!org.referred_by_affiliate_id)
+      throw new BadRequestException('Not a referred company');
+
+    const oldStatus = org.med_alliance_referral_status;
+
+    await this.prisma.organization.update({
+      where: { id },
+      data: {
+        med_alliance_referral_status: 'not_eligible',
+        med_alliance_block_reason: dto.reason,
+        med_alliance_approval_note: null,
+        eligibility_start_at: null,
+      },
+    });
+
+    // Void all non-paid commissions for this org.
+    const commissionsToVoid = await this.prisma.affiliateCommission.findMany({
+      where: {
+        organization_id: id,
+        status: { in: ['detected', 'pending_admin_confirmation'] },
+      },
+      select: { id: true },
+    });
+
+    for (const commission of commissionsToVoid) {
+      await this.prisma.affiliateCommission.update({
+        where: { id: commission.id },
+        data: { status: 'void' },
+      });
+    }
+
+    await this.prisma.medAllianceAuditLog.create({
+      data: {
+        entity_type: 'referred_company',
+        entity_id: id,
+        event: 'eligibility_blocked',
+        old_status: oldStatus,
+        new_status: 'not_eligible',
+        reason: dto.reason,
+        source: 'admin_action',
+        actor_user_id: admin.id,
+        metadata: {
+          commissions_voided: commissionsToVoid.length,
+        } as any,
+      },
+    });
+
+    return this.findOneForAdmin(id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: revert eligibility back to pending_confirmation for re-review.
+  // Reverts void commissions (set by a prior block/confirm) back to detected.
+  // ---------------------------------------------------------------------------
+  async revertEligibility(id: string, admin: USER) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        referred_by_affiliate_id: true,
+        med_alliance_referral_status: true,
+        deployment_date: true,
+        eligibility_start_at: true,
+      },
+    });
+
+    if (!org) throw new NotFoundException('Referred company not found');
+    if (!org.referred_by_affiliate_id)
+      throw new BadRequestException('Not a referred company');
+    if (org.med_alliance_referral_status === 'pending_confirmation')
+      throw new BadRequestException('Company is already pending confirmation');
+
+    const oldStatus = org.med_alliance_referral_status;
+
+    // Restore eligibility_start_at from deployment_date when re-opening a blocked company
+    // that had its window cleared, so the countdown is correct.
+    const restoredEligibilityStart =
+      org.eligibility_start_at ?? org.deployment_date ?? null;
+
+    await this.prisma.organization.update({
+      where: { id },
+      data: {
+        med_alliance_referral_status: 'pending_confirmation',
+        med_alliance_block_reason: null,
+        med_alliance_approval_note: null,
+        eligibility_start_at: restoredEligibilityStart,
+      },
+    });
+
+    // Revert void commissions back to detected so the admin can review them.
+    // void is only written by admin block/confirm actions, so reverting all void
+    // commissions for this org is safe.
+    const voidCommissions = await this.prisma.affiliateCommission.findMany({
+      where: { organization_id: id, status: 'void' },
+      select: { id: true },
+    });
+
+    for (const commission of voidCommissions) {
+      await this.prisma.affiliateCommission.update({
+        where: { id: commission.id },
+        data: { status: 'detected' },
+      });
+    }
+
+    await this.prisma.medAllianceAuditLog.create({
+      data: {
+        entity_type: 'referred_company',
+        entity_id: id,
+        event: 'eligibility_reverted',
+        old_status: oldStatus,
+        new_status: 'pending_confirmation',
+        reason: 'Admin re-opened for review',
+        source: 'admin_action',
+        actor_user_id: admin.id,
+        metadata: {
+          commissions_reverted: voidCommissions.length,
         } as any,
       },
     });

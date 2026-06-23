@@ -33,6 +33,8 @@ const mockPrisma = {
   },
   affiliateCommission: {
     deleteMany: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
   },
   hubspotInvoiceSnapshot: {
     deleteMany: jest.fn(),

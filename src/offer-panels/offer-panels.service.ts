@@ -207,16 +207,22 @@ export class OfferPanelsService {
   async searchContacts(q: string, businessUnit: string): Promise<any[]> {
     const term = q.trim();
     businessUnit = businessUnit === 'BerryVirtual' ? 'Berry Virtual' : businessUnit;
+    const tokens = term.split(/\s+/).filter(Boolean);
+    const makeTokenFilter = (extra: string[] = []) =>
+      tokens.map((t) => ({
+        OR: [
+          { first_name: { contains: t, mode: 'insensitive' as const } },
+          { last_name: { contains: t, mode: 'insensitive' as const } },
+          { email: { contains: t, mode: 'insensitive' as const } },
+          ...extra.map((f) => ({ [f]: { contains: t, mode: 'insensitive' as const } })),
+        ],
+      }));
     const [users, contacts] = await Promise.all([
       this.prisma.uSER.findMany({
         where: {
           role: { in: ['organization_admin', 'organization_super_admin'] },
           organization: { business_unit: businessUnit },
-          OR: [
-            { first_name: { contains: term, mode: 'insensitive' } },
-            { last_name: { contains: term, mode: 'insensitive' } },
-            { email: { contains: term, mode: 'insensitive' } },
-          ],
+          AND: makeTokenFilter(),
         },
         select: {
           id: true,
@@ -234,12 +240,7 @@ export class OfferPanelsService {
             role: { in: ['organization_admin', 'organization_super_admin'] },
             organization: { business_unit: businessUnit },
           },
-          OR: [
-            { first_name: { contains: term, mode: 'insensitive' } },
-            { last_name: { contains: term, mode: 'insensitive' } },
-            { email: { contains: term, mode: 'insensitive' } },
-            { company_name: { contains: term, mode: 'insensitive' } },
-          ],
+          AND: makeTokenFilter(['company_name']),
         },
         select: {
           id: true,
