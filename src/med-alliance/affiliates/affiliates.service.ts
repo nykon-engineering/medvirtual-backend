@@ -1344,7 +1344,7 @@ export class AffiliatesService {
         med_alliance_block_reason: isExpired
           ? 'eligibility_expired: one-year window elapsed'
           : null,
-        ...(isEligible && { med_alliance_referral_status: 'eligible' }),
+        ...(isEligible && { med_alliance_referral_status: 'pending_confirmation' as any }),
       },
     });
 
@@ -1354,7 +1354,7 @@ export class AffiliatesService {
         entity_id: organizationId,
         event: 'stage_changed',
         old_status: 'not_eligible',
-        new_status: isEligible ? 'eligible' : 'not_eligible',
+        new_status: isEligible ? 'pending_confirmation' : 'not_eligible',
         reason:
           'Company associated by admin — retroactive deployment date set from first paid invoice',
         source: 'admin_action',
@@ -1366,7 +1366,7 @@ export class AffiliatesService {
           result: isExpired
             ? 'expired'
             : isEligible
-              ? 'eligible'
+              ? 'pending_confirmation'
               : 'stabilization_window',
         } as any,
       },

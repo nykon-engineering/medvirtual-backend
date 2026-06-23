@@ -133,8 +133,8 @@ export class ReviewCasesService {
           hubspot_sync_status: 'synced',
           hubspot_sync_error: null,
           hubspot_synced_at: new Date(),
-          // Clear the needs_admin_review flag so commission detection can proceed
-          med_alliance_referral_status: 'eligible',
+          // Set to pending_confirmation so Super Admin must explicitly confirm eligibility
+          med_alliance_referral_status: 'pending_confirmation' as any,
         },
       });
       this.logger.log(
