@@ -788,6 +788,234 @@ describe('ReferredCompaniesService', () => {
   });
 
   // -------------------------------------------------------------------------
+  // eligibility admin actions
+  // -------------------------------------------------------------------------
+  describe('eligibility admin actions', () => {
+    const mockAdminUser = {
+      id: 'admin-1',
+      first_name: 'Admin',
+      last_name: 'User',
+      role: 'system_admin',
+    } as any;
+
+    const makeAdminOrg = (overrides: Partial<any> = {}) => ({
+      ...mockOrg,
+      med_alliance_referral_status: 'pending_confirmation',
+      eligibility_start_at: new Date('2026-02-01T00:00:00.000Z'),
+      deployment_date: new Date('2026-02-01T00:00:00.000Z'),
+      first_paid_invoice_at: null,
+      med_alliance_block_reason: null,
+      med_alliance_approval_note: null,
+      referral_stage: 'deployed',
+      hubspot_sync_status: null,
+      hubspot_sync_error: null,
+      hubspot_synced_at: null,
+      referredByAffiliate: null,
+      referToUser: null,
+      users: [],
+      affiliateCommissions: [],
+      hubspotInvoiceSnapshots: [],
+      adminReviewCases: [],
+      ...overrides,
+    });
+
+    it('should confirm eligibility with backfill and promote detected commissions', async () => {
+      const existingStart = new Date('2026-02-01T00:00:00.000Z');
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referred_by_affiliate_id: 'user-1',
+          med_alliance_referral_status: 'pending_confirmation',
+          eligibility_start_at: existingStart,
+          deployment_date: new Date('2026-01-15T00:00:00.000Z'),
+        })
+        .mockResolvedValueOnce(makeAdminOrg({ med_alliance_referral_status: 'eligible' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        { id: 'comm-1' },
+        { id: 'comm-2' },
+      ]);
+      mockPrisma.affiliateCommission.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.approveEligibility(
+        'org-1',
+        { reason: 'Review complete', backfill: true },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: expect.objectContaining({
+            med_alliance_referral_status: 'eligible',
+            eligibility_start_at: existingStart,
+            med_alliance_approval_note: 'Review complete',
+          }),
+        }),
+      );
+      expect(mockPrisma.affiliateCommission.update).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.affiliateCommission.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'comm-1' },
+          data: { status: 'pending_admin_confirmation' },
+        }),
+      );
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            event: 'eligibility_confirmed',
+            old_status: 'pending_confirmation',
+            new_status: 'eligible',
+            actor_user_id: 'admin-1',
+            metadata: expect.objectContaining({
+              backfill: true,
+              commissions_affected: 2,
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should confirm eligibility without backfill, void detected commissions, and re-anchor eligibility', async () => {
+      const before = Date.now();
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referred_by_affiliate_id: 'user-1',
+          med_alliance_referral_status: 'pending_confirmation',
+          eligibility_start_at: new Date('2026-02-01T00:00:00.000Z'),
+          deployment_date: new Date('2026-01-15T00:00:00.000Z'),
+        })
+        .mockResolvedValueOnce(makeAdminOrg({ med_alliance_referral_status: 'eligible' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-1' }]);
+      mockPrisma.affiliateCommission.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.approveEligibility(
+        'org-1',
+        { reason: 'Only future invoices', backfill: false },
+        mockAdminUser,
+      );
+
+      const after = Date.now();
+      const eligibilityStart = mockPrisma.organization.update.mock.calls[0][0].data
+        .eligibility_start_at as Date;
+
+      expect(eligibilityStart).toBeInstanceOf(Date);
+      expect(eligibilityStart.getTime()).toBeGreaterThanOrEqual(before);
+      expect(eligibilityStart.getTime()).toBeLessThanOrEqual(after);
+      expect(mockPrisma.affiliateCommission.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'comm-1' },
+          data: { status: 'void' },
+        }),
+      );
+    });
+
+    it('should block eligibility and void non-paid commissions', async () => {
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referred_by_affiliate_id: 'user-1',
+          med_alliance_referral_status: 'pending_confirmation',
+        })
+        .mockResolvedValueOnce(makeAdminOrg({ med_alliance_referral_status: 'not_eligible' }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        { id: 'comm-1' },
+        { id: 'comm-2' },
+      ]);
+      mockPrisma.affiliateCommission.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.blockEligibility(
+        'org-1',
+        { reason: 'Existing active client' },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: expect.objectContaining({
+            med_alliance_referral_status: 'not_eligible',
+            med_alliance_block_reason: 'Existing active client',
+            med_alliance_approval_note: null,
+            eligibility_start_at: null,
+          }),
+        }),
+      );
+      expect(mockPrisma.affiliateCommission.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organization_id: 'org-1',
+            status: { in: ['detected', 'pending_admin_confirmation'] },
+          }),
+        }),
+      );
+      expect(mockPrisma.affiliateCommission.update).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            event: 'eligibility_blocked',
+            new_status: 'not_eligible',
+            metadata: { commissions_voided: 2 },
+          }),
+        }),
+      );
+    });
+
+    it('should revert eligibility to pending confirmation and restore void commissions', async () => {
+      const deploymentDate = new Date('2026-01-15T00:00:00.000Z');
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referred_by_affiliate_id: 'user-1',
+          med_alliance_referral_status: 'not_eligible',
+          deployment_date: deploymentDate,
+          eligibility_start_at: null,
+        })
+        .mockResolvedValueOnce(makeAdminOrg({ eligibility_start_at: deploymentDate }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-void' }]);
+      mockPrisma.affiliateCommission.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.revertEligibility('org-1', mockAdminUser);
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: expect.objectContaining({
+            med_alliance_referral_status: 'pending_confirmation',
+            med_alliance_block_reason: null,
+            med_alliance_approval_note: null,
+            eligibility_start_at: deploymentDate,
+          }),
+        }),
+      );
+      expect(mockPrisma.affiliateCommission.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'comm-void' },
+          data: { status: 'detected' },
+        }),
+      );
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            event: 'eligibility_reverted',
+            old_status: 'not_eligible',
+            new_status: 'pending_confirmation',
+            metadata: { commissions_reverted: 1 },
+          }),
+        }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // findAllForAffiliate — commission aggregation
   // -------------------------------------------------------------------------
   describe('findAllForAffiliate — commission status aggregation', () => {
