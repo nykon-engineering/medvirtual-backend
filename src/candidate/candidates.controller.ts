@@ -32,6 +32,7 @@ import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { updateStatusHubspotDTO } from './dto/updateStatus-candidate.dto';
 import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { RemoveCandidateAndCancelDto } from './dto/remove-candidate-and-cancel.dto';
 
 @ApiTags('candidates')
 @ApiBearerAuth()
@@ -155,6 +156,144 @@ export class CandidatesController {
     @Query('tools') tools: string,
   ) {
     const result = await this.candidatesService.findAll(
+      user,
+      country,
+      shift_block,
+      availability,
+      monthly_compensation_from,
+      monthly_compensation_to,
+      years_of_experience,
+      specializations,
+      positions,
+      skills,
+      languages,
+      page,
+      perPage,
+      search,
+      all,
+      scorecard_fields,
+      tools,
+    );
+    return result;
+  }
+
+  //Endpoint that should be used only for alliance module
+  @Get('for-alliance')
+  @ApiOperation({
+    summary:
+      "Get all candidates for the current user's organization filtered by status",
+  })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    type: String,
+    description: 'Filter candidates by country of residence',
+    example: 'USA, France, Brazil',
+  })
+  @ApiQuery({
+    name: 'shift_block',
+    required: false,
+    type: String,
+    description: 'Filter candidates by shift block from hubspot',
+    example: 'Flexible, Full Time',
+  })
+  @ApiQuery({
+    name: 'availiability',
+    required: false,
+    type: String,
+    description: 'Filter candidates by avaliability',
+    example: 'Full-time, Part-time',
+  })
+  @ApiQuery({
+    name: 'monthly_compensation_from',
+    required: false,
+    type: String,
+    description: 'Filter candidates by monthly compensations start',
+    example: '1000',
+  })
+  @ApiQuery({
+    name: 'monthly_compensation_to',
+    required: false,
+    type: String,
+    description: 'Filter candidates by monthly compensations end',
+    example: '5000',
+  })
+  @ApiQuery({
+    name: 'years_of_experience',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by years of experience',
+    example: '5',
+  })
+  @ApiQuery({
+    name: 'specializations',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by specializations',
+    example: 'pediatric',
+  })
+  @ApiQuery({
+    name: 'skills',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by skills',
+    example: 'office, communication',
+  })
+  @ApiQuery({
+    name: 'languages',
+    required: false,
+    type: Number,
+    description: 'Filter candidates by languages spoken',
+    example: 'English, Spanish',
+  })
+  @ApiQuery({
+    name: 'all',
+    required: false,
+    type: Boolean,
+    description: 'If true, returns all candidates without pagination',
+  })
+  @ApiQuery({
+    name: 'scorecard_fields',
+    required: false,
+    type: String,
+    description:
+      'Comma-separated list of VA score card fields to filter by (candidates must have a value for each field)',
+    example:
+      'speaks_clearly_and_professionally,stable_internet_connection__min__20_mbps_',
+  })
+  @ApiQuery({
+    name: 'tools',
+    required: false,
+    type: String,
+    description: 'Comma-separated list of tools to filter by (OR logic)',
+    example: 'Zoom,Google Workspace',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidates retrieved successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Failed to fetch candidates' })
+  @UseGuards(AuthGuard)
+  async findAllForAlliance(
+    @CurrentUser() user: USER,
+    @Query('country') country: string,
+    @Query('shift_block') shift_block: string,
+    @Query('availability') availability: string,
+    @Query('monthly_compensation_from') monthly_compensation_from: string,
+    @Query('monthly_compensation_to') monthly_compensation_to: string,
+    @Query('years_of_experience') years_of_experience: string,
+    @Query('specializations') specializations: string,
+    @Query('positions') positions: string,
+    @Query('skills') skills: string,
+    @Query('languages') languages: string,
+    @Query('page') page,
+    @Query('perPage') perPage,
+    @Query('search') search: string,
+    @Query('all') all: string,
+    @Query('scorecard_fields') scorecard_fields: string,
+    @Query('tools') tools: string,
+  ) {
+    const result = await this.candidatesService.findAllForAlliance(
       user,
       country,
       shift_block,
@@ -409,6 +548,40 @@ export class CandidatesController {
     };
   }
 
+  @Post('remove-candidate-and-cancel')
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary:
+      'Remove the last candidate from a panel and cancel the hire request atomically',
+  })
+  @ApiBody({ type: RemoveCandidateAndCancelDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidate removed and hire request cancelled',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error or invalid state',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Candidate or hire request not found',
+  })
+  async removeCandidateAndCancel(
+    @Body() data: RemoveCandidateAndCancelDto,
+    @CurrentUser() user: USER,
+  ) {
+    const result = await this.candidatesService.removeCandidateAndCancel(
+      data,
+      user,
+    );
+    return {
+      status: 200,
+      message: 'Candidate removed and hire request cancelled successfully',
+      data: result,
+    };
+  }
+
   @Get('process-all-avatars')
   @ApiOperation({
     summary: 'Process avatars for all candidates without an avatar',
@@ -491,6 +664,54 @@ export class CandidatesController {
   async getTalentPoolCandidateById(@Param('id') id: string) {
     const candidate =
       await this.candidatesService.getTalentPoolCandidateById(id);
+    return {
+      status: 200,
+      message: 'Candidate retrieved successfully',
+      data: candidate,
+    };
+  }
+
+  @Get('talent-pool-for-logged-user/:id')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per minute
+  @UseGuards(AuthGuard)
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Get a specific candidate from talent pool by ID (public endpoint)',
+    description:
+      'Returns a specific candidate from the talent pool by ID without sensitive information. No authentication required. Rate limited to 10 requests per minute.',
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    type: String,
+    description: 'Candidate ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidate retrieved successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid candidate ID',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Candidate not found or not available in talent pool',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many requests. Rate limit exceeded.',
+  })
+  async getTalentPoolCandidateByIdForLoggedUser(
+    @Param('id') id: string,
+    @CurrentUser() user: USER,
+  ) {
+    const candidate =
+      await this.candidatesService.getTalentPoolCandidateByIdForLoggedUser(
+        id,
+        user,
+      );
     return {
       status: 200,
       message: 'Candidate retrieved successfully',

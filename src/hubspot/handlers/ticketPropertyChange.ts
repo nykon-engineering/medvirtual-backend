@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { hrTicketToDbDictionary } from '../../common/dictionaries/HRTicket-dicionary';
 import { timestampToDate } from '../../common/utils/formatDate';
+import { buildHireRequestTitle } from '../../common/utils/hireRequestTitle.util';
 import axios from 'axios';
 
 const TITLE_AFFECTING_DB_FIELDS = new Set([
@@ -13,50 +14,6 @@ const TITLE_AFFECTING_DB_FIELDS = new Set([
 @Injectable()
 export class HandlerTicketPropertyChange {
   constructor(private readonly prisma: PrismaService) {}
-
-  private buildTitle(hr: {
-    hubspot_pairing_request_type?: string | null;
-    hubspot_numberVA?: number | null;
-    hubspot_role_type?: string | null;
-    availability?: string | null;
-    organization: { name: string };
-  }): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    const basePrefix = isProduction ? 'HR' : 'TEST HR';
-    const requestType = hr.hubspot_pairing_request_type || '';
-    const firstPrefix =
-      requestType === 'Upsell Agent'
-        ? 'UPS '
-        : requestType === 'Agent Replacement'
-          ? 'REP '
-          : '';
-
-    const parts: string[] = [(firstPrefix + basePrefix).trim()];
-
-    if (hr.organization?.name?.trim()) {
-      parts.push(hr.organization.name);
-    }
-
-    if (hr.hubspot_numberVA) {
-      parts.push(String(hr.hubspot_numberVA));
-    }
-
-    if (hr.hubspot_role_type?.trim()) {
-      parts.push(hr.hubspot_role_type);
-    }
-
-    if (hr.availability?.trim()) {
-      const formatted = hr.availability
-        .split('-')
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join('-');
-      if (formatted.trim()) {
-        parts.push(formatted);
-      }
-    }
-
-    return parts.filter((p) => p?.trim()).join(' - ');
-  }
 
   private async syncTitle(
     hrId: string,
@@ -74,7 +31,7 @@ export class HandlerTicketPropertyChange {
     });
     if (!hr) return;
 
-    const title = this.buildTitle(hr);
+    const title = buildHireRequestTitle(hr);
 
     await this.prisma.hireRequest.update({
       where: { id: hrId },

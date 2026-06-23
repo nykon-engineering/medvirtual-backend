@@ -181,7 +181,7 @@ describe('CronService', () => {
       expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
     });
 
-    it('should promote eligible orgs and their detected commissions', async () => {
+    it('should move eligible orgs to pending confirmation without advancing commissions', async () => {
       const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000); // 40 days ago
       prismaServiceMock.organization.findMany.mockResolvedValue([
         { id: 'org-1', eligibility_start_at: deployedAt },
@@ -189,26 +189,23 @@ describe('CronService', () => {
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany
-        .mockResolvedValueOnce([{ id: 'comm-1' }, { id: 'comm-2' }]) // 2 commissions for org-1
-        .mockResolvedValueOnce([{ id: 'comm-3' }]);                   // 1 commission for org-2
-      prismaServiceMock.affiliateCommission.update.mockResolvedValue({});
 
       const result = await service.promoteDeployedCompanies();
 
       expect(result.companiesPromoted).toBe(2);
-      expect(result.commissionsPromoted).toBe(3);
+      expect(result.commissionsPromoted).toBe(0);
       expect(result.errors).toHaveLength(0);
+      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
+      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
     });
 
-    it('should set org status to eligible and clear block reason', async () => {
+    it('should set org status to pending_confirmation and clear block reason', async () => {
       const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
         { id: 'org-1', eligibility_start_at: deployedAt },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
 
       await service.promoteDeployedCompanies();
 
@@ -216,41 +213,34 @@ describe('CronService', () => {
         expect.objectContaining({
           where: { id: 'org-1' },
           data: expect.objectContaining({
-            med_alliance_referral_status: 'eligible',
+            med_alliance_referral_status: 'pending_confirmation',
             med_alliance_block_reason: null,
           }),
         }),
       );
     });
 
-    it('should promote detected commissions to pending_admin_confirmation', async () => {
+    it('should not promote detected commissions before admin confirmation', async () => {
       const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
         { id: 'org-1', eligibility_start_at: deployedAt },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-1' }]);
-      prismaServiceMock.affiliateCommission.update.mockResolvedValue({});
 
       await service.promoteDeployedCompanies();
 
-      expect(prismaServiceMock.affiliateCommission.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'comm-1' },
-          data: { status: 'pending_admin_confirmation' },
-        }),
-      );
+      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
+      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
     });
 
-    it('should write eligibility_activated audit log for each promoted org', async () => {
+    it('should write eligibility_pending_confirmation audit log for each promoted org', async () => {
       const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
         { id: 'org-1', eligibility_start_at: deployedAt },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
 
       await service.promoteDeployedCompanies();
 
@@ -259,10 +249,10 @@ describe('CronService', () => {
           data: expect.objectContaining({
             entity_type: 'referred_company',
             entity_id: 'org-1',
-            event: 'eligibility_activated',
+            event: 'eligibility_pending_confirmation',
             old_status: 'not_eligible',
-            new_status: 'eligible',
-            reason: '30-day deployment window elapsed',
+            new_status: 'pending_confirmation',
+            reason: '30-day deployment window elapsed — awaiting Super Admin confirmation',
             source: 'cron',
             actor_user_id: null,
           }),
@@ -270,46 +260,20 @@ describe('CronService', () => {
       );
     });
 
-    it('should write status_changed audit log for each promoted commission', async () => {
+    it('should not require detected commission lookup to complete promotion', async () => {
       const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
         { id: 'org-1', eligibility_start_at: deployedAt },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-1' }]);
-      prismaServiceMock.affiliateCommission.update.mockResolvedValue({});
-
-      await service.promoteDeployedCompanies();
-
-      expect(prismaServiceMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            entity_type: 'commission',
-            entity_id: 'comm-1',
-            event: 'status_changed',
-            old_status: 'detected',
-            new_status: 'pending_admin_confirmation',
-            source: 'cron',
-          }),
-        }),
-      );
-    });
-
-    it('should skip orgs with no detected commissions without error', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-      prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', eligibility_start_at: deployedAt },
-      ]);
-      prismaServiceMock.organization.update.mockResolvedValue({});
-      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]); // no detected commissions
 
       const result = await service.promoteDeployedCompanies();
 
       expect(result.companiesPromoted).toBe(1);
       expect(result.commissionsPromoted).toBe(0);
       expect(result.errors).toHaveLength(0);
+      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
       expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
     });
 
@@ -323,7 +287,6 @@ describe('CronService', () => {
         .mockRejectedValueOnce(new Error('DB timeout'))  // org-fail throws
         .mockResolvedValueOnce({});                       // org-ok succeeds
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
 
       const result = await service.promoteDeployedCompanies();
 
@@ -340,21 +303,31 @@ describe('CronService', () => {
       expect(prismaServiceMock.organization.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            med_alliance_referral_status: 'not_eligible',
             referral_stage: 'deployed',
-            OR: expect.arrayContaining([
+            referred_by_affiliate_id: { not: null },
+            AND: expect.arrayContaining([
               expect.objectContaining({
-                deployment_date: expect.objectContaining({
-                  lte: expect.any(Date),
-                  gte: expect.any(Date),
-                }),
+                OR: expect.arrayContaining([
+                  { med_alliance_referral_status: 'not_eligible' },
+                  { med_alliance_referral_status: null },
+                ]),
               }),
               expect.objectContaining({
-                deployment_date: null,
-                first_paid_invoice_at: expect.objectContaining({
-                  lte: expect.any(Date),
-                  gte: expect.any(Date),
-                }),
+                OR: expect.arrayContaining([
+                  expect.objectContaining({
+                    deployment_date: expect.objectContaining({
+                      lte: expect.any(Date),
+                      gte: expect.any(Date),
+                    }),
+                  }),
+                  expect.objectContaining({
+                    deployment_date: null,
+                    first_paid_invoice_at: expect.objectContaining({
+                      lte: expect.any(Date),
+                      gte: expect.any(Date),
+                    }),
+                  }),
+                ]),
               }),
             ]),
           }),
@@ -1039,7 +1012,7 @@ describe('CronService', () => {
       expect(result.syncResults).toHaveLength(1);
     });
 
-    it('should promote deployed orgs that passed the 30-day window and advance their commissions', async () => {
+    it('should move deployed orgs that passed the 30-day window to pending confirmation', async () => {
       const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
       referralSyncServiceMock.run.mockResolvedValue({ organizationId: 'org-1', phaseA: { outcome: 'already_matched' } });
 
@@ -1050,20 +1023,20 @@ describe('CronService', () => {
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-1' }]);
-      prismaServiceMock.affiliateCommission.update.mockResolvedValue({});
 
       const result = await service.syncOrganizationsWithHubspot('org-1');
 
       expect(result.companiesPromoted).toBe(1);
-      expect(result.commissionsPromoted).toBe(1);
+      expect(result.commissionsPromoted).toBe(0);
       expect(result.promotionErrors).toHaveLength(0);
       expect(prismaServiceMock.organization.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'org-1' },
-          data: expect.objectContaining({ med_alliance_referral_status: 'eligible' }),
+          data: expect.objectContaining({ med_alliance_referral_status: 'pending_confirmation' }),
         }),
       );
+      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
+      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
     });
 
     it('should return promotionErrors when a per-org promotion fails', async () => {

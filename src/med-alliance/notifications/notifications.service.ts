@@ -17,6 +17,7 @@ import {
 import {
   referralStageChangedTemplate,
   ReferralStageChangedPayload,
+  stageToLabel,
 } from './templates/referral-stage-changed';
 import {
   adminPayoutRequestedTemplate,
@@ -72,7 +73,7 @@ export class AllianceNotificationsService {
     return isProduction ? raw : `[DEV] ${raw}`;
   }
 
-  private async getAdminEmails(): Promise<string[]> {
+  private getAdminEmails(): string[] {
     const isProduction = process.env.ENVIRONMENT === 'PROD';
     return isProduction ? ['hanieh@berryvirtual.com'] : ['pauli@regenta.ai'];
 
@@ -122,7 +123,7 @@ export class AllianceNotificationsService {
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `Your payout request of $${payload.totalAmount.toFixed(2)} has been cancelled`,
+        subject: `Update on your payout request of $${payload.totalAmount.toFixed(2)}`,
         html: payoutCancelledTemplate(
           { firstName: affiliate.first_name, ...payload },
           resolvedTheme,
@@ -173,7 +174,7 @@ export class AllianceNotificationsService {
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `Your payout of $${payload.totalAmount.toFixed(2)} has been processed`,
+        subject: `Your payout of $${payload.totalAmount.toFixed(2)} has been sent — money is on its way!`,
         html: payoutPaidTemplate(
           { firstName: affiliate.first_name, ...payload },
           resolvedTheme,
@@ -197,7 +198,7 @@ export class AllianceNotificationsService {
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `${payload.organizationName} has moved to ${payload.newStage.replace(/_/g, ' ')}`,
+        subject: `Pipeline update: ${payload.organizationName} is now at "${stageToLabel(payload.newStage)}"`,
         html: referralStageChangedTemplate(
           { firstName: affiliate.first_name, ...payload },
           resolvedTheme,
@@ -217,7 +218,7 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
-      const adminEmails = await this.getAdminEmails();
+      const adminEmails = this.getAdminEmails();
       const subject = `Payout request from ${payload.affiliateName} — $${payload.totalAmount.toFixed(2)}`;
       const html = adminPayoutRequestedTemplate(payload, resolvedTheme);
       for (const email of adminEmails) {
@@ -249,7 +250,7 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
-      const adminEmails = await this.getAdminEmails();
+      const adminEmails = this.getAdminEmails();
       const subject = `Commission ready for review — ${payload.organizationName}`;
       const html = adminCommissionPendingTemplate(payload, resolvedTheme);
       for (const email of adminEmails) {
@@ -281,7 +282,7 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
-      const adminEmails = await this.getAdminEmails();
+      const adminEmails = this.getAdminEmails();
       const subject = `Commission reverted to Pending — ${payload.organizationName}`;
       const html = adminCommissionRevertedTemplate(payload, resolvedTheme);
       for (const email of adminEmails) {
@@ -313,7 +314,7 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
-      const adminEmails = await this.getAdminEmails();
+      const adminEmails = this.getAdminEmails();
       const subject = payload.adminName
         ? `New referral: ${payload.organizationName} — initiated by ${payload.adminName}`
         : `New referral: ${payload.organizationName} referred by ${payload.affiliateName}`;
@@ -344,7 +345,7 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
-      const adminEmails = await this.getAdminEmails();
+      const adminEmails = this.getAdminEmails();
       const subject = `New Alliance partner registered: ${payload.partnerName}`;
       const html = adminPartnerRegisteredTemplate(payload, resolvedTheme);
       for (const email of adminEmails) {
@@ -376,7 +377,7 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
-      const adminEmails = await this.getAdminEmails();
+      const adminEmails = this.getAdminEmails();
       const subject = `Daily commission review — ${payload.commissions.length} pending ($${payload.totalAmount.toFixed(2)})`;
       const html = adminCommissionPendingSummaryTemplate(
         payload,
@@ -434,7 +435,7 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
-      const adminEmails = await this.getAdminEmails();
+      const adminEmails = this.getAdminEmails();
       const subject = `Bill.com payment failed — ${payload.partnerName} ($${payload.amount.toFixed(2)})`;
       const html = adminPaymentFailedTemplate(payload, resolvedTheme);
       for (const email of adminEmails) {

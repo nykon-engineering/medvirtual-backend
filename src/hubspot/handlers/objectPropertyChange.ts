@@ -108,6 +108,16 @@ export class HandlerObjectPropertyChange {
         data: updateData,
       });
 
+      // R9 — remove candidate from all OfferPanels when they become Hired or Lost
+      if (
+        event.propertyName === 'hs_pipeline_stage' &&
+        CandidatesService.UNAVAILABLE_PIPELINE_STATUSES.includes(
+          event.propertyValue,
+        )
+      ) {
+        await this.candidateService.removeFromOfferPanels(candidate.id);
+      }
+
       //if the property changed is related to pipeline stage, we need to remove this candidate from all panels
       if (
         event.propertyName === 'hs_pipeline_stage' &&

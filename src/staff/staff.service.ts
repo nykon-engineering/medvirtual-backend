@@ -26,7 +26,7 @@ export class StaffService {
   ) {}
 
   private async findOne(id: string) {
-    return await this.prisma.staff.findUnique({
+    const staff = await this.prisma.staff.findUnique({
       where: { id },
       select: {
         id: true,
@@ -59,6 +59,8 @@ export class StaffService {
             employment_type: true,
             country: true,
             about_me: true,
+            avatar_url: true,
+            gender: true,
             languages: {
               select: {
                 name: true,
@@ -95,6 +97,18 @@ export class StaffService {
         },
       },
     });
+    if (!staff) return null;
+    return {
+      ...staff,
+      candidate: staff.candidate
+        ? {
+            ...staff.candidate,
+            avatar: staff.candidate.avatar_url
+              ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}`
+              : null,
+          }
+        : null,
+    };
   }
 
   async create(createStaffDto: CreateStaffDto, user: USER) {

@@ -63,6 +63,7 @@ export const organizationIndustryToDbDictionary: Record<string, string> = {
   INDIVIDUAL_FAMILY_SERVICES: 'Individual & Family Services',
   INDUSTRIAL_AUTOMATION: 'Industrial Automation',
   INFORMATION_SERVICES: 'Information Services',
+  INFORMATION_TECHNOLOGY_AND_SERVICES: 'Information Technology & Services',
   INFORMATION_TECHNOLOGY_SERVICES: 'Information Technology & Services',
   INSURANCE: 'Insurance',
   INTERNATIONAL_AFFAIRS: 'International Affairs',

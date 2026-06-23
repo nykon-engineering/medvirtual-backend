@@ -2,8 +2,6 @@ generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
-
-
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
@@ -83,6 +81,10 @@ model USER {
   hubspotAuditLogs             HubspotAuditLog[]          @relation("HubspotAuditActor")
   // MA-006 review cases resolved by this admin user
   resolvedReviewCases          MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
+
+  // --- Offer Panels relations ---
+  offerPanelsCreated           OfferPanel[]               @relation("OfferPanelCreatedBy")
+  offerPanelsAsRecipient       OfferPanel[]               @relation("OfferPanelRecipientUser")
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -173,6 +175,8 @@ model Organization {
   med_alliance_referral_status MedAllianceReferralStatus?
   // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
   med_alliance_block_reason    String?
+  // Admin note recorded when eligibility is manually approved
+  med_alliance_approval_note   String?
   // Anchor timestamp that starts the one-year eligibility window; set when the first paid invoice is received;
   // cleared when the window expires so the status reflects not_eligible correctly.
   eligibility_start_at         DateTime?
@@ -209,6 +213,7 @@ model Organization {
   // MA-006 admin review cases opened for this referred organization
   adminReviewCases             MedAllianceAdminReviewCase[]
   contacts                     Contact[]
+  offerPanelsAsRecipient       OfferPanel[]               @relation("OfferPanelRecipientCompany")
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -268,16 +273,16 @@ model Candidate {
   can_articulate_experience_clearly_to_clients                  String?
   can_multitask_between_systems_or_windows_efficiently          String?
   client_readiness___fit_evaluator_notes                        String?
-  comfortable_with_basic_tools__google_workspace__zoom__ehr_software_ String?
+  comfortable_with_basic_tools__google_workspace__zoom__ehr_software_ String? @map("comfortable_with_basic_tools__google_workspace__zoom__ehr_softw")
   comfortable_with_camera_on_setup                              String?
   communication_skills_evaluator_notes                          String?
   confident_on_video_and_phone_calls                            String?
   cultural_alignment_with_us_healthcare_environment             String?
   demonstrates_problem_solving_and_tech_adaptability            String?
   demonstrates_stability_and_commitment                         String?
-  demonstrates_understanding_of_medical_terminology_and_procedures String?
+  demonstrates_understanding_of_medical_terminology_and_procedures String? @map("demonstrates_understanding_of_medical_terminology_and_procedure")
   exhibits_confidence_and_empathy_in_roleplay_scenarios         String?
-  familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__ String?
+  familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__ String? @map("familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks")
   for_bilinguals__fluent_and_accurate_in_both_english_and_spanish String?
   grammar__vocabulary__and_tone_are_appropriate_for_us_clients  String?
   handles_feedback_constructively                               String?
@@ -295,7 +300,7 @@ model Candidate {
   technical_competence_evaluator_notes                          String?
   tier_level                                                    String?
   total_points                                                  String?
-  understands_workflow_in_medical_offices___telehealth_environments String?
+  understands_workflow_in_medical_offices___telehealth_environments String? @map("understands_workflow_in_medical_offices___telehealth_environmen")
 
   educations                 CandidateEducation[]
   experiences                CandidateExperience[]
@@ -306,6 +311,7 @@ model Candidate {
   panelCandidates            PanelCandidate[]
   staff                      Staff[]
   tickets                    Ticket[]
+  offerPanelCandidates       OfferPanelCandidate[]
 }
 
 model CandidateLanguage {
@@ -433,7 +439,9 @@ model HireRequest {
   assign_sourcing_id                String?
   old_status                        HireRequestStatus?
   staff_to_be_replaced_id           String?
+  offer_panel_id                    String?            @unique
   staff_to_be_replaced              Staff?             @relation("StaffToBeReplaced", fields: [staff_to_be_replaced_id], references: [id])
+  offerPanel                        OfferPanel?        @relation(fields: [offer_panel_id], references: [id])
   panels                            CandidatePanel[]
   assigned_sourcing                 USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
   assigned_staffing                 USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
@@ -535,13 +543,15 @@ model Ticket {
   priority      Priority
   staff_id      String?
   candidate_id  String?
-  hireRequest_id String?
-  updatedAt      DateTime      @updatedAt
+  hireRequest_id  String?
+  offer_panel_id  String?
+  updatedAt       DateTime      @updatedAt
   created_by    String?
   candidate     Candidate?    @relation(fields: [candidate_id], references: [id])
   organization  Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff         Staff?        @relation(fields: [staff_id], references: [id])
   hireRequest   HireRequest?  @relation(fields: [hireRequest_id], references: [id])
+  offerPanel    OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
   user          USER?         @relation(fields: [user_id], references: [id])
   createdBy     USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
   TicketNotes   TicketNotes[]
@@ -553,6 +563,7 @@ model Ticket {
   @@index([updatedAt], map: "idx_tickets_updatedAt")
   @@index([candidate_id], map: "idx_tickets_candidate_id")
   @@index([created_by], map: "idx_tickets_created_by")
+  @@index([offer_panel_id], map: "idx_tickets_offer_panel_id")
 }
 
 model GoogleToken {
@@ -781,6 +792,7 @@ model HubspotInvoiceSnapshot {
   sync_hash      String?
   raw_payload    Json?
   hubspot_pdf_link String?
+  invoice_number  String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -1181,6 +1193,7 @@ enum MedAllianceEntityType {
 enum MedAllianceReferralStatus {
   eligible
   not_eligible
+  pending_confirmation
 }
 
 // MA-006 — Reason why a review case was opened
@@ -1261,4 +1274,70 @@ model BillComCredential {
   device       String
   updatedAt    DateTime @updatedAt
   createdAt    DateTime @default(now())
+}
+
+// ============== Offer Panels ==========================
+
+enum OfferPanelStatus {
+  sent
+  viewed
+  accepted
+  declined
+}
+
+enum OfferPanelRecipientType {
+  client_user
+  company_contact
+  email
+}
+
+model OfferPanel {
+  id                   String                  @id @default(uuid())
+  title                String
+  description          String?
+  business_unit        String
+  status               OfferPanelStatus        @default(sent)
+  is_public            Boolean                 @default(false)
+  recipient_type       OfferPanelRecipientType
+  recipient_user_id    String?
+  recipient_company_id String?
+  recipient_name       String
+  recipient_email      String
+  recipient_org_name   String?
+  public_token         String?                 @unique
+  created_by_user_id   String
+  viewed_at            DateTime?
+  last_viewed_at       DateTime?
+  view_count           Int                     @default(0)
+  decided_at           DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  createdBy        USER                    @relation("OfferPanelCreatedBy", fields: [created_by_user_id], references: [id])
+  recipientUser    USER?                   @relation("OfferPanelRecipientUser", fields: [recipient_user_id], references: [id])
+  recipientCompany Organization?           @relation("OfferPanelRecipientCompany", fields: [recipient_company_id], references: [id])
+  candidates       OfferPanelCandidate[]
+  tickets          Ticket[]
+  hireRequest      HireRequest?
+
+  @@index([status],               map: "idx_offer_panels_status")
+  @@index([created_by_user_id],   map: "idx_offer_panels_created_by")
+  @@index([recipient_user_id],    map: "idx_offer_panels_recipient_user")
+  @@index([recipient_company_id], map: "idx_offer_panels_recipient_company")
+  @@index([recipient_type],       map: "idx_offer_panels_recipient_type")
+  @@index([createdAt],            map: "idx_offer_panels_created_at")
+}
+
+model OfferPanelCandidate {
+  id             String     @id @default(uuid())
+  offer_panel_id String
+  candidate_id   String
+  createdAt      DateTime   @default(now())
+
+  offerPanel OfferPanel @relation(fields: [offer_panel_id], references: [id], onDelete: Cascade)
+  candidate  Candidate  @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
+
+  @@unique([offer_panel_id, candidate_id], name: "idx_offer_panel_candidates_unique")
+  @@index([offer_panel_id], map: "idx_offer_panel_candidates_panel_id")
+  @@index([candidate_id],   map: "idx_offer_panel_candidates_candidate_id")
 }

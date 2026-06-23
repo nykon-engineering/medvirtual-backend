@@ -58,6 +58,12 @@ const mockPrisma = {
     createMany: jest.fn(),
     deleteMany: jest.fn(),
   },
+  hireRequest: {
+    findUnique: jest.fn(),
+  },
+  panelCandidate: {
+    count: jest.fn(),
+  },
   $transaction: jest.fn(),
 };
 
@@ -246,11 +252,13 @@ describe('CandidatesService', () => {
               hireRequest: {
                 id: 'hr-1',
                 title: 'Hire Request 1',
+                status: 'interview_scheduled',
                 organization: { id: 'org-1', name: 'Org 1' },
               },
             },
           },
         ],
+        existingInOtherClientPanel: true,
       };
 
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
@@ -354,6 +362,7 @@ describe('CandidatesService', () => {
                     select: {
                       id: true,
                       title: true,
+                      status: true,
                       organization: {
                         select: {
                           id: true,
@@ -863,15 +872,19 @@ describe('CandidatesService', () => {
       pipeline_status_origin: '261075105',
     };
 
-    const setupTransaction = (
-      remainingCount: number,
+    /** Sets up the outer panelCandidate.count mock (pre-removal check) and
+     *  the $transaction mock for the actual deletion path. */
+    const setupScenario = (
+      currentCount: number,
+      hireRequestStatus: string,
       otherPanels: { id: string }[] = [],
     ) => {
+      mockPrisma.hireRequest.findUnique.mockResolvedValue({ status: hireRequestStatus });
+      mockPrisma.panelCandidate.count.mockResolvedValue(currentCount);
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         const tx = {
           panelCandidate: {
             deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
-            count: jest.fn().mockResolvedValue(remainingCount),
             findMany: jest.fn().mockResolvedValue(otherPanels),
           },
           candidate: {
@@ -905,66 +918,100 @@ describe('CandidatesService', () => {
       await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(NotFoundException);
     });
 
-    it('should restore pipeline status and update HubSpot when panel still has candidates and no other critical panels', async () => {
+    it('should throw NotFoundException if hire request does not exist', async () => {
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
-      setupTransaction(1, []); // panel still has 1 candidate, no other critical panels
+      mockPrisma.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when removing last candidate from panel_ready hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'panel_ready');
+
+      await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when removing last candidate from interview_scheduled hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'interview_scheduled');
+
+      await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return shouldPromptCancel=true when removing last candidate from sourcing hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'sourcing');
 
       const result = await service.removeCandidate(mockRemoveData, mockUser);
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ success: true, shouldPromptCancel: true });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(hubspotMock.updateOneCandidateFromHireRequest).not.toHaveBeenCalled();
+    });
+
+    it('should return shouldPromptCancel=true when removing last candidate from new hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'new');
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: true, shouldPromptCancel: true });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should remove candidate and update HubSpot when panel still has multiple candidates', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(3, 'sourcing', []); // 3 candidates, no critical other panels
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: true, shouldPromptCancel: false });
       expect(HireRequestMock.updateStatus).not.toHaveBeenCalled();
       expect(hubspotMock.updateOneCandidateFromHireRequest).toHaveBeenCalledWith(
         mockCandidateRecord.hubspot_id,
         mockCandidateRecord.pipeline_status_origin,
         mockUser.id,
+        undefined,
+        expect.stringContaining(mockRemoveData.hireRequestId),
       );
     });
 
-    it('should use Available Candidates status when pipeline_status_origin is null', async () => {
+    it('should use Available Candidates pipeline status when pipeline_status_origin is null', async () => {
       mockPrisma.candidate.findUnique.mockResolvedValue({ hubspot_id: 'hs-1', pipeline_status_origin: null });
-      setupTransaction(1, []);
+      setupScenario(2, 'sourcing', []);
 
       const result = await service.removeCandidate(mockRemoveData, mockUser);
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ success: true, shouldPromptCancel: false });
       expect(hubspotMock.updateOneCandidateFromHireRequest).toHaveBeenCalledWith(
         'hs-1',
         expect.any(String),
         mockUser.id,
+        undefined,
+        expect.any(String),
       );
     });
 
     it('should NOT update HubSpot if candidate is in another panel with selected_by_client or blocked', async () => {
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
-      setupTransaction(1, [{ id: 'other-panel-candidate-1' }]); // another critical panel exists
+      setupScenario(2, 'sourcing', [{ id: 'other-panel-candidate-1' }]);
 
       const result = await service.removeCandidate(mockRemoveData, mockUser);
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ success: true, shouldPromptCancel: false });
       expect(hubspotMock.updateOneCandidateFromHireRequest).not.toHaveBeenCalled();
     });
 
-    it('should cancel hire request when no candidates remain in panel', async () => {
+    it('should return { success: false } when an unexpected error occurs during transaction', async () => {
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
-      setupTransaction(0, []); // panel is now empty
-
-      const result = await service.removeCandidate(mockRemoveData, mockUser);
-
-      expect(result).toBe(true);
-      expect(HireRequestMock.updateStatus).toHaveBeenCalledWith(
-        mockRemoveData.hireRequestId,
-        { status: 'cancelled' },
-        mockUser,
-      );
-    });
-
-    it('should return false when an unexpected error occurs', async () => {
-      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      mockPrisma.hireRequest.findUnique.mockResolvedValue({ status: 'sourcing' });
+      mockPrisma.panelCandidate.count.mockResolvedValue(2);
       mockPrisma.$transaction.mockRejectedValue(new Error('DB failure'));
 
       const result = await service.removeCandidate(mockRemoveData, mockUser);
 
-      expect(result).toBe(false);
+      expect(result).toEqual({ success: false, shouldPromptCancel: false });
     });
   });
 

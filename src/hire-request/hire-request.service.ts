@@ -34,6 +34,7 @@ import {
   findHourlyPerRate,
 } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { OfferPanelsService } from '../offer-panels/offer-panels.service';
 import {
   changeLabelAvailability,
   mapHRTicketToDb,
@@ -52,6 +53,8 @@ export class HireRequestService {
     private readonly notifications: NotificationsService,
     private readonly openai: OpenaiService,
     private readonly positionRateConfigService: PositionRateConfigService,
+    @Inject(forwardRef(() => OfferPanelsService))
+    private readonly offerPanelsService: OfferPanelsService,
   ) {}
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split('T');
@@ -572,7 +575,17 @@ export class HireRequestService {
     //this code was updated for the switch above
     // baseWhere = user.role.includes('organization') ? { organization: { id: user.organization_id } } : {};
     const searchWhere = search
-      ? { title: { contains: search, mode: 'insensitive' as const } }
+      ? {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' as const } },
+            {
+              hubspot_ticket_id: {
+                contains: search,
+                mode: 'insensitive' as const,
+              },
+            },
+          ],
+        }
       : {};
 
     // Add business unit filter if provided
@@ -4063,10 +4076,15 @@ export class HireRequestService {
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
 
     //check if panel exists
-    const panelExists = await this.prisma.candidatePanel.findFirst({
-      where: {
-        hire_request_id: hireRequest.id,
-      },
+    const panelId = await this.prisma.candidatePanel.findFirst({
+      where: { hire_request_id: hireRequest.id },
+      select: { id: true },
+    });
+    if (!panelId)
+      throw new NotFoundException(`Panel for this hire request not found`);
+
+    const panelExists = await this.prisma.candidatePanel.findUnique({
+      where: { id: panelId.id },
       select: {
         id: true,
         panelCandidates: {
@@ -4075,7 +4093,12 @@ export class HireRequestService {
               select: {
                 id: true,
                 pipeline_status: true,
-                panelCandidates: { select: { status: true } },
+                // Only check other panels — a candidate selected on THIS panel
+                // is the winner being replaced, not a blocker.
+                panelCandidates: {
+                  where: { panel_id: { not: panelId.id } },
+                  select: { status: true },
+                },
               },
             },
           },
@@ -4239,6 +4262,9 @@ export class HireRequestService {
             user?.id,
             undefined,
             `Hire request ${hireRequest.id} — candidate selected as winner and set to Endorsed via Platform`,
+          );
+          await this.offerPanelsService.removeCandidateFromAllPanels(
+            c.candidate_id,
           );
         }),
       );

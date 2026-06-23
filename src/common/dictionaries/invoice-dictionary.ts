@@ -7,6 +7,7 @@ export const invoiceToDbDictionary: Record<string, string> = {
   hs_pdf_download_link: 'hubspot_pdf_link',
   hs_payment_date: 'paid_at',
   hs_due_date: 'due_date',
+  hs_number: 'invoice_number',
 };
 
 export const dbToInvoiceDictionary: Record<string, string> = Object.fromEntries(

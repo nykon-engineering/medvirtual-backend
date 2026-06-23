@@ -42,6 +42,7 @@ export const PAYOUT_REQUEST_SELECT = {
               id: true,
               invoice_amount: true,
               invoice_status: true,
+              invoice_number: true,
             },
           },
         },
@@ -165,6 +166,8 @@ export function shapeAdminRequest(raw: any, allRequestedIds?: Set<string>) {
       invoice_amount: parseFloat(
         String(c.commission.hubspotInvoiceSnapshot?.invoice_amount ?? '0'),
       ),
+      invoice_number:
+        c.commission.hubspotInvoiceSnapshot?.invoice_number ?? null,
       created_at: c.commission.createdAt ?? null,
     })),
     requested_amount: parseFloat(raw.requested_amount ?? '0'),

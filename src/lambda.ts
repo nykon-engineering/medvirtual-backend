@@ -32,6 +32,7 @@ async function bootstrapServer(): Promise<any> {
       'http://localhost:3000',
       'https://med-alliance.d2odvfjc5yqdaj.amplifyapp.com',
       'https://med-alliance-improved.d2odvfjc5yqdaj.amplifyapp.com',
+      'https://audit-logs.d2odvfjc5yqdaj.amplifyapp.com',
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,

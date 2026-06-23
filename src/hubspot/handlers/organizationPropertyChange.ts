@@ -70,7 +70,9 @@ export class HandlerOrganizationPropertyChange {
     }
 
     if (fieldUpdated === 'deployment_date') {
-      value = event.propertyValue ? new Date(Number(event.propertyValue)) : null;
+      value = event.propertyValue
+        ? new Date(Number(event.propertyValue))
+        : null;
     }
 
     if (event.propertyName === 'hubspot_owner_id') {
@@ -149,12 +151,12 @@ export class HandlerOrganizationPropertyChange {
             },
           });
         } else if (now.getTime() - deployDate.getTime() >= THIRTY_DAYS_MS) {
-          // 30+ days ago: deployed + eligible
+          // 30+ days ago: deployed + pending_confirmation (admin must confirm)
           await this.prisma.organization.update({
             where: { id: organization.id },
             data: {
               referral_stage: 'deployed' as any,
-              med_alliance_referral_status: 'eligible',
+              med_alliance_referral_status: 'pending_confirmation' as any,
               eligibility_start_at: eligibilityStartAt,
               med_alliance_block_reason: null,
             },
@@ -176,11 +178,11 @@ export class HandlerOrganizationPropertyChange {
           data: {
             entity_type: 'referred_company',
             entity_id: organization.id,
-            event: 'stage_changed',
+            event: 'eligibility_pending_confirmation',
             old_status: null,
-            new_status: null,
+            new_status: 'pending_confirmation',
             reason:
-              'deployment_date synced from HubSpot deploy_date_of_first_va',
+              'deployment_date synced from HubSpot deploy_date_of_first_va — 30+ days elapsed',
             source: 'sync',
             actor_user_id: null,
             metadata: {

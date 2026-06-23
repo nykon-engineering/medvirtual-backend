@@ -56,12 +56,12 @@ export function payoutProcessingTemplate(
         </div>
         <div class="greeting">Hi ${payload.firstName},</div>
         <div class="main-message">
-          <p>Your payout is being processed.</p>
+          <p>We've received your payout request and it's currently being processed. You'll receive a confirmation once the payment is on its way.</p>
           <div class="highlight-box">
             <div class="amount">$${payload.totalAmount.toFixed(2)}</div>
-            <div class="detail">Processed on ${processedDate}</div>
+            <div class="detail">Request submitted on ${processedDate}</div>
           </div>
-          <p>You can view your full payout history in your partner dashboard.</p>
+          <p>In the meantime, you can track the status of all your payouts in your partner dashboard.</p>
         </div>
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">View My Payouts</a>
