@@ -515,6 +515,12 @@ export class UserService {
         throw new NotFoundException(`User not found`);
       }
 
+      if (userData.status === 'active' && currentUser.verified === false) {
+        throw new BadRequestException(
+          'Cannot activate a user who has not completed email verification.',
+        );
+      }
+
       //verify user to update status
       if (
         userData.job_title &&
