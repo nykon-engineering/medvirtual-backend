@@ -419,6 +419,53 @@ export class AffiliatesService {
     return this.findOneEnriched(id);
   }
 
+  async reInviteAffiliateUser(affiliateId: string, adminUserId: string): Promise<string> {
+    const affiliate = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateId },
+      include: { user: true },
+    });
+    if (!affiliate) throw new NotFoundException('Affiliate profile not found');
+    if (!affiliate.user_id || !affiliate.user)
+      throw new BadRequestException('Affiliate has no connected user');
+
+    const user = affiliate.user;
+    const code = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: '48h',
+    });
+    const emailTheme = await getUserEmailTheme(this.prisma, adminUserId);
+    const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
+
+    const mailSent = await this.mailService.sendMail({
+      from: this.buildFromWithPrefix(
+        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      ),
+      to: user.email,
+      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
+      html: MedAllianceInviteSignup(
+        inviteLink,
+        emailTheme || undefined,
+        user.first_name,
+      ),
+    });
+    if (!mailSent)
+      throw new BadRequestException('Failed to send re-invitation email');
+
+    await this.prisma.emailInvitation.create({
+      data: {
+        userId: user.id,
+        email_from: user.email,
+        code,
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      },
+    });
+
+    return `Re-invitation sent successfully to ${user.email}`;
+  }
+
   async findByUserId(userId: string) {
     return this.prisma.affiliateProfile.findUnique({
       where: { user_id: userId },
