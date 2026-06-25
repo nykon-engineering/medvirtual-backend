@@ -9,6 +9,7 @@ import { MailService } from '../mail/mail.service';
 import { UpdateEmailTemplateDto } from './dto/update-email-template.dto';
 import { PreviewEmailTemplateDto } from './dto/preview-email-template.dto';
 import { TestSendEmailTemplateDto } from './dto/test-send-email-template.dto';
+import { EmailTheme } from '../common/utils/email-templates/theme';
 
 // Sample data used when filling placeholders for preview / test-send
 const SAMPLE_DATA: Record<string, string> = {
@@ -49,6 +50,40 @@ export class EmailTemplatesService {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
   ) {}
+
+  // ── getTemplateContent (used by other services) ───────────────────────────
+  // Returns { subject, html } resolved from the DB, falling back to the
+  // original hardcoded template function when the DB record is missing.
+
+  async getTemplateContent(
+    key: string,
+    runtimeValues: Record<string, string>,
+    theme: EmailTheme,
+    businessUnit?: string | null,
+  ): Promise<{ subject: string; html: string }> {
+    const dbTemplate = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: businessUnit ?? null, is_active: true },
+    });
+
+    if (!dbTemplate) {
+      return null as unknown as { subject: string; html: string };
+    }
+
+    const subject = this.applyPlaceholders(dbTemplate.subject, runtimeValues);
+    const html = this.renderHtml(
+      dbTemplate.body,
+      dbTemplate.headline ?? '',
+      {
+        primaryColor: theme.primaryColor,
+        primaryColorHover: theme.primaryColorHover,
+        companyName: theme.companyName,
+        logoUrl: theme.logoUrl,
+      },
+      runtimeValues,
+    );
+
+    return { subject, html };
+  }
 
   // ── List ──────────────────────────────────────────────────────────────────
 
@@ -352,9 +387,10 @@ export class EmailTemplatesService {
     body: string,
     headline: string,
     branding: { primaryColor: string; primaryColorHover: string; companyName: string; logoUrl?: string },
+    overrides?: Record<string, string>,
   ): string {
-    const filledBody = this.applyPlaceholders(body);
-    const filledHeadline = this.applyPlaceholders(headline);
+    const filledBody = this.applyPlaceholders(body, overrides);
+    const filledHeadline = this.applyPlaceholders(headline, overrides);
     const logoUrl =
       branding.logoUrl ??
       `https://staging.medvirtual.ai/${branding.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
