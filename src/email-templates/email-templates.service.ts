@@ -1,0 +1,432 @@
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
+import { UpdateEmailTemplateDto } from './dto/update-email-template.dto';
+import { PreviewEmailTemplateDto } from './dto/preview-email-template.dto';
+import { TestSendEmailTemplateDto } from './dto/test-send-email-template.dto';
+
+// Sample data used when filling placeholders for preview / test-send
+const SAMPLE_DATA: Record<string, string> = {
+  '{{inviteLink}}': 'https://app.medvirtual.ai/invite/sample-token',
+  '{{resetLink}}': 'https://app.medvirtual.ai/reset/sample-token',
+  '{{verificationCode}}': '482951',
+  '{{verificationUrl}}': 'https://app.medvirtual.ai/verify/sample-token',
+  '{{userName}}': 'Jane Smith',
+  '{{companyName}}': 'MedVirtual',
+  '{{organizationName}}': 'Bright Dental Clinic',
+  '{{partnerName}}': 'Allied Health Partners',
+  '{{positionCount}}': '3',
+  '{{platformUrl}}': 'https://app.medvirtual.ai',
+  '{{reportUrl}}': 'https://app.medvirtual.ai/reports/sample',
+  '{{quarter}}': 'Q1',
+  '{{year}}': '2026',
+  '{{totalEarnings}}': '$1,250.00',
+  '{{paidOut}}': '$900.00',
+  '{{pendingAmount}}': '$350.00',
+  '{{date}}': new Date().toLocaleDateString('en-US'),
+  '{{userList}}': '- john@example.com\n- mary@example.com',
+  '{{companiesList}}': '- Bright Dental Clinic\n- Sunrise Medical',
+  '{{reportContent}}': 'Active staff: 42 | Open requests: 8 | Tickets: 3',
+  '{{jobName}}': 'daily-sync',
+  '{{errorTime}}': new Date().toISOString(),
+  '{{errorMessage}}': 'Connection timeout after 30s',
+  '{{operationName}}': 'upload-candidate-document',
+  '{{accountEmail}}': 'integration@medvirtual.ai',
+  '{{currentUsage}}': '95%',
+  '{{quotaLimit}}': '100%',
+};
+
+@Injectable()
+export class EmailTemplatesService {
+  private readonly logger = new Logger(EmailTemplatesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
+
+  // ── List ──────────────────────────────────────────────────────────────────
+
+  async findAll(page = 1, perPage = 25, search = '', businessUnit?: string) {
+    const skip = (page - 1) * perPage;
+
+    const where: Record<string, unknown> = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { key: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (businessUnit !== undefined) {
+      where.business_unit = businessUnit === 'global' ? null : businessUnit;
+    }
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.emailTemplate.findMany({
+        where,
+        orderBy: { key: 'asc' },
+        skip,
+        take: perPage,
+        select: {
+          id: true,
+          key: true,
+          name: true,
+          description: true,
+          subject: true,
+          headline: true,
+          button_label: true,
+          business_unit: true,
+          is_active: true,
+          placeholders: true,
+          updated_at: true,
+          updated_by: true,
+        },
+      }),
+      this.prisma.emailTemplate.count({ where }),
+    ]);
+
+    return {
+      status: 200,
+      data,
+      meta: { total, page, perPage, totalPages: Math.ceil(total / perPage) },
+    };
+  }
+
+  // ── Detail ────────────────────────────────────────────────────────────────
+
+  async findOne(key: string, businessUnit?: string) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: businessUnit ?? null },
+    });
+    if (!template) throw new NotFoundException(`Template "${key}" not found`);
+    return { status: 200, data: template };
+  }
+
+  // ── Update (wording) ──────────────────────────────────────────────────────
+
+  async update(
+    key: string,
+    dto: UpdateEmailTemplateDto,
+    userId: string,
+    businessUnit?: string,
+  ) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: businessUnit ?? null },
+    });
+    if (!template) throw new NotFoundException(`Template "${key}" not found`);
+
+    this.validatePlaceholders(dto.body, template.placeholders as string[]);
+
+    // Snapshot current state into history before overwriting
+    await this.prisma.emailTemplateHistory.create({
+      data: {
+        template_id: template.id,
+        subject: template.subject,
+        headline: template.headline ?? '',
+        body: template.body,
+        button_label: template.button_label ?? '',
+        changed_by: userId,
+        reason: dto.reason ?? 'Manual edit',
+      },
+    });
+
+    const updated = await this.prisma.emailTemplate.update({
+      where: { id: template.id },
+      data: {
+        subject: dto.subject,
+        headline: dto.headline ?? template.headline,
+        body: dto.body,
+        button_label: dto.button_label ?? template.button_label,
+        updated_by: userId,
+      },
+    });
+
+    // Fire-and-forget sync to peer environment
+    this.syncToPeer(key, updated, userId).catch((err) =>
+      this.logger.error(`Sync to peer failed for template "${key}": ${err.message}`),
+    );
+
+    return { status: 200, data: updated };
+  }
+
+  // ── History ───────────────────────────────────────────────────────────────
+
+  async getHistory(key: string, businessUnit?: string) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: businessUnit ?? null },
+      select: { id: true },
+    });
+    if (!template) throw new NotFoundException(`Template "${key}" not found`);
+
+    const history = await this.prisma.emailTemplateHistory.findMany({
+      where: { template_id: template.id },
+      orderBy: { changed_at: 'desc' },
+      take: 50,
+    });
+
+    return { status: 200, data: history };
+  }
+
+  // ── Rollback ──────────────────────────────────────────────────────────────
+
+  async rollback(key: string, historyId: string, userId: string, businessUnit?: string) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: businessUnit ?? null },
+    });
+    if (!template) throw new NotFoundException(`Template "${key}" not found`);
+
+    const snapshot = await this.prisma.emailTemplateHistory.findUnique({
+      where: { id: historyId },
+    });
+    if (!snapshot || snapshot.template_id !== template.id) {
+      throw new NotFoundException('History entry not found for this template');
+    }
+
+    // Save current state to history before rolling back
+    await this.prisma.emailTemplateHistory.create({
+      data: {
+        template_id: template.id,
+        subject: template.subject,
+        headline: template.headline ?? '',
+        body: template.body,
+        button_label: template.button_label ?? '',
+        changed_by: userId,
+        reason: `Rollback to version from ${snapshot.changed_at.toISOString()}`,
+      },
+    });
+
+    const updated = await this.prisma.emailTemplate.update({
+      where: { id: template.id },
+      data: {
+        subject: snapshot.subject,
+        headline: snapshot.headline,
+        body: snapshot.body,
+        button_label: snapshot.button_label,
+        updated_by: userId,
+      },
+    });
+
+    // Sync rollback to peer as well
+    this.syncToPeer(key, updated, userId).catch((err) =>
+      this.logger.error(`Sync to peer failed for rollback "${key}": ${err.message}`),
+    );
+
+    return { status: 200, data: updated };
+  }
+
+  // ── Preview ───────────────────────────────────────────────────────────────
+
+  async preview(key: string, dto: PreviewEmailTemplateDto, businessUnit?: string) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: businessUnit ?? null },
+    });
+    if (!template) throw new NotFoundException(`Template "${key}" not found`);
+
+    const body = dto.body ?? template.body;
+    const subject = dto.subject ?? template.subject;
+    const buSlug = dto.business_unit ?? businessUnit ?? null;
+
+    const branding = await this.resolveBranding(buSlug);
+    const html = this.renderHtml(body, template.headline ?? '', branding);
+    const renderedSubject = this.applyPlaceholders(subject);
+
+    return { status: 200, data: { subject: renderedSubject, html } };
+  }
+
+  // ── Test Send ─────────────────────────────────────────────────────────────
+
+  async testSend(
+    key: string,
+    dto: TestSendEmailTemplateDto,
+    userId: string,
+    userEmail: string,
+    businessUnit?: string,
+  ) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: businessUnit ?? null },
+    });
+    if (!template) throw new NotFoundException(`Template "${key}" not found`);
+
+    const buSlug = dto.business_unit ?? businessUnit ?? null;
+    const branding = await this.resolveBranding(buSlug);
+    const html = this.renderHtml(template.body, template.headline ?? '', branding);
+    const subject = this.applyPlaceholders(template.subject);
+
+    await this.mail.sendMail({
+      from: `${branding.companyName} <noreply@medvirtual.ai>`,
+      to: userEmail,
+      subject: `[TEST] ${subject}`,
+      html,
+    });
+
+    this.logger.log(`Test email sent for template "${key}" to ${userEmail} by user ${userId}`);
+    return { status: 200, message: `Test email sent to ${userEmail}` };
+  }
+
+  // ── Sync receiver (called by peer environment) ────────────────────────────
+
+  async receiveSyncFromPeer(
+    key: string,
+    payload: { subject: string; headline?: string; body: string; button_label?: string },
+    originEnv: string,
+  ) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: null },
+    });
+    if (!template) {
+      this.logger.warn(`Sync received for unknown template "${key}" — ignored`);
+      return;
+    }
+
+    await this.prisma.emailTemplateHistory.create({
+      data: {
+        template_id: template.id,
+        subject: template.subject,
+        headline: template.headline ?? '',
+        body: template.body,
+        button_label: template.button_label ?? '',
+        changed_by: 'sync',
+        reason: `Auto-sync from ${originEnv}`,
+      },
+    });
+
+    await this.prisma.emailTemplate.update({
+      where: { id: template.id },
+      data: {
+        subject: payload.subject,
+        headline: payload.headline ?? template.headline,
+        body: payload.body,
+        button_label: payload.button_label ?? template.button_label,
+        updated_by: 'sync',
+      },
+    });
+
+    this.logger.log(`Template "${key}" synced from ${originEnv}`);
+  }
+
+  // ── Internal helpers ──────────────────────────────────────────────────────
+
+  validatePlaceholders(body: string, allowedPlaceholders: string[]) {
+    const used = body.match(/\{\{[^}]+\}\}/g) ?? [];
+    const invalid = used.filter((p) => !allowedPlaceholders.includes(p));
+    if (invalid.length > 0) {
+      throw new BadRequestException(
+        `Invalid placeholder(s): ${invalid.join(', ')}. Allowed: ${allowedPlaceholders.join(', ')}`,
+      );
+    }
+  }
+
+  applyPlaceholders(text: string, overrides?: Record<string, string>): string {
+    const data = { ...SAMPLE_DATA, ...overrides };
+    return text.replace(/\{\{[^}]+\}\}/g, (match) => data[match] ?? match);
+  }
+
+  private async resolveBranding(buSlug: string | null) {
+    if (buSlug) {
+      const branding = await this.prisma.emailBranding.findUnique({
+        where: { business_unit: buSlug },
+      });
+      if (branding) {
+        return {
+          primaryColor: branding.primary_color,
+          primaryColorHover: branding.secondary_color ?? '#013A4F',
+          companyName: branding.company_name,
+          logoUrl: branding.logo_url ?? undefined,
+        };
+      }
+    }
+    return {
+      primaryColor: '#01546B',
+      primaryColorHover: '#013A4F',
+      companyName: 'MedVirtual',
+      logoUrl: undefined,
+    };
+  }
+
+  private renderHtml(
+    body: string,
+    headline: string,
+    branding: { primaryColor: string; primaryColorHover: string; companyName: string; logoUrl?: string },
+  ): string {
+    const filledBody = this.applyPlaceholders(body);
+    const filledHeadline = this.applyPlaceholders(headline);
+    const logoUrl =
+      branding.logoUrl ??
+      `https://staging.medvirtual.ai/${branding.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
+
+    // Convert newlines to <br> for HTML rendering
+    const htmlBody = filledBody.replace(/\n/g, '<br>');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${filledHeadline || branding.companyName}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+    .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .content { padding: 40px 30px; }
+    .logo { text-align: left; margin-bottom: 30px; }
+    .logo img { max-width: 200px; height: auto; }
+    .headline { color: #333333; font-size: 22px; font-weight: 700; margin-bottom: 20px; }
+    .body-text { color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px; }
+    .footer { border-top: 1px solid #e9ecef; padding: 20px 30px; margin-top: 30px; }
+    .footer p { color: #666666; font-size: 13px; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="email-wrapper">
+    <div class="container">
+      <div style="background:${branding.primaryColor};padding:30px 20px;text-align:center;">
+        <img src="${logoUrl}" alt="${branding.companyName} Logo" style="max-width:200px;height:auto;" />
+      </div>
+      <div class="content">
+        ${filledHeadline ? `<div class="headline">${filledHeadline}</div>` : ''}
+        <div class="body-text">${htmlBody}</div>
+      </div>
+      <div class="footer">
+        <p>${branding.companyName} &copy; ${new Date().getFullYear()}. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  private async syncToPeer(
+    key: string,
+    template: { subject: string; headline?: string | null; body: string; button_label?: string | null },
+    userId: string,
+  ) {
+    const peerUrl = process.env.PEER_ENV_API_URL;
+    const secret = process.env.INTER_ENV_SYNC_SECRET;
+    const currentEnv = process.env.ENVIRONMENT ?? 'DEV';
+
+    if (!peerUrl || !secret) return;
+
+    await fetch(`${peerUrl}/email-templates/${key}/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Sync-Secret': secret,
+        'X-Sync-Origin': currentEnv,
+        'X-Sync-By': userId,
+      },
+      body: JSON.stringify({
+        subject: template.subject,
+        headline: template.headline,
+        body: template.body,
+        button_label: template.button_label,
+      }),
+    });
+
+    this.logger.log(`Template "${key}" synced to peer (${peerUrl})`);
+  }
+}
