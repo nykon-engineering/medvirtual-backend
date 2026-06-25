@@ -1151,6 +1151,13 @@ export class HireRequestService {
       case 'organization_admin':
         baseWhere = {
           organization: { id: user.organization_id },
+          //this condition is to avoid showing hire requests that have a cancellation ticket that is not resolved yet
+          tickets: {
+            none: {
+              type: 'hire_request_cancellation',
+              status: { not: 'resolved' },
+            },
+          },
           OR: [
             {
               status: {
@@ -1186,6 +1193,13 @@ export class HireRequestService {
       case 'system_admin':
         baseWhere = {
           status: { in: ['sourcing', 'for_review'] },
+          //this condition is to avoid showing hire requests that have a cancellation ticket that is not resolved yet
+          tickets: {
+            none: {
+              type: 'hire_request_cancellation',
+              status: { not: 'resolved' },
+            },
+          },
         };
         break;
     }
