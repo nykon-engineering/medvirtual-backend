@@ -384,25 +384,15 @@ describe('AllianceNotificationsService', () => {
   // ---------------------------------------------------------------------------
 
   describe('buildFrom (via email from field)', () => {
-    it('prefixes [DEV] when not in production', async () => {
-      process.env.ENVIRONMENT = 'DEV';
+    it('passes from without [DEV] prefix to MailService (prefix is applied by MailService)', async () => {
       await service.notifyCommissionEligible(affiliate, {
         organizationName: 'Org',
         commissionAmount: 10,
         commissionPercent: 5,
       });
       const call = mockMail.sendMail.mock.calls[0][0];
-      expect(call.from).toContain('[DEV]');
-    });
-
-    it('does not prefix [DEV] in production', async () => {
-      process.env.ENVIRONMENT = 'PROD';
-      await service.notifyCommissionEligible(affiliate, {
-        organizationName: 'Org',
-        commissionAmount: 10,
-        commissionPercent: 5,
-      });
-      const call = mockMail.sendMail.mock.calls[0][0];
+      expect(call.from).toContain('MedVirtual');
+      expect(call.from).toContain('noreply@medvirtual.ai');
       expect(call.from).not.toContain('[DEV]');
     });
   });
