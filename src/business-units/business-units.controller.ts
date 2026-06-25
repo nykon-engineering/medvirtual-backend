@@ -3,10 +3,13 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
+  HttpCode,
   Param,
   Post,
   Put,
   Request,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -98,5 +101,32 @@ export class BusinessUnitsController {
   @ApiResponse({ status: 200 })
   getBrandingHistory(@Param('slug') slug: string) {
     return this.service.getBrandingHistory(slug);
+  }
+
+  // ── Sync receiver (internal — peer environment only) ──────────────────────
+
+  @Post(':slug/branding/sync')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Receive a branding sync from the peer environment (internal)' })
+  @ApiParam({ name: 'slug', description: 'Business unit slug' })
+  @ApiResponse({ status: 200, description: 'Sync applied' })
+  @ApiResponse({ status: 401, description: 'Invalid sync secret' })
+  async receiveBrandingSync(
+    @Param('slug') slug: string,
+    @Body() body: {
+      primary_color?: string;
+      secondary_color?: string;
+      logo_url?: string;
+      company_name?: string;
+      layout_preset?: string;
+    },
+    @Headers('x-sync-secret') secret: string,
+    @Headers('x-sync-origin') origin: string,
+  ) {
+    if (!secret || secret !== process.env.INTER_ENV_SYNC_SECRET) {
+      throw new UnauthorizedException('Invalid sync secret');
+    }
+    await this.service.receiveBrandingSyncFromPeer(slug, body, origin ?? 'unknown');
+    return { status: 200, message: 'Branding sync applied' };
   }
 }

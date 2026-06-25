@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,6 +11,8 @@ import { UpdateBrandingDto } from './dto/update-branding.dto';
 
 @Injectable()
 export class BusinessUnitsService {
+  private readonly logger = new Logger(BusinessUnitsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ── List ──────────────────────────────────────────────────────────────────
@@ -131,6 +134,11 @@ export class BusinessUnitsService {
       },
     });
 
+    // Fire-and-forget sync to peer environment
+    this.syncBrandingToPeer(slug, updated, userId).catch((err) =>
+      this.logger.error(`Branding sync to peer failed for "${slug}": ${err.message}`),
+    );
+
     return { status: 200, data: updated };
   }
 
@@ -150,6 +158,93 @@ export class BusinessUnitsService {
     });
 
     return { status: 200, data: history };
+  }
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+
+  async receiveBrandingSyncFromPeer(
+    slug: string,
+    payload: {
+      primary_color?: string;
+      secondary_color?: string;
+      logo_url?: string;
+      company_name?: string;
+      layout_preset?: string;
+    },
+    originEnv: string,
+  ) {
+    const branding = await this.prisma.emailBranding.findUnique({
+      where: { business_unit: slug },
+    });
+    if (!branding) {
+      this.logger.warn(`Branding sync received for unknown BU "${slug}" — ignored`);
+      return;
+    }
+
+    await this.prisma.emailBrandingHistory.create({
+      data: {
+        branding_id: branding.id,
+        snapshot: {
+          primary_color: branding.primary_color,
+          secondary_color: branding.secondary_color,
+          logo_url: branding.logo_url,
+          company_name: branding.company_name,
+          layout_preset: branding.layout_preset,
+        },
+        changed_by: 'sync',
+      },
+    });
+
+    await this.prisma.emailBranding.update({
+      where: { business_unit: slug },
+      data: {
+        ...(payload.primary_color !== undefined && { primary_color: payload.primary_color }),
+        ...(payload.secondary_color !== undefined && { secondary_color: payload.secondary_color }),
+        ...(payload.logo_url !== undefined && { logo_url: payload.logo_url }),
+        ...(payload.company_name !== undefined && { company_name: payload.company_name }),
+        ...(payload.layout_preset !== undefined && { layout_preset: payload.layout_preset }),
+        updated_by: 'sync',
+      },
+    });
+
+    this.logger.log(`Branding for "${slug}" synced from ${originEnv}`);
+  }
+
+  private async syncBrandingToPeer(
+    slug: string,
+    branding: {
+      primary_color: string;
+      secondary_color?: string | null;
+      logo_url?: string | null;
+      company_name: string;
+      layout_preset: string;
+    },
+    userId: string,
+  ) {
+    const peerUrl = process.env.PEER_ENV_API_URL;
+    const secret = process.env.INTER_ENV_SYNC_SECRET;
+    const currentEnv = process.env.ENVIRONMENT ?? 'DEV';
+
+    if (!peerUrl || !secret) return;
+
+    await fetch(`${peerUrl}/business-units/${slug}/branding/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Sync-Secret': secret,
+        'X-Sync-Origin': currentEnv,
+        'X-Sync-By': userId,
+      },
+      body: JSON.stringify({
+        primary_color: branding.primary_color,
+        secondary_color: branding.secondary_color,
+        logo_url: branding.logo_url,
+        company_name: branding.company_name,
+        layout_preset: branding.layout_preset,
+      }),
+    });
+
+    this.logger.log(`Branding for "${slug}" synced to peer (${peerUrl})`);
   }
 
   // ── Internal ──────────────────────────────────────────────────────────────

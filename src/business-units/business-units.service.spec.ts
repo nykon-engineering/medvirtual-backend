@@ -231,6 +231,113 @@ describe('BusinessUnitsService.updateBranding', () => {
   });
 });
 
+// ── sync bidirecional ──────────────────────────────────────────────────────────
+
+describe('BusinessUnitsService — sync bidirecional', () => {
+  const updatedBranding = { ...BRANDING, primary_color: '#FF0000' };
+
+  afterEach(() => {
+    delete process.env.PEER_ENV_API_URL;
+    delete process.env.INTER_ENV_SYNC_SECRET;
+  });
+
+  it('calls syncBrandingToPeer after updateBranding when env vars are set', async () => {
+    const mockFetch = jest.fn().mockResolvedValue({ ok: true });
+    global.fetch = mockFetch;
+    process.env.PEER_ENV_API_URL = 'https://peer.example.com';
+    process.env.INTER_ENV_SYNC_SECRET = 'secret123';
+
+    const prisma = makePrisma({
+      emailBranding: {
+        findUnique: jest.fn().mockResolvedValue(BRANDING),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue(updatedBranding),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma) as BusinessUnitsService;
+
+    await service.updateBranding('medvirtual', { primary_color: '#FF0000' }, 'user-1');
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://peer.example.com/business-units/medvirtual/branding/sync',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-Sync-Secret': 'secret123' }),
+      }),
+    );
+  });
+
+  it('does NOT call fetch when PEER_ENV_API_URL is not set', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch;
+    delete process.env.PEER_ENV_API_URL;
+
+    const { service } = makeService();
+    await service.updateBranding('medvirtual', { primary_color: '#FF0000' }, 'user-1');
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('BusinessUnitsService.receiveBrandingSyncFromPeer', () => {
+  const payload = { primary_color: '#FD7171', company_name: 'Berry Virtual' };
+
+  it('snapshots the current branding with changed_by = "sync"', async () => {
+    const { service, prisma } = makeService();
+    await service.receiveBrandingSyncFromPeer('medvirtual', payload, 'PROD');
+    expect(prisma.emailBrandingHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ changed_by: 'sync' }),
+      }),
+    );
+  });
+
+  it('applies the payload fields to the branding record', async () => {
+    const { service, prisma } = makeService();
+    await service.receiveBrandingSyncFromPeer('medvirtual', payload, 'PROD');
+    expect(prisma.emailBranding.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          primary_color: '#FD7171',
+          company_name: 'Berry Virtual',
+          updated_by: 'sync',
+        }),
+      }),
+    );
+  });
+
+  it('does NOT call syncBrandingToPeer after receiving (anti-loop guarantee)', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch;
+    process.env.PEER_ENV_API_URL = 'https://peer.example.com';
+    process.env.INTER_ENV_SYNC_SECRET = 'secret123';
+
+    const { service } = makeService();
+    await service.receiveBrandingSyncFromPeer('medvirtual', payload, 'PROD');
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    delete process.env.PEER_ENV_API_URL;
+    delete process.env.INTER_ENV_SYNC_SECRET;
+  });
+
+  it('ignores sync for an unknown BU slug without throwing', async () => {
+    const { service } = makeService({
+      emailBranding: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    await expect(
+      service.receiveBrandingSyncFromPeer('ghost', payload, 'PROD'),
+    ).resolves.not.toThrow();
+  });
+});
+
 // ── getBrandingHistory ─────────────────────────────────────────────────────────
 
 describe('BusinessUnitsService.getBrandingHistory', () => {
