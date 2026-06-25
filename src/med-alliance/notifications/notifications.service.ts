@@ -68,9 +68,7 @@ export class AllianceNotificationsService {
 
   private buildFrom(theme?: EmailTheme): string {
     const name = theme?.companyName || 'MedVirtual';
-    const raw = `${name} <noreply@medvirtual.ai>`;
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? raw : `[DEV] ${raw}`;
+    return `${name} <noreply@medvirtual.ai>`;
   }
 
   private getAdminEmails(): string[] {

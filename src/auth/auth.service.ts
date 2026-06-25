@@ -43,10 +43,6 @@ export class AuthService {
     private readonly affiliateUpdateService: AffiliateUpdateService,
   ) {}
 
-  private buildFromWithPrefix(from: string): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? from : `[DEV] ${from}`;
-  }
 
   async signIn(data: AuthSignInDto): Promise<object> {
     const timeToExpires = data.rememberMe
@@ -256,7 +252,7 @@ export class AuthService {
       verificationUrl,
     );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
+      from: 'MedVirtual <noreply@medvirtual.ai>',
       to: data.email,
       subject: 'Verification Code',
       html: emailBody,
@@ -431,7 +427,7 @@ export class AuthService {
       verificationUrl,
     );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
+      from: 'MedVirtual <noreply@medvirtual.ai>',
       to: user.email,
       subject: 'Verify Your MedVirtual Account - Verification Code',
       html: emailBody,
@@ -532,9 +528,7 @@ export class AuthService {
         : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: data.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,
@@ -592,9 +586,7 @@ export class AuthService {
         : baseInviteLink;
     const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: userToReInvite.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
       html: emailBody,

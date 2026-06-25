@@ -46,7 +46,7 @@ describe('MailService', () => {
     });
 
     it('should throw BadRequestException if options are missing required fields', async () => {
-      const invalidOptions = { to: 'user@test.com', subject: 'Test', html: '<p>hi</p>' };
+      const invalidOptions = { to: 'user@test.com', subject: 'Test', html: '<p>hi</p>' } as any;
       await expect(service.sendMail(invalidOptions)).rejects.toThrow('Invalid email options provided');
     });
 
@@ -61,6 +61,7 @@ describe('MailService', () => {
     });
 
     it('should return true when email is sent successfully', async () => {
+      process.env.ENVIRONMENT = 'PROD';
       mockEmailsSend.mockResolvedValueOnce({ data: { id: 'email-123' }, error: null });
       const result = await service.sendMail(validOptions);
       expect(result).toBe(true);
@@ -89,6 +90,59 @@ describe('MailService', () => {
       expect(mockEmailsSend).toHaveBeenCalledWith(
         expect.objectContaining({ tags: customTags }),
       );
+    });
+
+    describe('[DEV] prefix', () => {
+      afterEach(() => {
+        delete process.env.ENVIRONMENT;
+      });
+
+      it('adds [DEV] prefix to from when ENVIRONMENT is not PROD', async () => {
+        process.env.ENVIRONMENT = 'STAGING';
+        mockEmailsSend.mockResolvedValueOnce({ data: { id: 'e1' } });
+
+        await service.sendMail(validOptions);
+
+        expect(mockEmailsSend).toHaveBeenCalledWith(
+          expect.objectContaining({ from: `[DEV] ${validOptions.from}` }),
+        );
+      });
+
+      it('adds [DEV] prefix when ENVIRONMENT is undefined', async () => {
+        delete process.env.ENVIRONMENT;
+        mockEmailsSend.mockResolvedValueOnce({ data: { id: 'e2' } });
+
+        await service.sendMail(validOptions);
+
+        expect(mockEmailsSend).toHaveBeenCalledWith(
+          expect.objectContaining({ from: `[DEV] ${validOptions.from}` }),
+        );
+      });
+
+      it('does NOT add [DEV] prefix when ENVIRONMENT is PROD', async () => {
+        process.env.ENVIRONMENT = 'PROD';
+        mockEmailsSend.mockResolvedValueOnce({ data: { id: 'e3' } });
+
+        await service.sendMail(validOptions);
+
+        expect(mockEmailsSend).toHaveBeenCalledWith(
+          expect.objectContaining({ from: validOptions.from }),
+        );
+      });
+
+      it('preserves custom from value unchanged in PROD', async () => {
+        process.env.ENVIRONMENT = 'PROD';
+        mockEmailsSend.mockResolvedValueOnce({ data: { id: 'e4' } });
+
+        await service.sendMail({
+          ...validOptions,
+          from: 'Berry Virtual <noreply@medvirtual.ai>',
+        });
+
+        expect(mockEmailsSend).toHaveBeenCalledWith(
+          expect.objectContaining({ from: 'Berry Virtual <noreply@medvirtual.ai>' }),
+        );
+      });
     });
   });
 });

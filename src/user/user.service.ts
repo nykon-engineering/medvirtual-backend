@@ -27,10 +27,6 @@ export class UserService {
     private readonly hubspotService: HubspotService,
   ) {}
 
-  private buildFromWithPrefix(from: string): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? from : `[DEV] ${from}`;
-  }
 
   async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
     const { password, ...rest } = userData;
@@ -1066,9 +1062,7 @@ export class UserService {
           : baseInviteLink;
       const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
-        from: this.buildFromWithPrefix(
-          `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-        ),
+        from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
         to: inviteData.email,
         subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
         html: emailBody,

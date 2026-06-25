@@ -79,10 +79,8 @@ export class RecoverypassService {
       `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`,
       emailTheme || undefined,
     );
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-
     const mailSent = await this.mail.sendMail({
-      from: `${!isProduction ? '[DEV] ' : ''}MedVirtual <noreply@medvirtual.ai>`,
+      from: 'MedVirtual <noreply@medvirtual.ai>',
       to: user.email,
       subject: `Reset Your MedVirtual Password - Action Required`,
       html: emailBody,

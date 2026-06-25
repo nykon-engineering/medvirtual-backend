@@ -77,10 +77,6 @@ export class AffiliatesService {
     return profile;
   }
 
-  private buildFromWithPrefix(from: string): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? from : `[DEV] ${from}`;
-  }
 
   async create(dto: CreateAffiliateProfileDto, adminUser: USER) {
     const user = await this.prisma.uSER.findUnique({
@@ -134,7 +130,7 @@ export class AffiliatesService {
     try {
       const theme = await getUserEmailTheme(this.prisma, dto.user_id);
       await this.mailService.sendMail({
-        from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
+        from: 'MedVirtual <noreply@medvirtual.ai>',
         to: user.email,
         subject: `You're now a ${theme?.companyName || 'MedVirtual'} Med Alliance Partner — here's what's next`,
         html: MedAllianceInvitation(user.first_name, theme ?? undefined),
@@ -200,9 +196,7 @@ export class AffiliatesService {
       dto.first_name,
     );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: dto.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
       html: emailBody,
@@ -352,9 +346,7 @@ export class AffiliatesService {
         : baseInviteLink;
 
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: dto.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
       html: MedAllianceInviteSignup(
@@ -440,9 +432,7 @@ export class AffiliatesService {
         : baseInviteLink;
 
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: user.email,
       subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
       html: MedAllianceInviteSignup(

@@ -1,11 +1,27 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 
+interface MailOptions {
+  from: string;
+  to: string | string[];
+  subject: string;
+  html: string;
+  cc?: string | string[];
+  bcc?: string | string[];
+  headers?: Record<string, string>;
+  tags?: { name: string; value: string }[];
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
-  async sendMail(options): Promise<boolean> {
+  private applyDevPrefix(from: string): string {
+    const isProduction = process.env.ENVIRONMENT === 'PROD';
+    return isProduction ? from : `[DEV] ${from}`;
+  }
+
+  async sendMail(options: MailOptions): Promise<boolean> {
     try {
       if (!process.env.RESEND_API_KEY) {
         throw new BadRequestException(
@@ -26,7 +42,7 @@ export class MailService {
       const resend = new Resend(process.env.RESEND_API_KEY);
 
       const emailData = {
-        from: options.from,
+        from: this.applyDevPrefix(options.from),
         to: options.to,
         cc: options.cc,
         bcc: options.bcc,

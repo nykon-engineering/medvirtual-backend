@@ -45,16 +45,6 @@ export class NotificationsService {
     return `${process.env.FRONTEND_URL}${path}?ticket=${ticketId}`;
   }
 
-  private async sendMailWithPrefix(options: {
-    from: string;
-    to: string | string[];
-    subject: string;
-    html: string;
-  }): Promise<boolean> {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    const from = isProduction ? options.from : `[DEV] ${options.from}`;
-    return this.mail.sendMail({ ...options, from });
-  }
 
   private buildEmail(
     htmlInner: string,
@@ -323,7 +313,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: recipients,
       subject: `Placement completed: ${hr.title}`,
@@ -444,7 +434,7 @@ export class NotificationsService {
        ${bodyLink}`,
       emailTheme,
     );
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emailsUsers.map((u) => u.email),
       subject: `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
@@ -511,7 +501,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map((user) => user.email),
       subject: `Hire Request ${verb}: ${hr.title}`,
@@ -570,7 +560,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [hr.assigned_sourcing.email],
       subject: `Hire Request ${verb}: ${hr.title}`,
@@ -638,7 +628,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map((user) => user.email).filter(Boolean),
       subject: `Hire Request ${verb}: ${hr.title}`,
@@ -748,7 +738,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
       subject: `Hire Request Assigned: ${hr.title}`,
@@ -827,7 +817,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
       subject: `Hire Request Assigned: ${hr.title}`,
@@ -911,7 +901,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
       subject: `Your candidate panel is ready: ${hr.title}`,
@@ -991,7 +981,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization?.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
       subject: `Panel Reviewed and Ready: ${hr.title}`,
@@ -1054,7 +1044,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map((user) => user.email),
       subject: `New candidates in Hire Request: ${hr.title}`,
@@ -1202,7 +1192,7 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
-    const results = this.sendMailWithPrefix({
+    const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: uniqueRecipients.map((r) => r.email),
       subject: `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
@@ -1307,7 +1297,7 @@ export class NotificationsService {
       </div>`,
       emailTheme,
     );
-    const results = this.sendMailWithPrefix({
+    const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: uniqueRecipients.map((r) => r.email),
       subject: `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
@@ -1424,7 +1414,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
       subject: `Your ticket changed to ${statusDisplay} status: ${ticket.title}`,
@@ -1531,7 +1521,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
       subject: `Your ticket has been reopened: ${ticket.title}`,
@@ -1776,7 +1766,7 @@ export class NotificationsService {
           emailTheme,
         );
 
-        return this.sendMailWithPrefix({
+        return this.mail.sendMail({
           from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
           subject: emailSubject,
@@ -1821,7 +1811,7 @@ export class NotificationsService {
           emailTheme,
         );
 
-        return this.sendMailWithPrefix({
+        return this.mail.sendMail({
           from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
           subject: `Ticket ${event}: ${ticket.title}`,
@@ -1907,7 +1897,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [ticket.user.email],
       subject: `You received a response on your ticket: ${ticket.title}`,
@@ -1984,7 +1974,7 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creator.email],
       subject: `You received a response on your ticket: ${ticket.title}`,
@@ -2156,7 +2146,7 @@ export class NotificationsService {
         theme,
       );
 
-      await this.sendMailWithPrefix({
+      await this.mail.sendMail({
         from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
         to: [payload.ownerEmail],
         subject: `New talent pool lead: ${payload.leadName} — ${payload.organization}`,
@@ -2208,7 +2198,7 @@ export class NotificationsService {
       'Cheers,',
     );
 
-    return this.sendMailWithPrefix({
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
       subject: `${candidateLabel} picked for you — ${theme.companyName}`,
@@ -2250,7 +2240,7 @@ export class NotificationsService {
       'Cheers,',
     );
 
-    return this.sendMailWithPrefix({
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
       subject: `${candidateLabel} picked for you — ${theme.companyName}`,
@@ -2291,7 +2281,7 @@ export class NotificationsService {
       theme,
     );
 
-    return this.sendMailWithPrefix({
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.createdBy.email,
       subject: `Your offer was accepted`,
@@ -2332,7 +2322,7 @@ export class NotificationsService {
       theme,
     );
 
-    return this.sendMailWithPrefix({
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.createdBy.email,
       subject: `Your offer was declined`,
