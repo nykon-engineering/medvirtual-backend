@@ -588,6 +588,30 @@ export class AffiliatesController {
     };
   }
 
+  @Get('admin/affiliates/:id/re-invite-user')
+  @HttpCode(200)
+  @Roles(...ADMIN_ROLES)
+  @ApiOperation({
+    summary: 'Re-send the affiliate invite email to an already-invited user',
+  })
+  @ApiParam({ name: 'id', description: 'Affiliate profile UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Re-invitation sent successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Affiliate profile not found' })
+  @ApiResponse({ status: 400, description: 'Affiliate has no connected user' })
+  async reInviteAffiliateUser(
+    @Param('id') id: string,
+    @CurrentUser() admin: USER,
+  ) {
+    const message = await this.affiliatesService.reInviteAffiliateUser(
+      id,
+      admin.id,
+    );
+    return { statusCode: 200, message };
+  }
+
   // PATCH /med-alliance/admin/affiliates/:id — Update profile (admin full access).
   @Patch('admin/affiliates/:id')
   @HttpCode(200)
