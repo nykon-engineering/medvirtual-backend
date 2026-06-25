@@ -28,6 +28,7 @@ import { PositionRateConfigModule } from './position-rate-config/position-rate-c
 import { MedAllianceModule } from './med-alliance/med-alliance.module';
 import { OfferPanelsModule } from './offer-panels/offer-panels.module';
 import { EmailTemplatesModule } from './email-templates/email-templates.module';
+import { BusinessUnitsModule } from './business-units/business-units.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { EmailTemplatesModule } from './email-templates/email-templates.module';
     MedAllianceModule,
     OfferPanelsModule,
     EmailTemplatesModule,
+    BusinessUnitsModule,
   ],
   controllers: [AppController],
   providers: [
