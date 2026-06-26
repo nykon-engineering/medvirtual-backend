@@ -1,38 +1,38 @@
-# Editable Emails — Spec Técnica
+# Editable Emails — Technical Spec
 
-> Entregável de fechamento de ticket. Documenta arquitetura, modelos, endpoints, regras de negócio e plano de testes da feature "Editable Emails".
-
----
-
-## 1. Visão Geral
-
-### Problema
-
-Todos os ~16 templates de email do sistema eram funções TypeScript hardcoded em `/src/common/utils/email-templates/`. Qualquer alteração de texto, branding ou layout exigia um desenvolvedor e um deploy completo — mesmo para mudanças triviais como corrigir um typo ou atualizar o nome de uma campanha.
-
-### Solução
-
-Os templates foram movidos para o banco de dados PostgreSQL com uma interface de administração dentro do próprio app. Um usuário autorizado pode agora:
-
-- Editar wording (subject, headline, body, button label) de qualquer template
-- Visualizar preview em HTML com dados de exemplo antes de salvar
-- Enviar um email de teste para si mesmo
-- Consultar e reverter para versões anteriores (rollback)
-- Gerenciar brandings por Business Unit (cores, logo, layout)
-- Criar e gerenciar Business Units dinamicamente
-
-Mudanças em qualquer ambiente (Stage ou Prod) são **sincronizadas automaticamente** para o ambiente oposto. O sistema de **fallback** garante que, se um template estiver ausente do banco, o código original TypeScript continua sendo usado — sem falha de envio.
+> Closing deliverable for the ticket. Documents the architecture, models, endpoints, business rules, and test plan for the "Editable Emails" feature.
 
 ---
 
-## 2. Arquitetura
+## 1. Overview
+
+### Problem
+
+All ~16 email templates in the system were hardcoded TypeScript functions in `/src/common/utils/email-templates/`. Any change to copy, branding, or layout required a developer and a full deploy — even for trivial changes like fixing a typo or updating a campaign name.
+
+### Solution
+
+Templates have been moved to the PostgreSQL database with an admin interface built into the app itself. An authorized user can now:
+
+- Edit wording (subject, headline, body, button label) for any template
+- Preview the HTML with sample data before saving
+- Send a test email to themselves
+- Browse and roll back to previous versions
+- Manage branding per Business Unit (colors, logo, layout)
+- Create and manage Business Units dynamically
+
+Changes in any environment (Stage or Prod) are **automatically synced** to the opposite environment. The **fallback system** ensures that if a template is missing from the database, the original TypeScript code continues to be used — without any send failure.
+
+---
+
+## 2. Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Admin UI (Next.js 15)                     │
-│  /modules/administration/email-templates  (lista + editor)  │
-│  /modules/administration/branding/[slug]  (branding por BU) │
-│  /modules/administration/business-units   (gestão de BUs)   │
+│  /modules/administration/email-templates  (list + editor)   │
+│  /modules/administration/branding/[slug]  (branding per BU) │
+│  /modules/administration/business-units   (BU management)   │
 └────────────────────────┬────────────────────────────────────┘
                          │ JWT Bearer
                          ▼
@@ -44,7 +44,7 @@ Mudanças em qualquer ambiente (Stage ou Prod) são **sincronizadas automaticame
 │                                                             │
 │  EmailTemplatesService ──► PrismaService ──► PostgreSQL DB  │
 │         │                                                   │
-│         ├── getTemplateContent()  ← chamado por outros svc  │
+│         ├── getTemplateContent()  ← called by other svcs    │
 │         ├── validatePlaceholders()                          │
 │         ├── renderHtml()                                    │
 │         └── syncToPeer()  ──► PEER_ENV_API_URL (fire & forget)
@@ -53,27 +53,27 @@ Mudanças em qualquer ambiente (Stage ou Prod) são **sincronizadas automaticame
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
 │               Peer Environment API                          │
-│  POST /email-templates/:key/sync    (sem JWT, usa X-Sync-Secret)
+│  POST /email-templates/:key/sync    (no JWT, uses X-Sync-Secret)
 │  POST /business-units/:slug/branding/sync                   │
-│  → receiveSyncFromPeer() salva no DB e NUNCA re-propaga     │
+│  → receiveSyncFromPeer() saves to DB and NEVER re-propagates│
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Serviços que lêem templates do banco
+### Services that read templates from the database
 
-Os seguintes serviços substituíram o uso direto dos arquivos hardcoded pelo padrão de fallback via `EmailTemplatesService.getTemplateContent()`:
+The following services replaced direct use of hardcoded files with the fallback pattern via `EmailTemplatesService.getTemplateContent()`:
 
-| Serviço | Templates consumidos |
+| Service | Templates consumed |
 |---|---|
 | `AuthService` | `verification-code`, `invite-signup` |
 | `RecoverypassService` | `reset-password` |
 | `AffiliatesService` (med-alliance) | `med-alliance-invitation`, `med-alliance-invite-signup`, `med-alliance-org-invitation` |
 
-Os arquivos TypeScript originais em `/src/common/utils/email-templates/` permanecem como **fallback permanente** — nunca foram deletados.
+The original TypeScript files in `/src/common/utils/email-templates/` remain as **permanent fallbacks** — they were never deleted.
 
 ---
 
-## 3. Modelos de Dados (Prisma)
+## 3. Data Models (Prisma)
 
 ### BusinessUnit
 
@@ -90,9 +90,9 @@ model BusinessUnit {
 }
 ```
 
-- `slug` é gerado automaticamente a partir do `name` no frontend (`toSlug()`)
-- Ao criar uma BU, o backend cria automaticamente um `EmailBranding` com defaults do MedVirtual
-- Soft-delete via `is_active = false` (não deleta registros)
+- `slug` is auto-generated from `name` in the frontend (`toSlug()`)
+- When a BU is created, the backend automatically creates an `EmailBranding` with MedVirtual defaults
+- Soft-delete via `is_active = false` (records are never physically deleted)
 
 ### EmailTemplate
 
@@ -108,7 +108,7 @@ model EmailTemplate {
   button_label  String?
   button_url    String?
   placeholders  Json                          // ["{{inviteLink}}", "{{companyName}}"]
-  business_unit String?                       // null = global; "medvirtual" = override por BU
+  business_unit String?                       // null = global; "medvirtual" = BU-specific override
   is_active     Boolean  @default(true)
   updated_by    String?
   created_at    DateTime @default(now())
@@ -119,9 +119,9 @@ model EmailTemplate {
 }
 ```
 
-- `business_unit: null` = template global (usado por todas as BUs sem override específico)
-- `@@unique([key, business_unit])` permite um override por chave por BU
-- `is_active: false` faz o sistema cair no fallback de código automaticamente
+- `business_unit: null` = global template (used by all BUs without a specific override)
+- `@@unique([key, business_unit])` allows one override per key per BU
+- `is_active: false` makes the system automatically fall back to code
 
 ### EmailTemplateHistory
 
@@ -134,15 +134,15 @@ model EmailTemplateHistory {
   headline     String?
   body         String
   button_label String?
-  changed_by   String   // userId ou "sync"
+  changed_by   String   // userId or "sync"
   changed_at   DateTime @default(now())
   reason       String?  // "Manual edit" | "Auto-sync from PROD" | "Rollback to version..."
 }
 ```
 
-- Snapshot criado **antes** de cada `update()` e `rollback()`
-- `changed_by = "sync"` quando a mudança veio de sincronização automática entre ambientes
-- Os últimos 50 registros são exibidos na UI
+- Snapshot created **before** each `update()` and `rollback()`
+- `changed_by = "sync"` when the change came from automatic environment sync
+- The last 50 records are displayed in the UI
 
 ### EmailBranding
 
@@ -161,9 +161,9 @@ model EmailBranding {
 }
 ```
 
-- Um registro por BU (`@unique`)
-- `layout_preset` aceita: `"default"`, `"minimal"`, `"hero"`
-- Ao criar uma BU, o backend preenche com `primary_color: "#01546B"` e `company_name` = nome da BU
+- One record per BU (`@unique`)
+- `layout_preset` accepts: `"default"`, `"minimal"`, `"hero"`
+- When a BU is created, the backend sets `primary_color: "#01546B"` and `company_name` = BU name
 
 ### EmailBrandingHistory
 
@@ -172,7 +172,7 @@ model EmailBrandingHistory {
   id          String   @id @default(uuid())
   branding_id String
   branding    EmailBranding @relation(...)
-  snapshot    Json     // estado completo anterior do EmailBranding
+  snapshot    Json     // full previous state of EmailBranding
   changed_by  String
   changed_at  DateTime @default(now())
 }
@@ -184,80 +184,80 @@ model EmailBrandingHistory {
 
 ### Email Templates — `/email-templates`
 
-| Método | Rota | Auth | Body | Descrição |
+| Method | Route | Auth | Body | Description |
 |---|---|---|---|---|
-| `GET` | `/email-templates` | `system_admin+` | — | Lista templates com paginação; `?page`, `?perPage`, `?search`, `?businessUnit` |
-| `GET` | `/email-templates/:key` | `system_admin+` | — | Detalhe de um template; `?businessUnit` |
-| `PUT` | `/email-templates/:key` | `system_admin+` | `UpdateEmailTemplateDto` | Edita wording; valida placeholders; salva histórico; dispara sync |
-| `GET` | `/email-templates/:key/history` | `system_admin+` | — | Últimas 50 versões do template |
-| `POST` | `/email-templates/:key/rollback/:historyId` | `system_admin+` | — | Restaura versão anterior; salva histórico; dispara sync |
-| `POST` | `/email-templates/:key/preview` | `system_admin+` | `PreviewEmailTemplateDto` | Renderiza HTML com sample data para preview |
-| `POST` | `/email-templates/:key/test-send` | `system_admin+` | `TestSendEmailTemplateDto` | Envia email real para o usuário logado |
-| `POST` | `/email-templates/:key/sync` | `X-Sync-Secret` header | `{ subject, headline?, body, button_label? }` | Recebe sync do peer (sem JWT) |
+| `GET` | `/email-templates` | `system_admin+` | — | Lists templates with pagination; `?page`, `?perPage`, `?search`, `?businessUnit` |
+| `GET` | `/email-templates/:key` | `system_admin+` | — | Single template detail; `?businessUnit` |
+| `PUT` | `/email-templates/:key` | `system_admin+` | `UpdateEmailTemplateDto` | Edits wording; validates placeholders; saves history; triggers sync |
+| `GET` | `/email-templates/:key/history` | `system_admin+` | — | Last 50 versions of the template |
+| `POST` | `/email-templates/:key/rollback/:historyId` | `system_admin+` | — | Restores a previous version; saves history; triggers sync |
+| `POST` | `/email-templates/:key/preview` | `system_admin+` | `PreviewEmailTemplateDto` | Renders HTML with sample data for preview |
+| `POST` | `/email-templates/:key/test-send` | `system_admin+` | `TestSendEmailTemplateDto` | Sends a real email to the logged-in user |
+| `POST` | `/email-templates/:key/sync` | `X-Sync-Secret` header | `{ subject, headline?, body, button_label? }` | Receives sync from peer (no JWT) |
 
 ### Business Units — `/business-units`
 
-| Método | Rota | Auth | Body | Descrição |
+| Method | Route | Auth | Body | Description |
 |---|---|---|---|---|
-| `GET` | `/business-units` | `system_super_admin` | — | Lista todas as BUs com branding |
-| `POST` | `/business-units` | `system_super_admin` | `CreateBusinessUnitDto` | Cria BU + branding default |
-| `PUT` | `/business-units/:slug` | `system_super_admin` | `UpdateBusinessUnitDto` | Edita nome ou status |
+| `GET` | `/business-units` | `system_super_admin` | — | Lists all BUs with branding |
+| `POST` | `/business-units` | `system_super_admin` | `CreateBusinessUnitDto` | Creates BU + default branding |
+| `PUT` | `/business-units/:slug` | `system_super_admin` | `UpdateBusinessUnitDto` | Edits name or status |
 | `DELETE` | `/business-units/:slug` | `system_super_admin` | — | Soft-delete (`is_active = false`) |
-| `GET` | `/business-units/:slug/branding` | `system_super_admin` | — | Branding atual da BU |
-| `PUT` | `/business-units/:slug/branding` | `system_super_admin` | `UpdateBrandingDto` | Edita branding; salva histórico; dispara sync |
-| `GET` | `/business-units/:slug/branding/history` | `system_super_admin` | — | Histórico de branding |
-| `POST` | `/business-units/:slug/branding/sync` | `X-Sync-Secret` header | payload de branding | Recebe sync de branding do peer (sem JWT) |
+| `GET` | `/business-units/:slug/branding` | `system_super_admin` | — | Current branding for the BU |
+| `PUT` | `/business-units/:slug/branding` | `system_super_admin` | `UpdateBrandingDto` | Edits branding; saves history; triggers sync |
+| `GET` | `/business-units/:slug/branding/history` | `system_super_admin` | — | Branding history |
+| `POST` | `/business-units/:slug/branding/sync` | `X-Sync-Secret` header | branding payload | Receives branding sync from peer (no JWT) |
 
 ---
 
-## 5. Sync Bidirecional Stage ↔ Prod
+## 5. Bidirectional Sync Stage ↔ Prod
 
-### Fluxo
+### Flow
 
 ```
-[Usuário edita template no Stage]
+[User edits template on Stage]
   ↓
-Stage API: salva no Stage DB + cria histórico
-  ↓ (fire-and-forget, não bloqueia resposta)
+Stage API: saves to Stage DB + creates history entry
+  ↓ (fire-and-forget, does not block response)
 Stage API → POST https://prod-api/email-templates/:key/sync
             headers: X-Sync-Secret, X-Sync-Origin: STAGE
   ↓
-Prod API: valida X-Sync-Secret
-Prod API: salva no Prod DB + cria histórico (changed_by: "sync", reason: "Auto-sync from STAGE")
-Prod API: NÃO re-propaga (recebeu X-Sync-Origin → é uma sync, não uma edição UI)
+Prod API: validates X-Sync-Secret
+Prod API: saves to Prod DB + creates history (changed_by: "sync", reason: "Auto-sync from STAGE")
+Prod API: does NOT re-propagate (received X-Sync-Origin → it is a sync, not a UI edit)
 ```
 
-### Regra anti-loop
+### Anti-loop rule
 
-`receiveSyncFromPeer()` **nunca** chama `syncToPeer()`. A distinção é feita internamente: saves da UI passam por `update()` que chama `syncToPeer()`. O endpoint `/sync` passa por `receiveSyncFromPeer()` que nunca propaga.
+`receiveSyncFromPeer()` **never** calls `syncToPeer()`. The distinction is made internally: UI saves go through `update()` which calls `syncToPeer()`. The `/sync` endpoint goes through `receiveSyncFromPeer()` which never propagates further.
 
-### Comportamento em falha
+### Failure behavior
 
-- A sincronização é **fire-and-forget**: o save local sempre completa, mesmo que o peer esteja fora do ar
-- Erros de sync são logados via `Logger.error` mas não revertem o save local
-- Não há retry automático — reconciliação manual via edição posterior
+- Sync is **fire-and-forget**: the local save always completes, even if the peer is unreachable
+- Sync errors are logged via `Logger.error` but do not roll back the local save
+- No automatic retry — manual reconciliation via a subsequent edit
 
-### Variáveis de ambiente necessárias
+### Required environment variables
 
-| Variável | Servidor Stage | Servidor Prod |
+| Variable | Stage server | Prod server |
 |---|---|---|
-| `PEER_ENV_API_URL` | `https://api.medvirtual.ai` (URL do prod) | `https://staging.medvirtual.ai` (URL do stage) |
-| `INTER_ENV_SYNC_SECRET` | `<segredo compartilhado>` | `<mesmo segredo>` |
+| `PEER_ENV_API_URL` | `https://api.medvirtual.ai` (prod URL) | `https://staging.medvirtual.ai` (stage URL) |
+| `INTER_ENV_SYNC_SECRET` | `<shared secret>` | `<same secret>` |
 | `ENVIRONMENT` | `STAGE` | `PROD` |
 
-Se `PEER_ENV_API_URL` não estiver definida, o sync é silenciosamente omitido (comportamento correto para ambiente local/dev).
+If `PEER_ENV_API_URL` is not set, sync is silently skipped (correct behavior for local/dev environments).
 
 ---
 
-## 6. Sistema de Placeholders
+## 6. Placeholder System
 
-### Sintaxe
+### Syntax
 
-`{{placeholderName}}` — estilo Mustache, sem ambiguidade com Tailwind ou JSX.
+`{{placeholderName}}` — Mustache-style, unambiguous with Tailwind or JSX.
 
-### Validação no save
+### Validation on save
 
-Antes de persistir um update, `validatePlaceholders(body, allowedPlaceholders)` escaneia o body com `/\{\{[^}]+\}\}/g` e rejeita qualquer placeholder não declarado na lista `placeholders` do template:
+Before persisting an update, `validatePlaceholders(body, allowedPlaceholders)` scans the body with `/\{\{[^}]+\}\}/g` and rejects any placeholder not declared in the template's `placeholders` list:
 
 ```
 PUT /email-templates/invite-signup
@@ -265,13 +265,13 @@ body: "Click {{unknownPlaceholder}}"
 → 400 Bad Request: "Invalid placeholder(s): {{unknownPlaceholder}}. Allowed: {{inviteLink}}, {{companyName}}"
 ```
 
-### Substituição em runtime
+### Runtime substitution
 
-`applyPlaceholders(text, overrides?)` aplica primeiro o `SAMPLE_DATA` (para preview) e depois os `overrides` passados pelo serviço chamador (para envio real). Placeholders sem valor de runtime permanecem como texto literal — nunca quebram o envio.
+`applyPlaceholders(text, overrides?)` first applies `SAMPLE_DATA` (for preview) and then the `overrides` passed by the calling service (for real sends). Placeholders without a runtime value remain as literal text — they never break the send.
 
-### Sample data (para preview e test-send)
+### Sample data (for preview and test-send)
 
-| Placeholder | Valor de exemplo |
+| Placeholder | Sample value |
 |---|---|
 | `{{inviteLink}}` | `https://app.medvirtual.ai/invite/sample-token` |
 | `{{resetLink}}` | `https://app.medvirtual.ai/reset/sample-token` |
@@ -282,24 +282,24 @@ body: "Click {{unknownPlaceholder}}"
 | `{{positionCount}}` | `3` |
 | `{{quarter}}` / `{{year}}` | `Q1` / `2026` |
 | `{{totalEarnings}}` | `$1,250.00` |
-| *(demais)* | ver `SAMPLE_DATA` em `email-templates.service.ts` |
+| *(others)* | see `SAMPLE_DATA` in `email-templates.service.ts` |
 
 ---
 
-## 7. Sistema de Fallback
+## 7. Fallback System
 
-A resolução de template segue esta cadeia de prioridade:
+Template resolution follows this priority chain:
 
 ```
-1. EmailTemplate no DB (key + business_unit específica, is_active = true)
-   ↓ não encontrado
-2. EmailTemplate no DB (key + business_unit = null [global], is_active = true)
-   ↓ não encontrado ou is_active = false
-3. getTemplateContent() retorna null
-   ↓ serviço chamador usa o arquivo TypeScript original como fallback
+1. EmailTemplate in DB (key + specific business_unit, is_active = true)
+   ↓ not found
+2. EmailTemplate in DB (key + business_unit = null [global], is_active = true)
+   ↓ not found or is_active = false
+3. getTemplateContent() returns null
+   ↓ calling service uses the original TypeScript file as fallback
 ```
 
-**Implementação no serviço chamador (padrão):**
+**Implementation in the calling service (standard pattern):**
 
 ```typescript
 const dbContent = await this.emailTemplatesService.getTemplateContent(
@@ -312,44 +312,44 @@ const html = dbContent?.html ?? getInviteSignupTemplate(link, theme);
 const subject = dbContent?.subject ?? `You have been invited to the ${theme.companyName} platform`;
 ```
 
-Os arquivos TypeScript originais em `/src/common/utils/email-templates/` **nunca são deletados** — são a rede de segurança permanente.
+The original TypeScript files in `/src/common/utils/email-templates/` **are never deleted** — they are the permanent safety net.
 
 ---
 
-## 8. Business Units Dinâmicas
+## 8. Dynamic Business Units
 
-### Criação
+### Creation
 
 ```
 POST /business-units
 { "name": "MMVA", "slug": "mmva" }
-→ cria BusinessUnit { slug: "mmva", name: "MMVA", is_active: true }
-→ cria EmailBranding { business_unit: "mmva", primary_color: "#01546B", company_name: "MMVA", layout_preset: "default" }
+→ creates BusinessUnit { slug: "mmva", name: "MMVA", is_active: true }
+→ creates EmailBranding { business_unit: "mmva", primary_color: "#01546B", company_name: "MMVA", layout_preset: "default" }
 ```
 
-### Resolução de tema em emails
+### Theme resolution for emails
 
-`getUserEmailTheme(prisma, userId)` em `theme-helper.ts` consulta o `EmailBranding` do banco para a BU do usuário. O mapeamento de nome de BU para slug é feito por `orgBusinessUnitToSlug()`:
+`getUserEmailTheme(prisma, userId)` in `theme-helper.ts` queries the `EmailBranding` from the database for the user's BU. The mapping from BU name to slug is done by `orgBusinessUnitToSlug()`:
 
 ```typescript
 "MedVirtual"    → "medvirtual"
 "Berry Virtual" → "berry-virtual"
 ```
 
-Se não houver `EmailBranding` no banco para a BU, o sistema cai no tema hardcoded em `theme.ts` como fallback.
+If no `EmailBranding` exists in the database for the BU, the system falls back to the hardcoded theme in `theme.ts`.
 
-### Business Units iniciais (seed)
+### Initial Business Units (seed)
 
-| Slug | Nome | Cor primária |
+| Slug | Name | Primary color |
 |---|---|---|
 | `medvirtual` | MedVirtual | `#01546B` |
 | `berry-virtual` | Berry Virtual | `#FD7171` |
 
 ---
 
-## 9. Prefixo [DEV]
+## 9. [DEV] Prefix
 
-`MailService.sendMail()` aplica `[DEV]` ao campo `from` quando `process.env.ENVIRONMENT !== 'PROD'`:
+`MailService.sendMail()` prepends `[DEV]` to the `from` field when `process.env.ENVIRONMENT !== 'PROD'`:
 
 ```typescript
 private applyDevPrefix(from: string): string {
@@ -358,25 +358,25 @@ private applyDevPrefix(from: string): string {
 }
 ```
 
-- **Centralizado**: nenhum outro serviço precisa se preocupar com o prefixo
-- **Escopo**: aplicado ao campo `from`, que aparece no cabeçalho do email recebido
-- **Test-send**: também passa pelo `MailService`, recebe o prefixo automaticamente em Stage
+- **Centralized**: no other service needs to handle the prefix
+- **Scope**: applied to the `from` field, which appears in the received email header
+- **Test-send**: also goes through `MailService`, automatically receives the prefix in Stage
 
 ---
 
-## 10. Variáveis de Ambiente
+## 10. Environment Variables
 
-| Variável | Obrigatória | Descrição |
+| Variable | Required | Description |
 |---|---|---|
-| `RESEND_API_KEY` | Sim | Chave da API Resend para envio de emails |
-| `ENVIRONMENT` | Sim | `"PROD"` em produção; qualquer outro valor em Stage/Dev — controla o prefixo `[DEV]` |
-| `PEER_ENV_API_URL` | Não | URL base do ambiente oposto para sync; omitir em local/dev desativa o sync silenciosamente |
-| `INTER_ENV_SYNC_SECRET` | Condicional | Segredo compartilhado entre Stage e Prod para autenticar requests de sync; obrigatório se `PEER_ENV_API_URL` estiver definida |
-| `DATABASE_URL` | Sim | URL do PostgreSQL (via Prisma) |
+| `RESEND_API_KEY` | Yes | Resend API key for sending emails |
+| `ENVIRONMENT` | Yes | `"PROD"` in production; any other value in Stage/Dev — controls the `[DEV]` prefix |
+| `PEER_ENV_API_URL` | No | Base URL of the opposite environment for sync; omitting it in local/dev silently disables sync |
+| `INTER_ENV_SYNC_SECRET` | Conditional | Shared secret between Stage and Prod to authenticate sync requests; required if `PEER_ENV_API_URL` is set |
+| `DATABASE_URL` | Yes | PostgreSQL URL (via Prisma) |
 
 ---
 
-## 11. Estrutura de Arquivos
+## 11. File Structure
 
 ### Backend
 
@@ -385,9 +385,9 @@ src/
 ├── email-templates/
 │   ├── email-templates.controller.ts   # 9 endpoints
 │   ├── email-templates.module.ts
-│   ├── email-templates.service.ts      # lógica central
-│   ├── email-templates.service.spec.ts # 30 testes unitários
-│   ├── email-templates-e2e.spec.ts     # 41 testes de integração E2E
+│   ├── email-templates.service.ts      # core logic
+│   ├── email-templates.service.spec.ts # 30 unit tests
+│   ├── email-templates-e2e.spec.ts     # 41 E2E integration tests
 │   └── dto/
 │       ├── update-email-template.dto.ts
 │       ├── preview-email-template.dto.ts
@@ -396,21 +396,21 @@ src/
 │   ├── business-units.controller.ts    # 8 endpoints
 │   ├── business-units.module.ts
 │   ├── business-units.service.ts       # CRUD + branding + sync
-│   ├── business-units.service.spec.ts  # 20 testes unitários
+│   ├── business-units.service.spec.ts  # 20 unit tests
 │   └── dto/
 │       ├── create-business-unit.dto.ts
 │       ├── update-business-unit.dto.ts
 │       └── update-branding.dto.ts
 ├── mail/
-│   ├── mail.service.ts                 # prefixo [DEV] centralizado aqui
-│   └── mail.service.spec.ts            # 4 testes de prefixo [DEV]
-└── common/utils/email-templates/       # fallback permanente (não deletar)
+│   ├── mail.service.ts                 # [DEV] prefix centralized here
+│   └── mail.service.spec.ts            # 4 [DEV] prefix tests
+└── common/utils/email-templates/       # permanent fallback (do not delete)
     ├── theme.ts
-    ├── theme-helper.ts                 # atualizado para ler EmailBranding do banco
-    └── *.ts                            # 16 arquivos de template (fallback)
+    ├── theme-helper.ts                 # updated to read EmailBranding from DB
+    └── *.ts                            # 16 template files (fallback)
 
 prisma/
-├── schema.prisma                       # +5 modelos: BusinessUnit, EmailTemplate,
+├── schema.prisma                       # +5 models: BusinessUnit, EmailTemplate,
 │                                       #  EmailTemplateHistory, EmailBranding, EmailBrandingHistory
 └── seed.ts                             # +2 BUs, +2 Brandings, +16 templates
 ```
@@ -420,98 +420,98 @@ prisma/
 ```
 src/app/modules/administration/
 ├── email-templates/
-│   ├── page.tsx                        # lista com DataTable + filtro BU + badge STAGE/PROD
+│   ├── page.tsx                        # list with DataTable + BU filter + STAGE/PROD badge
 │   ├── [key]/
-│   │   ├── page.tsx                    # wrapper mínimo (resolve use(params))
+│   │   ├── page.tsx                    # minimal wrapper (resolves use(params))
 │   │   └── _components/
-│   │       └── editor-view.tsx         # editor split-screen: form + preview + history
+│   │       └── editor-view.tsx         # split-screen editor: form + preview + history
 │   └── _tests/
-│       ├── page.test.tsx               # 8 testes
-│       └── editor.test.tsx             # 10 testes
+│       ├── page.test.tsx               # 8 tests
+│       └── editor.test.tsx             # 10 tests
 ├── branding/
 │   └── [slug]/
 │       └── page.tsx                    # color picker + logo + layout preset + history
 ├── business-units/
 │   ├── page.tsx                        # cards + create/edit/deactivate dialogs
 │   └── _tests/
-│       └── page.test.tsx               # 12 testes
+│       └── page.test.tsx               # 12 tests
 └── _lib/
-    └── admin-nav.ts                    # itens de nav: Email Templates + Business Units
+    └── admin-nav.ts                    # nav items: Email Templates + Business Units
 ```
 
 ---
 
-## 12. Cobertura de Testes
+## 12. Test Coverage
 
-| Arquivo | Tipo | Testes | O que cobre |
+| File | Type | Tests | What it covers |
 |---|---|---|---|
-| `email-templates.service.spec.ts` | Unitário | 30 | CRUD, fallback, placeholder validation, preview, test-send, rollback, sync anti-loop |
-| `email-templates-e2e.spec.ts` | Integração E2E | 41 | 16 templates do seed, fallback, anti-loop, [DEV] prefix, history, branding per-BU |
-| `business-units.service.spec.ts` | Unitário | 20 | CRUD de BU, branding auto-create, sync bidirecional, rollback de branding |
-| `mail.service.spec.ts` | Unitário | 4 | Prefixo [DEV] em STAGE, DEV, undefined, e ausência em PROD |
-| `email-templates/_tests/page.test.tsx` | Frontend | 8 | Lista de templates, filtro, navegação para editor |
-| `email-templates/_tests/editor.test.tsx` | Frontend | 10 | Editor: form, chips, history, rollback dialog, test-send, navegação |
-| `business-units/_tests/page.test.tsx` | Frontend | 12 | Cards, dialogs, auto-slug, search, filtro, deactivate |
+| `email-templates.service.spec.ts` | Unit | 30 | CRUD, fallback, placeholder validation, preview, test-send, rollback, sync anti-loop |
+| `email-templates-e2e.spec.ts` | E2E Integration | 41 | 16 seed templates, fallback, anti-loop, [DEV] prefix, history, per-BU branding |
+| `business-units.service.spec.ts` | Unit | 20 | BU CRUD, auto-create branding, bidirectional sync, branding rollback |
+| `mail.service.spec.ts` | Unit | 4 | [DEV] prefix in STAGE, DEV, undefined, and absence in PROD |
+| `email-templates/_tests/page.test.tsx` | Frontend | 8 | Template list, filter, navigation to editor |
+| `email-templates/_tests/editor.test.tsx` | Frontend | 10 | Editor: form, chips, history, rollback dialog, test-send, navigation |
+| `business-units/_tests/page.test.tsx` | Frontend | 12 | Cards, dialogs, auto-slug, search, filter, deactivate |
 | **Total** | | **125** | |
 
 ---
 
-## 13. Checklist de Verificação Manual (QA)
+## 13. Manual Verification Checklist (QA)
 
 ### Fallback
-- [ ] Deletar um template do banco → enviar o evento correspondente → confirmar que o email ainda é enviado com o conteúdo original do código TypeScript
+- [ ] Delete a template from the database → trigger the corresponding event → confirm the email is still sent with the original TypeScript content
 
 ### Wording
-- [ ] Alterar o subject de `invite-signup` → enviar um convite → confirmar novo subject no email recebido
+- [ ] Change the subject of `invite-signup` → send an invitation → confirm the new subject in the received email
 
-### Placeholder inválido
-- [ ] Tentar salvar body com `{{placeholderNaoDeclarado}}` → confirmar que o save é bloqueado com mensagem de erro listando o placeholder inválido
+### Invalid placeholder
+- [ ] Try to save a body with `{{undeclaredPlaceholder}}` → confirm that the save is blocked with an error message listing the invalid placeholder
 
 ### Test Send
-- [ ] Clicar "Send Test" no editor → confirmar que o email chegou no inbox com sample data e com prefixo `[DEV]` (em Stage)
+- [ ] Click "Send Test" in the editor → confirm the email arrived in the inbox with sample data and with the `[DEV]` prefix (on Stage)
 
 ### Rollback
-- [ ] Editar um template, confirmar que histórico foi criado, fazer rollback → confirmar que conteúdo voltou ao estado anterior
+- [ ] Edit a template, confirm a history entry was created, perform a rollback → confirm the content reverted to the previous state
 
 ### Branding
-- [ ] Trocar a `primary_color` de uma BU no editor → ver preview atualizar → salvar → enviar email real → confirmar cor aplicada
+- [ ] Change the `primary_color` of a BU in the editor → see the preview update → save → send a real email → confirm the color was applied
 
-### Business Unit dinâmica
-- [ ] Criar nova BU via tela de admin → confirmar que aparece como opção no filtro de templates → confirmar que `EmailBranding` padrão foi criado automaticamente
+### Dynamic Business Unit
+- [ ] Create a new BU via the admin screen → confirm it appears as an option in the template filter → confirm the default `EmailBranding` was automatically created
 
 ### Sync Stage → Prod
-- [ ] Editar template no Stage → aguardar 2s → confirmar no Prod que template foi atualizado e histórico registra `changed_by: "sync"` com `reason: "Auto-sync from STAGE"`
+- [ ] Edit a template on Stage → wait 2s → confirm on Prod that the template was updated and the history records `changed_by: "sync"` with `reason: "Auto-sync from STAGE"`
 
-### Prefixo [DEV]
-- [ ] Disparar qualquer email no Stage → confirmar que o campo `from` no email recebido começa com `[DEV]`
-- [ ] Em Prod: confirmar que o campo `from` NÃO tem prefixo `[DEV]`
+### [DEV] Prefix
+- [ ] Trigger any email on Stage → confirm that the `from` field in the received email starts with `[DEV]`
+- [ ] On Prod: confirm that the `from` field does NOT have the `[DEV]` prefix
 
-### Segurança do endpoint de sync
-- [ ] `POST /email-templates/:key/sync` sem header `X-Sync-Secret` → confirmar `401 Unauthorized`
-- [ ] Com secret errado → confirmar `401 Unauthorized`
+### Sync endpoint security
+- [ ] `POST /email-templates/:key/sync` without the `X-Sync-Secret` header → confirm `401 Unauthorized`
+- [ ] With wrong secret → confirm `401 Unauthorized`
 
 ---
 
-## 14. Soluções Alternativas Consideradas e Descartadas
+## 14. Alternative Solutions Considered and Discarded
 
 ### A. React Email (component-based templates)
-Mudaria a stack de templates de strings TypeScript para componentes React — migração significativa dos 16 templates existentes. Recomendada para iteração futura se o volume crescer muito.
+Would shift the template stack from TypeScript strings to React components — a significant migration of the 16 existing templates. Recommended for a future iteration if the volume grows substantially.
 
-### B. Unlayer / BeeFree (editor WYSIWYG)
-SDKs embedáveis de editor drag-and-drop. Alto custo de integração e dependência externa. Adequado apenas se o requisito evoluir para "qualquer pessoa edita o design livremente sem restrições de layout".
+### B. Unlayer / BeeFree (WYSIWYG editor)
+Embeddable drag-and-drop editor SDKs. High integration cost and external dependency. Only appropriate if the requirement evolves to "anyone edits the design freely without layout restrictions."
 
-### C. Templates nativos do Resend
-Resend tem feature de template management. Perde controle de histórico/rollback dentro do app e requer acesso ao painel Resend para quem edita. Incompatível com o requisito de tela interna.
+### C. Native Resend templates
+Resend has a template management feature. Loses in-app history/rollback control and requires Resend dashboard access for editors. Incompatible with the requirement for an internal screen.
 
-### D. CMS Headless (Contentful / Sanity)
-Adiciona dependência externa cara para um volume pequeno de templates. Justificável apenas com 100+ templates e múltiplos idiomas.
+### D. Headless CMS (Contentful / Sanity)
+Adds an expensive external dependency for a small volume of templates. Only justifiable with 100+ templates and multiple languages.
 
 ---
 
-## 15. Cronograma de Desenvolvimento
+## 15. Development Timeline
 
-| Semana | Escopo | Status |
+| Week | Scope | Status |
 |---|---|---|
-| Semana 1 | Modelos Prisma, seed, migration, EmailTemplatesService, BusinessUnitsService, sync bidirecional, fallback em AuthService/RecoverypassService/AffiliatesService, theme-helper atualizado | ✅ Concluído |
-| Semana 2 | Página lista, editor split-screen, página branding, página business-units, testes de frontend | ✅ Concluído |
-| Semana 3 | Testes E2E, spec técnica, vídeo Remotion, QA final | 🔄 Em andamento |
+| Week 1 | Prisma models, seed, migration, EmailTemplatesService, BusinessUnitsService, bidirectional sync, fallback in AuthService/RecoverypassService/AffiliatesService, updated theme-helper | ✅ Done |
+| Week 2 | List page, split-screen editor, branding page, business-units page, frontend tests | ✅ Done |
+| Week 3 | E2E tests, technical spec, Remotion video, final QA | 🔄 In progress |
