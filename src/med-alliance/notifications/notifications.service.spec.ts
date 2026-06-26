@@ -2,9 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AllianceNotificationsService } from './notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
 
 const mockMail = { sendMail: jest.fn() };
 const mockPrisma = {};
+const mockEmailTemplates = { getTemplateContent: jest.fn().mockResolvedValue(null) };
 
 const affiliate = { email: 'partner@test.com', first_name: 'Jane' };
 
@@ -18,6 +20,7 @@ describe('AllianceNotificationsService', () => {
         AllianceNotificationsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MailService, useValue: mockMail },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 

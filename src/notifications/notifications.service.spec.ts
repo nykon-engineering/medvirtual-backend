@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -29,12 +30,17 @@ describe('NotificationsService', () => {
     sendMail: jest.fn(),
   };
 
+  const mockEmailTemplatesService = {
+    getTemplateContent: jest.fn().mockResolvedValue(null),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: MailService, useValue: mockMailService },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplatesService },
       ],
     }).compile();
 
