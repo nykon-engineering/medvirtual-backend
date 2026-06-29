@@ -1391,6 +1391,7 @@ model EmailTemplateHistory {
   headline     String?
   body         String
   button_label String?
+  button_url   String?
   changed_by   String
   changed_at   DateTime @default(now())
   reason       String?

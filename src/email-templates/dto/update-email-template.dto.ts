@@ -22,6 +22,11 @@ export class UpdateEmailTemplateDto {
   @IsString()
   button_label?: string;
 
+  @ApiPropertyOptional({ description: 'CTA button URL (use {{placeholder}} for dynamic links)' })
+  @IsOptional()
+  @IsString()
+  button_url?: string;
+
   @ApiPropertyOptional({ description: 'Reason for this change (for audit history)' })
   @IsOptional()
   @IsString()

@@ -80,6 +80,8 @@ export class EmailTemplatesService {
         logoUrl: theme.logoUrl,
       },
       runtimeValues,
+      dbTemplate.button_label,
+      dbTemplate.button_url,
     );
 
     return { subject, html };
@@ -165,6 +167,7 @@ export class EmailTemplatesService {
         headline: template.headline ?? '',
         body: template.body,
         button_label: template.button_label ?? '',
+        button_url: template.button_url ?? '',
         changed_by: userId,
         reason: dto.reason ?? 'Manual edit',
       },
@@ -177,6 +180,7 @@ export class EmailTemplatesService {
         headline: dto.headline ?? template.headline,
         body: dto.body,
         button_label: dto.button_label ?? template.button_label,
+        button_url: dto.button_url ?? template.button_url,
         updated_by: userId,
       },
     });
@@ -204,7 +208,22 @@ export class EmailTemplatesService {
       take: 50,
     });
 
-    return { status: 200, data: history };
+    // Resolve user display names for history entries that have a real user id
+    const userIds = [...new Set(history.map((h) => h.changed_by).filter((id) => id !== 'sync'))];
+    const users = userIds.length
+      ? await this.prisma.uSER.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, first_name: true, last_name: true },
+        })
+      : [];
+    const userMap = Object.fromEntries(users.map((u) => [u.id, `${u.first_name} ${u.last_name}`]));
+
+    const enriched = history.map((h) => ({
+      ...h,
+      changed_by_name: h.changed_by === 'sync' ? 'Auto-sync' : (userMap[h.changed_by] ?? h.changed_by),
+    }));
+
+    return { status: 200, data: enriched };
   }
 
   // ── Rollback ──────────────────────────────────────────────────────────────
@@ -230,6 +249,7 @@ export class EmailTemplatesService {
         headline: template.headline ?? '',
         body: template.body,
         button_label: template.button_label ?? '',
+        button_url: template.button_url ?? '',
         changed_by: userId,
         reason: `Rollback to version from ${snapshot.changed_at.toISOString()}`,
       },
@@ -242,6 +262,7 @@ export class EmailTemplatesService {
         headline: snapshot.headline,
         body: snapshot.body,
         button_label: snapshot.button_label,
+        button_url: snapshot.button_url,
         updated_by: userId,
       },
     });
@@ -267,7 +288,7 @@ export class EmailTemplatesService {
     const buSlug = dto.business_unit ?? businessUnit ?? null;
 
     const branding = await this.resolveBranding(buSlug);
-    const html = this.renderHtml(body, template.headline ?? '', branding);
+    const html = this.renderHtml(body, template.headline ?? '', branding, undefined, template.button_label, template.button_url);
     const renderedSubject = this.applyPlaceholders(subject);
 
     return { status: 200, data: { subject: renderedSubject, html } };
@@ -289,7 +310,7 @@ export class EmailTemplatesService {
 
     const buSlug = dto.business_unit ?? businessUnit ?? null;
     const branding = await this.resolveBranding(buSlug);
-    const html = this.renderHtml(template.body, template.headline ?? '', branding);
+    const html = this.renderHtml(template.body, template.headline ?? '', branding, undefined, template.button_label, template.button_url);
     const subject = this.applyPlaceholders(template.subject);
 
     await this.mail.sendMail({
@@ -307,7 +328,7 @@ export class EmailTemplatesService {
 
   async receiveSyncFromPeer(
     key: string,
-    payload: { subject: string; headline?: string; body: string; button_label?: string },
+    payload: { subject: string; headline?: string; body: string; button_label?: string; button_url?: string },
     originEnv: string,
   ) {
     const template = await this.prisma.emailTemplate.findFirst({
@@ -325,6 +346,7 @@ export class EmailTemplatesService {
         headline: template.headline ?? '',
         body: template.body,
         button_label: template.button_label ?? '',
+        button_url: template.button_url ?? '',
         changed_by: 'sync',
         reason: `Auto-sync from ${originEnv}`,
       },
@@ -337,6 +359,7 @@ export class EmailTemplatesService {
         headline: payload.headline ?? template.headline,
         body: payload.body,
         button_label: payload.button_label ?? template.button_label,
+        button_url: payload.button_url ?? template.button_url,
         updated_by: 'sync',
       },
     });
@@ -388,6 +411,8 @@ export class EmailTemplatesService {
     headline: string,
     branding: { primaryColor: string; primaryColorHover: string; companyName: string; logoUrl?: string },
     overrides?: Record<string, string>,
+    buttonLabel?: string | null,
+    buttonUrl?: string | null,
   ): string {
     const filledBody = this.applyPlaceholders(body, overrides);
     const filledHeadline = this.applyPlaceholders(headline, overrides);
@@ -395,8 +420,16 @@ export class EmailTemplatesService {
       branding.logoUrl ??
       `https://staging.medvirtual.ai/${branding.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
-    // Convert newlines to <br> for HTML rendering
     const htmlBody = filledBody.replace(/\n/g, '<br>');
+
+    const buttonHtml =
+      buttonLabel && buttonUrl
+        ? `<div style="text-align:left;margin:30px 0;">
+        <a href="${buttonUrl}" style="display:inline-block;background-color:${branding.primaryColor};color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
+          ${buttonLabel}
+        </a>
+       </div>`
+        : '';
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -426,6 +459,7 @@ export class EmailTemplatesService {
       <div class="content">
         ${filledHeadline ? `<div class="headline">${filledHeadline}</div>` : ''}
         <div class="body-text">${htmlBody}</div>
+        ${buttonHtml}
       </div>
       <div class="footer">
         <p>${branding.companyName} &copy; ${new Date().getFullYear()}. All rights reserved.</p>
@@ -438,7 +472,7 @@ export class EmailTemplatesService {
 
   private async syncToPeer(
     key: string,
-    template: { subject: string; headline?: string | null; body: string; button_label?: string | null },
+    template: { subject: string; headline?: string | null; body: string; button_label?: string | null; button_url?: string | null },
     userId: string,
   ) {
     const peerUrl = process.env.PEER_ENV_API_URL;
@@ -460,6 +494,7 @@ export class EmailTemplatesService {
         headline: template.headline,
         body: template.body,
         button_label: template.button_label,
+        button_url: template.button_url,
       }),
     });
 
