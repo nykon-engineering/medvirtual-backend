@@ -1010,6 +1010,12 @@ export class UserService {
         throw new NotFoundException('Organization not found');
       }
 
+      if (organization.status === 'inactive') {
+        throw new BadRequestException(
+          'Cannot invite users to an inactive organization',
+        );
+      }
+
       // Create the user with invited status
       const newUser = await this.prisma.uSER.create({
         data: {

@@ -1,3 +1,4 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -50,5 +51,46 @@ describe('UserService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('inviteUserToOrganization', () => {
+    const currentUser: any = { id: 'admin-1', role: 'system_admin' };
+    const inviteData: any = { email: 'new@test.com', role: 'organization_admin' };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should throw BadRequestException when inviting user to an inactive organization', async () => {
+      prismaMock.uSER.findUnique.mockResolvedValue(null);
+      prismaMock.organization.findUnique.mockResolvedValue({
+        id: 'org-1',
+        name: 'Test Org',
+        status: 'inactive',
+      });
+
+      await expect(
+        service.inviteUserToOrganization('org-1', inviteData, currentUser),
+      ).rejects.toThrow(
+        new BadRequestException('Cannot invite users to an inactive organization'),
+      );
+    });
+
+    it('should throw NotFoundException when organization does not exist', async () => {
+      prismaMock.uSER.findUnique.mockResolvedValue(null);
+      prismaMock.organization.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.inviteUserToOrganization('org-missing', inviteData, currentUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when user email already exists', async () => {
+      prismaMock.uSER.findUnique.mockResolvedValue({ id: 'existing-user' });
+
+      await expect(
+        service.inviteUserToOrganization('org-1', inviteData, currentUser),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 });

@@ -696,6 +696,18 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    if (user.organization_id) {
+      const org = await this.prisma.organization.findUnique({
+        where: { id: user.organization_id },
+        select: { status: true },
+      });
+      if (org?.status === 'inactive') {
+        throw new BadRequestException(
+          'Cannot complete signup for an inactive organization',
+        );
+      }
+    }
+
     const passwordCript = await bcrypt.hash(data.password, 10);
     //set password and update status to prospect
     const updateData: {
