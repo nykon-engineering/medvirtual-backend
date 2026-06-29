@@ -573,6 +573,19 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    //check if the organization of this user is active, if not, I cannot send the invite link
+    if (userToReInvite.organization_id) {
+      const org = await this.prisma.organization.findUnique({
+        where: { id: userToReInvite.organization_id },
+        select: { status: true },
+      });
+      if (org?.status === 'inactive') {
+        throw new BadRequestException(
+          'Cannot re-invite user from an inactive organization',
+        );
+      }
+    }
+
     const code = jwt.sign({ id: userToReInvite.id }, process.env.JWT_SECRET, {
       expiresIn: '48h',
     });
