@@ -1347,6 +1347,21 @@ describe('AuthService - invitedUserSignup (additional branches)', () => {
     (prisma.session as any).create.mockResolvedValue(null);
     await expect(service.invitedUserSignup({ ...dataFake })).rejects.toThrow('Failed to create session');
   });
+
+  it('should throw BadRequestException when completing signup for an inactive organization', async () => {
+    (jwt.verify as jest.Mock).mockReturnValue({ id: 'u1' });
+    (prisma.emailInvitation as any).findFirst.mockResolvedValue({ id: 'inv-1' });
+    (prisma.uSER as any).findFirst.mockResolvedValue({
+      id: 'u1',
+      email: 'u@test.com',
+      organization_id: 'org-inactive',
+    });
+    (prisma as any).organization = { findUnique: jest.fn().mockResolvedValue({ status: 'inactive' }) };
+
+    await expect(service.invitedUserSignup({ ...dataFake })).rejects.toThrow(
+      'Cannot complete signup for an inactive organization',
+    );
+  });
 });
 
 describe('AuthService - reInviteUser (additional branches)', () => {
