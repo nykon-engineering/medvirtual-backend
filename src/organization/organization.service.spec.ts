@@ -273,6 +273,7 @@ describe('OrganizationService', () => {
       const rawSql = Array.from(rawStrings).join('');
       expect(rawSql).toContain('status_before_deactivation');
       expect(rawSql).toContain('inactive');
+      expect(rawSql).toContain('NOT IN');
     });
 
     it('should restore status from status_before_deactivation when status is active', async () => {
@@ -293,8 +294,9 @@ describe('OrganizationService', () => {
       expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
       const rawStrings: ReadonlyArray<string> = mockPrismaService.$executeRaw.mock.calls[0][0];
       const rawSql = Array.from(rawStrings).join('');
-      expect(rawSql).toContain('COALESCE');
+      expect(rawSql).not.toContain('COALESCE');
       expect(rawSql).toContain('status_before_deactivation');
+      expect(rawSql).toContain("= 'active'");
     });
   });
 
