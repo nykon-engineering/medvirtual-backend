@@ -1042,15 +1042,17 @@ export class OrganizationService {
             UPDATE "USER"
             SET "status_before_deactivation" = "status", "status" = 'inactive'
             WHERE "organization_id" = ${id}
+              AND "status" NOT IN ('invited', 'suspended', 'incomplete')
           `;
         }
 
         if (updateData.status === OrganizationStatus.active) {
           await tx.$executeRaw`
             UPDATE "USER"
-            SET "status" = COALESCE("status_before_deactivation", 'active'),
+            SET "status" = "status_before_deactivation",
                 "status_before_deactivation" = NULL
             WHERE "organization_id" = ${id}
+              AND "status_before_deactivation" = 'active'
           `;
         }
         return updated;
