@@ -214,7 +214,7 @@ export class AuthController {
   @Get('re-invite/:id')
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
   @ApiOperation({ summary: 'Resend invitation to an invited user' })
   @ApiResponse({
     status: 200,
