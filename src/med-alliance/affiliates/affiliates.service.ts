@@ -490,27 +490,27 @@ export class AffiliatesService {
     const where: any = {};
     if (status) where.status = status;
 
-    // Banking filter: complete = has real payout details (not will_be_provided_later).
+    // Banking filter: complete = affiliate has a hubspot_billcom_vendor_id on their contact
+    // (either the direct AffiliateProfile.contact or their user.contact — mirrors banking_complete in findOwn).
     if (banking === 'complete') {
-      where.AND = [
-        { payout_details: { not: null } },
-        {
-          NOT: {
-            payout_details: {
-              path: ['method'],
-              equals: 'will_be_provided_later',
-            },
-          },
-        },
+      where.OR = [
+        { contact: { hubspot_billcom_vendor_id: { not: null } } },
+        { user: { contact: { hubspot_billcom_vendor_id: { not: null } } } },
       ];
     } else if (banking === 'incomplete') {
-      where.OR = [
-        { payout_details: null },
+      where.AND = [
         {
-          payout_details: {
-            path: ['method'],
-            equals: 'will_be_provided_later',
-          },
+          OR: [
+            { contact: { is: null } },
+            { contact: { hubspot_billcom_vendor_id: null } },
+          ],
+        },
+        {
+          OR: [
+            { user: { is: null } },
+            { user: { contact: { is: null } } },
+            { user: { contact: { hubspot_billcom_vendor_id: null } } },
+          ],
         },
       ];
     }
