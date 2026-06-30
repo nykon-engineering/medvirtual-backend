@@ -5,6 +5,7 @@ import {
   EmailTheme,
   getEmailThemeByBusinessUnit,
 } from '../../common/utils/email-templates/theme';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
 import {
   commissionEligibleTemplate,
   CommissionEligiblePayload,
@@ -60,7 +61,21 @@ export class AllianceNotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
+
+  // ── EmailTemplatesService fallback helper ──────────────────────────────────
+  private async getTplContent(
+    key: string,
+    runtimeValues: Record<string, string>,
+    theme: EmailTheme,
+  ): Promise<{ subject: string; html: string } | null> {
+    try {
+      return await this.emailTemplates.getTemplateContent(key, runtimeValues, theme);
+    } catch {
+      return null;
+    }
+  }
 
   private defaultTheme(): EmailTheme {
     return getEmailThemeByBusinessUnit('MedVirtual');
@@ -68,9 +83,7 @@ export class AllianceNotificationsService {
 
   private buildFrom(theme?: EmailTheme): string {
     const name = theme?.companyName || 'MedVirtual';
-    const raw = `${name} <noreply@medvirtual.ai>`;
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? raw : `[DEV] ${raw}`;
+    return `${name} <noreply@medvirtual.ai>`;
   }
 
   private getAdminEmails(): string[] {
@@ -96,20 +109,23 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
+      const fallbackHtml = commissionEligibleTemplate({ firstName: affiliate.first_name, ...payload }, resolvedTheme);
+      const fallbackSubject = `Your commission is ready — $${payload.commissionAmount.toFixed(2)} from ${payload.organizationName}`;
+      const tpl = await this.getTplContent('alliance-commission-eligible', {
+        '{{firstName}}': affiliate.first_name,
+        '{{organizationName}}': payload.organizationName,
+        '{{commissionAmount}}': payload.commissionAmount.toFixed(2),
+        '{{commissionPercent}}': String(payload.commissionPercent),
+        '{{earningsUrl}}': `${process.env.FRONTEND_URL}/modules/alliance/partner/earnings`,
+      }, resolvedTheme);
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `Your commission is ready — $${payload.commissionAmount.toFixed(2)} from ${payload.organizationName}`,
-        html: commissionEligibleTemplate(
-          { firstName: affiliate.first_name, ...payload },
-          resolvedTheme,
-        ),
+        subject: tpl?.subject ?? fallbackSubject,
+        html: tpl?.html ?? fallbackHtml,
       });
     } catch (err) {
-      this.logger.error(
-        `Failed to send commission eligible email to ${affiliate.email}`,
-        err,
-      );
+      this.logger.error(`Failed to send commission eligible email to ${affiliate.email}`, err);
     }
   }
 
@@ -120,20 +136,22 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
+      const fallbackHtml = payoutCancelledTemplate({ firstName: affiliate.first_name, ...payload }, resolvedTheme);
+      const fallbackSubject = `Update on your payout request of $${payload.totalAmount.toFixed(2)}`;
+      const tpl = await this.getTplContent('alliance-payout-cancelled', {
+        '{{firstName}}': affiliate.first_name,
+        '{{totalAmount}}': payload.totalAmount.toFixed(2),
+        '{{cancellationReason}}': payload.cancellationReason ? `Why it was cancelled: ${payload.cancellationReason}` : '',
+        '{{payoutsUrl}}': `${process.env.FRONTEND_URL}/modules/alliance/partner/payouts`,
+      }, resolvedTheme);
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `Update on your payout request of $${payload.totalAmount.toFixed(2)}`,
-        html: payoutCancelledTemplate(
-          { firstName: affiliate.first_name, ...payload },
-          resolvedTheme,
-        ),
+        subject: tpl?.subject ?? fallbackSubject,
+        html: tpl?.html ?? fallbackHtml,
       });
     } catch (err) {
-      this.logger.error(
-        `Failed to send payout cancelled email to ${affiliate.email}`,
-        err,
-      );
+      this.logger.error(`Failed to send payout cancelled email to ${affiliate.email}`, err);
     }
   }
 
@@ -147,20 +165,22 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
+      const fallbackHtml = payoutProcessingTemplate({ firstName: affiliate.first_name, ...payload }, resolvedTheme);
+      const fallbackSubject = `Your payout of $${payload.totalAmount.toFixed(2)} is being processed`;
+      const tpl = await this.getTplContent('alliance-payout-processing', {
+        '{{firstName}}': affiliate.first_name,
+        '{{totalAmount}}': payload.totalAmount.toFixed(2),
+        '{{processedDate}}': new Date(payload.processedAt).toLocaleDateString('en-US'),
+        '{{payoutsUrl}}': `${process.env.FRONTEND_URL}/modules/alliance/partner/payouts`,
+      }, resolvedTheme);
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `Your payout of $${payload.totalAmount.toFixed(2)} is being processed`,
-        html: payoutProcessingTemplate(
-          { firstName: affiliate.first_name, ...payload },
-          resolvedTheme,
-        ),
+        subject: tpl?.subject ?? fallbackSubject,
+        html: tpl?.html ?? fallbackHtml,
       });
     } catch (err) {
-      this.logger.error(
-        `Failed to send payout processing email to ${affiliate.email}`,
-        err,
-      );
+      this.logger.error(`Failed to send payout processing email to ${affiliate.email}`, err);
     }
   }
 
@@ -171,20 +191,22 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
+      const fallbackHtml = payoutPaidTemplate({ firstName: affiliate.first_name, ...payload }, resolvedTheme);
+      const fallbackSubject = `Your payout of $${payload.totalAmount.toFixed(2)} has been sent — money is on its way!`;
+      const tpl = await this.getTplContent('alliance-payout-paid', {
+        '{{firstName}}': affiliate.first_name,
+        '{{totalAmount}}': payload.totalAmount.toFixed(2),
+        '{{paidDate}}': new Date(payload.paidAt).toLocaleDateString('en-US'),
+        '{{payoutsUrl}}': `${process.env.FRONTEND_URL}/modules/alliance/partner/payouts`,
+      }, resolvedTheme);
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `Your payout of $${payload.totalAmount.toFixed(2)} has been sent — money is on its way!`,
-        html: payoutPaidTemplate(
-          { firstName: affiliate.first_name, ...payload },
-          resolvedTheme,
-        ),
+        subject: tpl?.subject ?? fallbackSubject,
+        html: tpl?.html ?? fallbackHtml,
       });
     } catch (err) {
-      this.logger.error(
-        `Failed to send payout paid email to ${affiliate.email}`,
-        err,
-      );
+      this.logger.error(`Failed to send payout paid email to ${affiliate.email}`, err);
     }
   }
 
@@ -195,20 +217,23 @@ export class AllianceNotificationsService {
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
+      const fallbackHtml = referralStageChangedTemplate({ firstName: affiliate.first_name, ...payload }, resolvedTheme);
+      const fallbackSubject = `Pipeline update: ${payload.organizationName} is now at "${stageToLabel(payload.newStage)}"`;
+      const tpl = await this.getTplContent('alliance-referral-stage-changed', {
+        '{{firstName}}': affiliate.first_name,
+        '{{organizationName}}': payload.organizationName,
+        '{{previousStage}}': stageToLabel(payload.previousStage),
+        '{{newStage}}': stageToLabel(payload.newStage),
+        '{{referralsUrl}}': `${process.env.FRONTEND_URL}/modules/alliance/partner/referred`,
+      }, resolvedTheme);
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: affiliate.email,
-        subject: `Pipeline update: ${payload.organizationName} is now at "${stageToLabel(payload.newStage)}"`,
-        html: referralStageChangedTemplate(
-          { firstName: affiliate.first_name, ...payload },
-          resolvedTheme,
-        ),
+        subject: tpl?.subject ?? fallbackSubject,
+        html: tpl?.html ?? fallbackHtml,
       });
     } catch (err) {
-      this.logger.error(
-        `Failed to send referral stage changed email to ${affiliate.email}`,
-        err,
-      );
+      this.logger.error(`Failed to send referral stage changed email to ${affiliate.email}`, err);
     }
   }
 
@@ -219,28 +244,29 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = this.getAdminEmails();
-      const subject = `Payout request from ${payload.affiliateName} — $${payload.totalAmount.toFixed(2)}`;
-      const html = adminPayoutRequestedTemplate(payload, resolvedTheme);
+      const fallbackSubject = `Payout request from ${payload.affiliateName} — $${payload.totalAmount.toFixed(2)}`;
+      const fallbackHtml = adminPayoutRequestedTemplate(payload, resolvedTheme);
+      const tpl = await this.getTplContent('alliance-admin-payout-requested', {
+        '{{affiliateName}}': payload.affiliateName,
+        '{{totalAmount}}': payload.totalAmount.toFixed(2),
+        '{{commissionCount}}': String(payload.commissionCount),
+        '{{payoutRequestId}}': payload.payoutRequestId,
+        '{{payoutRequestsUrl}}': `${process.env.FRONTEND_URL}/med-alliance/payout-requests`,
+      }, resolvedTheme);
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({
             from: this.buildFrom(resolvedTheme),
             to: email,
-            subject,
-            html,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
           });
         } catch (err) {
-          this.logger.error(
-            `Failed to send admin payout requested email to ${email}`,
-            err,
-          );
+          this.logger.error(`Failed to send admin payout requested email to ${email}`, err);
         }
       }
     } catch (err) {
-      this.logger.error(
-        'Failed to send admin payout requested notifications',
-        err,
-      );
+      this.logger.error('Failed to send admin payout requested notifications', err);
     }
   }
 
@@ -251,28 +277,29 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = this.getAdminEmails();
-      const subject = `Commission ready for review — ${payload.organizationName}`;
-      const html = adminCommissionPendingTemplate(payload, resolvedTheme);
+      const fallbackSubject = `Commission ready for review — ${payload.organizationName}`;
+      const fallbackHtml = adminCommissionPendingTemplate(payload, resolvedTheme);
+      const tpl = await this.getTplContent('alliance-admin-commission-pending', {
+        '{{organizationName}}': payload.organizationName,
+        '{{affiliateName}}': payload.affiliateName,
+        '{{commissionAmount}}': payload.commissionAmount.toFixed(2),
+        '{{commissionId}}': payload.commissionId,
+        '{{commissionsUrl}}': `${process.env.FRONTEND_URL}/med-alliance/admin/commissions`,
+      }, resolvedTheme);
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({
             from: this.buildFrom(resolvedTheme),
             to: email,
-            subject,
-            html,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
           });
         } catch (err) {
-          this.logger.error(
-            `Failed to send admin commission pending email to ${email}`,
-            err,
-          );
+          this.logger.error(`Failed to send admin commission pending email to ${email}`, err);
         }
       }
     } catch (err) {
-      this.logger.error(
-        'Failed to send admin commission pending notifications',
-        err,
-      );
+      this.logger.error('Failed to send admin commission pending notifications', err);
     }
   }
 
@@ -283,28 +310,30 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = this.getAdminEmails();
-      const subject = `Commission reverted to Pending — ${payload.organizationName}`;
-      const html = adminCommissionRevertedTemplate(payload, resolvedTheme);
+      const fallbackSubject = `Commission reverted to Pending — ${payload.organizationName}`;
+      const fallbackHtml = adminCommissionRevertedTemplate(payload, resolvedTheme);
+      const tpl = await this.getTplContent('alliance-admin-commission-reverted', {
+        '{{organizationName}}': payload.organizationName,
+        '{{affiliateName}}': payload.affiliateName,
+        '{{commissionAmount}}': payload.commissionAmount.toFixed(2),
+        '{{commissionId}}': payload.commissionId,
+        '{{revertedByName}}': payload.revertedByName,
+        '{{commissionsUrl}}': `${process.env.FRONTEND_URL}/med-alliance/admin/commissions`,
+      }, resolvedTheme);
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({
             from: this.buildFrom(resolvedTheme),
             to: email,
-            subject,
-            html,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
           });
         } catch (err) {
-          this.logger.error(
-            `Failed to send admin commission reverted email to ${email}`,
-            err,
-          );
+          this.logger.error(`Failed to send admin commission reverted email to ${email}`, err);
         }
       }
     } catch (err) {
-      this.logger.error(
-        'Failed to send admin commission reverted notifications',
-        err,
-      );
+      this.logger.error('Failed to send admin commission reverted notifications', err);
     }
   }
 
@@ -315,23 +344,26 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = this.getAdminEmails();
-      const subject = payload.adminName
+      const fallbackSubject = payload.adminName
         ? `New referral: ${payload.organizationName} — initiated by ${payload.adminName}`
         : `New referral: ${payload.organizationName} referred by ${payload.affiliateName}`;
-      const html = adminReferralNewTemplate(payload, resolvedTheme);
+      const fallbackHtml = adminReferralNewTemplate(payload, resolvedTheme);
+      const tpl = await this.getTplContent('alliance-admin-referral-new', {
+        '{{organizationName}}': payload.organizationName,
+        '{{affiliateName}}': payload.affiliateName,
+        '{{referredCompanyId}}': payload.referredCompanyId,
+        '{{pipelineUrl}}': `${process.env.FRONTEND_URL}/med-alliance/admin/companies-pipeline`,
+      }, resolvedTheme);
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({
             from: this.buildFrom(resolvedTheme),
             to: email,
-            subject,
-            html,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
           });
         } catch (err) {
-          this.logger.error(
-            `Failed to send admin new referral email to ${email}`,
-            err,
-          );
+          this.logger.error(`Failed to send admin new referral email to ${email}`, err);
         }
       }
     } catch (err) {
@@ -346,28 +378,28 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = this.getAdminEmails();
-      const subject = `New Alliance partner registered: ${payload.partnerName}`;
-      const html = adminPartnerRegisteredTemplate(payload, resolvedTheme);
+      const fallbackSubject = `New Alliance partner registered: ${payload.partnerName}`;
+      const fallbackHtml = adminPartnerRegisteredTemplate(payload, resolvedTheme);
+      const tpl = await this.getTplContent('alliance-admin-partner-registered', {
+        '{{partnerName}}': payload.partnerName,
+        '{{partnerEmail}}': payload.partnerEmail,
+        '{{affiliateProfileId}}': payload.affiliateProfileId,
+        '{{partnersUrl}}': `${process.env.FRONTEND_URL}/med-alliance/affiliate-partners`,
+      }, resolvedTheme);
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({
             from: this.buildFrom(resolvedTheme),
             to: email,
-            subject,
-            html,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
           });
         } catch (err) {
-          this.logger.error(
-            `Failed to send admin partner registered email to ${email}`,
-            err,
-          );
+          this.logger.error(`Failed to send admin partner registered email to ${email}`, err);
         }
       }
     } catch (err) {
-      this.logger.error(
-        'Failed to send admin partner registered notifications',
-        err,
-      );
+      this.logger.error('Failed to send admin partner registered notifications', err);
     }
   }
 
@@ -378,31 +410,30 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = this.getAdminEmails();
-      const subject = `Daily commission review — ${payload.commissions.length} pending ($${payload.totalAmount.toFixed(2)})`;
-      const html = adminCommissionPendingSummaryTemplate(
-        payload,
-        resolvedTheme,
-      );
+      const fallbackSubject = `Daily commission review — ${payload.commissions.length} pending ($${payload.totalAmount.toFixed(2)})`;
+      const fallbackHtml = adminCommissionPendingSummaryTemplate(payload, resolvedTheme);
+      const formattedDate = new Date(payload.reportDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const tpl = await this.getTplContent('alliance-admin-commission-summary', {
+        '{{commissionCount}}': String(payload.commissions.length),
+        '{{totalAmount}}': payload.totalAmount.toFixed(2),
+        '{{reportDate}}': formattedDate,
+        '{{commissionsTable}}': payload.commissions.map(c => `- ${c.organizationName} / ${c.affiliateName}: $${c.commissionAmount.toFixed(2)} (${c.commissionId})`).join('\n'),
+        '{{commissionsUrl}}': `${process.env.FRONTEND_URL}/med-alliance/admin/commissions`,
+      }, resolvedTheme);
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({
             from: this.buildFrom(resolvedTheme),
             to: email,
-            subject,
-            html,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
           });
         } catch (err) {
-          this.logger.error(
-            `Failed to send daily commission summary email to ${email}`,
-            err,
-          );
+          this.logger.error(`Failed to send daily commission summary email to ${email}`, err);
         }
       }
     } catch (err) {
-      this.logger.error(
-        'Failed to send daily commission summary notifications',
-        err,
-      );
+      this.logger.error('Failed to send daily commission summary notifications', err);
     }
   }
 
@@ -411,21 +442,27 @@ export class AllianceNotificationsService {
     theme?: EmailTheme,
   ): Promise<void> {
     const resolvedTheme = theme ?? this.defaultTheme();
-    const amountLabel =
-      payload.amount !== undefined ? ` — $${payload.amount.toFixed(2)}` : '';
-    const subject = `markPaid() error at "${payload.errorPhase}" — payout ${payload.payoutRequestId}${amountLabel}`;
+    const amountLabel = payload.amount !== undefined ? ` — $${payload.amount.toFixed(2)}` : '';
+    const fallbackSubject = `markPaid() error at "${payload.errorPhase}" — payout ${payload.payoutRequestId}${amountLabel}`;
+    const fallbackHtml = adminMarkPaidErrorTemplate(payload, resolvedTheme);
     try {
+      const tpl = await this.getTplContent('alliance-admin-mark-paid-error', {
+        '{{errorPhase}}': payload.errorPhase,
+        '{{payoutRequestId}}': payload.payoutRequestId,
+        '{{adminName}}': payload.adminName,
+        '{{affiliateName}}': payload.affiliateName || 'N/A',
+        '{{amount}}': payload.amount !== undefined ? `$${payload.amount.toFixed(2)}` : 'N/A',
+        '{{errorMessage}}': payload.errorMessage,
+        '{{payoutRequestUrl}}': `${process.env.FRONTEND_URL}/med-alliance/payout-requests/${payload.payoutRequestId}`,
+      }, resolvedTheme);
       await this.mail.sendMail({
         from: this.buildFrom(resolvedTheme),
         to: 'paulo@regenta.ai',
-        subject,
-        html: adminMarkPaidErrorTemplate(payload, resolvedTheme),
+        subject: tpl?.subject ?? fallbackSubject,
+        html: tpl?.html ?? fallbackHtml,
       });
     } catch (err) {
-      this.logger.error(
-        `Failed to send markPaid error fallback email for payout ${payload.payoutRequestId}`,
-        err,
-      );
+      this.logger.error(`Failed to send markPaid error fallback email for payout ${payload.payoutRequestId}`, err);
     }
   }
 
@@ -436,28 +473,30 @@ export class AllianceNotificationsService {
     const resolvedTheme = theme ?? this.defaultTheme();
     try {
       const adminEmails = this.getAdminEmails();
-      const subject = `Bill.com payment failed — ${payload.partnerName} ($${payload.amount.toFixed(2)})`;
-      const html = adminPaymentFailedTemplate(payload, resolvedTheme);
+      const fallbackSubject = `Bill.com payment failed — ${payload.partnerName} ($${payload.amount.toFixed(2)})`;
+      const fallbackHtml = adminPaymentFailedTemplate(payload, resolvedTheme);
+      const tpl = await this.getTplContent('alliance-admin-payment-failed', {
+        '{{partnerName}}': payload.partnerName,
+        '{{amount}}': payload.amount.toFixed(2),
+        '{{billIds}}': payload.billIds,
+        '{{payoutRequestId}}': payload.payoutRequestId,
+        '{{errorMsg}}': payload.errorMsg,
+        '{{payoutRequestsUrl}}': `${process.env.FRONTEND_URL}/med-alliance/payout-requests`,
+      }, resolvedTheme);
       for (const email of adminEmails) {
         try {
           await this.mail.sendMail({
             from: this.buildFrom(resolvedTheme),
             to: email,
-            subject,
-            html,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
           });
         } catch (err) {
-          this.logger.error(
-            `Failed to send admin payment failed email to ${email}`,
-            err,
-          );
+          this.logger.error(`Failed to send admin payment failed email to ${email}`, err);
         }
       }
     } catch (err) {
-      this.logger.error(
-        'Failed to send admin payment failed notifications',
-        err,
-      );
+      this.logger.error('Failed to send admin payment failed notifications', err);
     }
   }
 }

@@ -10,6 +10,7 @@ import { PositionRateConfigModule } from '../position-rate-config/position-rate-
 import { PayoutRequestsModule } from '../med-alliance/payout-requests/payout-requests.module';
 import { SyncModule } from '../med-alliance/sync/sync.module';
 import { AllianceNotificationsModule } from '../med-alliance/notifications/notifications.module';
+import { EmailTemplatesModule } from '../email-templates/email-templates.module';
 
 @Module({
   controllers: [CronController],
@@ -24,6 +25,7 @@ import { AllianceNotificationsModule } from '../med-alliance/notifications/notif
     PayoutRequestsModule,
     SyncModule,
     AllianceNotificationsModule,
+    EmailTemplatesModule,
   ],
 })
 export class CronModule {}

@@ -11,6 +11,7 @@ import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-re
 import { ReferralSyncService } from '../med-alliance/sync/referral-sync.service';
 import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 jest.mock('axios');
 
@@ -101,6 +102,7 @@ describe('CronService', () => {
         { provide: ReferralSyncService, useValue: referralSyncServiceMock },
         { provide: CommissionDetectionService, useValue: commissionDetectionServiceMock },
         { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
+        { provide: EmailTemplatesService, useValue: { getTemplateContent: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
 

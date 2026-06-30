@@ -3,6 +3,7 @@ import { RecoverypassService } from './recoverypass.service';
 import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 import * as bcrypt from 'bcryptjs';
 
@@ -46,6 +47,7 @@ describe('RecoverypassService', () => {
         { provide: UserService, useValue: userServiceMock },
         { provide: PrismaService, useValue: prismaServiceMock },
         { provide: MailService, useValue: mailServiceMock },
+        { provide: EmailTemplatesService, useValue: { getTemplateContent: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
 

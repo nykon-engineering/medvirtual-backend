@@ -8,13 +8,31 @@ import { MailService } from '../mail/mail.service';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { ticketTypeReverseDictionary } from '../common/dictionaries/ticket-type';
 import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
+
+  // ── EmailTemplatesService fallback helper ─────────────────────────────────
+  // Tries to load the template from the DB; returns { subject, html } if found,
+  // or null if not — allowing each method to fall back to buildEmail().
+  private async getTplContent(
+    key: string,
+    runtimeValues: Record<string, string>,
+    theme: ReturnType<typeof getEmailThemeByBusinessUnit> | null,
+  ): Promise<{ subject: string; html: string } | null> {
+    try {
+      if (!theme) return null;
+      return await this.emailTemplates.getTemplateContent(key, runtimeValues, theme);
+    } catch {
+      return null;
+    }
+  }
 
   // Helper function to decode HTML entities
   private decodeHtmlEntities = (text: string): string => {
@@ -45,16 +63,6 @@ export class NotificationsService {
     return `${process.env.FRONTEND_URL}${path}?ticket=${ticketId}`;
   }
 
-  private async sendMailWithPrefix(options: {
-    from: string;
-    to: string | string[];
-    subject: string;
-    html: string;
-  }): Promise<boolean> {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    const from = isProduction ? options.from : `[DEV] ${options.from}`;
-    return this.mail.sendMail({ ...options, from });
-  }
 
   private buildEmail(
     htmlInner: string,
@@ -297,15 +305,15 @@ export class NotificationsService {
       throw new BadRequestException('No valid recipient emails found');
     }
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<h2>Placement Completed</h2>
       <p>The hire request has been marked as <strong>placement completed</strong>.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
@@ -313,7 +321,7 @@ export class NotificationsService {
          <p><strong>Selected Candidates:</strong> </p>
          ${winners}
        </div>
-       
+
         <p>Please proceed with onboarding steps.</p>
         <div style="text-align: left; margin: 30px 0;">
           <a href="${detailUrl}" class="cta-button">
@@ -323,11 +331,21 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tpl = await this.getTplContent('hr-placement-completed', {
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{salaryRange}}': salaryRange,
+      '{{startDate}}': startDate,
+      '{{selectedCandidates}}': hr.panels?.[0]?.panelCandidates?.map(pc => pc.candidate.name || `${pc.candidate.first_name || ''} ${pc.candidate.last_name || ''}`.trim()).join(', ') || '',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
+
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: recipients,
-      subject: `Placement completed: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Placement completed: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
@@ -429,9 +447,9 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<p>You have been invited to an <strong>Interview</strong>.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Position Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -440,15 +458,24 @@ export class NotificationsService {
          <p><strong>Pairing Date:</strong> ${interviewDateFormatted}</p>
          ${bodyLine}
        </div>
-       
+
        ${bodyLink}`,
       emailTheme,
     );
-    return await this.sendMailWithPrefix({
+    const tpl = await this.getTplContent('hr-interview-scheduled', {
+      '{{roleType}}': hr.hubspot_role_type || '',
+      '{{availability}}': hr.availability || '',
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{startDate}}': startDate,
+      '{{interviewDate}}': interviewDateFormatted,
+      '{{interviewLink}}': interviewLink,
+    }, emailTheme);
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emailsUsers.map((u) => u.email),
-      subject: `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
-      html,
+      subject: tpl?.subject ?? `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
@@ -490,19 +517,19 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<h2>Hire Request ${verb.toUpperCase()}</h2>
        <p>The hire request was ${verb} by the client.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
@@ -510,12 +537,20 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
+    const tpl = await this.getTplContent('hr-client-change', {
+      '{{action}}': verb,
+      '{{actionUpper}}': verb.toUpperCase(),
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map((user) => user.email),
-      subject: `Hire Request ${verb}: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Hire Request ${verb}: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
@@ -549,19 +584,20 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
-      `<p>${hr.assigned_sourcing.first_name ?? hr.assigned_sourcing.first_name} ${hr.assigned_sourcing.last_name ?? hr.assigned_sourcing.last_name}</p>
+    const assigneeName = `${hr.assigned_sourcing.first_name ?? ''} ${hr.assigned_sourcing.last_name ?? ''}`.trim();
+    const fallbackHtml = this.buildEmail(
+      `<p>${assigneeName}</p>
        <p>The hire request was updated to Start to sourcing stage.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
@@ -569,12 +605,19 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
+    const tpl = await this.getTplContent('hr-sourcing-assigned', {
+      '{{assigneeName}}': assigneeName,
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [hr.assigned_sourcing.email],
-      subject: `Hire Request ${verb}: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Hire Request ${verb}: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
@@ -616,11 +659,12 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
-      `<p>${users[0].first_name ?? users[0].first_name}</p>
+    const conciergeAssigneeName = users[0].first_name ?? '';
+    const fallbackHtml = this.buildEmail(
+      `<p>${conciergeAssigneeName}</p>
        <p><strong>Hire Request Ready For Review</strong></p>
        <p>This request requires your attention:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -629,7 +673,7 @@ export class NotificationsService {
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
@@ -637,12 +681,19 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
+    const tpl = await this.getTplContent('hr-concierge-assigned', {
+      '{{assigneeName}}': conciergeAssigneeName,
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map((user) => user.email).filter(Boolean),
-      subject: `Hire Request ${verb}: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Hire Request ${verb}: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
@@ -719,11 +770,11 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<p>${users.map((u) => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
       ${type === 'sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : type === 'staffing_coordinator' ? `<p><strong>Staffing Coordinator Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
        <p>You have been assigned ${type === 'sourcing' ? `to source` : type === 'staffing_coordinator' ? `as a staffing coordinator` : `to`} this hire request:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -732,12 +783,11 @@ export class NotificationsService {
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
-
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
        </div>
-       
+
        <p>Please review the details and take appropriate action.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
@@ -747,12 +797,27 @@ export class NotificationsService {
        ${from === 'panel_request_flow' ? `<p>This hire request was created from Panel Request Flow.</p>` : ''}`,
       emailTheme,
     );
+    const assignmentType = type === 'sourcing' ? 'Sourcing Assignment to a Hire Request' : type === 'staffing_coordinator' ? 'Staffing Coordinator Assignment to a Hire Request' : 'Assignment to a Hire Request';
+    const assignmentRole = type === 'sourcing' ? 'to source' : type === 'staffing_coordinator' ? 'as a staffing coordinator' : 'to';
+    const tpl = await this.getTplContent('hr-created', {
+      '{{assigneeName}}': users.map((u) => `${u.first_name || ''} ${u.last_name || ''}`).join(', '),
+      '{{assignmentType}}': assignmentType,
+      '{{assignmentRole}}': assignmentRole,
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{availability}}': hr.availability || '',
+      '{{salaryRange}}': salaryRange,
+      '{{startDate}}': startDate,
+      '{{hrStatus}}': hr.status || '',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
-      subject: `Hire Request Assigned: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Hire Request Assigned: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
@@ -799,25 +864,24 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
        <p><strong>Back to sourcing</strong></p>
        <p>A hire request requires your attention since it has been put back to sourcing:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
-
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
        </div>
-       
+
        <p>Please review the details and take appropriate action.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
@@ -826,12 +890,24 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
+    const backToSourcingName = `${destin.first_name || ''} ${destin.last_name || ''}`.trim();
+    const tplBTS = await this.getTplContent('hr-back-to-sourcing', {
+      '{{assigneeName}}': backToSourcingName,
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{availability}}': hr.availability || '',
+      '{{salaryRange}}': salaryRange,
+      '{{startDate}}': startDate,
+      '{{hrStatus}}': hr.status || '',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
-      subject: `Hire Request Assigned: ${hr.title}`,
-      html,
+      subject: tplBTS?.subject ?? `Hire Request Assigned: ${hr.title}`,
+      html: tplBTS?.html ?? fallbackHtml,
     });
   }
 
@@ -886,7 +962,7 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
+    const fallbackHtmlPanelClient = this.buildEmail(
       `<p><strong>Your candidate panel is ready for review!</strong></p>
        <p>The panel for the following hire request has been reviewed and is now ready for your follow-up:</p>
 
@@ -910,12 +986,21 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
+    const tplPanelClient = await this.getTplContent('hr-panel-ready-client', {
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{availability}}': hr.availability || '',
+      '{{salaryRange}}': salaryRange,
+      '{{startDate}}': startDate,
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
-      subject: `Your candidate panel is ready: ${hr.title}`,
-      html,
+      subject: tplPanelClient?.subject ?? `Your candidate panel is ready: ${hr.title}`,
+      html: tplPanelClient?.html ?? fallbackHtmlPanelClient,
     });
   }
 
@@ -964,11 +1049,12 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
-      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
+    const panelReadyName = `${destin.first_name || ''} ${destin.last_name || ''}`.trim();
+    const fallbackHtmlPanelInternal = this.buildEmail(
+      `<p>${panelReadyName}</p>
        <p><strong>Panel Ready</strong></p>
        <p>The panel of the following hire request has been reviewed and now it is ready:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -981,7 +1067,7 @@ export class NotificationsService {
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
        </div>
-       
+
        <p>Please review the details and take appropriate action.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
@@ -990,12 +1076,23 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
+    const tplPanelInternal = await this.getTplContent('hr-panel-ready-internal', {
+      '{{assigneeName}}': panelReadyName,
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{availability}}': hr.availability || '',
+      '{{salaryRange}}': salaryRange,
+      '{{startDate}}': startDate,
+      '{{hrStatus}}': hr.status || '',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization?.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
-      subject: `Panel Reviewed and Ready: ${hr.title}`,
-      html,
+      subject: tplPanelInternal?.subject ?? `Panel Reviewed and Ready: ${hr.title}`,
+      html: tplPanelInternal?.html ?? fallbackHtmlPanelInternal,
     });
   }
 
@@ -1033,19 +1130,20 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
-      `<p>${users[0].first_name ?? users[0].first_name} ${users[0].last_name ?? users[0].last_name}</p>
+    const endorseName = `${users[0].first_name || ''} ${users[0].last_name || ''}`.trim();
+    const fallbackHtmlEndorse = this.buildEmail(
+      `<p>${endorseName}</p>
        <p>The hire request received new candidates.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
@@ -1053,12 +1151,19 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
+    const tplEndorse = await this.getTplContent('hr-candidates-endorsed', {
+      '{{assigneeName}}': endorseName,
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: users.map((user) => user.email),
-      subject: `New candidates in Hire Request: ${hr.title}`,
-      html,
+      subject: tplEndorse?.subject ?? `New candidates in Hire Request: ${hr.title}`,
+      html: tplEndorse?.html ?? fallbackHtmlEndorse,
     });
   }
 
@@ -1179,9 +1284,9 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
+    const fallbackHtmlWinner = this.buildEmail(
       `<p>Your hire request has been completed.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -1193,7 +1298,7 @@ export class NotificationsService {
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Selected Candidate:</strong> ${winnerName}</p>
        </div>
-       
+
        <p>Please review the details and proceed with the next steps.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
@@ -1202,11 +1307,22 @@ export class NotificationsService {
        </div>`,
       emailTheme,
     );
-    const results = this.sendMailWithPrefix({
+    const tplWinner = await this.getTplContent('hr-winner-selected', {
+      '{{roleType}}': hr.hubspot_role_type || '',
+      '{{availability}}': hr.availability || '',
+      '{{hrTitle}}': hr.title,
+      '{{orgName}}': hr.organization.name,
+      '{{hrDescription}}': hr.description || 'No description provided',
+      '{{salaryRange}}': salaryRange,
+      '{{startDate}}': startDate,
+      '{{winnerName}}': winnerName,
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
+    const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: uniqueRecipients.map((r) => r.email),
-      subject: `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
-      html,
+      subject: tplWinner?.subject ?? `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
+      html: tplWinner?.html ?? fallbackHtmlWinner,
     });
 
     // Return true if at least one email was sent successfully
@@ -1293,13 +1409,13 @@ export class NotificationsService {
       hr.organization.business_unit,
     );
 
-    const html = this.buildEmail(
+    const fallbackHtmlAwaiting = this.buildEmail(
       `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
-      
+
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
         <p><strong>Scheduled Date:</strong> ${scheduledDate}</p>
       </div>
-      
+
       <div style="text-align: left; margin: 30px 0;">
         <a href="${detailUrl}" class="cta-button">
           Review Hire Request
@@ -1307,11 +1423,17 @@ export class NotificationsService {
       </div>`,
       emailTheme,
     );
-    const results = this.sendMailWithPrefix({
+    const tplAwaiting = await this.getTplContent('hr-awaiting-decision', {
+      '{{roleType}}': hr.hubspot_role_type || '',
+      '{{availability}}': hr.availability || '',
+      '{{scheduledDate}}': scheduledDate,
+      '{{hrLink}}': detailUrl,
+    }, emailTheme);
+    const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: uniqueRecipients.map((r) => r.email),
-      subject: `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
-      html,
+      subject: tplAwaiting?.subject ?? `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
+      html: tplAwaiting?.html ?? fallbackHtmlAwaiting,
     });
 
     // Return true if at least one email was sent successfully
@@ -1424,11 +1546,21 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplTicketStatus = await this.getTplContent('ticket-status-changed', {
+      '{{status}}': statusDisplay,
+      '{{ticketTitle}}': ticket.title,
+      '{{orgName}}': ticket.organization?.name || 'N/A',
+      '{{ticketType}}': ticket.type || '',
+      '{{createdDate}}': createdDate,
+      '{{ticketDescription}}': ticket.description || '',
+      '{{ticketLink}}': detailUrl,
+    }, emailTheme);
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
-      subject: `Your ticket changed to ${statusDisplay} status: ${ticket.title}`,
-      html,
+      subject: tplTicketStatus?.subject ?? `Your ticket changed to ${statusDisplay} status: ${ticket.title}`,
+      html: tplTicketStatus?.html ?? html,
     });
   }
 
@@ -1531,11 +1663,20 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplReopened = await this.getTplContent('ticket-reopened', {
+      '{{ticketTitle}}': ticket.title,
+      '{{orgName}}': ticket.organization?.name || 'N/A',
+      '{{ticketType}}': ticket.type || '',
+      '{{createdDate}}': createdDate,
+      '{{ticketDescription}}': ticket.description || '',
+      '{{ticketLink}}': detailUrl,
+    }, emailTheme);
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
-      subject: `Your ticket has been reopened: ${ticket.title}`,
-      html,
+      subject: tplReopened?.subject ?? `Your ticket has been reopened: ${ticket.title}`,
+      html: tplReopened?.html ?? html,
     });
   }
 
@@ -1776,7 +1917,7 @@ export class NotificationsService {
           emailTheme,
         );
 
-        return this.sendMailWithPrefix({
+        return this.mail.sendMail({
           from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
           subject: emailSubject,
@@ -1821,11 +1962,20 @@ export class NotificationsService {
           emailTheme,
         );
 
-        return this.sendMailWithPrefix({
+        const tplEvent = await this.getTplContent('ticket-event', {
+          '{{event}}': event,
+          '{{ticketTitle}}': ticket.title,
+          '{{orgName}}': ticket.organization?.name || 'N/A',
+          '{{ticketType}}': ticketTypeDisplay,
+          '{{ticketDescription}}': ticket.description || '',
+          '{{ticketLink}}': detailUrl,
+        }, emailTheme);
+
+        return this.mail.sendMail({
           from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
-          subject: `Ticket ${event}: ${ticket.title}`,
-          html,
+          subject: tplEvent?.subject ?? `Ticket ${event}: ${ticket.title}`,
+          html: tplEvent?.html ?? html,
         });
       }
     });
@@ -1907,11 +2057,19 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplNoteAssignee = await this.getTplContent('ticket-note-added', {
+      '{{ticketTitle}}': ticket.title,
+      '{{orgName}}': ticket.organization?.name || 'N/A',
+      '{{authorName}}': authorName,
+      '{{noteContent}}': note.content,
+      '{{ticketLink}}': detailUrl,
+    }, emailTheme);
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [ticket.user.email],
-      subject: `You received a response on your ticket: ${ticket.title}`,
-      html,
+      subject: tplNoteAssignee?.subject ?? `You received a response on your ticket: ${ticket.title}`,
+      html: tplNoteAssignee?.html ?? html,
     });
   }
 
@@ -1984,11 +2142,19 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplNoteCreator = await this.getTplContent('ticket-note-added', {
+      '{{ticketTitle}}': ticket.title,
+      '{{orgName}}': ticket.organization?.name || 'N/A',
+      '{{authorName}}': authorName,
+      '{{noteContent}}': note.content,
+      '{{ticketLink}}': detailUrl,
+    }, emailTheme);
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creator.email],
-      subject: `You received a response on your ticket: ${ticket.title}`,
-      html,
+      subject: tplNoteCreator?.subject ?? `You received a response on your ticket: ${ticket.title}`,
+      html: tplNoteCreator?.html ?? html,
     });
   }
 
@@ -2156,11 +2322,21 @@ export class NotificationsService {
         theme,
       );
 
-      await this.sendMailWithPrefix({
+      const tplLead = await this.getTplContent('talent-pool-lead-new', {
+        '{{leadName}}': payload.leadName,
+        '{{leadEmail}}': payload.email,
+        '{{organization}}': payload.organization,
+        '{{websiteUrl}}': websiteDisplay,
+        '{{languagePreference}}': payload.languagePreference === 'yes' ? 'Yes' : 'No',
+        '{{mainNeed}}': payload.mainNeed || 'N/A',
+        '{{additionalDetails}}': payload.additionalDetails || 'N/A',
+      }, theme);
+
+      await this.mail.sendMail({
         from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
         to: [payload.ownerEmail],
-        subject: `New talent pool lead: ${payload.leadName} — ${payload.organization}`,
-        html,
+        subject: tplLead?.subject ?? `New talent pool lead: ${payload.leadName} — ${payload.organization}`,
+        html: tplLead?.html ?? html,
       });
     } catch (err) {
       console.warn(
@@ -2196,7 +2372,7 @@ export class NotificationsService {
       ? `Hi ${panel.recipientUser.first_name},`
       : `Hi ${panel.recipient_name},`;
 
-    const html = this.buildEmail(
+    const fallbackHtmlOfferClient = this.buildEmail(
       `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
       <p>Take a look at their profiles whenever you're ready.</p>
       <div style="text-align: left; margin: 30px 0;">
@@ -2207,12 +2383,19 @@ export class NotificationsService {
       greeting,
       'Cheers,',
     );
+    const tplOfferClient = await this.getTplContent('offer-panel-created', {
+      '{{candidateLabel}}': candidateLabel,
+      '{{companyName}}': theme.companyName,
+      '{{createdByName}}': panel.createdBy.first_name || '',
+      '{{candidateCount}}': String(candidateCount),
+      '{{panelLink}}': panelUrl,
+    }, theme);
 
-    return this.sendMailWithPrefix({
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
-      subject: `${candidateLabel} picked for you — ${theme.companyName}`,
-      html,
+      subject: tplOfferClient?.subject ?? `${candidateLabel} picked for you — ${theme.companyName}`,
+      html: tplOfferClient?.html ?? fallbackHtmlOfferClient,
     });
   }
 
@@ -2250,11 +2433,19 @@ export class NotificationsService {
       'Cheers,',
     );
 
-    return this.sendMailWithPrefix({
+    const tplOfferPublic = await this.getTplContent('offer-panel-created', {
+      '{{candidateLabel}}': candidateLabel,
+      '{{companyName}}': theme.companyName,
+      '{{createdByName}}': panel.createdBy.first_name || '',
+      '{{candidateCount}}': String(candidateCount),
+      '{{panelLink}}': panelUrl,
+    }, theme);
+
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
-      subject: `${candidateLabel} picked for you — ${theme.companyName}`,
-      html,
+      subject: tplOfferPublic?.subject ?? `${candidateLabel} picked for you — ${theme.companyName}`,
+      html: tplOfferPublic?.html ?? html,
     });
   }
 
@@ -2279,7 +2470,7 @@ export class NotificationsService {
       ? ` from ${panel.recipient_org_name}`
       : '';
 
-    const html = this.buildEmail(
+    const fallbackHtmlAccepted = this.buildEmail(
       `<p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>accepted</strong> the offer panel you sent.</p>
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
         <p><strong>Panel:</strong> ${panel.title}</p>
@@ -2290,12 +2481,18 @@ export class NotificationsService {
       </div>`,
       theme,
     );
+    const tplAccepted = await this.getTplContent('offer-panel-accepted', {
+      '{{recipientName}}': panel.recipient_name || '',
+      '{{recipientOrg}}': panel.recipient_org_name || 'N/A',
+      '{{recipientEmail}}': panel.recipient_email || '',
+      '{{panelTitle}}': panel.title || '',
+    }, theme);
 
-    return this.sendMailWithPrefix({
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.createdBy.email,
-      subject: `Your offer was accepted`,
-      html,
+      subject: tplAccepted?.subject ?? `Your offer was accepted`,
+      html: tplAccepted?.html ?? fallbackHtmlAccepted,
     });
   }
 
@@ -2331,12 +2528,18 @@ export class NotificationsService {
       </div>`,
       theme,
     );
+    const tplDeclined = await this.getTplContent('offer-panel-declined', {
+      '{{recipientName}}': panel.recipient_name || '',
+      '{{recipientOrg}}': panel.recipient_org_name || 'N/A',
+      '{{recipientEmail}}': panel.recipient_email || '',
+      '{{panelTitle}}': panel.title || '',
+    }, theme);
 
-    return this.sendMailWithPrefix({
+    return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.createdBy.email,
-      subject: `Your offer was declined`,
-      html,
+      subject: tplDeclined?.subject ?? `Your offer was declined`,
+      html: tplDeclined?.html ?? html,
     });
   }
 }

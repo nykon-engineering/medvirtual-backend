@@ -27,6 +27,8 @@ import { SqsModule } from './sqs/sqs.module';
 import { PositionRateConfigModule } from './position-rate-config/position-rate-config.module';
 import { MedAllianceModule } from './med-alliance/med-alliance.module';
 import { OfferPanelsModule } from './offer-panels/offer-panels.module';
+import { EmailTemplatesModule } from './email-templates/email-templates.module';
+import { BusinessUnitsModule } from './business-units/business-units.module';
 
 @Module({
   imports: [
@@ -62,6 +64,8 @@ import { OfferPanelsModule } from './offer-panels/offer-panels.module';
     PositionRateConfigModule,
     MedAllianceModule,
     OfferPanelsModule,
+    EmailTemplatesModule,
+    BusinessUnitsModule,
   ],
   controllers: [AppController],
   providers: [

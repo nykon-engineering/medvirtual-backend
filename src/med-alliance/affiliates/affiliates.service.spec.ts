@@ -8,6 +8,7 @@ import { AffiliateUpdateService } from '../../hubspot/update/affiliate';
 import { HubspotService } from '../../hubspot/hubspot.service';
 import { InvoiceIngestionService } from '../sync/invoice-ingestion.service';
 import { AllianceNotificationsService } from '../notifications/notifications.service';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
 
 const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
   notifyAdminPartnerRegistered: jest.fn(),
@@ -107,6 +108,7 @@ describe('AffiliatesService', () => {
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: InvoiceIngestionService, useValue: mockInvoiceIngestionService },
         { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
+        { provide: EmailTemplatesService, useValue: { getTemplateContent: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
 

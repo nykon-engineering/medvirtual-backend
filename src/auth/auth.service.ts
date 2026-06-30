@@ -32,6 +32,7 @@ import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
 import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
 import { AffiliateUpdateService } from '../hubspot/update/affiliate';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
 export class AuthService {
@@ -41,12 +42,9 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly prisma: PrismaService,
     private readonly affiliateUpdateService: AffiliateUpdateService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
 
-  private buildFromWithPrefix(from: string): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? from : `[DEV] ${from}`;
-  }
 
   async signIn(data: AuthSignInDto): Promise<object> {
     const timeToExpires = data.rememberMe
@@ -241,25 +239,22 @@ export class AuthService {
       throw new BadRequestException('Failed to generate verification code');
     }
 
-    // Get user email theme and Berry Virtual status
     const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
     const isBerryVirtual = await isUserBerryVirtual(this.prisma, newUser.id);
-
-    // Generate verification URL with Berry Virtual parameter
     const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
 
-    // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(
-      code,
-      emailTheme || undefined,
-      isBerryVirtual,
-      verificationUrl,
+    const fallbackSubject = 'Verification Code';
+    const fallbackHtml = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
+    const tplContent = await this.emailTemplates.getTemplateContent(
+      'verification-code',
+      { '{{verificationCode}}': code, '{{verificationUrl}}': verificationUrl, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
+      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
     );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: data.email,
-      subject: 'Verification Code',
-      html: emailBody,
+      subject: tplContent?.subject ?? fallbackSubject,
+      html: tplContent?.html ?? fallbackHtml,
     });
 
     if (!mailSent) {
@@ -416,25 +411,22 @@ export class AuthService {
       throw new BadRequestException('Failed to store verification code');
     }
 
-    // Get user email theme and Berry Virtual status
     const emailTheme = await getUserEmailTheme(this.prisma, user.id);
     const isBerryVirtual = await isUserBerryVirtual(this.prisma, user.id);
-
-    // Generate verification URL with Berry Virtual parameter
     const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
 
-    // Send verification code via email
-    const emailBody = getVerificationCodeTemplate(
-      code,
-      emailTheme || undefined,
-      isBerryVirtual,
-      verificationUrl,
+    const fallbackSubject = 'Verify Your MedVirtual Account - Verification Code';
+    const fallbackHtml = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
+    const tplContent = await this.emailTemplates.getTemplateContent(
+      'verification-code',
+      { '{{verificationCode}}': code, '{{verificationUrl}}': verificationUrl, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
+      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
     );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: user.email,
-      subject: 'Verify Your MedVirtual Account - Verification Code',
-      html: emailBody,
+      subject: tplContent?.subject ?? fallbackSubject,
+      html: tplContent?.html ?? fallbackHtml,
       headers: {
         'X-Mailer': 'MedVirtual Platform',
         'X-Priority': '3',
@@ -521,23 +513,22 @@ export class AuthService {
       throw new BadRequestException('Failed to generate invite code');
     }
 
-    // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
-
-    // Send signup link via email
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink =
-      emailTheme?.companyName === 'Berry Virtual'
-        ? `${baseInviteLink}&company=berry`
-        : baseInviteLink;
-    const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
+    const inviteLink = emailTheme?.companyName === 'Berry Virtual' ? `${baseInviteLink}&company=berry` : baseInviteLink;
+
+    const fallbackSubject = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`;
+    const fallbackHtml = InviteSignup(inviteLink, emailTheme || undefined);
+    const tplContent = await this.emailTemplates.getTemplateContent(
+      'invite-signup',
+      { '{{inviteLink}}': inviteLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
+      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+    );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: data.email,
-      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
-      html: emailBody,
+      subject: tplContent?.subject ?? fallbackSubject,
+      html: tplContent?.html ?? fallbackHtml,
       headers: {
         'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
         'X-Priority': '3',
@@ -594,23 +585,22 @@ export class AuthService {
       throw new BadRequestException('Failed to generate invite code');
     }
 
-    // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, userToReInvite.id);
-
-    // Send signup link via email
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink =
-      emailTheme?.companyName === 'Berry Virtual'
-        ? `${baseInviteLink}&company=berry`
-        : baseInviteLink;
-    const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
+    const inviteLink = emailTheme?.companyName === 'Berry Virtual' ? `${baseInviteLink}&company=berry` : baseInviteLink;
+
+    const fallbackSubject = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`;
+    const fallbackHtml = InviteSignup(inviteLink, emailTheme || undefined);
+    const tplContent = await this.emailTemplates.getTemplateContent(
+      'invite-signup',
+      { '{{inviteLink}}': inviteLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
+      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+    );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: userToReInvite.email,
-      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
-      html: emailBody,
+      subject: tplContent?.subject ?? fallbackSubject,
+      html: tplContent?.html ?? fallbackHtml,
       headers: {
         'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
         'X-Priority': '3',
