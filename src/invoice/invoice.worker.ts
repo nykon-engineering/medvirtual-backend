@@ -416,7 +416,7 @@ export class InvoiceWorker extends WorkerHost {
         const staff = staffRecords.find(s => s.candidate?.hubstaff_id === String(userId)) || null;
         const candidate = staff?.candidate || null;
 
-        let isFullTime = false;
+        let isFullTime = true;
         if (staff) {
           const deploymentType = (staff.hubspot_deployment_type || '').trim().toLowerCase().replace('-', ' ');
           isFullTime = deploymentType === 'full time' || deploymentType === 'fulltime';
@@ -487,7 +487,7 @@ export class InvoiceWorker extends WorkerHost {
         const actualHours = totalPayableHours;
         const hasOvertime = actualHours > requiredHours + 4;
 
-        let hourlyRate = new Decimal(25); // Default fallback
+        let hourlyRate = new Decimal(12); // Default fallback
         let lineTotal = hours.mul(hourlyRate);
         let primaryHours = actualHours;
 
@@ -509,11 +509,29 @@ export class InvoiceWorker extends WorkerHost {
               const startDT = DateTime.fromJSDate(startJSDate, { zone: 'utc' });
               const endDT = DateTime.fromJSDate(endJSDate, { zone: 'utc' });
               const diffInDays = endDT.diff(startDT, 'days').days + 1;
-              const isFullMonth = diffInDays >= 27;
 
-              const baseSalary = isFullMonth ? monthlySalary : (monthlySalary / 2);
-              lineTotal = new Decimal(baseSalary);
-              hourlyRate = primaryHours > 0 ? lineTotal.div(new Decimal(primaryHours)) : new Decimal(0);
+              const startDay = startDT.day;
+              const endDay = endDT.day;
+              const daysInMonth = startDT.daysInMonth;
+
+              const isFullMonth = (startDay === 1 && endDay === daysInMonth) || (diffInDays >= 27);
+              const isHalfMonth = !isFullMonth && (
+                (startDay === 1 && endDay === 15) ||
+                (startDay === 16 && endDay === daysInMonth)
+              );
+
+              if (isFullMonth) {
+                const baseSalary = monthlySalary;
+                lineTotal = new Decimal(baseSalary);
+                hourlyRate = primaryHours > 0 ? lineTotal.div(new Decimal(primaryHours)) : new Decimal(0);
+              } else if (isHalfMonth) {
+                const baseSalary = monthlySalary / 2;
+                lineTotal = new Decimal(baseSalary);
+                hourlyRate = primaryHours > 0 ? lineTotal.div(new Decimal(primaryHours)) : new Decimal(0);
+              } else {
+                hourlyRate = new Decimal(prorationRate);
+                lineTotal = new Decimal(primaryHours).mul(hourlyRate);
+              }
             } else {
               hourlyRate = new Decimal(prorationRate);
               lineTotal = new Decimal(primaryHours).mul(hourlyRate);
@@ -525,7 +543,7 @@ export class InvoiceWorker extends WorkerHost {
             overtimeHourlyRate = new Decimal(rate);
             overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
           } else {
-            hourlyRate = new Decimal(25);
+            hourlyRate = new Decimal(12);
             lineTotal = new Decimal(primaryHours).mul(hourlyRate);
             overtimeHourlyRate = new Decimal(25);
             overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
@@ -533,32 +551,51 @@ export class InvoiceWorker extends WorkerHost {
         } else {
           if (staff && staff.salary) {
             const monthlySalary = Number(staff.salary);
+            const prorationRate = (monthlySalary * 12) / 52 / 40;
+            const prorationHourlyDecimal = new Decimal(prorationRate);
 
             if (isFullTime) {
               // Full-Time staff logic
               const startDT = DateTime.fromJSDate(startJSDate, { zone: 'utc' });
               const endDT = DateTime.fromJSDate(endJSDate, { zone: 'utc' });
               const diffInDays = endDT.diff(startDT, 'days').days + 1;
-              const isFullMonth = diffInDays >= 27;
 
-              const baseSalary = isFullMonth ? monthlySalary : (monthlySalary / 2);
+              const startDay = startDT.day;
+              const endDay = endDT.day;
+              const daysInMonth = startDT.daysInMonth;
 
-              const deficit = requiredHours - actualHours;
+              const isFullMonth = (startDay === 1 && endDay === daysInMonth) || (diffInDays >= 27);
+              const isHalfMonth = !isFullMonth && (
+                (startDay === 1 && endDay === 15) ||
+                (startDay === 16 && endDay === daysInMonth)
+              );
 
-              if (deficit > 10) {
-                // Compute hourly rate and prorate
-                const prorationRate = (monthlySalary * 12) / 52 / 40;
-                const prorationHourlyDecimal = new Decimal(prorationRate);
-                lineTotal = hours.mul(prorationHourlyDecimal);
+              if (isFullMonth) {
+                const baseSalary = monthlySalary;
+                const deficit = requiredHours - actualHours;
+                if (deficit > 10) {
+                  lineTotal = hours.mul(prorationHourlyDecimal);
+                } else {
+                  lineTotal = new Decimal(baseSalary);
+                }
+                hourlyRate = hours.gt(0) ? lineTotal.div(hours) : new Decimal(0);
+              } else if (isHalfMonth) {
+                const baseSalary = monthlySalary / 2;
+                const deficit = requiredHours - actualHours;
+                if (deficit > 10) {
+                  lineTotal = hours.mul(prorationHourlyDecimal);
+                } else {
+                  lineTotal = new Decimal(baseSalary);
+                }
+                hourlyRate = hours.gt(0) ? lineTotal.div(hours) : new Decimal(0);
               } else {
-                // Pay full amount (baseSalary)
-                lineTotal = new Decimal(baseSalary);
+                // Not a full month and not a half month -> Prorate based on hours
+                lineTotal = hours.mul(prorationHourlyDecimal);
+                hourlyRate = prorationHourlyDecimal;
               }
-              hourlyRate = hours.gt(0) ? lineTotal.div(hours) : new Decimal(0);
             } else {
               // Non-Full-Time staff logic
-              const prorationRate = (monthlySalary * 12) / 52 / 40;
-              hourlyRate = new Decimal(prorationRate);
+              hourlyRate = prorationHourlyDecimal;
               lineTotal = hours.mul(hourlyRate);
             }
           } else if (candidate && candidate.hourly_pay_rate) {
