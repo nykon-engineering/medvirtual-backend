@@ -14,7 +14,9 @@ export class PreviewEmailTemplateDto {
   @IsString()
   body?: string;
 
-  @ApiPropertyOptional({ description: 'Business unit slug to resolve branding' })
+  @ApiPropertyOptional({
+    description: 'Business unit slug to resolve branding',
+  })
   @IsOptional()
   @IsString()
   business_unit?: string;

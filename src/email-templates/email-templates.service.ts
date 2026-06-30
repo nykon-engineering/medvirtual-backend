@@ -187,7 +187,9 @@ export class EmailTemplatesService {
 
     // Fire-and-forget sync to peer environment
     this.syncToPeer(key, updated, userId).catch((err) =>
-      this.logger.error(`Sync to peer failed for template "${key}": ${err.message}`),
+      this.logger.error(
+        `Sync to peer failed for template "${key}": ${err.message}`,
+      ),
     );
 
     return { status: 200, data: updated };
@@ -209,18 +211,27 @@ export class EmailTemplatesService {
     });
 
     // Resolve user display names for history entries that have a real user id
-    const userIds = [...new Set(history.map((h) => h.changed_by).filter((id) => id !== 'sync'))];
+    const userIds = [
+      ...new Set(
+        history.map((h) => h.changed_by).filter((id) => id !== 'sync'),
+      ),
+    ];
     const users = userIds.length
       ? await this.prisma.uSER.findMany({
           where: { id: { in: userIds } },
           select: { id: true, first_name: true, last_name: true },
         })
       : [];
-    const userMap = Object.fromEntries(users.map((u) => [u.id, `${u.first_name} ${u.last_name}`]));
+    const userMap = Object.fromEntries(
+      users.map((u) => [u.id, `${u.first_name} ${u.last_name}`]),
+    );
 
     const enriched = history.map((h) => ({
       ...h,
-      changed_by_name: h.changed_by === 'sync' ? 'Auto-sync' : (userMap[h.changed_by] ?? h.changed_by),
+      changed_by_name:
+        h.changed_by === 'sync'
+          ? 'Auto-sync'
+          : (userMap[h.changed_by] ?? h.changed_by),
     }));
 
     return { status: 200, data: enriched };
@@ -228,7 +239,12 @@ export class EmailTemplatesService {
 
   // ── Rollback ──────────────────────────────────────────────────────────────
 
-  async rollback(key: string, historyId: string, userId: string, businessUnit?: string) {
+  async rollback(
+    key: string,
+    historyId: string,
+    userId: string,
+    businessUnit?: string,
+  ) {
     const template = await this.prisma.emailTemplate.findFirst({
       where: { key, business_unit: businessUnit ?? null },
     });
@@ -269,7 +285,9 @@ export class EmailTemplatesService {
 
     // Sync rollback to peer as well
     this.syncToPeer(key, updated, userId).catch((err) =>
-      this.logger.error(`Sync to peer failed for rollback "${key}": ${err.message}`),
+      this.logger.error(
+        `Sync to peer failed for rollback "${key}": ${err.message}`,
+      ),
     );
 
     return { status: 200, data: updated };
@@ -277,7 +295,11 @@ export class EmailTemplatesService {
 
   // ── Preview ───────────────────────────────────────────────────────────────
 
-  async preview(key: string, dto: PreviewEmailTemplateDto, businessUnit?: string) {
+  async preview(
+    key: string,
+    dto: PreviewEmailTemplateDto,
+    businessUnit?: string,
+  ) {
     const template = await this.prisma.emailTemplate.findFirst({
       where: { key, business_unit: businessUnit ?? null },
     });
@@ -288,7 +310,14 @@ export class EmailTemplatesService {
     const buSlug = dto.business_unit ?? businessUnit ?? null;
 
     const branding = await this.resolveBranding(buSlug);
-    const html = this.renderHtml(body, template.headline ?? '', branding, undefined, template.button_label, template.button_url);
+    const html = this.renderHtml(
+      body,
+      template.headline ?? '',
+      branding,
+      undefined,
+      template.button_label,
+      template.button_url,
+    );
     const renderedSubject = this.applyPlaceholders(subject);
 
     return { status: 200, data: { subject: renderedSubject, html } };
@@ -310,7 +339,14 @@ export class EmailTemplatesService {
 
     const buSlug = dto.business_unit ?? businessUnit ?? null;
     const branding = await this.resolveBranding(buSlug);
-    const html = this.renderHtml(template.body, template.headline ?? '', branding, undefined, template.button_label, template.button_url);
+    const html = this.renderHtml(
+      template.body,
+      template.headline ?? '',
+      branding,
+      undefined,
+      template.button_label,
+      template.button_url,
+    );
     const subject = this.applyPlaceholders(template.subject);
 
     await this.mail.sendMail({
@@ -320,7 +356,9 @@ export class EmailTemplatesService {
       html,
     });
 
-    this.logger.log(`Test email sent for template "${key}" to ${userEmail} by user ${userId}`);
+    this.logger.log(
+      `Test email sent for template "${key}" to ${userEmail} by user ${userId}`,
+    );
     return { status: 200, message: `Test email sent to ${userEmail}` };
   }
 
@@ -328,7 +366,13 @@ export class EmailTemplatesService {
 
   async receiveSyncFromPeer(
     key: string,
-    payload: { subject: string; headline?: string; body: string; button_label?: string; button_url?: string },
+    payload: {
+      subject: string;
+      headline?: string;
+      body: string;
+      button_label?: string;
+      button_url?: string;
+    },
     originEnv: string,
   ) {
     const template = await this.prisma.emailTemplate.findFirst({
@@ -409,7 +453,12 @@ export class EmailTemplatesService {
   private renderHtml(
     body: string,
     headline: string,
-    branding: { primaryColor: string; primaryColorHover: string; companyName: string; logoUrl?: string },
+    branding: {
+      primaryColor: string;
+      primaryColorHover: string;
+      companyName: string;
+      logoUrl?: string;
+    },
     overrides?: Record<string, string>,
     buttonLabel?: string | null,
     buttonUrl?: string | null,
@@ -472,7 +521,13 @@ export class EmailTemplatesService {
 
   private async syncToPeer(
     key: string,
-    template: { subject: string; headline?: string | null; body: string; button_label?: string | null; button_url?: string | null },
+    template: {
+      subject: string;
+      headline?: string | null;
+      body: string;
+      button_label?: string | null;
+      button_url?: string | null;
+    },
     userId: string,
   ) {
     const peerUrl = process.env.PEER_ENV_API_URL;

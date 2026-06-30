@@ -32,7 +32,9 @@ export class BusinessUnitsService {
       where: { slug: dto.slug },
     });
     if (existing) {
-      throw new BadRequestException(`A business unit with slug "${dto.slug}" already exists`);
+      throw new BadRequestException(
+        `A business unit with slug "${dto.slug}" already exists`,
+      );
     }
 
     // Create BU and its default EmailBranding in a single transaction
@@ -94,7 +96,8 @@ export class BusinessUnitsService {
     const branding = await this.prisma.emailBranding.findUnique({
       where: { business_unit: slug },
     });
-    if (!branding) throw new NotFoundException(`Branding for "${slug}" not found`);
+    if (!branding)
+      throw new NotFoundException(`Branding for "${slug}" not found`);
 
     return { status: 200, data: branding };
   }
@@ -105,7 +108,8 @@ export class BusinessUnitsService {
     const current = await this.prisma.emailBranding.findUnique({
       where: { business_unit: slug },
     });
-    if (!current) throw new NotFoundException(`Branding for "${slug}" not found`);
+    if (!current)
+      throw new NotFoundException(`Branding for "${slug}" not found`);
 
     // Snapshot to history before overwriting
     await this.prisma.emailBrandingHistory.create({
@@ -125,18 +129,28 @@ export class BusinessUnitsService {
     const updated = await this.prisma.emailBranding.update({
       where: { business_unit: slug },
       data: {
-        ...(dto.primary_color !== undefined && { primary_color: dto.primary_color }),
-        ...(dto.secondary_color !== undefined && { secondary_color: dto.secondary_color }),
+        ...(dto.primary_color !== undefined && {
+          primary_color: dto.primary_color,
+        }),
+        ...(dto.secondary_color !== undefined && {
+          secondary_color: dto.secondary_color,
+        }),
         ...(dto.logo_url !== undefined && { logo_url: dto.logo_url }),
-        ...(dto.company_name !== undefined && { company_name: dto.company_name }),
-        ...(dto.layout_preset !== undefined && { layout_preset: dto.layout_preset }),
+        ...(dto.company_name !== undefined && {
+          company_name: dto.company_name,
+        }),
+        ...(dto.layout_preset !== undefined && {
+          layout_preset: dto.layout_preset,
+        }),
         updated_by: userId,
       },
     });
 
     // Fire-and-forget sync to peer environment
     this.syncBrandingToPeer(slug, updated, userId).catch((err) =>
-      this.logger.error(`Branding sync to peer failed for "${slug}": ${err.message}`),
+      this.logger.error(
+        `Branding sync to peer failed for "${slug}": ${err.message}`,
+      ),
     );
 
     return { status: 200, data: updated };
@@ -149,7 +163,8 @@ export class BusinessUnitsService {
       where: { business_unit: slug },
       select: { id: true },
     });
-    if (!branding) throw new NotFoundException(`Branding for "${slug}" not found`);
+    if (!branding)
+      throw new NotFoundException(`Branding for "${slug}" not found`);
 
     const history = await this.prisma.emailBrandingHistory.findMany({
       where: { branding_id: branding.id },
@@ -177,7 +192,9 @@ export class BusinessUnitsService {
       where: { business_unit: slug },
     });
     if (!branding) {
-      this.logger.warn(`Branding sync received for unknown BU "${slug}" — ignored`);
+      this.logger.warn(
+        `Branding sync received for unknown BU "${slug}" — ignored`,
+      );
       return;
     }
 
@@ -198,11 +215,19 @@ export class BusinessUnitsService {
     await this.prisma.emailBranding.update({
       where: { business_unit: slug },
       data: {
-        ...(payload.primary_color !== undefined && { primary_color: payload.primary_color }),
-        ...(payload.secondary_color !== undefined && { secondary_color: payload.secondary_color }),
+        ...(payload.primary_color !== undefined && {
+          primary_color: payload.primary_color,
+        }),
+        ...(payload.secondary_color !== undefined && {
+          secondary_color: payload.secondary_color,
+        }),
         ...(payload.logo_url !== undefined && { logo_url: payload.logo_url }),
-        ...(payload.company_name !== undefined && { company_name: payload.company_name }),
-        ...(payload.layout_preset !== undefined && { layout_preset: payload.layout_preset }),
+        ...(payload.company_name !== undefined && {
+          company_name: payload.company_name,
+        }),
+        ...(payload.layout_preset !== undefined && {
+          layout_preset: payload.layout_preset,
+        }),
         updated_by: 'sync',
       },
     });

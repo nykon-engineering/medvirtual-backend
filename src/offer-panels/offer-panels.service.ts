@@ -206,7 +206,8 @@ export class OfferPanelsService {
 
   async searchContacts(q: string, businessUnit: string): Promise<any[]> {
     const term = q.trim();
-    businessUnit = businessUnit === 'BerryVirtual' ? 'Berry Virtual' : businessUnit;
+    businessUnit =
+      businessUnit === 'BerryVirtual' ? 'Berry Virtual' : businessUnit;
     const tokens = term.split(/\s+/).filter(Boolean);
     const makeTokenFilter = (extra: string[] = []) =>
       tokens.map((t) => ({
@@ -214,7 +215,9 @@ export class OfferPanelsService {
           { first_name: { contains: t, mode: 'insensitive' as const } },
           { last_name: { contains: t, mode: 'insensitive' as const } },
           { email: { contains: t, mode: 'insensitive' as const } },
-          ...extra.map((f) => ({ [f]: { contains: t, mode: 'insensitive' as const } })),
+          ...extra.map((f) => ({
+            [f]: { contains: t, mode: 'insensitive' as const },
+          })),
         ],
       }));
     const [users, contacts] = await Promise.all([
@@ -448,8 +451,14 @@ export class OfferPanelsService {
 
     const enrichedCandidates = await Promise.all(
       panel.candidates.map(async (pc) => {
-        const enriched = await this.candidatesService.getTalentPoolCandidateById(pc.candidate_id);
-        const howManyClientsAreViewing = await this.countOtherPanels(pc.candidate_id, panel.id);
+        const enriched =
+          await this.candidatesService.getTalentPoolCandidateById(
+            pc.candidate_id,
+          );
+        const howManyClientsAreViewing = await this.countOtherPanels(
+          pc.candidate_id,
+          panel.id,
+        );
         return { ...enriched, howManyClientsAreViewing };
       }),
     );
@@ -471,8 +480,14 @@ export class OfferPanelsService {
 
     const enrichedCandidates = await Promise.all(
       panel.candidates.map(async (pc) => {
-        const enriched = await this.candidatesService.getTalentPoolCandidateById(pc.candidate_id);
-        const howManyClientsAreViewing = await this.countOtherPanels(pc.candidate_id, panel.id);
+        const enriched =
+          await this.candidatesService.getTalentPoolCandidateById(
+            pc.candidate_id,
+          );
+        const howManyClientsAreViewing = await this.countOtherPanels(
+          pc.candidate_id,
+          panel.id,
+        );
         return { ...enriched, howManyClientsAreViewing };
       }),
     );
@@ -506,8 +521,14 @@ export class OfferPanelsService {
       panels.map(async (panel) => {
         const enrichedCandidates = await Promise.all(
           panel.candidates.map(async (pc) => {
-            const enriched = await this.candidatesService.getTalentPoolCandidateById(pc.candidate_id);
-            const howManyClientsAreViewing = await this.countOtherPanels(pc.candidate_id, panel.id);
+            const enriched =
+              await this.candidatesService.getTalentPoolCandidateById(
+                pc.candidate_id,
+              );
+            const howManyClientsAreViewing = await this.countOtherPanels(
+              pc.candidate_id,
+              panel.id,
+            );
             return { ...enriched, howManyClientsAreViewing };
           }),
         );

@@ -282,12 +282,16 @@ export class ReferredCompaniesController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({
-    summary: 'Confirm eligibility for a referred company in pending_confirmation state (admin)',
+    summary:
+      'Confirm eligibility for a referred company in pending_confirmation state (admin)',
   })
   @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
   @ApiBody({ type: ApproveEligibilityDto })
   @ApiResponse({ status: 200, description: 'Eligibility confirmed' })
-  @ApiResponse({ status: 400, description: 'Already eligible or not a referral' })
+  @ApiResponse({
+    status: 400,
+    description: 'Already eligible or not a referral',
+  })
   @ApiResponse({ status: 404, description: 'Referred company not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async approveEligibility(
@@ -305,7 +309,8 @@ export class ReferredCompaniesController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({
-    summary: 'Block eligibility for a referred company with a required reason (admin)',
+    summary:
+      'Block eligibility for a referred company with a required reason (admin)',
   })
   @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
   @ApiBody({ type: BlockEligibilityDto })
@@ -328,19 +333,27 @@ export class ReferredCompaniesController {
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({
-    summary: 'Revert a referred company back to pending_confirmation for re-review (admin)',
+    summary:
+      'Revert a referred company back to pending_confirmation for re-review (admin)',
   })
   @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
-  @ApiResponse({ status: 200, description: 'Eligibility reverted to pending confirmation' })
-  @ApiResponse({ status: 400, description: 'Already pending confirmation or not a referral' })
+  @ApiResponse({
+    status: 200,
+    description: 'Eligibility reverted to pending confirmation',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Already pending confirmation or not a referral',
+  })
   @ApiResponse({ status: 404, description: 'Referred company not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
-  async revertEligibility(
-    @Param('id') id: string,
-    @CurrentUser() admin: USER,
-  ) {
+  async revertEligibility(@Param('id') id: string, @CurrentUser() admin: USER) {
     const data = await this.service.revertEligibility(id, admin);
-    return { status: 200, message: 'Eligibility reverted to pending confirmation', data };
+    return {
+      status: 200,
+      message: 'Eligibility reverted to pending confirmation',
+      data,
+    };
   }
 
   // POST /med-alliance/admin/referred-companies/:id/eligibility-check

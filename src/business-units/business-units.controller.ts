@@ -45,7 +45,9 @@ export class BusinessUnitsController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new business unit (auto-creates default branding)' })
+  @ApiOperation({
+    summary: 'Create a new business unit (auto-creates default branding)',
+  })
   @ApiResponse({ status: 201, description: 'Business unit created' })
   @ApiResponse({ status: 400, description: 'Slug already in use' })
   create(
@@ -84,7 +86,9 @@ export class BusinessUnitsController {
   }
 
   @Put(':slug/branding')
-  @ApiOperation({ summary: 'Update branding for a business unit (snapshots history)' })
+  @ApiOperation({
+    summary: 'Update branding for a business unit (snapshots history)',
+  })
   @ApiParam({ name: 'slug', description: 'Business unit slug' })
   @ApiResponse({ status: 200 })
   updateBranding(
@@ -107,13 +111,16 @@ export class BusinessUnitsController {
 
   @Post(':slug/branding/sync')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Receive a branding sync from the peer environment (internal)' })
+  @ApiOperation({
+    summary: 'Receive a branding sync from the peer environment (internal)',
+  })
   @ApiParam({ name: 'slug', description: 'Business unit slug' })
   @ApiResponse({ status: 200, description: 'Sync applied' })
   @ApiResponse({ status: 401, description: 'Invalid sync secret' })
   async receiveBrandingSync(
     @Param('slug') slug: string,
-    @Body() body: {
+    @Body()
+    body: {
       primary_color?: string;
       secondary_color?: string;
       logo_url?: string;
@@ -126,7 +133,11 @@ export class BusinessUnitsController {
     if (!secret || secret !== process.env.INTER_ENV_SYNC_SECRET) {
       throw new UnauthorizedException('Invalid sync secret');
     }
-    await this.service.receiveBrandingSyncFromPeer(slug, body, origin ?? 'unknown');
+    await this.service.receiveBrandingSyncFromPeer(
+      slug,
+      body,
+      origin ?? 'unknown',
+    );
     return { status: 200, message: 'Branding sync applied' };
   }
 }

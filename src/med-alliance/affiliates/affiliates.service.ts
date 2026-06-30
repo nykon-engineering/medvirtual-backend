@@ -79,7 +79,6 @@ export class AffiliatesService {
     return profile;
   }
 
-
   async create(dto: CreateAffiliateProfileDto, adminUser: USER) {
     const user = await this.prisma.uSER.findUnique({
       where: { id: dto.user_id },
@@ -131,11 +130,23 @@ export class AffiliatesService {
     try {
       const theme = await getUserEmailTheme(this.prisma, dto.user_id);
       const fallbackSubject = `You're now a ${theme?.companyName || 'MedVirtual'} Med Alliance Partner — here's what's next`;
-      const fallbackHtml = MedAllianceInvitation(user.first_name, theme ?? undefined);
+      const fallbackHtml = MedAllianceInvitation(
+        user.first_name,
+        theme ?? undefined,
+      );
       const tpl = await this.emailTemplates.getTemplateContent(
         'med-alliance-invitation',
-        { '{{partnerName}}': user.first_name, '{{companyName}}': theme?.companyName || 'MedVirtual' },
-        theme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+        {
+          '{{partnerName}}': user.first_name,
+          '{{companyName}}': theme?.companyName || 'MedVirtual',
+        },
+        theme || {
+          primaryColor: '#01546B',
+          primaryColorHover: '#013A4F',
+          secondaryColor: '#F8F9FA',
+          accentColor: '#00B2E2',
+          companyName: 'MedVirtual',
+        },
       );
       await this.mailService.sendMail({
         from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -144,7 +155,10 @@ export class AffiliatesService {
         html: tpl?.html ?? fallbackHtml,
       });
     } catch (emailError) {
-      console.error('Failed to send Med Alliance invitation email:', emailError);
+      console.error(
+        'Failed to send Med Alliance invitation email:',
+        emailError,
+      );
     }
 
     const partnerName =
@@ -188,14 +202,30 @@ export class AffiliatesService {
     // Theme is resolved from the admin's org since the new user has no org yet
     const emailTheme = await getUserEmailTheme(this.prisma, adminUser.id);
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual' ? `${baseInviteLink}&company=berry` : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
 
     const fallbackSubject = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`;
-    const fallbackHtml = MedAllianceInviteSignup(inviteLink, emailTheme || undefined, dto.first_name);
+    const fallbackHtml = MedAllianceInviteSignup(
+      inviteLink,
+      emailTheme || undefined,
+      dto.first_name,
+    );
     const tpl = await this.emailTemplates.getTemplateContent(
       'med-alliance-invite-signup',
-      { '{{inviteLink}}': inviteLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mailService.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -342,19 +372,37 @@ export class AffiliatesService {
     // Theme is resolved from the admin's org since the new user has no org yet
     const emailTheme = await getUserEmailTheme(this.prisma, adminUserId);
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual' ? `${baseInviteLink}&company=berry` : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
 
     const fallbackSubject2 = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`;
     const tpl2 = await this.emailTemplates.getTemplateContent(
       'med-alliance-invite-signup',
-      { '{{inviteLink}}': inviteLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mailService.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: dto.email,
       subject: tpl2?.subject ?? fallbackSubject2,
-      html: tpl2?.html ?? MedAllianceInviteSignup(inviteLink, emailTheme || undefined, dto.first_name),
+      html:
+        tpl2?.html ??
+        MedAllianceInviteSignup(
+          inviteLink,
+          emailTheme || undefined,
+          dto.first_name,
+        ),
     });
     if (!mailSent)
       throw new BadRequestException('Failed to send invitation email');
@@ -412,7 +460,10 @@ export class AffiliatesService {
     return this.findOneEnriched(id);
   }
 
-  async reInviteAffiliateUser(affiliateId: string, adminUserId: string): Promise<string> {
+  async reInviteAffiliateUser(
+    affiliateId: string,
+    adminUserId: string,
+  ): Promise<string> {
     const affiliate = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateId },
       include: { user: true },
@@ -427,19 +478,37 @@ export class AffiliatesService {
     });
     const emailTheme = await getUserEmailTheme(this.prisma, adminUserId);
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual' ? `${baseInviteLink}&company=berry` : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
 
     const fallbackSubjectReinvite = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`;
     const tplReinvite = await this.emailTemplates.getTemplateContent(
       'med-alliance-invite-signup',
-      { '{{inviteLink}}': inviteLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mailService.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: user.email,
       subject: tplReinvite?.subject ?? fallbackSubjectReinvite,
-      html: tplReinvite?.html ?? MedAllianceInviteSignup(inviteLink, emailTheme || undefined, user.first_name),
+      html:
+        tplReinvite?.html ??
+        MedAllianceInviteSignup(
+          inviteLink,
+          emailTheme || undefined,
+          user.first_name,
+        ),
     });
     if (!mailSent)
       throw new BadRequestException('Failed to send re-invitation email');
@@ -905,11 +974,23 @@ export class AffiliatesService {
     try {
       const theme = await getUserEmailTheme(this.prisma, currentUser.id);
       const fallbackSubjectOrg = `Welcome to the Med Alliance Program, ${currentUser.first_name}`;
-      const fallbackHtmlOrg = MedAllianceInvitationForOrgUsers(currentUser.first_name, theme ?? undefined);
+      const fallbackHtmlOrg = MedAllianceInvitationForOrgUsers(
+        currentUser.first_name,
+        theme ?? undefined,
+      );
       const tplOrg = await this.emailTemplates.getTemplateContent(
         'med-alliance-org-invitation',
-        { '{{userName}}': currentUser.first_name, '{{companyName}}': theme?.companyName || 'MedVirtual' },
-        theme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+        {
+          '{{userName}}': currentUser.first_name,
+          '{{companyName}}': theme?.companyName || 'MedVirtual',
+        },
+        theme || {
+          primaryColor: '#01546B',
+          primaryColorHover: '#013A4F',
+          secondaryColor: '#F8F9FA',
+          accentColor: '#00B2E2',
+          companyName: 'MedVirtual',
+        },
       );
       await this.mailService.sendMail({
         from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -918,7 +999,10 @@ export class AffiliatesService {
         html: tplOrg?.html ?? fallbackHtmlOrg,
       });
     } catch (emailError) {
-      console.error('Failed to send Med Alliance invitation email:', emailError);
+      console.error(
+        'Failed to send Med Alliance invitation email:',
+        emailError,
+      );
     }
 
     return newAffiliateData;
@@ -1382,7 +1466,9 @@ export class AffiliatesService {
         med_alliance_block_reason: isExpired
           ? 'eligibility_expired: one-year window elapsed'
           : null,
-        ...(isEligible && { med_alliance_referral_status: 'pending_confirmation' as any }),
+        ...(isEligible && {
+          med_alliance_referral_status: 'pending_confirmation' as any,
+        }),
       },
     });
 

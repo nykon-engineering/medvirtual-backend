@@ -60,7 +60,11 @@ export class CronService {
   ): Promise<{ subject: string; html: string } | null> {
     try {
       const theme = getEmailThemeByBusinessUnit('MedVirtual');
-      return await this.emailTemplates.getTemplateContent(key, runtimeValues, theme);
+      return await this.emailTemplates.getTemplateContent(
+        key,
+        runtimeValues,
+        theme,
+      );
     } catch {
       return null;
     }
@@ -431,12 +435,15 @@ export class CronService {
         new Date(),
       );
 
-      const tplDeactivation = await this.getCronTplContent('client-users-deactivation', {
-        '{{reportDate}}': new Date().toLocaleDateString('en-US'),
-        '{{deactivatedCount}}': String(usersToDeactivate.length),
-        '{{removedCount}}': String(invitedUsersToDelete.length),
-        '{{reportContent}}': '(see attached report)',
-      });
+      const tplDeactivation = await this.getCronTplContent(
+        'client-users-deactivation',
+        {
+          '{{reportDate}}': new Date().toLocaleDateString('en-US'),
+          '{{deactivatedCount}}': String(usersToDeactivate.length),
+          '{{removedCount}}': String(invitedUsersToDelete.length),
+          '{{reportContent}}': '(see attached report)',
+        },
+      );
       await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: 'paulo@regenta.ai',
@@ -465,7 +472,9 @@ export class CronService {
           from: 'MedVirtual <noreply@medvirtual.ai>',
           to: 'paulo@regenta.ai',
           cc: ['paulo@regenta.ai'],
-          subject: tplCronError?.subject ?? '[ERROR] Client Users Deactivation Cron Job Failed',
+          subject:
+            tplCronError?.subject ??
+            '[ERROR] Client Users Deactivation Cron Job Failed',
           html: emailBody,
         });
       } catch (mailError) {
@@ -571,7 +580,8 @@ export class CronService {
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: 'shayan@regenta.ai',
         cc: ['paulo@regenta.ai'],
-        subject: tplPositions?.subject ?? '[Action Required] New VA Positions Found',
+        subject:
+          tplPositions?.subject ?? '[Action Required] New VA Positions Found',
         html: emailBody,
       });
 
@@ -654,18 +664,25 @@ export class CronService {
       .reduce((sum, s) => sum + parseFloat(s.totalAmount), 0)
       .toFixed(2);
 
-    const quarterlyDate = runAt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const tplQuarterly = await this.getCronTplContent('quarterly-payout-report', {
-      '{{reportDate}}': quarterlyDate,
-      '{{successCount}}': String(successes.length),
-      '{{totalAmount}}': totalAmount,
-      '{{failureCount}}': String(failures.length),
-      '{{reportContent}}': '(see attached report)',
+    const quarterlyDate = runAt.toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
     });
+    const tplQuarterly = await this.getCronTplContent(
+      'quarterly-payout-report',
+      {
+        '{{reportDate}}': quarterlyDate,
+        '{{successCount}}': String(successes.length),
+        '{{totalAmount}}': totalAmount,
+        '{{failureCount}}': String(failures.length),
+        '{{reportContent}}': '(see attached report)',
+      },
+    );
     await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
-      subject: tplQuarterly?.subject ?? `Quarterly Payout Report — ${quarterlyDate}`,
+      subject:
+        tplQuarterly?.subject ?? `Quarterly Payout Report — ${quarterlyDate}`,
       html: quarterlyPayoutReport(successes, failures, runAt),
     });
 
@@ -1026,7 +1043,7 @@ export class CronService {
     });
 
     let companiesPromoted = 0;
-    let commissionsPromoted = 0;
+    const commissionsPromoted = 0;
     const errors: string[] = [];
     const promotedEntries: PromotedCompanyEntry[] = [];
 
@@ -1035,7 +1052,7 @@ export class CronService {
         console.log(
           `Evaluating org ${org.id} (${org.name}) for promotion: deployment_date=${org.deployment_date}, first_paid_invoice_at=${org.first_paid_invoice_at}`,
         );
-        
+
         // Set to pending_confirmation — a Super Admin must manually confirm or block.
         // Commission promotion happens only when the admin confirms eligibility.
         await this.prisma.organization.update({
@@ -1052,7 +1069,8 @@ export class CronService {
             event: 'eligibility_pending_confirmation',
             old_status: 'not_eligible',
             new_status: 'pending_confirmation',
-            reason: '30-day deployment window elapsed — awaiting Super Admin confirmation',
+            reason:
+              '30-day deployment window elapsed — awaiting Super Admin confirmation',
             source: 'cron',
             actor_user_id: null,
             metadata: {
@@ -1074,7 +1092,6 @@ export class CronService {
             : 'N/A',
           commissionsPromoted: 0,
         });
-        
       } catch (err: any) {
         const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
         console.error(msg);
@@ -1088,18 +1105,27 @@ export class CronService {
 
     if (companiesPromoted > 0) {
       try {
-        const deployedDate = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        const tplDeployed = await this.getCronTplContent('med-alliance-deployed-companies', {
-          '{{reportDate}}': deployedDate,
-          '{{promotedCount}}': String(companiesPromoted),
-          '{{totalCommissions}}': String(commissionsPromoted),
-          '{{errorCount}}': String(errors.length),
-          '{{reportContent}}': '(see attached report)',
+        const deployedDate = now.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
         });
+        const tplDeployed = await this.getCronTplContent(
+          'med-alliance-deployed-companies',
+          {
+            '{{reportDate}}': deployedDate,
+            '{{promotedCount}}': String(companiesPromoted),
+            '{{totalCommissions}}': String(commissionsPromoted),
+            '{{errorCount}}': String(errors.length),
+            '{{reportContent}}': '(see attached report)',
+          },
+        );
         await this.mailService.sendMail({
           from: 'MedVirtual <noreply@medvirtual.ai>',
           to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
-          subject: tplDeployed?.subject ?? `Med Alliance — Deployed Companies Report (${deployedDate})`,
+          subject:
+            tplDeployed?.subject ??
+            `Med Alliance — Deployed Companies Report (${deployedDate})`,
           html: medAllianceDeployedCompaniesReport(
             promotedEntries,
             errors,

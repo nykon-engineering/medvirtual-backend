@@ -12,7 +12,9 @@ export class UpdateEmailTemplateDto {
   @IsString()
   headline?: string;
 
-  @ApiProperty({ description: 'Main body text (supports {{placeholder}} syntax)' })
+  @ApiProperty({
+    description: 'Main body text (supports {{placeholder}} syntax)',
+  })
   @IsString()
   @MinLength(1)
   body: string;
@@ -22,12 +24,16 @@ export class UpdateEmailTemplateDto {
   @IsString()
   button_label?: string;
 
-  @ApiPropertyOptional({ description: 'CTA button URL (use {{placeholder}} for dynamic links)' })
+  @ApiPropertyOptional({
+    description: 'CTA button URL (use {{placeholder}} for dynamic links)',
+  })
   @IsOptional()
   @IsString()
   button_url?: string;
 
-  @ApiPropertyOptional({ description: 'Reason for this change (for audit history)' })
+  @ApiPropertyOptional({
+    description: 'Reason for this change (for audit history)',
+  })
   @IsOptional()
   @IsString()
   reason?: string;

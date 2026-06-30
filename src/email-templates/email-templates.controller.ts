@@ -43,7 +43,12 @@ export class EmailTemplatesController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'perPage', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
-  @ApiQuery({ name: 'businessUnit', required: false, type: String, description: 'Slug or "global" for null' })
+  @ApiQuery({
+    name: 'businessUnit',
+    required: false,
+    type: String,
+    description: 'Slug or "global" for null',
+  })
   @ApiResponse({ status: 200, description: 'Templates retrieved successfully' })
   findAll(
     @Query('page') page?: string,
@@ -84,7 +89,10 @@ export class EmailTemplatesController {
   @ApiOperation({ summary: 'Update wording of an email template' })
   @ApiParam({ name: 'key', description: 'Template key' })
   @ApiQuery({ name: 'businessUnit', required: false, type: String })
-  @ApiResponse({ status: 200, description: 'Template updated and synced to peer' })
+  @ApiResponse({
+    status: 200,
+    description: 'Template updated and synced to peer',
+  })
   @ApiResponse({ status: 400, description: 'Invalid placeholder in body' })
   @ApiResponse({ status: 404, description: 'Template not found' })
   update(
@@ -101,7 +109,9 @@ export class EmailTemplatesController {
   @Get(':key/history')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_admin', 'system_super_admin')
-  @ApiOperation({ summary: 'Get change history for a template (last 50 versions)' })
+  @ApiOperation({
+    summary: 'Get change history for a template (last 50 versions)',
+  })
   @ApiParam({ name: 'key', description: 'Template key' })
   @ApiQuery({ name: 'businessUnit', required: false, type: String })
   @ApiResponse({ status: 200 })
@@ -122,7 +132,10 @@ export class EmailTemplatesController {
   @ApiParam({ name: 'key', description: 'Template key' })
   @ApiParam({ name: 'historyId', description: 'History entry ID to restore' })
   @ApiQuery({ name: 'businessUnit', required: false, type: String })
-  @ApiResponse({ status: 200, description: 'Template rolled back and synced to peer' })
+  @ApiResponse({
+    status: 200,
+    description: 'Template rolled back and synced to peer',
+  })
   rollback(
     @Param('key') key: string,
     @Param('historyId') historyId: string,
@@ -138,7 +151,9 @@ export class EmailTemplatesController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_admin', 'system_super_admin')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Render a template to HTML with sample data for preview' })
+  @ApiOperation({
+    summary: 'Render a template to HTML with sample data for preview',
+  })
   @ApiParam({ name: 'key', description: 'Template key' })
   @ApiQuery({ name: 'businessUnit', required: false, type: String })
   @ApiResponse({ status: 200, description: 'HTML preview generated' })
@@ -166,20 +181,34 @@ export class EmailTemplatesController {
     @Request() req: { user: { id: string; email: string } },
     @Query('businessUnit') businessUnit?: string,
   ) {
-    return this.service.testSend(key, dto, req.user.id, req.user.email, businessUnit);
+    return this.service.testSend(
+      key,
+      dto,
+      req.user.id,
+      req.user.email,
+      businessUnit,
+    );
   }
 
   // ── Sync receiver (internal — peer environment only) ──────────────────────
 
   @Post(':key/sync')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Receive a template sync from the peer environment (internal)' })
+  @ApiOperation({
+    summary: 'Receive a template sync from the peer environment (internal)',
+  })
   @ApiParam({ name: 'key', description: 'Template key' })
   @ApiResponse({ status: 200, description: 'Sync applied' })
   @ApiResponse({ status: 401, description: 'Invalid sync secret' })
   async receiveSync(
     @Param('key') key: string,
-    @Body() body: { subject: string; headline?: string; body: string; button_label?: string },
+    @Body()
+    body: {
+      subject: string;
+      headline?: string;
+      body: string;
+      button_label?: string;
+    },
     @Headers('x-sync-secret') secret: string,
     @Headers('x-sync-origin') origin: string,
   ) {

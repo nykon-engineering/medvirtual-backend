@@ -76,11 +76,25 @@ export class RecoverypassService {
     const resetLink = `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`;
 
     const fallbackSubject = `Reset Your MedVirtual Password - Action Required`;
-    const fallbackHtml = getResetPasswordTemplate(user.first_name, resetLink, emailTheme || undefined);
+    const fallbackHtml = getResetPasswordTemplate(
+      user.first_name,
+      resetLink,
+      emailTheme || undefined,
+    );
     const tplContent = await this.emailTemplates.getTemplateContent(
       'reset-password',
-      { '{{userName}}': user.first_name, '{{resetLink}}': resetLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{userName}}': user.first_name,
+        '{{resetLink}}': resetLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,

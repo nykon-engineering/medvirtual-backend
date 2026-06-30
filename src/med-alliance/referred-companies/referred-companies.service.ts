@@ -883,11 +883,7 @@ export class ReferredCompaniesService {
   // Admin: block eligibility — mark company as not_eligible with a required reason.
   // Voids all detected + pending_admin_confirmation commissions.
   // ---------------------------------------------------------------------------
-  async blockEligibility(
-    id: string,
-    dto: BlockEligibilityDto,
-    admin: USER,
-  ) {
+  async blockEligibility(id: string, dto: BlockEligibilityDto, admin: USER) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
       select: {

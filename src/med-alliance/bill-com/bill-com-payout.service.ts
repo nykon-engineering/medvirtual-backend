@@ -224,7 +224,11 @@ export class BillComPayoutService {
   async retryPayment(id: string, adminUser: USER) {
     const request = await this.prisma.affiliatePayoutRequest.findUnique({
       where: { id },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        commissions: { select: { commission_id: true } },
+      },
     });
     if (!request) throw new NotFoundException('Payout request not found');
 
@@ -234,14 +238,25 @@ export class BillComPayoutService {
       );
     }
 
-    await this.prisma.affiliatePayoutRequest.update({
-      where: { id },
-      data: {
-        status: 'approved',
-        bill_com_payment_id: null,
-        bill_com_status: null,
-        bill_com_error: null,
-      },
+    const commissionIds = request.commissions.map((c) => c.commission_id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.affiliatePayoutRequest.update({
+        where: { id },
+        data: {
+          status: 'approved',
+          bill_com_payment_id: null,
+          bill_com_status: null,
+          bill_com_error: null,
+        },
+      });
+
+      if (commissionIds.length > 0) {
+        await tx.affiliateCommission.updateMany({
+          where: { id: { in: commissionIds } },
+          data: { status: 'requested' },
+        });
+      }
     });
 
     await this.writeAuditLog({
@@ -253,6 +268,22 @@ export class BillComPayoutService {
       reason: 'Admin retried Bill.com payment',
       source: 'admin_action',
     });
+
+    for (const commissionId of commissionIds) {
+      await this.prisma.medAllianceAuditLog.create({
+        data: {
+          actor_user_id: adminUser.id,
+          entity_type: 'commission',
+          entity_id: commissionId,
+          event: 'status_changed',
+          old_status: 'eligible',
+          new_status: 'requested',
+          reason: 'Payout request retry — commissions re-requested',
+          source: 'admin_action',
+          metadata: { payout_request_id: id } as any,
+        },
+      });
+    }
 
     return this.findOneForAdmin(id);
   }
@@ -345,6 +376,7 @@ export class BillComPayoutService {
         status: true,
         approved_amount: true,
         requested_amount: true,
+        commissions: { select: { commission_id: true } },
         affiliate: {
           select: { first_name: true, last_name: true, email: true },
         },
@@ -365,13 +397,24 @@ export class BillComPayoutService {
       return;
     }
 
-    await this.prisma.affiliatePayoutRequest.update({
-      where: { id: request.id },
-      data: {
-        status: 'failed',
-        bill_com_status: 'FAILED',
-        bill_com_error: errorMsg,
-      },
+    const commissionIds = request.commissions.map((c) => c.commission_id);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.affiliatePayoutRequest.update({
+        where: { id: request.id },
+        data: {
+          status: 'failed',
+          bill_com_status: 'FAILED',
+          bill_com_error: errorMsg,
+        },
+      });
+
+      if (commissionIds.length > 0) {
+        await tx.affiliateCommission.updateMany({
+          where: { id: { in: commissionIds } },
+          data: { status: 'eligible' },
+        });
+      }
     });
 
     await this.writeAuditLog({
@@ -383,6 +426,22 @@ export class BillComPayoutService {
       reason: errorMsg,
       source: 'sync',
     });
+
+    for (const commissionId of commissionIds) {
+      await this.prisma.medAllianceAuditLog.create({
+        data: {
+          actor_user_id: null,
+          entity_type: 'commission',
+          entity_id: commissionId,
+          event: 'status_changed',
+          old_status: 'paid',
+          new_status: 'eligible',
+          reason: 'Bill.com payment failed — reverted to eligible',
+          source: 'sync',
+          metadata: { payout_request_id: request.id } as any,
+        },
+      });
+    }
 
     await this.notifyAdminsOfFailure(
       request.id,

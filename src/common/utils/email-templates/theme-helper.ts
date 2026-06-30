@@ -1,5 +1,9 @@
 import { PrismaService } from '../../../prisma/prisma.service';
-import { EmailTheme, getEmailThemeByBusinessUnit, getEmailThemeByUserId } from './theme';
+import {
+  EmailTheme,
+  getEmailThemeByBusinessUnit,
+  getEmailThemeByUserId,
+} from './theme';
 
 // Maps the Organization.business_unit display value to the EmailBranding slug.
 // Organization stores "Berry Virtual" / "MedVirtual"; EmailBranding uses "berry-virtual" / "medvirtual".
@@ -48,7 +52,8 @@ export async function isUserBerryVirtual(
     });
 
     if (!user) return false;
-    if (['system_super_admin', 'system_admin'].includes(user.role)) return false;
+    if (['system_super_admin', 'system_admin'].includes(user.role))
+      return false;
     if (!user.organization_id) return false;
 
     const organizations = await prisma.organization.findMany({

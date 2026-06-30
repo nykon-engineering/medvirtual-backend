@@ -45,7 +45,6 @@ export class AuthService {
     private readonly emailTemplates: EmailTemplatesService,
   ) {}
 
-
   async signIn(data: AuthSignInDto): Promise<object> {
     const timeToExpires = data.rememberMe
       ? 7 * 24 * 60 * 60 * 1000
@@ -244,11 +243,26 @@ export class AuthService {
     const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
 
     const fallbackSubject = 'Verification Code';
-    const fallbackHtml = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
+    const fallbackHtml = getVerificationCodeTemplate(
+      code,
+      emailTheme || undefined,
+      isBerryVirtual,
+      verificationUrl,
+    );
     const tplContent = await this.emailTemplates.getTemplateContent(
       'verification-code',
-      { '{{verificationCode}}': code, '{{verificationUrl}}': verificationUrl, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{verificationCode}}': code,
+        '{{verificationUrl}}': verificationUrl,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mailService.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -415,12 +429,28 @@ export class AuthService {
     const isBerryVirtual = await isUserBerryVirtual(this.prisma, user.id);
     const verificationUrl = `${process.env.FRONTEND_URL}/signup/verification-code?t=${code}&berry=${isBerryVirtual ? 'true' : 'false'}`;
 
-    const fallbackSubject = 'Verify Your MedVirtual Account - Verification Code';
-    const fallbackHtml = getVerificationCodeTemplate(code, emailTheme || undefined, isBerryVirtual, verificationUrl);
+    const fallbackSubject =
+      'Verify Your MedVirtual Account - Verification Code';
+    const fallbackHtml = getVerificationCodeTemplate(
+      code,
+      emailTheme || undefined,
+      isBerryVirtual,
+      verificationUrl,
+    );
     const tplContent = await this.emailTemplates.getTemplateContent(
       'verification-code',
-      { '{{verificationCode}}': code, '{{verificationUrl}}': verificationUrl, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{verificationCode}}': code,
+        '{{verificationUrl}}': verificationUrl,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mailService.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -515,14 +545,26 @@ export class AuthService {
 
     const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual' ? `${baseInviteLink}&company=berry` : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
 
     const fallbackSubject = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`;
     const fallbackHtml = InviteSignup(inviteLink, emailTheme || undefined);
     const tplContent = await this.emailTemplates.getTemplateContent(
       'invite-signup',
-      { '{{inviteLink}}': inviteLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mailService.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -587,14 +629,26 @@ export class AuthService {
 
     const emailTheme = await getUserEmailTheme(this.prisma, userToReInvite.id);
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-    const inviteLink = emailTheme?.companyName === 'Berry Virtual' ? `${baseInviteLink}&company=berry` : baseInviteLink;
+    const inviteLink =
+      emailTheme?.companyName === 'Berry Virtual'
+        ? `${baseInviteLink}&company=berry`
+        : baseInviteLink;
 
     const fallbackSubject = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`;
     const fallbackHtml = InviteSignup(inviteLink, emailTheme || undefined);
     const tplContent = await this.emailTemplates.getTemplateContent(
       'invite-signup',
-      { '{{inviteLink}}': inviteLink, '{{companyName}}': emailTheme?.companyName || 'MedVirtual' },
-      emailTheme || { primaryColor: '#01546B', primaryColorHover: '#013A4F', secondaryColor: '#F8F9FA', accentColor: '#00B2E2', companyName: 'MedVirtual' },
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
     );
     const mailSent = await this.mailService.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,

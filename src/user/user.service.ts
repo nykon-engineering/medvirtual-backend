@@ -27,7 +27,6 @@ export class UserService {
     private readonly hubspotService: HubspotService,
   ) {}
 
-
   async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
     const { password, ...rest } = userData;
     const hash = await bcrypt.hash(password, 10);
