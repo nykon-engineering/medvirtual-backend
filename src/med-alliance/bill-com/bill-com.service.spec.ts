@@ -226,8 +226,7 @@ describe('BillComService', () => {
   // addPhoneForMfaSetup / validatePhoneForMfaSetup
   // ---------------------------------------------------------------------
   describe('addPhoneForMfaSetup', () => {
-    it('posts to /mfa/setup and returns setupId', async () => {
-      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+    it('posts to /mfa/setup with exactly the documented payload (no device/primary)', async () => {
       mockedAxios.post.mockResolvedValue({ data: { setupId: 'setup-1' } } as any);
 
       const result = await service.addPhoneForMfaSetup(
@@ -239,13 +238,16 @@ describe('BillComService', () => {
       expect(result).toEqual({ setupId: 'setup-1' });
       expect(mockedAxios.post).toHaveBeenCalledWith(
         expect.stringContaining('/mfa/setup'),
-        expect.objectContaining({ phone: '+14155552671', type: 'TEXT', primary: true }),
+        { phone: '+14155552671', type: 'TEXT' },
         expect.anything(),
       );
+      // device/primary are not part of Bill.com's documented contract for
+      // this endpoint; sending them was a plausible trigger for BDC_1570
+      // "Shield Service Errors."
+      expect(mockPrisma.uSER.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
     it('does NOT persist billcom_device (regression guard: premature persistence caused a BDC_5324 retry loop)', async () => {
-      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
       mockedAxios.post.mockResolvedValue({ data: { setupId: 'setup-1' } } as any);
 
       await service.addPhoneForMfaSetup('admin-1', 'sess-1', '+14155552671');

@@ -225,18 +225,25 @@ export class BillComService {
     }
   }
 
+  /**
+   * Per Bill.com's documented contract for this endpoint (phone, type,
+   * deprecated primary only), `device` is not an accepted field here — it
+   * only applies to /login and MFA challenge validation, once Bill.com has
+   * already issued a device identity. Sending it on this call (the one that
+   * *creates* that identity) doesn't match the documented contract and is a
+   * plausible trigger for Bill.com's Shield risk service rejecting the call.
+   */
   async addPhoneForMfaSetup(
     userId: string,
     sessionId: string,
     phone: string,
   ): Promise<{ setupId: string }> {
     const { devKey, billBaseUrl } = this.requireEnv();
-    const device = await this.resolveDeviceLabel(userId);
 
     try {
       const response = await axios.post<{ setupId: string }>(
         `${billBaseUrl}${BILLCOM_ADD_PHONE_ENDPOINT}`,
-        { phone, type: 'TEXT', primary: true, device },
+        { phone, type: 'TEXT' },
         {
           headers: { 'Content-Type': 'application/json', devKey, sessionId },
           timeout: 15000,
