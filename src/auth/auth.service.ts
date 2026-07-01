@@ -488,6 +488,10 @@ export class AuthService {
       throw new BadRequestException('Token is required');
     }
 
+    const session = await this.prisma.session.findFirst({
+      where: { token },
+    });
+
     const revodeToken = await this.prisma.session.updateMany({
       where: { token },
       data: { isRevoked: true },
@@ -495,6 +499,16 @@ export class AuthService {
 
     if (!revodeToken) {
       throw new BadRequestException('Failed to revoke token');
+    }
+
+    if (session) {
+      await this.prisma.uSER.update({
+        where: { id: session.userId },
+        data: {
+          billcom_session_id: null,
+          billcom_session_expires: null,
+        },
+      });
     }
 
     return true;

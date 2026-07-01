@@ -5,6 +5,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { AllianceNotificationsService } from '../notifications/notifications.service';
 import { BillComPayoutService } from '../bill-com/bill-com-payout.service';
+import { BillComService } from '../bill-com/bill-com.service';
+import { BillComSessionRequiredException } from '../bill-com/bill-com-session-required.exception';
 
 const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
   notifyAdminPayoutRequested: jest.fn(),
@@ -16,6 +18,10 @@ const mockAllianceNotifications: Partial<AllianceNotificationsService> = {
 const mockBillComPayoutService = {
   validateAndPreparePayment: jest.fn(),
   createBillAndPaymentForMarkPaid: jest.fn(),
+};
+
+const mockBillComService = {
+  hasValidSession: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -113,11 +119,13 @@ describe('PayoutRequestsService', () => {
         { provide: AffiliatesService, useValue: mockAffiliatesService },
         { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
         { provide: BillComPayoutService, useValue: mockBillComPayoutService },
+        { provide: BillComService, useValue: mockBillComService },
         { provide: Logger, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() } },
       ],
     }).compile();
 
     service = module.get<PayoutRequestsService>(PayoutRequestsService);
+    mockBillComService.hasValidSession.mockResolvedValue(true);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -537,6 +545,21 @@ describe('PayoutRequestsService', () => {
       await expect(
         service.markPaid('payout-1', {}, mockAdminUser),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BillComSessionRequiredException before any Bill.com/DB work when admin has no valid session', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest({ status: 'approved', commissions: [{ commission_id: 'c-1' }] }),
+      );
+      mockBillComService.hasValidSession.mockResolvedValue(false);
+
+      await expect(
+        service.markPaid('payout-1', {}, mockAdminUser),
+      ).rejects.toThrow(BillComSessionRequiredException);
+
+      expect(mockBillComPayoutService.validateAndPreparePayment).not.toHaveBeenCalled();
+      expect(mockBillComPayoutService.createBillAndPaymentForMarkPaid).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('should not write to DB when validateAndPreparePayment throws (vendor ID missing)', async () => {

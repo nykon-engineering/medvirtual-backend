@@ -86,6 +86,13 @@ model USER {
   offerPanelsCreated           OfferPanel[]               @relation("OfferPanelCreatedBy")
   offerPanelsAsRecipient       OfferPanel[]               @relation("OfferPanelRecipientUser")
 
+  // --- Bill.com per-user credentials (admin's own bill.com login/session) ---
+  billcom_session_id           String?    // only ever a trusted, MFA-confirmed session
+  billcom_session_expires      DateTime?
+  billcom_pending_session_id   String?    // transient, untrusted session in-flight during MFA/phone-setup
+  billcom_remember_me_id       String?
+  billcom_device               String?
+
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
   @@index([organization_id], map: "idx_users_organization_id")
@@ -1268,6 +1275,8 @@ model HubspotAuditLog {
   @@index([createdAt],                          map: "idx_hs_audit_created_at")
 }
 
+// @deprecated Superseded by per-user billcom_* fields on USER. Safe to drop
+// in a future migration once confirmed unused in production for a while.
 model BillComCredential {
   id           String   @id @default("singleton")
   rememberMeId String

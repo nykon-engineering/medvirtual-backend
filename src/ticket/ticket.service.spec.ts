@@ -31,6 +31,11 @@ const userfake = {
   hubspot_contact_id: '1',
   status_before_deactivation: null,
   activatedAt: null,
+  billcom_session_id: null,
+  billcom_session_expires: null,
+  billcom_pending_session_id: null,
+  billcom_remember_me_id: null,
+  billcom_device: null,
 }
 
 const systemAdminUser = { ...userfake, id: 'admin1', role: 'system_admin', organization_id: null };

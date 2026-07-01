@@ -6,8 +6,7 @@ import {
 } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MailService } from '../../mail/mail.service';
-import { adminRememberMeExpiredTemplate } from '../notifications/templates/admin-remember-me-expired';
+import { BillComSessionRequiredException } from './bill-com-session-required.exception';
 
 export interface CreateBillAndPaymentResponse {
   paymentId: string;
@@ -17,60 +16,107 @@ export interface CreateBillAndPaymentResponse {
   transactionNumber: string;
 }
 
+export interface BillComLoginResult {
+  sessionId: string;
+  trusted: boolean;
+}
+
+// TODO(verify): confirm real Bill.com endpoint for "add phone for MFA setup"
+// against live API docs/sandbox. Per bill.com support this is POST /mfa/setup
+// (distinct from /mfa/setup/validate used to validate the code).
+const BILLCOM_ADD_PHONE_ENDPOINT = '/mfa/setup';
+
+const SESSION_TTL_MS = 35 * 60 * 1000; // conservative; real retry-on-401 is the correctness backstop
+
 @Injectable()
 export class BillComService {
   private readonly logger = new Logger(BillComService.name);
-  private cachedSessionId: string | null = null;
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly mail: MailService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   private requireEnv(): {
-    username: string;
-    password: string;
     organizationId: string;
     devKey: string;
     fundingAccountId: string;
     billBaseUrl: string;
   } {
-    const username = process.env.BILLCOM_USERNAME;
-    const password = process.env.BILLCOM_PASSWORD;
     const organizationId = process.env.BILLCOM_ORGANIZATION_ID;
     const devKey = process.env.BILLCOM_DEV_KEY;
     const fundingAccountId = process.env.BILLCOM_FUNDING_ACCOUNT_ID;
     const billBaseUrl = process.env.BILLCOM_BASE_URL;
 
-    if (
-      !username ||
-      !password ||
-      !organizationId ||
-      !devKey ||
-      !fundingAccountId ||
-      !billBaseUrl
-    ) {
+    if (!organizationId || !devKey || !fundingAccountId || !billBaseUrl) {
       throw new InternalServerErrorException(
-        'Bill.com credentials not configured. Set BILLCOM_USERNAME, BILLCOM_PASSWORD, BILLCOM_ORGANIZATION_ID, BILLCOM_DEV_KEY, BILLCOM_FUNDING_ACCOUNT_ID, BILLCOM_BASE_URL.',
+        'Bill.com configuration missing. Set BILLCOM_ORGANIZATION_ID, BILLCOM_DEV_KEY, BILLCOM_FUNDING_ACCOUNT_ID, BILLCOM_BASE_URL.',
       );
     }
 
-    return {
-      username,
-      password,
-      organizationId,
-      devKey,
-      fundingAccountId,
-      billBaseUrl,
-    };
+    return { organizationId, devKey, fundingAccountId, billBaseUrl };
   }
 
-  private async login(): Promise<string> {
-    const { username, password, organizationId, devKey, billBaseUrl } =
-      this.requireEnv();
+  private wrapError(operation: string, err: unknown): BadGatewayException {
+    const axiosErr = err as AxiosError<any>;
+    const responseData = axiosErr.response?.data;
+    if (responseData) {
+      this.logger.error(
+        `Bill.com ${operation} raw error response: ${JSON.stringify(responseData)}`,
+      );
+    }
+    const errorsArray = Array.isArray(responseData)
+      ? responseData
+      : Array.isArray(responseData?.errors)
+        ? responseData.errors
+        : undefined;
+    const message =
+      responseData?.message ??
+      responseData?.error ??
+      responseData?.response_message ??
+      (errorsArray
+        ? errorsArray.map((e: any) => e.message ?? JSON.stringify(e)).join('; ')
+        : undefined) ??
+      axiosErr.message ??
+      'Unknown Bill.com error';
+    this.logger.error(`Bill.com ${operation} failed: ${message}`);
+    return new BadGatewayException(`Bill.com ${operation} failed: ${message}`);
+  }
 
-    const cred = await this.prisma.billComCredential.findUnique({
-      where: { id: 'singleton' },
+  /**
+   * Ensures the admin has a device label registered for Bill.com's MFA-trust
+   * mechanism. Per Bill.com docs, `device` is not returned by their API — it's
+   * any caller-chosen string used to identify the device. We generate and own
+   * it once per admin and reuse it on every subsequent login/MFA call.
+   */
+  private async ensureDeviceLabel(userId: string): Promise<string> {
+    const user = await this.prisma.uSER.findUniqueOrThrow({
+      where: { id: userId },
+      select: { billcom_device: true, email: true },
+    });
+    if (user.billcom_device) return user.billcom_device;
+
+    const device = `MedVirtual Admin - ${user.email}`;
+    await this.prisma.uSER.update({
+      where: { id: userId },
+      data: { billcom_device: device },
+    });
+    return device;
+  }
+
+  /**
+   * Signs the admin into Bill.com with their own credentials. Only a
+   * `trusted: true` response is immediately usable for payments — that
+   * session is persisted to billcom_session_id/billcom_session_expires.
+   * A `trusted: false` response is transient scaffolding for the MFA/phone
+   * flow and is held only in billcom_pending_session_id until
+   * validateMfaChallenge confirms it.
+   */
+  async login(
+    userId: string,
+    credentials: { username: string; password: string },
+  ): Promise<BillComLoginResult> {
+    const { organizationId, devKey, billBaseUrl } = this.requireEnv();
+    const user = await this.prisma.uSER.findUniqueOrThrow({
+      where: { id: userId },
+      select: { billcom_remember_me_id: true, billcom_device: true },
     });
 
     try {
@@ -82,111 +128,220 @@ export class BillComService {
       }>(
         `${billBaseUrl}/login`,
         {
-          username,
-          password,
+          username: credentials.username,
+          password: credentials.password,
           organizationId,
           devKey,
-          ...(cred?.rememberMeId && { rememberMeId: cred.rememberMeId }),
-          ...(cred?.device && { device: cred.device }),
+          ...(user.billcom_remember_me_id && {
+            rememberMeId: user.billcom_remember_me_id,
+          }),
+          ...(user.billcom_device && { device: user.billcom_device }),
         },
         { headers: { 'Content-Type': 'application/json' }, timeout: 15000 },
       );
-      this.cachedSessionId = response.data.sessionId;
-      this.logger.log('Bill.com session refreshed');
-      return this.cachedSessionId;
-    } catch (err) {
-      this.cachedSessionId = null;
-      const axiosErr = err as AxiosError<any>;
-      if (axiosErr.response?.data?.errorCode === 'BDC_1109') {
-        this.logger.error(
-          'Bill.com rememberMeId has expired (BDC_1109). Sending alert email.',
-        );
-        void this.notifyRememberMeIdExpired();
+
+      const { sessionId, trusted } = response.data;
+
+      if (trusted) {
+        await this.prisma.uSER.update({
+          where: { id: userId },
+          data: {
+            billcom_session_id: sessionId,
+            billcom_session_expires: new Date(Date.now() + SESSION_TTL_MS),
+            billcom_pending_session_id: null,
+          },
+        });
+      } else {
+        await this.prisma.uSER.update({
+          where: { id: userId },
+          data: { billcom_pending_session_id: sessionId },
+        });
       }
+
+      return { sessionId, trusted };
+    } catch (err) {
       throw this.wrapError('login', err);
     }
   }
 
-  private async notifyRememberMeIdExpired(): Promise<void> {
+  async requestMfaChallenge(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ challengeId: string }> {
+    const { devKey, billBaseUrl } = this.requireEnv();
     try {
-      await this.mail.sendMail({
-        from: 'MedVirtual <noreply@medvirtual.ai>',
-        to: 'paulo@regenta.ai',
-        subject: '[Bill.com] rememberMeId expired — manual renewal required',
-        html: adminRememberMeExpiredTemplate(),
-      });
-    } catch (err) {
-      this.logger.error('Failed to send rememberMeId expiry alert email', err);
-    }
-  }
-
-  private async ensureSession(): Promise<string> {
-    if (this.cachedSessionId) return this.cachedSessionId;
-    return this.login();
-  }
-
-  private invalidateSession(): void {
-    this.cachedSessionId = null;
-  }
-
-  private wrapError(operation: string, err: unknown): BadGatewayException {
-    const axiosErr = err as AxiosError<any>;
-    const responseData = axiosErr.response?.data;
-    if (responseData) {
-      this.logger.error(
-        `Bill.com ${operation} raw error response: ${JSON.stringify(responseData)}`,
+      const response = await axios.post<{ challengeId: string }>(
+        `${billBaseUrl}/mfa/challenge`,
+        {},
+        {
+          headers: { 'Content-Type': 'application/json', devKey, sessionId },
+          timeout: 15000,
+        },
       );
+      return { challengeId: response.data.challengeId };
+    } catch (err) {
+      throw this.wrapError('requestMfaChallenge', err);
     }
-    const message =
-      responseData?.message ??
-      responseData?.error ??
-      responseData?.response_message ??
-      (Array.isArray(responseData?.errors)
-        ? responseData.errors
-            .map((e: any) => e.message ?? JSON.stringify(e))
-            .join('; ')
-        : undefined) ??
-      axiosErr.message ??
-      'Unknown Bill.com error';
-    this.logger.error(`Bill.com ${operation} failed: ${message}`);
-    return new BadGatewayException(`Bill.com ${operation} failed: ${message}`);
+  }
+
+  /**
+   * Validates the MFA code. On success, this is the point the session
+   * actually becomes trusted — it is promoted from billcom_pending_session_id
+   * to billcom_session_id, and the returned rememberMeId is persisted so
+   * future logins can skip MFA entirely.
+   */
+  async validateMfaChallenge(
+    userId: string,
+    sessionId: string,
+    challengeId: string,
+    token: string,
+  ): Promise<{ rememberMeId: string }> {
+    const { devKey, billBaseUrl } = this.requireEnv();
+    const device = await this.ensureDeviceLabel(userId);
+
+    try {
+      const response = await axios.post<{ rememberMeId: string }>(
+        `${billBaseUrl}/mfa/challenge/validate`,
+        { challengeId, token, device, rememberMe: false },
+        {
+          headers: { 'Content-Type': 'application/json', devKey, sessionId },
+          timeout: 15000,
+        },
+      );
+
+      const { rememberMeId } = response.data;
+
+      await this.prisma.uSER.update({
+        where: { id: userId },
+        data: {
+          billcom_session_id: sessionId,
+          billcom_session_expires: new Date(Date.now() + SESSION_TTL_MS),
+          billcom_pending_session_id: null,
+          billcom_remember_me_id: rememberMeId,
+        },
+      });
+
+      return { rememberMeId };
+    } catch (err) {
+      throw this.wrapError('validateMfaChallenge', err);
+    }
+  }
+
+  async addPhoneForMfaSetup(
+    userId: string,
+    sessionId: string,
+    phone: string,
+  ): Promise<{ setupId: string }> {
+    const { devKey, billBaseUrl } = this.requireEnv();
+    const device = await this.ensureDeviceLabel(userId);
+
+    try {
+      const response = await axios.post<{ setupId: string }>(
+        `${billBaseUrl}${BILLCOM_ADD_PHONE_ENDPOINT}`,
+        { phone, type: 'TEXT', primary: true, device },
+        {
+          headers: { 'Content-Type': 'application/json', devKey, sessionId },
+          timeout: 15000,
+        },
+      );
+      return { setupId: response.data.setupId };
+    } catch (err) {
+      throw this.wrapError('addPhoneForMfaSetup', err);
+    }
+  }
+
+  /**
+   * Confirms the phone MFA setup. This alone does not yield a trusted
+   * session — per Bill.com's workflow, it must be followed by the regular
+   * MFA challenge/validate pair (now using the newly-registered device).
+   */
+  async validatePhoneForMfaSetup(
+    userId: string,
+    sessionId: string,
+    setupId: string,
+    token: string,
+  ): Promise<{ status: string }> {
+    const { devKey, billBaseUrl } = this.requireEnv();
+
+    try {
+      const response = await axios.post<{ status: string }>(
+        `${billBaseUrl}/mfa/setup/validate`,
+        { setupId, type: 'TEXT', token },
+        {
+          headers: { 'Content-Type': 'application/json', devKey, sessionId },
+          timeout: 15000,
+        },
+      );
+      return { status: response.data.status };
+    } catch (err) {
+      throw this.wrapError('validatePhoneForMfaSetup', err);
+    }
+  }
+
+  async hasValidSession(userId: string): Promise<boolean> {
+    const user = await this.prisma.uSER.findUniqueOrThrow({
+      where: { id: userId },
+      select: { billcom_session_id: true, billcom_session_expires: true },
+    });
+    return Boolean(
+      user.billcom_session_id &&
+        user.billcom_session_expires &&
+        user.billcom_session_expires.getTime() > Date.now(),
+    );
   }
 
   private async callWithSessionRetry<T>(
+    userId: string,
     operation: string,
     fn: (sessionId: string, devKey: string) => Promise<T>,
   ): Promise<T> {
     const { devKey } = this.requireEnv();
-    const sessionId = await this.ensureSession();
+    const user = await this.prisma.uSER.findUniqueOrThrow({
+      where: { id: userId },
+      select: { billcom_session_id: true, billcom_session_expires: true },
+    });
+
+    const hasValid =
+      user.billcom_session_id &&
+      user.billcom_session_expires &&
+      user.billcom_session_expires.getTime() > Date.now();
+
+    if (!hasValid) {
+      throw new BillComSessionRequiredException();
+    }
 
     try {
-      return await fn(sessionId, devKey);
+      return await fn(user.billcom_session_id as string, devKey);
     } catch (err) {
       const axiosErr = err as AxiosError;
       if (axiosErr.response?.status === 401) {
-        this.logger.warn('Bill.com session expired, re-authenticating...');
-        this.invalidateSession();
-        const freshSessionId = await this.login();
-        try {
-          return await fn(freshSessionId, devKey);
-        } catch (retryErr) {
-          throw this.wrapError(operation, retryErr);
-        }
+        this.logger.warn(
+          `Bill.com session expired for user ${userId}, invalidating.`,
+        );
+        await this.prisma.uSER.update({
+          where: { id: userId },
+          data: { billcom_session_id: null, billcom_session_expires: null },
+        });
+        throw new BillComSessionRequiredException();
       }
       throw this.wrapError(operation, err);
     }
   }
 
-  async createBillAndPayment(params: {
-    vendorId: string;
-    amount: number;
-    processDate: string;
-    description: string;
-  }): Promise<CreateBillAndPaymentResponse> {
+  async createBillAndPayment(
+    userId: string,
+    params: {
+      vendorId: string;
+      amount: number;
+      processDate: string;
+      description: string;
+    },
+  ): Promise<CreateBillAndPaymentResponse> {
     const { vendorId, amount, processDate, description } = params;
     const { fundingAccountId, billBaseUrl } = this.requireEnv();
 
     return this.callWithSessionRetry(
+      userId,
       'createBillAndPayment',
       async (sessionId, devKey) => {
         const response = await axios.post<{
@@ -229,7 +384,7 @@ export class BillComService {
           paymentId: response.data.id,
           billId,
           status: response.data.status,
-          confirmationNumber: response.data.confirmationNumber, // Assuming payment ID can serve as confirmation number
+          confirmationNumber: response.data.confirmationNumber,
           transactionNumber: response.data.transactionNumber,
         };
       },

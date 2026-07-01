@@ -1,0 +1,330 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import axios from 'axios';
+import { BillComService } from './bill-com.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { BillComSessionRequiredException } from './bill-com-session-required.exception';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+const mockPrisma = {
+  uSER: {
+    findUniqueOrThrow: jest.fn(),
+    update: jest.fn(),
+  },
+};
+
+const baseUser = {
+  id: 'admin-1',
+  email: 'admin@medvirtual.ai',
+  billcom_remember_me_id: null as string | null,
+  billcom_device: null as string | null,
+  billcom_session_id: null as string | null,
+  billcom_session_expires: null as Date | null,
+};
+
+describe('BillComService', () => {
+  let service: BillComService;
+
+  beforeEach(async () => {
+    process.env.BILLCOM_ORGANIZATION_ID = 'org-1';
+    process.env.BILLCOM_DEV_KEY = 'dev-key';
+    process.env.BILLCOM_FUNDING_ACCOUNT_ID = 'fund-1';
+    process.env.BILLCOM_BASE_URL = 'https://gateway.stage.bill.com/connect/v3';
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        BillComService,
+        { provide: PrismaService, useValue: mockPrisma },
+      ],
+    }).compile();
+
+    service = module.get<BillComService>(BillComService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  // ---------------------------------------------------------------------
+  // login
+  // ---------------------------------------------------------------------
+  describe('login', () => {
+    it('persists a trusted session to billcom_session_id and clears pending', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({
+        data: { sessionId: 'sess-1', trusted: true, organizationId: 'org-1', userId: 'u-1' },
+      } as any);
+
+      const result = await service.login('admin-1', {
+        username: 'admin@medvirtual.ai',
+        password: 'secret',
+      });
+
+      expect(result).toEqual({ sessionId: 'sess-1', trusted: true });
+      expect(mockPrisma.uSER.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'admin-1' },
+          data: expect.objectContaining({
+            billcom_session_id: 'sess-1',
+            billcom_pending_session_id: null,
+          }),
+        }),
+      );
+    });
+
+    it('holds an untrusted session only in billcom_pending_session_id, never billcom_session_id', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({
+        data: { sessionId: 'sess-2', trusted: false, organizationId: 'org-1', userId: 'u-1' },
+      } as any);
+
+      const result = await service.login('admin-1', {
+        username: 'admin@medvirtual.ai',
+        password: 'secret',
+      });
+
+      expect(result).toEqual({ sessionId: 'sess-2', trusted: false });
+      expect(mockPrisma.uSER.update).toHaveBeenCalledWith({
+        where: { id: 'admin-1' },
+        data: { billcom_pending_session_id: 'sess-2' },
+      });
+    });
+
+    it('includes rememberMeId/device from stored user fields when present', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
+        ...baseUser,
+        billcom_remember_me_id: 'remember-1',
+        billcom_device: 'MedVirtual Admin - admin@medvirtual.ai',
+      });
+      mockedAxios.post.mockResolvedValue({
+        data: { sessionId: 'sess-3', trusted: true, organizationId: 'org-1', userId: 'u-1' },
+      } as any);
+
+      await service.login('admin-1', { username: 'admin@medvirtual.ai', password: 'secret' });
+
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/login'),
+        expect.objectContaining({
+          rememberMeId: 'remember-1',
+          device: 'MedVirtual Admin - admin@medvirtual.ai',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('wraps a Bill.com error into a BadGatewayException', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockRejectedValue({
+        response: { data: { message: 'invalid credentials' } },
+      });
+
+      await expect(
+        service.login('admin-1', { username: 'x', password: 'y' }),
+      ).rejects.toThrow('Bill.com login failed: invalid credentials');
+    });
+
+    it('extracts the message when Bill.com returns an error array at the response root', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockRejectedValue({
+        response: {
+          data: [
+            { code: 'BDC_5324', severity: 'ERROR', message: 'Mfa action blocked.' },
+          ],
+        },
+      });
+
+      await expect(
+        service.login('admin-1', { username: 'x', password: 'y' }),
+      ).rejects.toThrow('Bill.com login failed: Mfa action blocked.');
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // hasValidSession
+  // ---------------------------------------------------------------------
+  describe('hasValidSession', () => {
+    it('returns false when no session is stored', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      await expect(service.hasValidSession('admin-1')).resolves.toBe(false);
+    });
+
+    it('returns false when the session is expired', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
+        ...baseUser,
+        billcom_session_id: 'sess-1',
+        billcom_session_expires: new Date(Date.now() - 1000),
+      });
+      await expect(service.hasValidSession('admin-1')).resolves.toBe(false);
+    });
+
+    it('returns true when the session is valid and not expired', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
+        ...baseUser,
+        billcom_session_id: 'sess-1',
+        billcom_session_expires: new Date(Date.now() + 1000 * 60),
+      });
+      await expect(service.hasValidSession('admin-1')).resolves.toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // requestMfaChallenge / validateMfaChallenge
+  // ---------------------------------------------------------------------
+  describe('requestMfaChallenge', () => {
+    it('returns the challengeId from Bill.com', async () => {
+      mockedAxios.post.mockResolvedValue({ data: { challengeId: 'chal-1' } } as any);
+      await expect(
+        service.requestMfaChallenge('admin-1', 'sess-1'),
+      ).resolves.toEqual({ challengeId: 'chal-1' });
+    });
+  });
+
+  describe('validateMfaChallenge', () => {
+    it('promotes the pending session to trusted and persists rememberMeId', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
+        ...baseUser,
+        billcom_device: 'MedVirtual Admin - admin@medvirtual.ai',
+      });
+      mockedAxios.post.mockResolvedValue({ data: { rememberMeId: 'remember-1' } } as any);
+
+      const result = await service.validateMfaChallenge(
+        'admin-1',
+        'sess-1',
+        'chal-1',
+        '123456',
+      );
+
+      expect(result).toEqual({ rememberMeId: 'remember-1' });
+      expect(mockPrisma.uSER.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'admin-1' },
+          data: expect.objectContaining({
+            billcom_session_id: 'sess-1',
+            billcom_pending_session_id: null,
+            billcom_remember_me_id: 'remember-1',
+          }),
+        }),
+      );
+    });
+
+    it('generates and persists a device label when the user has none yet', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({ data: { rememberMeId: 'remember-1' } } as any);
+
+      await service.validateMfaChallenge('admin-1', 'sess-1', 'chal-1', '123456');
+
+      expect(mockPrisma.uSER.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'admin-1' },
+          data: expect.objectContaining({
+            billcom_device: 'MedVirtual Admin - admin@medvirtual.ai',
+          }),
+        }),
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // addPhoneForMfaSetup / validatePhoneForMfaSetup
+  // ---------------------------------------------------------------------
+  describe('addPhoneForMfaSetup', () => {
+    it('posts to /mfa/setup and returns setupId', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({ data: { setupId: 'setup-1' } } as any);
+
+      const result = await service.addPhoneForMfaSetup(
+        'admin-1',
+        'sess-1',
+        '+14155552671',
+      );
+
+      expect(result).toEqual({ setupId: 'setup-1' });
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/mfa/setup'),
+        expect.objectContaining({ phone: '+14155552671', type: 'TEXT', primary: true }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('validatePhoneForMfaSetup', () => {
+    it('persists billcom_device on SUCCESS', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({ data: { status: 'SUCCESS' } } as any);
+
+      const result = await service.validatePhoneForMfaSetup(
+        'admin-1',
+        'sess-1',
+        'setup-1',
+        '654321',
+      );
+
+      expect(result).toEqual({ status: 'SUCCESS' });
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // createBillAndPayment
+  // ---------------------------------------------------------------------
+  describe('createBillAndPayment', () => {
+    const params = {
+      vendorId: 'vendor-1',
+      amount: 150,
+      processDate: '2026-06-01',
+      description: 'Payment for affiliate',
+    };
+
+    it('throws BillComSessionRequiredException when the admin has no valid session', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+
+      await expect(
+        service.createBillAndPayment('admin-1', params),
+      ).rejects.toThrow(BillComSessionRequiredException);
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+    });
+
+    it('creates the bill and payment using the stored session', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
+        ...baseUser,
+        billcom_session_id: 'sess-1',
+        billcom_session_expires: new Date(Date.now() + 1000 * 60),
+      });
+      mockedAxios.post.mockResolvedValue({
+        data: {
+          id: 'pay-1',
+          billId: 'bill-1',
+          status: 'SCHEDULED',
+          confirmationNumber: 'conf-1',
+          transactionNumber: 'txn-1',
+        },
+      } as any);
+
+      const result = await service.createBillAndPayment('admin-1', params);
+
+      expect(result).toEqual({
+        paymentId: 'pay-1',
+        billId: 'bill-1',
+        status: 'SCHEDULED',
+        confirmationNumber: 'conf-1',
+        transactionNumber: 'txn-1',
+      });
+    });
+
+    it('invalidates the session and throws BillComSessionRequiredException on a 401 mid-call', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
+        ...baseUser,
+        billcom_session_id: 'sess-1',
+        billcom_session_expires: new Date(Date.now() + 1000 * 60),
+      });
+      mockedAxios.post.mockRejectedValue({ response: { status: 401 } });
+
+      await expect(
+        service.createBillAndPayment('admin-1', params),
+      ).rejects.toThrow(BillComSessionRequiredException);
+
+      expect(mockPrisma.uSER.update).toHaveBeenCalledWith({
+        where: { id: 'admin-1' },
+        data: { billcom_session_id: null, billcom_session_expires: null },
+      });
+    });
+  });
+});

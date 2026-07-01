@@ -145,7 +145,7 @@ export class BillComPayoutService {
   ) {
     const { vendorId, affiliateName, affiliateEmail, amount, today } = payload;
 
-    return this.billComService.createBillAndPayment({
+    return this.billComService.createBillAndPayment(adminUser.id, {
       vendorId,
       amount,
       processDate: today,
@@ -178,12 +178,15 @@ export class BillComPayoutService {
     const { vendorId, affiliateName, affiliateEmail, amount, today } =
       billPayload;
 
-    const result = await this.billComService.createBillAndPayment({
-      vendorId,
-      amount,
-      processDate: today,
-      description: `Bill created by ${adminUser.first_name} ${adminUser.last_name} (${adminUser.email}) for affiliate ${affiliateName} (${affiliateEmail}) through the payout request id ${id}`,
-    });
+    const result = await this.billComService.createBillAndPayment(
+      adminUser.id,
+      {
+        vendorId,
+        amount,
+        processDate: today,
+        description: `Bill created by ${adminUser.first_name} ${adminUser.last_name} (${adminUser.email}) for affiliate ${affiliateName} (${affiliateEmail}) through the payout request id ${id}`,
+      },
+    );
 
     const commissionIds = request.commissions.map((c) => c.commission_id);
 
