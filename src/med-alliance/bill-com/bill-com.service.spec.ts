@@ -206,17 +206,16 @@ describe('BillComService', () => {
       );
     });
 
-    it('generates and persists a device label when the user has none yet', async () => {
+    it('does NOT persist billcom_device even when the user has none yet (only validatePhoneForMfaSetup does, on confirmed SUCCESS)', async () => {
       mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
       mockedAxios.post.mockResolvedValue({ data: { rememberMeId: 'remember-1' } } as any);
 
       await service.validateMfaChallenge('admin-1', 'sess-1', 'chal-1', '123456');
 
-      expect(mockPrisma.uSER.update).toHaveBeenCalledWith(
+      expect(mockPrisma.uSER.update).not.toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'admin-1' },
           data: expect.objectContaining({
-            billcom_device: 'MedVirtual Admin - admin@medvirtual.ai',
+            billcom_device: expect.anything(),
           }),
         }),
       );
@@ -244,6 +243,15 @@ describe('BillComService', () => {
         expect.anything(),
       );
     });
+
+    it('does NOT persist billcom_device (regression guard: premature persistence caused a BDC_5324 retry loop)', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({ data: { setupId: 'setup-1' } } as any);
+
+      await service.addPhoneForMfaSetup('admin-1', 'sess-1', '+14155552671');
+
+      expect(mockPrisma.uSER.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('validatePhoneForMfaSetup', () => {
@@ -259,6 +267,40 @@ describe('BillComService', () => {
       );
 
       expect(result).toEqual({ status: 'SUCCESS' });
+      expect(mockPrisma.uSER.update).toHaveBeenCalledWith({
+        where: { id: 'admin-1' },
+        data: { billcom_device: 'MedVirtual Admin - admin@medvirtual.ai' },
+      });
+    });
+
+    it('does NOT persist billcom_device when Bill.com rejects the code', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({ data: { status: 'FAILED' } } as any);
+
+      const result = await service.validatePhoneForMfaSetup(
+        'admin-1',
+        'sess-1',
+        'setup-1',
+        '000000',
+      );
+
+      expect(result).toEqual({ status: 'FAILED' });
+      expect(mockPrisma.uSER.update).not.toHaveBeenCalled();
+    });
+
+    it('does NOT persist billcom_device when the Bill.com call throws (e.g. BDC_5324)', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockRejectedValue({
+        response: {
+          data: [{ code: 'BDC_5324', severity: 'ERROR', message: 'Mfa action blocked.' }],
+        },
+      });
+
+      await expect(
+        service.validatePhoneForMfaSetup('admin-1', 'sess-1', 'setup-1', '654321'),
+      ).rejects.toThrow('Mfa action blocked.');
+
+      expect(mockPrisma.uSER.update).not.toHaveBeenCalled();
     });
   });
 

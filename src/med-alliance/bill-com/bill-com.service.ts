@@ -81,24 +81,22 @@ export class BillComService {
   }
 
   /**
-   * Ensures the admin has a device label registered for Bill.com's MFA-trust
-   * mechanism. Per Bill.com docs, `device` is not returned by their API — it's
-   * any caller-chosen string used to identify the device. We generate and own
-   * it once per admin and reuse it on every subsequent login/MFA call.
+   * Resolves the device label used for Bill.com's MFA-trust mechanism.
+   * Per Bill.com docs, `device` is not returned by their API — it's any
+   * caller-chosen string used to identify the device. This only *reads/
+   * generates* the label; it is intentionally NOT persisted here. Bill.com
+   * does not consider a device trusted until the phone MFA setup is actually
+   * confirmed (validatePhoneForMfaSetup), so persisting early left
+   * billcom_device populated for devices Bill.com never finished trusting —
+   * causing determineNextStep to skip straight to mfa_challenge on a later
+   * attempt and get BDC_5324 ("Mfa action blocked") in a loop.
    */
-  private async ensureDeviceLabel(userId: string): Promise<string> {
+  private async resolveDeviceLabel(userId: string): Promise<string> {
     const user = await this.prisma.uSER.findUniqueOrThrow({
       where: { id: userId },
       select: { billcom_device: true, email: true },
     });
-    if (user.billcom_device) return user.billcom_device;
-
-    const device = `MedVirtual Admin - ${user.email}`;
-    await this.prisma.uSER.update({
-      where: { id: userId },
-      data: { billcom_device: device },
-    });
-    return device;
+    return user.billcom_device ?? `MedVirtual Admin - ${user.email}`;
   }
 
   /**
@@ -197,7 +195,7 @@ export class BillComService {
     token: string,
   ): Promise<{ rememberMeId: string }> {
     const { devKey, billBaseUrl } = this.requireEnv();
-    const device = await this.ensureDeviceLabel(userId);
+    const device = await this.resolveDeviceLabel(userId);
 
     try {
       const response = await axios.post<{ rememberMeId: string }>(
@@ -233,7 +231,7 @@ export class BillComService {
     phone: string,
   ): Promise<{ setupId: string }> {
     const { devKey, billBaseUrl } = this.requireEnv();
-    const device = await this.ensureDeviceLabel(userId);
+    const device = await this.resolveDeviceLabel(userId);
 
     try {
       const response = await axios.post<{ setupId: string }>(
@@ -254,6 +252,9 @@ export class BillComService {
    * Confirms the phone MFA setup. This alone does not yield a trusted
    * session — per Bill.com's workflow, it must be followed by the regular
    * MFA challenge/validate pair (now using the newly-registered device).
+   * billcom_device is only persisted here, on confirmed SUCCESS — this is
+   * the sole write path for that field, so determineNextStep never treats a
+   * device as trusted unless Bill.com actually confirmed it.
    */
   async validatePhoneForMfaSetup(
     userId: string,
@@ -262,6 +263,7 @@ export class BillComService {
     token: string,
   ): Promise<{ status: string }> {
     const { devKey, billBaseUrl } = this.requireEnv();
+    const device = await this.resolveDeviceLabel(userId);
 
     try {
       const response = await axios.post<{ status: string }>(
@@ -272,7 +274,16 @@ export class BillComService {
           timeout: 15000,
         },
       );
-      return { status: response.data.status };
+
+      const { status } = response.data;
+      if (status === 'SUCCESS') {
+        await this.prisma.uSER.update({
+          where: { id: userId },
+          data: { billcom_device: device },
+        });
+      }
+
+      return { status };
     } catch (err) {
       throw this.wrapError('validatePhoneForMfaSetup', err);
     }
