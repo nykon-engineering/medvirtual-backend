@@ -953,7 +953,10 @@ describe('AuthService - logout', () => {
   let prisma: PrismaService;
 
   beforeEach(async () => {
-    const prismaMock: any = { session: { updateMany: jest.fn() } };
+    const prismaMock: any = {
+      session: { updateMany: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
+      uSER: { update: jest.fn() },
+    };
     const module = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -966,6 +969,7 @@ describe('AuthService - logout', () => {
     service = module.get<AuthService>(AuthService);
     prisma = module.get<PrismaService>(PrismaService);
     jest.clearAllMocks();
+    (prisma.session as any).findFirst.mockResolvedValue(null);
   });
 
   it('should throw BadRequestException when no token provided', async () => {
@@ -980,6 +984,27 @@ describe('AuthService - logout', () => {
       where: { token: 'valid-token' },
       data: { isRevoked: true },
     });
+  });
+
+  it('should clear the bill.com session for the logged-out user', async () => {
+    (prisma.session as any).findFirst.mockResolvedValue({ userId: 'user-1', token: 'valid-token' });
+    (prisma.session as any).updateMany.mockResolvedValue({ count: 1 });
+
+    await service.logout({ token: 'valid-token' } as any);
+
+    expect((prisma.uSER as any).update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { billcom_session_id: null, billcom_session_expires: null },
+    });
+  });
+
+  it('should not attempt to clear bill.com session when no matching session is found', async () => {
+    (prisma.session as any).findFirst.mockResolvedValue(null);
+    (prisma.session as any).updateMany.mockResolvedValue({ count: 1 });
+
+    await service.logout({ token: 'valid-token' } as any);
+
+    expect((prisma.uSER as any).update).not.toHaveBeenCalled();
   });
 });
 
@@ -1186,7 +1211,10 @@ describe('AuthService - logout (additional)', () => {
   let prisma: PrismaService;
 
   beforeEach(async () => {
-    const prismaMock: any = { session: { updateMany: jest.fn() } };
+    const prismaMock: any = {
+      session: { updateMany: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
+      uSER: { update: jest.fn() },
+    };
     const module = await Test.createTestingModule({
       providers: [
         AuthService,
