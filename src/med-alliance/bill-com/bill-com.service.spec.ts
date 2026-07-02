@@ -213,91 +213,47 @@ describe('BillComService', () => {
   });
 
   describe('validateMfaChallenge', () => {
-    const credentials = { username: 'admin@medvirtual.ai', password: 'secret123' };
-
-    it('persists rememberMeId + device, then re-logs in and returns a trusted session', async () => {
+    it('persists rememberMeId + device for future logins, and trusts the already-authenticated session directly', async () => {
       mockPrisma.uSER.findUniqueOrThrow
         // resolveDeviceLabel (inside validateMfaChallenge)
-        .mockResolvedValueOnce({ ...baseUser, billcom_device: null })
-        // login() -> reads billcom_remember_me_id/billcom_device for the request body
-        .mockResolvedValueOnce({
-          ...baseUser,
-          billcom_remember_me_id: 'remember-1',
-          billcom_device: 'MedVirtual Admin - admin@medvirtual.ai',
-        });
-      mockedAxios.post
-        .mockResolvedValueOnce({ data: { rememberMeId: 'remember-1' } } as any) // mfa/challenge/validate
-        .mockResolvedValueOnce({
-          data: { sessionId: 'sess-2', organizationId: 'org-1', userId: 'admin-1', trusted: true },
-        } as any); // login()
+        .mockResolvedValueOnce({ ...baseUser, billcom_device: null });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { rememberMeId: 'remember-1' },
+      } as any); // mfa/challenge/validate
 
       const result = await service.validateMfaChallenge(
         'admin-1',
         'sess-1',
         'chal-1',
         '123456',
-        credentials,
       );
 
-      expect(result).toEqual({ sessionId: 'sess-2', trusted: true });
-      // rememberMeId + device persisted before the re-login
+      // No second /login call — the sessionId passed in is already trusted.
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ sessionId: 'sess-1', trusted: true });
       expect(mockPrisma.uSER.update).toHaveBeenCalledWith({
         where: { id: 'admin-1' },
         data: {
           billcom_remember_me_id: 'remember-1',
           billcom_device: 'MedVirtual Admin - admin@medvirtual.ai',
+          billcom_session_id: 'sess-1',
+          billcom_session_expires: expect.any(Date),
+          billcom_pending_session_id: null,
         },
       });
-      // re-login persists the new trusted session
-      expect(mockPrisma.uSER.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'admin-1' },
-          data: expect.objectContaining({
-            billcom_session_id: 'sess-2',
-            billcom_pending_session_id: null,
-          }),
-        }),
-      );
-      // the re-login request included the fresh rememberMeId
-      expect(mockedAxios.post).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining('/login'),
-        expect.objectContaining({ rememberMeId: 'remember-1' }),
-        expect.anything(),
-      );
     });
 
-    it('returns a non-trusted result as-is when the re-login also comes back trusted:false', async () => {
-      mockPrisma.uSER.findUniqueOrThrow
-        .mockResolvedValueOnce({ ...baseUser, billcom_device: null })
-        .mockResolvedValueOnce({ ...baseUser, billcom_remember_me_id: 'remember-1' });
-      mockedAxios.post
-        .mockResolvedValueOnce({ data: { rememberMeId: 'remember-1' } } as any)
-        .mockResolvedValueOnce({
-          data: { sessionId: 'sess-2', organizationId: 'org-1', userId: 'admin-1', trusted: false },
-        } as any);
-
-      const result = await service.validateMfaChallenge(
-        'admin-1',
-        'sess-1',
-        'chal-1',
-        '123456',
-        credentials,
-      );
-
-      expect(result).toEqual({ sessionId: 'sess-2', trusted: false });
-    });
-
-    it('wraps and throws when the code itself is invalid, without attempting a re-login', async () => {
+    it('wraps and throws when the code itself is invalid, without persisting anything', async () => {
       mockPrisma.uSER.findUniqueOrThrow.mockResolvedValueOnce({ ...baseUser });
       mockedAxios.post.mockRejectedValueOnce({
         response: { data: [{ code: 'BDC_9999', message: 'Invalid code' }] },
       });
 
       await expect(
-        service.validateMfaChallenge('admin-1', 'sess-1', 'chal-1', '000000', credentials),
+        service.validateMfaChallenge('admin-1', 'sess-1', 'chal-1', '000000'),
       ).rejects.toThrow();
       expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.uSER.update).not.toHaveBeenCalled();
     });
   });
 
@@ -511,13 +467,16 @@ describe('BillComService', () => {
   });
 
   // ---------------------------------------------------------------------
-  // End-to-end guarantee: a session is only usable for payments once a
-  // login() call has itself returned trusted:true. Validating the MFA code
-  // alone must never be sufficient — see paymentCredentials.md line 122
-  // ("The flow can be started only if the login api returns trusted: true").
-  // These tests use a stateful fake Prisma (real read-your-writes) so the
-  // whole login -> validateMfaChallenge -> createBillAndPayment chain runs
-  // through the real service methods, not step-by-step mocks.
+  // End-to-end guarantee: a session is only usable for payments once it has
+  // been persisted as billcom_session_id — either via login() returning
+  // trusted:true directly, or via validateMfaChallenge() confirming the MFA
+  // code on an already-authenticated session (see paymentCredentials.md
+  // line 122, "The flow can be started only if the login api returns
+  // trusted: true", and lines 74-78 on rememberMeId being for the *next*
+  // login, not proof of the current one). These tests use a stateful fake
+  // Prisma (real read-your-writes) so the whole login -> validateMfaChallenge
+  // -> createBillAndPayment chain runs through the real service methods, not
+  // step-by-step mocks.
   // ---------------------------------------------------------------------
   describe('end-to-end: payments require an actual trusted:true login', () => {
     let statefulPrisma: {
@@ -552,7 +511,7 @@ describe('BillComService', () => {
       statefulService = module.get<BillComService>(BillComService);
     });
 
-    it('never grants a payable session on login alone when trusted is false, or on a validated MFA code alone — only a second login() returning trusted:true does', async () => {
+    it('never grants a payable session on login alone when trusted is false — only a validated MFA code (or a later trusted:true login) does', async () => {
       // 1) Initial login comes back untrusted.
       mockedAxios.post.mockResolvedValueOnce({
         data: { sessionId: 'sess-pending', organizationId: 'org-1', userId: 'admin-1', trusted: false },
@@ -573,14 +532,10 @@ describe('BillComService', () => {
         }),
       ).rejects.toThrow(BillComSessionRequiredException);
 
-      // 2) MFA code is validated successfully (rememberMeId returned)...
+      // 2) MFA code is validated successfully — this alone confirms the
+      // pending session as trusted, no second /login involved.
       mockedAxios.post.mockResolvedValueOnce({
         data: { rememberMeId: 'remember-1' },
-      } as any);
-      // ...but the re-login triggered internally by validateMfaChallenge
-      // itself comes back trusted:false (e.g. Bill.com still not satisfied).
-      mockedAxios.post.mockResolvedValueOnce({
-        data: { sessionId: 'sess-still-pending', organizationId: 'org-1', userId: 'admin-1', trusted: false },
       } as any);
 
       const validateResult = await statefulService.validateMfaChallenge(
@@ -588,40 +543,10 @@ describe('BillComService', () => {
         'sess-pending',
         'chal-1',
         '123456',
-        { username: 'admin@medvirtual.ai', password: 'secret123' },
       );
-      expect(validateResult.trusted).toBe(false);
+      expect(validateResult).toEqual({ sessionId: 'sess-pending', trusted: true });
 
-      // A validated MFA code alone — without a trusted:true re-login — must
-      // still not unlock payments.
-      await expect(
-        statefulService.createBillAndPayment('admin-1', {
-          vendorId: 'vendor-1',
-          amount: 100,
-          processDate: '2026-06-01',
-          description: 'test',
-        }),
-      ).rejects.toThrow(BillComSessionRequiredException);
-
-      // 3) Only now does the re-login (still inside validateMfaChallenge,
-      // simulating the user retrying) come back trusted:true.
-      mockedAxios.post.mockResolvedValueOnce({
-        data: { rememberMeId: 'remember-2' },
-      } as any);
-      mockedAxios.post.mockResolvedValueOnce({
-        data: { sessionId: 'sess-trusted', organizationId: 'org-1', userId: 'admin-1', trusted: true },
-      } as any);
-
-      const finalValidate = await statefulService.validateMfaChallenge(
-        'admin-1',
-        'sess-still-pending',
-        'chal-2',
-        '654321',
-        { username: 'admin@medvirtual.ai', password: 'secret123' },
-      );
-      expect(finalValidate.trusted).toBe(true);
-
-      // Now, and only now, payments are unlocked.
+      // Now payments are unlocked, using the MFA-validated session directly.
       mockedAxios.post.mockResolvedValueOnce({
         data: {
           id: 'pay-1',
@@ -639,8 +564,8 @@ describe('BillComService', () => {
       });
       expect(payment.paymentId).toBe('pay-1');
 
-      // The payable session must be the one issued by the trusted:true login.
-      expect(userRow.billcom_session_id).toBe('sess-trusted');
+      // The payable session must be the one confirmed by the MFA validation.
+      expect(userRow.billcom_session_id).toBe('sess-pending');
     });
   });
 });

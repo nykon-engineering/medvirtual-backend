@@ -22,7 +22,6 @@ import { ADMIN_ROLES } from '../constants';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillComService } from './bill-com.service';
 import { BillComAuthService } from './bill-com-auth.service';
-import { BillComPendingCredentialsStore } from './bill-com-pending-credentials.store';
 import { BillComAlreadyEnrolledException } from './bill-com-already-enrolled.exception';
 import { BillComLoginDto } from './dto/bill-com-login.dto';
 import { BillComMfaValidateDto } from './dto/bill-com-mfa-validate.dto';
@@ -38,7 +37,6 @@ export class BillComAuthController {
   constructor(
     private readonly billComService: BillComService,
     private readonly billComAuthService: BillComAuthService,
-    private readonly pendingCredentials: BillComPendingCredentialsStore,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -73,12 +71,6 @@ export class BillComAuthController {
       username: dto.email,
       password: dto.password,
     });
-    if (!result.trusted) {
-      // Bill.com requires username/password on every /login call, including
-      // the re-login after MFA validation — held only long enough to redeem
-      // the rememberMeId into a trusted session (see mfaValidate below).
-      this.pendingCredentials.set(admin.id, dto.email, dto.password);
-    }
     const { nextStep, challengeId } =
       await this.billComAuthService.determineNextStep(admin.id, result);
     return { trusted: result.trusted, nextStep, challengeId };
@@ -102,16 +94,11 @@ export class BillComAuthController {
     @Body() dto: BillComMfaValidateDto,
   ) {
     const sessionId = await this.requirePendingSessionId(admin.id);
-    const credentials = this.pendingCredentials.take(admin.id);
-    if (!credentials) {
-      throw new BadRequestException('Your session expired. Please sign in again.');
-    }
     const result = await this.billComService.validateMfaChallenge(
       admin.id,
       sessionId,
       dto.challengeId,
       dto.token,
-      credentials,
     );
     return { success: true, trusted: result.trusted };
   }

@@ -246,21 +246,19 @@ export class BillComService {
   }
 
   /**
-   * Validates the MFA code and redeems the resulting rememberMeId into an
-   * actual trusted session. Per Bill.com's contract, validating the code
-   * alone does not grant a trusted session — it only returns a rememberMeId
-   * that "needs to be used on login". So this persists that rememberMeId
-   * and immediately calls login() again with it; only if THAT login returns
-   * trusted:true is the session considered usable for payments. login()
-   * already handles persisting billcom_session_id/expires and clearing
-   * billcom_pending_session_id.
+   * Validates the MFA code. The sessionId used above is already the
+   * authenticated session — Bill.com just accepted the code on it. The
+   * returned rememberMeId is NOT proof for *this* session; per Bill.com's
+   * contract it "needs to be used on login", i.e. it's for the *next*
+   * login, to skip MFA next time. So: persist rememberMeId/device for
+   * future logins, and persist sessionId itself as the trusted session
+   * right now — no second /login call.
    */
   async validateMfaChallenge(
     userId: string,
     sessionId: string,
     challengeId: string,
     token: string,
-    credentials: { username: string; password: string },
   ): Promise<BillComLoginResult> {
     const { devKey, billBaseUrl } = this.requireEnv();
     const device = await this.resolveDeviceLabel(userId);
@@ -285,10 +283,13 @@ export class BillComService {
       data: {
         billcom_remember_me_id: rememberMeId,
         billcom_device: device,
+        billcom_session_id: sessionId,
+        billcom_session_expires: new Date(Date.now() + SESSION_TTL_MS),
+        billcom_pending_session_id: null,
       },
     });
 
-    return this.login(userId, credentials);
+    return { sessionId, trusted: true };
   }
 
   /**
