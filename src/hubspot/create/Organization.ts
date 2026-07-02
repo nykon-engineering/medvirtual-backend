@@ -92,7 +92,7 @@ export class OrganizationCreationService {
               ? await this.getOwnerId(data.admin_id)
               : undefined,
             referral_source: data.referred_by_affiliate_id
-              ? 'Referral - Partner'
+              ? 'Alliance Partner'
               : undefined,
             referral_partners_email: data.referred_by_affiliate_id
               ? await this.getAffiliateEmail(data.referred_by_affiliate_id)
