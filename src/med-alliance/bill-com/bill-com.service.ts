@@ -7,6 +7,8 @@ import {
 import axios, { AxiosError } from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillComSessionRequiredException } from './bill-com-session-required.exception';
+import { BillComAlreadyEnrolledException } from './bill-com-already-enrolled.exception';
+import { BillComNoDeviceException } from './bill-com-no-device.exception';
 
 export interface CreateBillAndPaymentResponse {
   paymentId: string;
@@ -26,7 +28,9 @@ export interface BillComLoginResult {
 // (distinct from /mfa/setup/validate used to validate the code).
 const BILLCOM_ADD_PHONE_ENDPOINT = '/mfa/setup';
 
-const SESSION_TTL_MS = 35 * 60 * 1000; // conservative; real retry-on-401 is the correctness backstop
+// 4 hours is a conservative TTL for Bill.com sessions. In practice, they may
+// last longer, but this is a correctness backstop for the retry-on-401 logic.
+const SESSION_TTL_MS = 240 * 60 * 1000; 
 
 @Injectable()
 export class BillComService {
@@ -81,6 +85,47 @@ export class BillComService {
   }
 
   /**
+   * BDC_5324 ("Mfa action blocked") on /mfa/setup means Bill.com's own
+   * state already has a phone/device registered for this org/user — our
+   * local billcom_device column can be null (e.g. a partial flow, or a
+   * setup that succeeded on Bill.com's side without our write completing)
+   * while Bill.com still considers the account enrolled. This is narrowly
+   * scoped to BDC_5324 only: BDC_1570 ("Shield Service Errors") is Bill.com's
+   * discretionary fraud/risk service and is not a reliable "already
+   * enrolled" signal, so it must keep surfacing as a normal error.
+   */
+  private isAlreadyEnrolledError(err: unknown): boolean {
+    const axiosErr = err as AxiosError<any>;
+    const responseData = axiosErr.response?.data;
+    const errorsArray = Array.isArray(responseData)
+      ? responseData
+      : Array.isArray(responseData?.errors)
+        ? responseData.errors
+        : undefined;
+    return Boolean(
+      errorsArray?.some((e: any) => e?.code === 'BDC_5324'),
+    );
+  }
+
+  /**
+   * BDC_1354 ("Specified 2-Step Verification phone is not setup or is
+   * invalid") on /mfa/challenge means Bill.com has no MFA device on file
+   * for this user at all — confirmed empirically against the stage
+   * sandbox. This is the signal used to skip our own phone-collection UI
+   * and instead direct the user to configure MFA directly in Bill.com.
+   */
+  private isNoDeviceError(err: unknown): boolean {
+    const axiosErr = err as AxiosError<any>;
+    const responseData = axiosErr.response?.data;
+    const errorsArray = Array.isArray(responseData)
+      ? responseData
+      : Array.isArray(responseData?.errors)
+        ? responseData.errors
+        : undefined;
+    return Boolean(errorsArray?.some((e: any) => e?.code === 'BDC_1354'));
+  }
+
+  /**
    * Resolves the device label used for Bill.com's MFA-trust mechanism.
    * Per Bill.com docs, `device` is not returned by their API — it's any
    * caller-chosen string used to identify the device. This only *reads/
@@ -97,6 +142,21 @@ export class BillComService {
       select: { billcom_device: true, email: true },
     });
     return user.billcom_device ?? `MedVirtual Admin - ${user.email}`;
+  }
+
+  /**
+   * BDC_5324 on addPhoneForMfaSetup means Bill.com already has a trusted
+   * device for this user (see isAlreadyEnrolledError) — unlike the early
+   * write this codebase deliberately avoids elsewhere, this is a confirmed
+   * signal from Bill.com, not an optimistic guess. Persisting it here lets
+   * determineNextStep skip phone_setup on the next login.
+   */
+  async markDeviceAlreadyEnrolled(userId: string): Promise<void> {
+    const device = await this.resolveDeviceLabel(userId);
+    await this.prisma.uSER.update({
+      where: { id: userId },
+      data: { billcom_device: device },
+    });
   }
 
   /**
@@ -178,25 +238,32 @@ export class BillComService {
       );
       return { challengeId: response.data.challengeId };
     } catch (err) {
+      if (this.isNoDeviceError(err)) {
+        throw new BillComNoDeviceException();
+      }
       throw this.wrapError('requestMfaChallenge', err);
     }
   }
 
   /**
-   * Validates the MFA code. On success, this is the point the session
-   * actually becomes trusted — it is promoted from billcom_pending_session_id
-   * to billcom_session_id, and the returned rememberMeId is persisted so
-   * future logins can skip MFA entirely.
+   * Validates the MFA code. The sessionId used above is already the
+   * authenticated session — Bill.com just accepted the code on it. The
+   * returned rememberMeId is NOT proof for *this* session; per Bill.com's
+   * contract it "needs to be used on login", i.e. it's for the *next*
+   * login, to skip MFA next time. So: persist rememberMeId/device for
+   * future logins, and persist sessionId itself as the trusted session
+   * right now — no second /login call.
    */
   async validateMfaChallenge(
     userId: string,
     sessionId: string,
     challengeId: string,
     token: string,
-  ): Promise<{ rememberMeId: string }> {
+  ): Promise<BillComLoginResult> {
     const { devKey, billBaseUrl } = this.requireEnv();
     const device = await this.resolveDeviceLabel(userId);
 
+    let rememberMeId: string;
     try {
       const response = await axios.post<{ rememberMeId: string }>(
         `${billBaseUrl}/mfa/challenge/validate`,
@@ -206,37 +273,44 @@ export class BillComService {
           timeout: 15000,
         },
       );
-
-      const { rememberMeId } = response.data;
-
-      await this.prisma.uSER.update({
-        where: { id: userId },
-        data: {
-          billcom_session_id: sessionId,
-          billcom_session_expires: new Date(Date.now() + SESSION_TTL_MS),
-          billcom_pending_session_id: null,
-          billcom_remember_me_id: rememberMeId,
-        },
-      });
-
-      return { rememberMeId };
+      rememberMeId = response.data.rememberMeId;
     } catch (err) {
       throw this.wrapError('validateMfaChallenge', err);
     }
+
+    await this.prisma.uSER.update({
+      where: { id: userId },
+      data: {
+        billcom_remember_me_id: rememberMeId,
+        billcom_device: device,
+        billcom_session_id: sessionId,
+        billcom_session_expires: new Date(Date.now() + SESSION_TTL_MS),
+        billcom_pending_session_id: null,
+      },
+    });
+
+    return { sessionId, trusted: true };
   }
 
+  /**
+   * Per Bill.com's documented contract for this endpoint (phone, type,
+   * deprecated primary only), `device` is not an accepted field here — it
+   * only applies to /login and MFA challenge validation, once Bill.com has
+   * already issued a device identity. Sending it on this call (the one that
+   * *creates* that identity) doesn't match the documented contract and is a
+   * plausible trigger for Bill.com's Shield risk service rejecting the call.
+   */
   async addPhoneForMfaSetup(
     userId: string,
     sessionId: string,
     phone: string,
   ): Promise<{ setupId: string }> {
     const { devKey, billBaseUrl } = this.requireEnv();
-    const device = await this.resolveDeviceLabel(userId);
 
     try {
       const response = await axios.post<{ setupId: string }>(
         `${billBaseUrl}${BILLCOM_ADD_PHONE_ENDPOINT}`,
-        { phone, type: 'TEXT', primary: true, device },
+        { phone, type: 'TEXT' },
         {
           headers: { 'Content-Type': 'application/json', devKey, sessionId },
           timeout: 15000,
@@ -244,6 +318,9 @@ export class BillComService {
       );
       return { setupId: response.data.setupId };
     } catch (err) {
+      if (this.isAlreadyEnrolledError(err)) {
+        throw new BillComAlreadyEnrolledException();
+      }
       throw this.wrapError('addPhoneForMfaSetup', err);
     }
   }

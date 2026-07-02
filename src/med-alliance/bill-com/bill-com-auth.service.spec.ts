@@ -1,11 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BillComAuthService } from './bill-com-auth.service';
-import { PrismaService } from '../../prisma/prisma.service';
+import { BillComService } from './bill-com.service';
+import { BillComNoDeviceException } from './bill-com-no-device.exception';
 
-const mockPrisma = {
-  uSER: {
-    findUniqueOrThrow: jest.fn(),
-  },
+const mockBillComService = {
+  requestMfaChallenge: jest.fn(),
 };
 
 describe('BillComAuthService', () => {
@@ -15,7 +14,7 @@ describe('BillComAuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BillComAuthService,
-        { provide: PrismaService, useValue: mockPrisma },
+        { provide: BillComService, useValue: mockBillComService },
       ],
     }).compile();
 
@@ -25,39 +24,56 @@ describe('BillComAuthService', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('determineNextStep', () => {
-    it('returns "proceed" when the login was trusted', async () => {
-      const step = await service.determineNextStep('admin-1', {
+    it('returns "proceed" when the login was trusted, without touching Bill.com', async () => {
+      const result = await service.determineNextStep('admin-1', {
         sessionId: 'sess-1',
         trusted: true,
       });
-      expect(step).toBe('proceed');
-      expect(mockPrisma.uSER.findUniqueOrThrow).not.toHaveBeenCalled();
+
+      expect(result).toEqual({ nextStep: 'proceed' });
+      expect(mockBillComService.requestMfaChallenge).not.toHaveBeenCalled();
     });
 
-    it('returns "mfa_challenge" when untrusted and the admin already has a device on file', async () => {
-      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
-        billcom_device: 'MedVirtual Admin - admin@medvirtual.ai',
+    it('returns "mfa_challenge" with the challengeId when the MFA challenge succeeds (device exists)', async () => {
+      mockBillComService.requestMfaChallenge.mockResolvedValue({
+        challengeId: 'chal-1',
       });
 
-      const step = await service.determineNextStep('admin-1', {
+      const result = await service.determineNextStep('admin-1', {
         sessionId: 'sess-1',
         trusted: false,
       });
 
-      expect(step).toBe('mfa_challenge');
+      expect(mockBillComService.requestMfaChallenge).toHaveBeenCalledWith(
+        'admin-1',
+        'sess-1',
+      );
+      expect(result).toEqual({ nextStep: 'mfa_challenge', challengeId: 'chal-1' });
     });
 
-    it('returns "phone_setup" when untrusted and the admin has no device on file', async () => {
-      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({
-        billcom_device: null,
-      });
+    it('returns "no_device_configured" when Bill.com reports no device on file (BDC_1354)', async () => {
+      mockBillComService.requestMfaChallenge.mockRejectedValue(
+        new BillComNoDeviceException(),
+      );
 
-      const step = await service.determineNextStep('admin-1', {
+      const result = await service.determineNextStep('admin-1', {
         sessionId: 'sess-1',
         trusted: false,
       });
 
-      expect(step).toBe('phone_setup');
+      expect(result).toEqual({ nextStep: 'no_device_configured' });
+    });
+
+    it('rethrows any other error from the MFA challenge', async () => {
+      const err = new Error('Bill.com unavailable');
+      mockBillComService.requestMfaChallenge.mockRejectedValue(err);
+
+      await expect(
+        service.determineNextStep('admin-1', {
+          sessionId: 'sess-1',
+          trusted: false,
+        }),
+      ).rejects.toThrow(err);
     });
   });
 });

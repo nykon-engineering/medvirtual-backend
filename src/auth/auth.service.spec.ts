@@ -965,7 +965,7 @@ describe('AuthService - logout', () => {
 
   beforeEach(async () => {
     const prismaMock: any = {
-      session: { updateMany: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
+      session: { updateMany: jest.fn() },
       uSER: { update: jest.fn() },
     };
     const module = await Test.createTestingModule({
@@ -981,42 +981,31 @@ describe('AuthService - logout', () => {
     service = module.get<AuthService>(AuthService);
     prisma = module.get<PrismaService>(PrismaService);
     jest.clearAllMocks();
-    (prisma.session as any).findFirst.mockResolvedValue(null);
   });
 
-  it('should throw BadRequestException when no token provided', async () => {
-    await expect(service.logout({ token: '' } as any)).rejects.toThrow('Token is required');
-  });
-
-  it('should revoke session and return true', async () => {
+  it('should revoke all active sessions for the authenticated user and return true', async () => {
     (prisma.session as any).updateMany.mockResolvedValue({ count: 1 });
-    const result = await service.logout({ token: 'valid-token' } as any);
+    (prisma.uSER as any).update.mockResolvedValue({});
+
+    const result = await service.logout('user-1');
+
     expect(result).toBe(true);
     expect((prisma.session as any).updateMany).toHaveBeenCalledWith({
-      where: { token: 'valid-token' },
+      where: { userId: 'user-1', isRevoked: false },
       data: { isRevoked: true },
     });
   });
 
-  it('should clear the bill.com session for the logged-out user', async () => {
-    (prisma.session as any).findFirst.mockResolvedValue({ userId: 'user-1', token: 'valid-token' });
+  it('should clear the bill.com session for the logged-out user (this is the fix requested: billcom_session_id must be cleared on MedVirtual logout)', async () => {
     (prisma.session as any).updateMany.mockResolvedValue({ count: 1 });
+    (prisma.uSER as any).update.mockResolvedValue({});
 
-    await service.logout({ token: 'valid-token' } as any);
+    await service.logout('user-1');
 
     expect((prisma.uSER as any).update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
       data: { billcom_session_id: null, billcom_session_expires: null },
     });
-  });
-
-  it('should not attempt to clear bill.com session when no matching session is found', async () => {
-    (prisma.session as any).findFirst.mockResolvedValue(null);
-    (prisma.session as any).updateMany.mockResolvedValue({ count: 1 });
-
-    await service.logout({ token: 'valid-token' } as any);
-
-    expect((prisma.uSER as any).update).not.toHaveBeenCalled();
   });
 });
 
@@ -1227,7 +1216,7 @@ describe('AuthService - logout (additional)', () => {
 
   beforeEach(async () => {
     const prismaMock: any = {
-      session: { updateMany: jest.fn(), findFirst: jest.fn().mockResolvedValue(null) },
+      session: { updateMany: jest.fn() },
       uSER: { update: jest.fn() },
     };
     const module = await Test.createTestingModule({
@@ -1247,7 +1236,7 @@ describe('AuthService - logout (additional)', () => {
 
   it('should throw when session.updateMany returns null', async () => {
     (prisma.session as any).updateMany.mockResolvedValue(null);
-    await expect(service.logout({ token: 'valid-token' } as any)).rejects.toThrow('Failed to revoke token');
+    await expect(service.logout('user-1')).rejects.toThrow('Failed to revoke token');
   });
 });
 
