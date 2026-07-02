@@ -22,6 +22,8 @@ import { ADMIN_ROLES } from '../constants';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BillComService } from './bill-com.service';
 import { BillComAuthService } from './bill-com-auth.service';
+import { BillComPendingCredentialsStore } from './bill-com-pending-credentials.store';
+import { BillComAlreadyEnrolledException } from './bill-com-already-enrolled.exception';
 import { BillComLoginDto } from './dto/bill-com-login.dto';
 import { BillComMfaValidateDto } from './dto/bill-com-mfa-validate.dto';
 import { BillComPhoneSetupDto } from './dto/bill-com-phone-setup.dto';
@@ -36,6 +38,7 @@ export class BillComAuthController {
   constructor(
     private readonly billComService: BillComService,
     private readonly billComAuthService: BillComAuthService,
+    private readonly pendingCredentials: BillComPendingCredentialsStore,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -70,11 +73,15 @@ export class BillComAuthController {
       username: dto.email,
       password: dto.password,
     });
-    const nextStep = await this.billComAuthService.determineNextStep(
-      admin.id,
-      result,
-    );
-    return { trusted: result.trusted, nextStep };
+    if (!result.trusted) {
+      // Bill.com requires username/password on every /login call, including
+      // the re-login after MFA validation — held only long enough to redeem
+      // the rememberMeId into a trusted session (see mfaValidate below).
+      this.pendingCredentials.set(admin.id, dto.email, dto.password);
+    }
+    const { nextStep, challengeId } =
+      await this.billComAuthService.determineNextStep(admin.id, result);
+    return { trusted: result.trusted, nextStep, challengeId };
   }
 
   @Post('mfa/challenge')
@@ -95,29 +102,43 @@ export class BillComAuthController {
     @Body() dto: BillComMfaValidateDto,
   ) {
     const sessionId = await this.requirePendingSessionId(admin.id);
-    await this.billComService.validateMfaChallenge(
+    const credentials = this.pendingCredentials.take(admin.id);
+    if (!credentials) {
+      throw new BadRequestException('Your session expired. Please sign in again.');
+    }
+    const result = await this.billComService.validateMfaChallenge(
       admin.id,
       sessionId,
       dto.challengeId,
       dto.token,
+      credentials,
     );
-    return { success: true };
+    return { success: true, trusted: result.trusted };
   }
 
   @Post('phone/setup')
   @HttpCode(200)
   @ApiOperation({ summary: 'Register a phone number for MFA (first-time setup)' })
-  @ApiResponse({ status: 200, description: 'setupId' })
+  @ApiResponse({ status: 200, description: 'setupId, or alreadyEnrolled if Bill.com already has a device on file' })
   async phoneSetup(
     @CurrentUser() admin: USER,
     @Body() dto: BillComPhoneSetupDto,
   ) {
     const sessionId = await this.requirePendingSessionId(admin.id);
-    return this.billComService.addPhoneForMfaSetup(
-      admin.id,
-      sessionId,
-      dto.phone,
-    );
+    try {
+      const result = await this.billComService.addPhoneForMfaSetup(
+        admin.id,
+        sessionId,
+        dto.phone,
+      );
+      return { ...result, alreadyEnrolled: false };
+    } catch (err) {
+      if (err instanceof BillComAlreadyEnrolledException) {
+        await this.billComService.markDeviceAlreadyEnrolled(admin.id);
+        return { setupId: null, alreadyEnrolled: true };
+      }
+      throw err;
+    }
   }
 
   @Post('phone/validate')
