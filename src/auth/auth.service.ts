@@ -27,7 +27,6 @@ import {
 import { AuthSignUpDto } from './dto/authSignUp.dto';
 import { AuthVerifyCodeDtoReturn } from './dto/authVerifyCodeReturn.dto';
 import { AuthinvitedUserSignupDto } from './dto/invitedUserSignup.dto';
-import { AuthLogoutDto } from './dto/authLogOut.dto';
 import { AuthGetInviteDto } from './dto/authGetInvite.dto';
 import { AuthResendCodeReturnDto } from './dto/authResendCodeReturn.dto';
 import { AuthUpdatePasswordDto } from './dto/authSetPassword.dto';
@@ -460,20 +459,23 @@ export class AuthService {
     };
   }
 
-  async logout(data: AuthLogoutDto): Promise<boolean> {
-    const { token } = data;
-    if (!token) {
-      throw new BadRequestException('Token is required');
-    }
-
-    const revodeToken = await this.prisma.session.updateMany({
-      where: { token },
+  async logout(userId: string): Promise<boolean> {
+    const revokeToken = await this.prisma.session.updateMany({
+      where: { userId, isRevoked: false },
       data: { isRevoked: true },
     });
 
-    if (!revodeToken) {
+    if (!revokeToken) {
       throw new BadRequestException('Failed to revoke token');
     }
+
+    await this.prisma.uSER.update({
+      where: { id: userId },
+      data: {
+        billcom_session_id: null,
+        billcom_session_expires: null,
+      },
+    });
 
     return true;
   }

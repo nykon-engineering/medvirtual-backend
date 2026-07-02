@@ -155,6 +155,11 @@ describe('HireRequestService', () => {
       hubspot_id: null,
       hubspot_contact_id: null,
       status_before_deactivation: null,
+      billcom_session_id: null,
+      billcom_session_expires: null,
+      billcom_pending_session_id: null,
+      billcom_remember_me_id: null,
+      billcom_device: null,
     } ;
   });
 
