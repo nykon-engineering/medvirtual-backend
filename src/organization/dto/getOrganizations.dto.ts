@@ -92,7 +92,8 @@ export class GetOrganizationsDto {
 
   @ApiProperty({
     required: false,
-    description: 'Filter by admin ID (only available for system_super_admin)',
+    description:
+      'Filter by admin ID (available for system_super_admin and system_admin)',
   })
   @IsOptional()
   @IsString()

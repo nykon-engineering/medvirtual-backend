@@ -730,9 +730,7 @@ export class PayoutRequestsService {
 
     // Phase 0: fail fast if this admin has no valid Bill.com session yet —
     // before any Bill.com validation or DB work runs.
-    const hasSession = await this.billComService.hasValidSession(
-      adminUser.id,
-    );
+    const hasSession = await this.billComService.hasValidSession(adminUser.id);
     if (!hasSession) {
       throw new BillComSessionRequiredException();
     }

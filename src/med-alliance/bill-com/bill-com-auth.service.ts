@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { BillComLoginResult, BillComService } from './bill-com.service';
 import { BillComNoDeviceException } from './bill-com-no-device.exception';
 
-export type BillComNextStep = 'proceed' | 'mfa_challenge' | 'no_device_configured';
+export type BillComNextStep =
+  | 'proceed'
+  | 'mfa_challenge'
+  | 'no_device_configured';
 
 export interface BillComNextStepResult {
   nextStep: BillComNextStep;

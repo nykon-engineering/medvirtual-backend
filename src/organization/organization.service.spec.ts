@@ -57,6 +57,10 @@ describe('OrganizationService', () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn(),
+    },
+    sync: {
+      findFirst: jest.fn(),
     },
     $transaction: jest.fn(),
     $executeRaw: jest.fn(),
@@ -434,9 +438,194 @@ describe('OrganizationService', () => {
   
     it('should throw NotFoundException if transaction fails', async () => {
       mockPrismaService.$transaction.mockRejectedValue(new Error());
-  
+
       await expect(service.delete('invalid-id')).rejects.toThrow(NotFoundException);
     });
   });
-  
+
+  describe('getAllPaginated', () => {
+    const CONCIERGE_ID = 'concierge-1';
+
+    const buildRow = (overrides: Record<string, any> = {}) => ({
+      id: 'org-1',
+      hubspot_id: null,
+      name: 'Org 1',
+      email: 'org1@example.com',
+      phone: null,
+      website_url: null,
+      address: null,
+      city: null,
+      state: null,
+      postal_code: null,
+      location: null,
+      description: null,
+      industry: null,
+      business_unit: null,
+      organization_role: OrganizationRole.client,
+      number_of_employees: null,
+      date_founded: null,
+      date_joined: null,
+      date_became_client: null,
+      type: null,
+      status: OrganizationStatus.active,
+      signed_document_url: null,
+      signed_document_date: null,
+      specialties: null,
+      services: null,
+      owner_id: null,
+      admin_id: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      source: null,
+      owner: null,
+      admin: null,
+      users: [],
+      staff: [],
+      contacts: [],
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      mockPrismaService.organization.count.mockResolvedValue(1);
+      mockPrismaService.organization.findMany.mockResolvedValue([buildRow()]);
+      mockPrismaService.sync.findFirst.mockResolvedValue(null);
+    });
+
+    it('should apply admin_id filter for system_admin when admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+      expect(prisma.organization.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+    });
+
+    it('should apply admin_id filter for system_super_admin when admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_super_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+      expect(prisma.organization.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+    });
+
+    it('should NOT let organization_admin override scope via admin param', async () => {
+      const user = { ...userfake, role: 'organization_admin', id: 'user-1' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).not.toBe(CONCIERGE_ID);
+      expect(whereArg.OR).toEqual(
+        expect.arrayContaining([
+          { admin_id: 'user-1' },
+          { owner_id: 'user-1' },
+        ]),
+      );
+    });
+
+    it('should NOT let organization_super_admin override scope via admin param', async () => {
+      const user = {
+        ...userfake,
+        role: 'organization_super_admin',
+        id: 'user-2',
+      };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).not.toBe(CONCIERGE_ID);
+      expect(whereArg.OR).toEqual(
+        expect.arrayContaining([
+          { admin_id: 'user-2' },
+          { owner_id: 'user-2' },
+        ]),
+      );
+    });
+
+    it('should not scope system_admin when no admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).toBeUndefined();
+      expect(whereArg.OR).toBeUndefined();
+    });
+
+    it('should not scope system_super_admin when no admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_super_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).toBeUndefined();
+      expect(whereArg.OR).toBeUndefined();
+    });
+
+    it('should call count with the same where shape used for findMany', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      const findManyWhere =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+      const countWhere =
+        mockPrismaService.organization.count.mock.calls[0][0].where;
+
+      expect(countWhere).toEqual(findManyWhere);
+    });
+  });
+
 });

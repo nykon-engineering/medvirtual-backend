@@ -17,11 +17,7 @@ import { AllianceNotificationsModule } from '../notifications/notifications.modu
     AllianceNotificationsModule,
     forwardRef(() => PayoutRequestsModule),
   ],
-  providers: [
-    BillComService,
-    BillComAuthService,
-    BillComPayoutService,
-  ],
+  providers: [BillComService, BillComAuthService, BillComPayoutService],
   controllers: [
     BillComWebhookController,
     BillComAdminController,

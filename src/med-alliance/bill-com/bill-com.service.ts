@@ -30,7 +30,7 @@ const BILLCOM_ADD_PHONE_ENDPOINT = '/mfa/setup';
 
 // 4 hours is a conservative TTL for Bill.com sessions. In practice, they may
 // last longer, but this is a correctness backstop for the retry-on-401 logic.
-const SESSION_TTL_MS = 240 * 60 * 1000; 
+const SESSION_TTL_MS = 240 * 60 * 1000;
 
 @Injectable()
 export class BillComService {
@@ -102,9 +102,7 @@ export class BillComService {
       : Array.isArray(responseData?.errors)
         ? responseData.errors
         : undefined;
-    return Boolean(
-      errorsArray?.some((e: any) => e?.code === 'BDC_5324'),
-    );
+    return Boolean(errorsArray?.some((e: any) => e?.code === 'BDC_5324'));
   }
 
   /**
@@ -373,8 +371,8 @@ export class BillComService {
     });
     return Boolean(
       user.billcom_session_id &&
-        user.billcom_session_expires &&
-        user.billcom_session_expires.getTime() > Date.now(),
+      user.billcom_session_expires &&
+      user.billcom_session_expires.getTime() > Date.now(),
     );
   }
 

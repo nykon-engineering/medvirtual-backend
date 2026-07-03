@@ -54,7 +54,9 @@ export class BillComAuthController {
   }
 
   @Get('status')
-  @ApiOperation({ summary: "Check whether the admin's Bill.com session is valid" })
+  @ApiOperation({
+    summary: "Check whether the admin's Bill.com session is valid",
+  })
   @ApiResponse({ status: 200, description: 'Session status' })
   async status(@CurrentUser() admin: USER) {
     const connected = await this.billComService.hasValidSession(admin.id);
@@ -63,7 +65,9 @@ export class BillComAuthController {
 
   @Post('login')
   @HttpCode(200)
-  @ApiOperation({ summary: "Sign in with the admin's own Bill.com credentials" })
+  @ApiOperation({
+    summary: "Sign in with the admin's own Bill.com credentials",
+  })
   @ApiResponse({ status: 200, description: 'trusted + nextStep' })
   @ApiResponse({ status: 502, description: 'Bill.com API error' })
   async login(@CurrentUser() admin: USER, @Body() dto: BillComLoginDto) {
@@ -87,7 +91,9 @@ export class BillComAuthController {
 
   @Post('mfa/validate')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Validate the MFA code sent to the registered device' })
+  @ApiOperation({
+    summary: 'Validate the MFA code sent to the registered device',
+  })
   @ApiResponse({ status: 200, description: 'success' })
   async mfaValidate(
     @CurrentUser() admin: USER,
@@ -105,8 +111,14 @@ export class BillComAuthController {
 
   @Post('phone/setup')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Register a phone number for MFA (first-time setup)' })
-  @ApiResponse({ status: 200, description: 'setupId, or alreadyEnrolled if Bill.com already has a device on file' })
+  @ApiOperation({
+    summary: 'Register a phone number for MFA (first-time setup)',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'setupId, or alreadyEnrolled if Bill.com already has a device on file',
+  })
   async phoneSetup(
     @CurrentUser() admin: USER,
     @Body() dto: BillComPhoneSetupDto,
@@ -130,7 +142,9 @@ export class BillComAuthController {
 
   @Post('phone/validate')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Confirm the code sent to the newly registered phone' })
+  @ApiOperation({
+    summary: 'Confirm the code sent to the newly registered phone',
+  })
   @ApiResponse({ status: 200, description: 'success' })
   async phoneValidate(
     @CurrentUser() admin: USER,
