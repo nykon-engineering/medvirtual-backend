@@ -1221,15 +1221,56 @@ export class PayoutRequestsService {
 
     return entries.map((e) => ({
       id: e.id,
-      action: e.event,
+      action: this.resolveAuditAction(e.event, e.old_status, e.new_status),
       actor: e.actorUser
         ? `${e.actorUser.first_name} ${e.actorUser.last_name}`.trim()
         : 'System',
       timestamp: e.createdAt,
       notes: e.reason ?? undefined,
+      // Frontend Activity timeline renders a from → to status pill pair.
+      from_status: e.old_status,
+      to_status: e.new_status,
+      // Legacy aliases kept for backward compatibility with existing consumers.
       old_status: e.old_status,
       new_status: e.new_status,
     }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Derive a descriptive, title-caseable action for the timeline.
+  // Historically most transitions were stored with the generic event
+  // "status_changed"; here we upgrade those to a status-specific action so the
+  // frontend can render a meaningful title. Already-descriptive events
+  // (e.g. bill_com_payment_initiated) are passed through untouched.
+  // ---------------------------------------------------------------------------
+  private resolveAuditAction(
+    event: string,
+    oldStatus: string | null,
+    newStatus: string | null,
+  ): string {
+    const genericEvents = new Set(['status_changed', 'admin_decision']);
+    if (!genericEvents.has(event)) return event;
+
+    switch (newStatus) {
+      case 'requested':
+        return oldStatus === null ? 'request_submitted' : 'request_reopened';
+      case 'under_review':
+        return 'review_started';
+      case 'approved':
+        return 'request_approved';
+      case 'rejected':
+        return 'request_rejected';
+      case 'processing':
+        return 'payment_processing';
+      case 'paid':
+        return 'payment_completed';
+      case 'cancelled':
+        return 'request_cancelled';
+      case 'failed':
+        return 'payment_failed';
+      default:
+        return event;
+    }
   }
 
   // ---------------------------------------------------------------------------

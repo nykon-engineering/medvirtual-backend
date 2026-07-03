@@ -40,6 +40,7 @@ import {
 } from './dto/decide-payout-request.dto';
 import { ReopenPayoutRequestDto } from './dto/reopen-payout-request.dto';
 import { ListPayoutRequestsDto } from './dto/list-payout-requests.dto';
+import { PayoutAuditEntryDto } from './dto/payout-audit-entry.dto';
 
 @ApiTags('med-alliance')
 @ApiBearerAuth()
@@ -527,7 +528,12 @@ export class PayoutRequestsController {
       'Get the full audit timeline of status changes and admin actions for a payout request',
   })
   @ApiParam({ name: 'id', description: 'Payout request UUID' })
-  @ApiResponse({ status: 200, description: 'Audit log retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Audit log retrieved successfully',
+    type: PayoutAuditEntryDto,
+    isArray: true,
+  })
   @ApiResponse({
     status: 403,
     description: 'Access denied: insufficient permissions',

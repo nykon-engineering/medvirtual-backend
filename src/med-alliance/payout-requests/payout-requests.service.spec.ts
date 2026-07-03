@@ -732,6 +732,60 @@ describe('PayoutRequestsService', () => {
         }),
       );
     });
+
+    it('should expose from_status/to_status aliases for the frontend timeline', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+
+      const entries = [
+        { id: 'log-1', event: 'status_changed', old_status: null, new_status: 'requested', source: 'user', createdAt: new Date('2026-03-01'), actorUser: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate' } },
+        { id: 'log-2', event: 'admin_decision', old_status: 'requested', new_status: 'approved', source: 'admin_action', createdAt: new Date('2026-03-02'), actorUser: { id: 'admin-1', first_name: 'Admin', last_name: 'User' } },
+      ];
+      mockPrisma.medAllianceAuditLog.findMany.mockResolvedValue(entries);
+
+      const result = await service.getAuditLog('payout-1');
+
+      expect(result[0].from_status).toBeNull();
+      expect(result[0].to_status).toBe('requested');
+      expect(result[1].from_status).toBe('requested');
+      expect(result[1].to_status).toBe('approved');
+      // Legacy aliases must still be present.
+      expect(result[0].old_status).toBeNull();
+      expect(result[0].new_status).toBe('requested');
+      expect(mockPrisma.medAllianceAuditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { entity_type: 'payout_request', entity_id: 'payout-1' },
+          orderBy: { createdAt: 'asc' },
+        }),
+      );
+    });
+
+    it('should upgrade generic events to descriptive, transition-specific actions', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+
+      const entries = [
+        { id: 'l1', event: 'status_changed', old_status: null, new_status: 'requested', source: 'user', createdAt: new Date('2026-03-01'), actorUser: null },
+        { id: 'l2', event: 'status_changed', old_status: 'requested', new_status: 'under_review', source: 'admin_action', createdAt: new Date('2026-03-02'), actorUser: null },
+        { id: 'l3', event: 'admin_decision', old_status: 'under_review', new_status: 'approved', source: 'admin_action', createdAt: new Date('2026-03-03'), actorUser: null },
+        { id: 'l4', event: 'admin_decision', old_status: 'requested', new_status: 'rejected', source: 'admin_action', createdAt: new Date('2026-03-04'), actorUser: null },
+        { id: 'l5', event: 'status_changed', old_status: 'under_review', new_status: 'cancelled', source: 'admin_action', createdAt: new Date('2026-03-05'), actorUser: null },
+        { id: 'l6', event: 'status_changed', old_status: 'rejected', new_status: 'requested', source: 'admin_action', createdAt: new Date('2026-03-06'), actorUser: null },
+        // Already-descriptive events are passed through untouched.
+        { id: 'l7', event: 'bill_com_payment_initiated', old_status: 'under_review', new_status: 'processing', source: 'admin_action', createdAt: new Date('2026-03-07'), actorUser: null },
+      ];
+      mockPrisma.medAllianceAuditLog.findMany.mockResolvedValue(entries);
+
+      const result = await service.getAuditLog('payout-1');
+
+      expect(result[0].action).toBe('request_submitted');
+      expect(result[1].action).toBe('review_started');
+      expect(result[2].action).toBe('request_approved');
+      expect(result[3].action).toBe('request_rejected');
+      expect(result[4].action).toBe('request_cancelled');
+      expect(result[5].action).toBe('request_reopened');
+      expect(result[6].action).toBe('bill_com_payment_initiated');
+      // Actor falls back to "System" when no user is attached.
+      expect(result[0].actor).toBe('System');
+    });
   });
 
   // -------------------------------------------------------------------------
