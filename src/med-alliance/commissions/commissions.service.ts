@@ -43,7 +43,7 @@ const COMMISSION_SELECT = {
   admin_decision_at: true,
   createdAt: true,
   updatedAt: true,
-  organization: { select: { id: true, name: true } },
+  organization: { select: { id: true, name: true, business_unit: true } },
   hubspotInvoiceSnapshot: {
     select: {
       id: true,
