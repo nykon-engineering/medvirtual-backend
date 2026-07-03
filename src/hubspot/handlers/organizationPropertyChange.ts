@@ -3,7 +3,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { HandlerOrganizationCreation } from './organizationCreation';
 import { organizationToDbDictionary } from '../../common/dictionaries/organization-dictionary';
 import { HandlerOrganizationDeletion } from './organizationDeletion';
-import { OrganizationRole } from '@prisma/client';
+import { HandlerOrganizationReactivation } from './organizationReactivation';
+import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 import { organizationIndustryToDbDictionary } from '../../common/dictionaries/organizationIndustry-dictionary';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class HandlerOrganizationPropertyChange {
     private readonly prisma: PrismaService,
     private readonly organizationCreation: HandlerOrganizationCreation,
     private readonly organizationDeletion: HandlerOrganizationDeletion,
+    private readonly organizationReactivation: HandlerOrganizationReactivation,
   ) {}
 
   async execute(event) {
@@ -25,16 +27,22 @@ export class HandlerOrganizationPropertyChange {
     //Here I dont need to check if the organization is a client of MedVirtual, because inside the organizationCreation handler it already does that
     if (!organization) return await this.organizationCreation.execute(event);
 
-    //Here I need to delete the organization if the business_unit property is changed to a value different than MedVirtual
-    if (
-      organization &&
-      event.propertyName === 'business_unit' &&
-      event.propertyValue !== 'MedVirtual' &&
-      organization &&
-      event.propertyName === 'business_unit' &&
-      event.propertyValue !== 'Berry Virtual'
-    )
-      return await this.organizationDeletion.execute(event);
+    // A business_unit outside the valid brands soft-deletes the org; when it
+    // changes back to a valid value we must reactivate a previously deleted org.
+    if (event.propertyName === 'business_unit') {
+      const isValidBusinessUnit =
+        event.propertyValue === 'MedVirtual' ||
+        event.propertyValue === 'Berry Virtual';
+
+      if (!isValidBusinessUnit) {
+        return await this.organizationDeletion.execute(event);
+      }
+
+      if (organization.status === OrganizationStatus.deleted) {
+        return await this.organizationReactivation.execute(event);
+      }
+      // else: valid business_unit, org not deleted -> fall through to generic update below
+    }
 
     const fieldExists = Object.keys(organizationToDbDictionary).includes(
       event.propertyName,

@@ -13,6 +13,7 @@ import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationReactivation } from './handlers/organizationReactivation';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 
@@ -73,6 +74,7 @@ import { HubspotAuditService } from './hubspot-audit.service';
     HandlerOrganizationCreation,
     HandlerOrganizationPropertyChange,
     HandlerOrganizationDeletion,
+    HandlerOrganizationReactivation,
     HandlerOrganizationMerge,
     HandlerOrganizationAssociationChange,
     HandlerOwnerCreation,
