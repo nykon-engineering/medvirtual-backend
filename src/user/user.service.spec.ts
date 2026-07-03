@@ -166,4 +166,79 @@ describe('UserService', () => {
       expect(countArgs.where.status).toBeUndefined();
     });
   });
+
+  describe('searchOrganizationUsers', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      prismaMock.uSER.findMany.mockResolvedValue([]);
+    });
+
+    it('should AND each whitespace-separated token so a complete full name matches across first_name and last_name', async () => {
+      await service.searchOrganizationUsers({ search: 'Jane Doe' } as any);
+
+      const findManyArgs = prismaMock.uSER.findMany.mock.calls[0][0];
+      expect(findManyArgs.where.AND).toEqual([
+        {
+          OR: [
+            { first_name: { contains: 'Jane', mode: 'insensitive' } },
+            { last_name: { contains: 'Jane', mode: 'insensitive' } },
+            { email: { contains: 'Jane', mode: 'insensitive' } },
+            { job_title: { contains: 'Jane', mode: 'insensitive' } },
+          ],
+        },
+        {
+          OR: [
+            { first_name: { contains: 'Doe', mode: 'insensitive' } },
+            { last_name: { contains: 'Doe', mode: 'insensitive' } },
+            { email: { contains: 'Doe', mode: 'insensitive' } },
+            { job_title: { contains: 'Doe', mode: 'insensitive' } },
+          ],
+        },
+      ]);
+    });
+
+    it('should still match a single-word search (email, partial name, or job title)', async () => {
+      await service.searchOrganizationUsers({
+        search: 'jane@test.com',
+      } as any);
+
+      const findManyArgs = prismaMock.uSER.findMany.mock.calls[0][0];
+      expect(findManyArgs.where.AND).toEqual([
+        {
+          OR: [
+            { first_name: { contains: 'jane@test.com', mode: 'insensitive' } },
+            { last_name: { contains: 'jane@test.com', mode: 'insensitive' } },
+            { email: { contains: 'jane@test.com', mode: 'insensitive' } },
+            { job_title: { contains: 'jane@test.com', mode: 'insensitive' } },
+          ],
+        },
+      ]);
+    });
+
+    it('should not add any AND/OR filter when search is omitted', async () => {
+      await service.searchOrganizationUsers({} as any);
+
+      const findManyArgs = prismaMock.uSER.findMany.mock.calls[0][0];
+      expect(findManyArgs.where.AND).toBeUndefined();
+      expect(findManyArgs.where.OR).toBeUndefined();
+      expect(findManyArgs.where.role).toEqual({
+        in: ['organization_admin', 'organization_super_admin'],
+      });
+    });
+
+    it('should collapse extra whitespace and not produce empty-token conditions', async () => {
+      await service.searchOrganizationUsers({
+        search: '  Jane   Doe  ',
+      } as any);
+
+      const findManyArgs = prismaMock.uSER.findMany.mock.calls[0][0];
+      expect(findManyArgs.where.AND).toHaveLength(2);
+      expect(findManyArgs.where.AND[0].OR[0]).toEqual({
+        first_name: { contains: 'Jane', mode: 'insensitive' },
+      });
+      expect(findManyArgs.where.AND[1].OR[0]).toEqual({
+        first_name: { contains: 'Doe', mode: 'insensitive' },
+      });
+    });
+  });
 });
