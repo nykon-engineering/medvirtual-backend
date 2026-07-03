@@ -368,12 +368,19 @@ export class UserController {
     type: String,
     description: 'Search term for name or email',
   })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['active', 'inactive', 'invited'],
+    description: 'Filter system users by their account status',
+  })
   async getAllSystemUsers(
     @Query('search') search?: string,
     @Query('page') page?: number,
     @Query('perPage') perPage?: number,
+    @Query('status') status?: string,
   ) {
-    return this.userService.getAllSystemUsers(search, page, perPage);
+    return this.userService.getAllSystemUsers(search, page, perPage, status);
   }
 
   @Patch(':id')

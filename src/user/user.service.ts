@@ -161,6 +161,7 @@ export class UserService {
     search?: string,
     page?: number,
     perPage?: number,
+    status?: string,
   ): Promise<any> {
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
@@ -170,6 +171,13 @@ export class UserService {
     const whereClause: any = {
       role: { in: ['system_admin', 'system_super_admin'] },
     };
+
+    // Status is a literal column on USER ('active' | 'inactive' | 'invited'),
+    // the same value the list already returns and the frontend displays.
+    // Filtering here (shared by findMany and count) keeps meta.total accurate.
+    if (status) {
+      whereClause.status = status;
+    }
 
     // Add search filter if provided
     if (search) {
