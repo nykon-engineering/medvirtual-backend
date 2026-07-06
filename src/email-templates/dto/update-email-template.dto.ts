@@ -32,6 +32,22 @@ export class UpdateEmailTemplateDto {
   button_url?: string;
 
   @ApiPropertyOptional({
+    description:
+      'Platform module this template belongs to (e.g. "talent", "alliance", "administration")',
+  })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Free-form functionality label used for admin filtering (e.g. "Commission review")',
+  })
+  @IsOptional()
+  @IsString()
+  functionality?: string;
+
+  @ApiPropertyOptional({
     description: 'Reason for this change (for audit history)',
   })
   @IsOptional()

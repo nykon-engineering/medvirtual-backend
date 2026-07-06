@@ -90,7 +90,14 @@ export class EmailTemplatesService {
 
   // ── List ──────────────────────────────────────────────────────────────────
 
-  async findAll(page = 1, perPage = 25, search = '', businessUnit?: string) {
+  async findAll(
+    page = 1,
+    perPage = 25,
+    search = '',
+    businessUnit?: string,
+    category?: string,
+    functionality?: string,
+  ) {
     const skip = (page - 1) * perPage;
 
     const where: Record<string, unknown> = {};
@@ -102,6 +109,12 @@ export class EmailTemplatesService {
     }
     if (businessUnit !== undefined) {
       where.business_unit = businessUnit === 'global' ? null : businessUnit;
+    }
+    if (category !== undefined) {
+      where.category = category;
+    }
+    if (functionality !== undefined) {
+      where.functionality = functionality;
     }
 
     const [data, total] = await this.prisma.$transaction([
@@ -123,6 +136,8 @@ export class EmailTemplatesService {
           placeholders: true,
           updated_at: true,
           updated_by: true,
+          category: true,
+          functionality: true,
         },
       }),
       this.prisma.emailTemplate.count({ where }),
@@ -169,6 +184,8 @@ export class EmailTemplatesService {
         body: template.body,
         button_label: template.button_label ?? '',
         button_url: template.button_url ?? '',
+        category: template.category ?? '',
+        functionality: template.functionality ?? '',
         changed_by: userId,
         reason: dto.reason ?? 'Manual edit',
       },
@@ -182,6 +199,8 @@ export class EmailTemplatesService {
         body: dto.body,
         button_label: dto.button_label ?? template.button_label,
         button_url: dto.button_url ?? template.button_url,
+        category: dto.category ?? template.category,
+        functionality: dto.functionality ?? template.functionality,
         updated_by: userId,
       },
     });
@@ -238,6 +257,23 @@ export class EmailTemplatesService {
     return { status: 200, data: enriched };
   }
 
+  // ── Functionality options ────────────────────────────────────────────────
+
+  async getFunctionalityOptions() {
+    const rows = await this.prisma.emailTemplate.findMany({
+      where: { functionality: { not: null } },
+      select: { functionality: true },
+      distinct: ['functionality'],
+      orderBy: { functionality: 'asc' },
+    });
+
+    const data = rows
+      .map((r) => r.functionality)
+      .filter((v): v is string => !!v && v.trim().length > 0);
+
+    return { status: 200, data };
+  }
+
   // ── Rollback ──────────────────────────────────────────────────────────────
 
   async rollback(
@@ -267,6 +303,8 @@ export class EmailTemplatesService {
         body: template.body,
         button_label: template.button_label ?? '',
         button_url: template.button_url ?? '',
+        category: template.category ?? '',
+        functionality: template.functionality ?? '',
         changed_by: userId,
         reason: `Rollback to version from ${snapshot.changed_at.toISOString()}`,
       },
@@ -280,6 +318,8 @@ export class EmailTemplatesService {
         body: snapshot.body,
         button_label: snapshot.button_label,
         button_url: snapshot.button_url,
+        category: snapshot.category,
+        functionality: snapshot.functionality,
         updated_by: userId,
       },
     });
@@ -371,6 +411,8 @@ export class EmailTemplatesService {
       body: string;
       button_label?: string;
       button_url?: string;
+      category?: string;
+      functionality?: string;
     },
     originEnv: string,
   ) {
@@ -390,6 +432,8 @@ export class EmailTemplatesService {
         body: template.body,
         button_label: template.button_label ?? '',
         button_url: template.button_url ?? '',
+        category: template.category ?? '',
+        functionality: template.functionality ?? '',
         changed_by: 'sync',
         reason: `Auto-sync from ${originEnv}`,
       },
@@ -403,6 +447,8 @@ export class EmailTemplatesService {
         body: payload.body,
         button_label: payload.button_label ?? template.button_label,
         button_url: payload.button_url ?? template.button_url,
+        category: payload.category ?? template.category,
+        functionality: payload.functionality ?? template.functionality,
         updated_by: 'sync',
       },
     });
@@ -634,6 +680,8 @@ export class EmailTemplatesService {
       body: string;
       button_label?: string | null;
       button_url?: string | null;
+      category?: string | null;
+      functionality?: string | null;
     },
     userId: string,
   ) {
@@ -657,6 +705,8 @@ export class EmailTemplatesService {
         body: template.body,
         button_label: template.button_label,
         button_url: template.button_url,
+        category: template.category,
+        functionality: template.functionality,
       }),
     });
 

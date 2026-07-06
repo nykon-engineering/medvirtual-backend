@@ -4,7 +4,7 @@ generator client {
 }
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("LOCAL_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -1377,6 +1377,8 @@ model EmailTemplate {
   body          String
   button_label  String?
   button_url    String?
+  category      String?
+  functionality String?
   placeholders  Json     @default("[]")
   business_unit String?
   is_active     Boolean  @default(true)
@@ -1391,19 +1393,23 @@ model EmailTemplate {
   @@index([key],           map: "idx_email_templates_key")
   @@index([business_unit], map: "idx_email_templates_bu")
   @@index([is_active],     map: "idx_email_templates_is_active")
+  @@index([category],      map: "idx_email_templates_category")
+  @@index([functionality], map: "idx_email_templates_functionality")
 }
 
 model EmailTemplateHistory {
-  id           String   @id @default(uuid())
-  template_id  String
-  subject      String
-  headline     String?
-  body         String
-  button_label String?
-  button_url   String?
-  changed_by   String
-  changed_at   DateTime @default(now())
-  reason       String?
+  id            String   @id @default(uuid())
+  template_id   String
+  subject       String
+  headline      String?
+  body          String
+  button_label  String?
+  button_url    String?
+  category      String?
+  functionality String?
+  changed_by    String
+  changed_at    DateTime @default(now())
+  reason        String?
 
   template EmailTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
 

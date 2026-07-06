@@ -49,19 +49,52 @@ export class EmailTemplatesController {
     type: String,
     description: 'Slug or "global" for null',
   })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    type: String,
+    description: 'Platform module, e.g. "talent", "alliance", "administration"',
+  })
+  @ApiQuery({
+    name: 'functionality',
+    required: false,
+    type: String,
+    description: 'Exact functionality label to filter by',
+  })
   @ApiResponse({ status: 200, description: 'Templates retrieved successfully' })
   findAll(
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
     @Query('search') search?: string,
     @Query('businessUnit') businessUnit?: string,
+    @Query('category') category?: string,
+    @Query('functionality') functionality?: string,
   ) {
     return this.service.findAll(
       page ? Number(page) : 1,
       perPage ? Number(perPage) : 25,
       search ?? '',
       businessUnit,
+      category,
+      functionality,
     );
+  }
+
+  // ── Functionality options ────────────────────────────────────────────────
+  // Registered before ':key' so this literal path isn't swallowed as a key param.
+
+  @Get('functionality-options')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @ApiOperation({
+    summary: 'List distinct functionality values in use, for filter dropdowns',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Distinct functionality values retrieved',
+  })
+  getFunctionalityOptions() {
+    return this.service.getFunctionalityOptions();
   }
 
   // ── Detail ────────────────────────────────────────────────────────────────
@@ -208,6 +241,9 @@ export class EmailTemplatesController {
       headline?: string;
       body: string;
       button_label?: string;
+      button_url?: string;
+      category?: string;
+      functionality?: string;
     },
     @Headers('x-sync-secret') secret: string,
     @Headers('x-sync-origin') origin: string,

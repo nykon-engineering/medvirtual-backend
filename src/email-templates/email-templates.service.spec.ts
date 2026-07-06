@@ -14,6 +14,8 @@ const TEMPLATE = {
   body: 'Hi, click here: {{inviteLink}}',
   button_label: 'Activate',
   button_url: '{{inviteLink}}',
+  category: 'talent',
+  functionality: 'Onboarding',
   placeholders: ['{{inviteLink}}', '{{companyName}}'],
   business_unit: null,
   is_active: true,
@@ -29,6 +31,8 @@ const HISTORY_ENTRY = {
   headline: 'Old headline',
   body: 'Old body',
   button_label: 'Old button',
+  category: 'talent',
+  functionality: 'Onboarding',
   changed_by: 'user-42',
   changed_at: new Date('2026-01-01T10:00:00Z'),
   reason: 'Manual edit',
@@ -186,6 +190,99 @@ describe('EmailTemplatesService.findOne', () => {
   });
 });
 
+// ── findAll ────────────────────────────────────────────────────────────────────
+
+describe('EmailTemplatesService.findAll', () => {
+  it('filters by category when provided', async () => {
+    const { service, prisma } = await buildService();
+    await service.findAll(1, 25, '', undefined, 'alliance');
+    expect(prisma.emailTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ category: 'alliance' }) }),
+    );
+    expect(prisma.emailTemplate.count).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ category: 'alliance' }) }),
+    );
+  });
+
+  it('filters by functionality when provided', async () => {
+    const { service, prisma } = await buildService();
+    await service.findAll(1, 25, '', undefined, undefined, 'Commission review');
+    expect(prisma.emailTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ functionality: 'Commission review' }),
+      }),
+    );
+  });
+
+  it('combines category and functionality with businessUnit/search filters', async () => {
+    const { service, prisma } = await buildService();
+    await service.findAll(1, 25, 'invite', 'medvirtual', 'talent', 'Onboarding');
+    expect(prisma.emailTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          business_unit: 'medvirtual',
+          category: 'talent',
+          functionality: 'Onboarding',
+          OR: expect.any(Array),
+        }),
+      }),
+    );
+  });
+
+  it('does not filter by category/functionality when omitted', async () => {
+    const { service, prisma } = await buildService();
+    await service.findAll(1, 25, '');
+    const call = (prisma.emailTemplate.findMany as jest.Mock).mock.calls[0][0];
+    expect(call.where).not.toHaveProperty('category');
+    expect(call.where).not.toHaveProperty('functionality');
+  });
+
+  it('includes category/functionality in the select whitelist', async () => {
+    const { service, prisma } = await buildService();
+    await service.findAll(1, 25, '');
+    expect(prisma.emailTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ category: true, functionality: true }),
+      }),
+    );
+  });
+});
+
+// ── getFunctionalityOptions ─────────────────────────────────────────────────────
+
+describe('EmailTemplatesService.getFunctionalityOptions', () => {
+  it('returns distinct non-null functionality values', async () => {
+    const { service, prisma } = await buildService({
+      emailTemplate: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ functionality: 'Onboarding' }, { functionality: 'Payroll' }]),
+      },
+    });
+    const result = await service.getFunctionalityOptions();
+    expect(result).toEqual({ status: 200, data: ['Onboarding', 'Payroll'] });
+    expect(prisma.emailTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ distinct: ['functionality'] }),
+    );
+  });
+
+  it('filters out null/empty functionality values', async () => {
+    const { service } = await buildService({
+      emailTemplate: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { functionality: 'Onboarding' },
+            { functionality: null },
+            { functionality: '' },
+          ]),
+      },
+    });
+    const result = await service.getFunctionalityOptions();
+    expect(result.data).toEqual(['Onboarding']);
+  });
+});
+
 // ── update ─────────────────────────────────────────────────────────────────────
 
 describe('EmailTemplatesService.update', () => {
@@ -203,6 +300,8 @@ describe('EmailTemplatesService.update', () => {
         data: expect.objectContaining({
           subject: TEMPLATE.subject,
           body: TEMPLATE.body,
+          category: TEMPLATE.category,
+          functionality: TEMPLATE.functionality,
           changed_by: 'user-1',
         }),
       }),
@@ -218,6 +317,36 @@ describe('EmailTemplatesService.update', () => {
           subject: dto.subject,
           body: dto.body,
           updated_by: 'user-1',
+        }),
+      }),
+    );
+  });
+
+  it('persists category/functionality when provided in the dto', async () => {
+    const { service, prisma } = await buildService();
+    await service.update(
+      'invite-signup',
+      { ...dto, category: 'administration', functionality: 'Payroll' },
+      'user-1',
+    );
+    expect(prisma.emailTemplate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: 'administration',
+          functionality: 'Payroll',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to existing category/functionality when omitted from dto', async () => {
+    const { service, prisma } = await buildService();
+    await service.update('invite-signup', dto, 'user-1');
+    expect(prisma.emailTemplate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: TEMPLATE.category,
+          functionality: TEMPLATE.functionality,
         }),
       }),
     );
@@ -296,6 +425,8 @@ describe('EmailTemplatesService.rollback', () => {
         data: expect.objectContaining({
           subject: HISTORY_ENTRY.subject,
           body: HISTORY_ENTRY.body,
+          category: HISTORY_ENTRY.category,
+          functionality: HISTORY_ENTRY.functionality,
         }),
       }),
     );
@@ -309,6 +440,8 @@ describe('EmailTemplatesService.rollback', () => {
         data: expect.objectContaining({
           subject: TEMPLATE.subject,
           body: TEMPLATE.body,
+          category: TEMPLATE.category,
+          functionality: TEMPLATE.functionality,
           changed_by: 'user-1',
           reason: expect.stringContaining('Rollback'),
         }),
@@ -368,6 +501,36 @@ describe('EmailTemplatesService.receiveSyncFromPeer', () => {
           subject: payload.subject,
           body: payload.body,
           updated_by: 'sync',
+        }),
+      }),
+    );
+  });
+
+  it('applies category/functionality from the synced payload when present', async () => {
+    const { service, prisma } = await buildService();
+    await service.receiveSyncFromPeer(
+      'invite-signup',
+      { ...payload, category: 'administration', functionality: 'Payroll' },
+      'PROD',
+    );
+    expect(prisma.emailTemplate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: 'administration',
+          functionality: 'Payroll',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to existing category/functionality when payload omits them', async () => {
+    const { service, prisma } = await buildService();
+    await service.receiveSyncFromPeer('invite-signup', payload, 'PROD');
+    expect(prisma.emailTemplate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: TEMPLATE.category,
+          functionality: TEMPLATE.functionality,
         }),
       }),
     );

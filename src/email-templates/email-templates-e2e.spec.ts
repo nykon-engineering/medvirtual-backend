@@ -611,3 +611,89 @@ describe('Checkpoint 7 — Per-BU branding applied to rendered HTML', () => {
     expect(result.data.html).toContain('MedVirtual');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. category/functionality filtering, update round-trip, history capture
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Checkpoint 8 — category/functionality filtering and snapshotting', () => {
+  it('findAll passes category/functionality through to the where clause', async () => {
+    const prisma = makePrisma(null);
+    const service = await buildModule(prisma);
+
+    await service.findAll(1, 25, '', undefined, 'alliance', 'Commission review');
+
+    expect((prisma as ReturnType<typeof makePrisma>).emailTemplate.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          category: 'alliance',
+          functionality: 'Commission review',
+        }),
+      }),
+    );
+    expect((prisma as ReturnType<typeof makePrisma>).emailTemplate.count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          category: 'alliance',
+          functionality: 'Commission review',
+        }),
+      }),
+    );
+  });
+
+  it('update() round-trips category/functionality and snapshots the previous values', async () => {
+    const template = makeTemplate('invite-signup', {
+      placeholders: ['{{companyName}}'],
+      category: 'talent',
+      functionality: 'Onboarding',
+    });
+    const prisma = makePrisma(template);
+    const service = await buildModule(prisma);
+
+    const updated = await service.update(
+      'invite-signup',
+      {
+        subject: 'New subject',
+        body: 'Body {{companyName}}',
+        category: 'alliance',
+        functionality: 'Commission review',
+      },
+      'user-1',
+    );
+
+    expect((prisma as ReturnType<typeof makePrisma>).emailTemplateHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: 'talent',
+          functionality: 'Onboarding',
+        }),
+      }),
+    );
+    expect((prisma as ReturnType<typeof makePrisma>).emailTemplate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: 'alliance',
+          functionality: 'Commission review',
+        }),
+      }),
+    );
+    expect(updated.data.category).toBe('alliance');
+    expect(updated.data.functionality).toBe('Commission review');
+  });
+
+  it('getFunctionalityOptions returns a distinct, non-empty list', async () => {
+    const prisma = makePrisma(null);
+    (prisma as ReturnType<typeof makePrisma>).emailTemplate.findMany.mockResolvedValue([
+      { functionality: 'Onboarding' },
+      { functionality: 'Commission review' },
+    ]);
+    const service = await buildModule(prisma);
+
+    const result = await service.getFunctionalityOptions();
+
+    expect(result).toEqual({
+      status: 200,
+      data: ['Onboarding', 'Commission review'],
+    });
+  });
+});
