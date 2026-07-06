@@ -300,14 +300,12 @@ export class EmailTemplatesService {
     dto: PreviewEmailTemplateDto,
     businessUnit?: string,
   ) {
-    const template = await this.prisma.emailTemplate.findFirst({
-      where: { key, business_unit: businessUnit ?? null },
-    });
+    const buSlug = dto.business_unit ?? businessUnit ?? null;
+    const template = await this.findTemplateForBranding(key, buSlug);
     if (!template) throw new NotFoundException(`Template "${key}" not found`);
 
     const body = dto.body ?? template.body;
     const subject = dto.subject ?? template.subject;
-    const buSlug = dto.business_unit ?? businessUnit ?? null;
 
     const branding = await this.resolveBranding(buSlug);
     const html = this.renderHtml(
@@ -332,12 +330,10 @@ export class EmailTemplatesService {
     userEmail: string,
     businessUnit?: string,
   ) {
-    const template = await this.prisma.emailTemplate.findFirst({
-      where: { key, business_unit: businessUnit ?? null },
-    });
+    const buSlug = dto.business_unit ?? businessUnit ?? null;
+    const template = await this.findTemplateForBranding(key, buSlug);
     if (!template) throw new NotFoundException(`Template "${key}" not found`);
 
-    const buSlug = dto.business_unit ?? businessUnit ?? null;
     const branding = await this.resolveBranding(buSlug);
     const html = this.renderHtml(
       template.body,
@@ -426,6 +422,20 @@ export class EmailTemplatesService {
   applyPlaceholders(text: string, overrides?: Record<string, string>): string {
     const data = { ...SAMPLE_DATA, ...overrides };
     return text.replace(/\{\{[^}]+\}\}/g, (match) => data[match] ?? match);
+  }
+
+  // Falls back to the default (null) template row when the requested business
+  // unit has no dedicated override, so "preview as <BU>" never 404s just
+  // because that BU hasn't customized this template's content.
+  private async findTemplateForBranding(key: string, buSlug: string | null) {
+    const template = await this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: buSlug },
+    });
+    if (template || buSlug === null) return template;
+
+    return this.prisma.emailTemplate.findFirst({
+      where: { key, business_unit: null },
+    });
   }
 
   private async resolveBranding(buSlug: string | null) {

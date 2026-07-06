@@ -424,6 +424,50 @@ describe('EmailTemplatesService.testSend', () => {
       service.testSend('ghost', {}, 'user-1', 'admin@example.com'),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it('honors business_unit from dto for the template row, not just branding', async () => {
+    const buRow = { ...TEMPLATE, business_unit: 'berry-virtual', headline: 'Berry Welcome!' };
+    const findFirst = jest.fn().mockResolvedValueOnce(buRow);
+    const { service, prisma, mail } = await buildService({
+      emailTemplate: { findFirst },
+    });
+    await service.testSend(
+      'invite-signup',
+      { business_unit: 'berry-virtual' },
+      'user-1',
+      'admin@example.com',
+    );
+    expect(prisma.emailTemplate.findFirst).toHaveBeenCalledWith({
+      where: { key: 'invite-signup', business_unit: 'berry-virtual' },
+    });
+    expect(mail.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ html: expect.stringContaining('Berry Welcome!') }),
+    );
+  });
+
+  it('falls back to the default row when the BU has no dedicated template', async () => {
+    const findFirst = jest
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(TEMPLATE);
+    const { service, mail } = await buildService({
+      emailTemplate: { findFirst },
+    });
+    await service.testSend(
+      'invite-signup',
+      { business_unit: 'berry-virtual' },
+      'user-1',
+      'admin@example.com',
+    );
+    expect(findFirst).toHaveBeenCalledTimes(2);
+    expect(findFirst).toHaveBeenNthCalledWith(1, {
+      where: { key: 'invite-signup', business_unit: 'berry-virtual' },
+    });
+    expect(findFirst).toHaveBeenNthCalledWith(2, {
+      where: { key: 'invite-signup', business_unit: null },
+    });
+    expect(mail.sendMail).toHaveBeenCalled();
+  });
 });
 
 // ── preview ────────────────────────────────────────────────────────────────────
@@ -459,5 +503,50 @@ describe('EmailTemplatesService.preview', () => {
     });
     const result = await service.preview('invite-signup', {});
     expect(result.data.html).toContain('#01546B');
+  });
+
+  it('honors business_unit from dto for the template row, not just branding', async () => {
+    const buRow = { ...TEMPLATE, business_unit: 'berry-virtual', headline: 'Berry Welcome!' };
+    const findFirst = jest.fn().mockResolvedValueOnce(buRow);
+    const { service, prisma } = await buildService({
+      emailTemplate: { findFirst },
+    });
+    const result = await service.preview('invite-signup', {
+      business_unit: 'berry-virtual',
+    });
+    expect(prisma.emailTemplate.findFirst).toHaveBeenCalledWith({
+      where: { key: 'invite-signup', business_unit: 'berry-virtual' },
+    });
+    expect(result.data.html).toContain('Berry Welcome!');
+  });
+
+  it('falls back to the default row when the BU has no dedicated template', async () => {
+    const findFirst = jest
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(TEMPLATE);
+    const { service } = await buildService({
+      emailTemplate: { findFirst },
+    });
+    const result = await service.preview('invite-signup', {
+      business_unit: 'berry-virtual',
+    });
+    expect(findFirst).toHaveBeenCalledTimes(2);
+    expect(findFirst).toHaveBeenNthCalledWith(1, {
+      where: { key: 'invite-signup', business_unit: 'berry-virtual' },
+    });
+    expect(findFirst).toHaveBeenNthCalledWith(2, {
+      where: { key: 'invite-signup', business_unit: null },
+    });
+    expect(result.data.html).toContain(TEMPLATE.headline);
+  });
+
+  it('throws NotFoundException when neither the BU row nor the default row exists', async () => {
+    const { service } = await buildService({
+      emailTemplate: { findFirst: jest.fn().mockResolvedValue(null) },
+    });
+    await expect(
+      service.preview('ghost', { business_unit: 'berry-virtual' }),
+    ).rejects.toThrow(NotFoundException);
   });
 });
