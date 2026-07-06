@@ -578,3 +578,152 @@ describe('EmailTemplatesService.preview', () => {
     );
   });
 });
+
+// ── layout presets ──────────────────────────────────────────────────────────────
+
+describe('EmailTemplatesService — layout presets', () => {
+  it('renders the solid banner div for the "default" preset', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toContain(
+      `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
+    );
+  });
+
+  it('omits the colored banner for the "minimal" preset and renders the logo inline', async () => {
+    const { service } = await buildService({
+      emailBranding: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ ...BRANDING, layout_preset: 'minimal' }),
+      },
+    });
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).not.toContain(
+      `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
+    );
+    expect(result.data.html).toContain('class="logo"');
+    expect(result.data.html).toContain(BRANDING.logo_url);
+  });
+
+  it('renders a tinted hero header with an accent bar for the "hero" preset', async () => {
+    const { service } = await buildService({
+      emailBranding: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ ...BRANDING, layout_preset: 'hero' }),
+      },
+    });
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toContain(`background:${BRANDING.primary_color}33;`);
+    expect(result.data.html).toContain(`background:${BRANDING.primary_color};margin:0 auto 20px;`);
+  });
+
+  it('falls back to the "default" structure for an unrecognized layout_preset value', async () => {
+    const { service } = await buildService({
+      emailBranding: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ ...BRANDING, layout_preset: 'bogus-value' }),
+      },
+    });
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toContain(
+      `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
+    );
+  });
+});
+
+// ── branding overrides in preview/testSend ──────────────────────────────────────
+
+describe('EmailTemplatesService — branding overrides in preview/testSend', () => {
+  it('preview() uses an overridden primary_color instead of the saved DB color', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+      primary_color: '#FF0000',
+    });
+    expect(result.data.html).toContain('background:#FF0000;');
+    expect(result.data.html).not.toContain(
+      `background:${BRANDING.primary_color};padding:30px 20px;`,
+    );
+  });
+
+  it('preview() switches structure via a layout_preset override while keeping saved colors/logo', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+      layout_preset: 'hero',
+    });
+    expect(result.data.html).toContain(`background:${BRANDING.primary_color}33;`);
+    expect(result.data.html).toContain(BRANDING.logo_url);
+  });
+
+  it('testSend() reflects branding overrides in the rendered email', async () => {
+    const { service, mail } = await buildService();
+    await service.testSend(
+      'invite-signup',
+      { business_unit: 'medvirtual', layout_preset: 'minimal' },
+      'user-1',
+      'admin@example.com',
+    );
+    expect(mail.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: expect.not.stringContaining(
+          `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
+        ),
+      }),
+    );
+  });
+
+  it('testSend() with no override fields behaves identically to before (back-compat)', async () => {
+    const { service, mail } = await buildService();
+    await service.testSend(
+      'invite-signup',
+      { business_unit: 'medvirtual' },
+      'user-1',
+      'admin@example.com',
+    );
+    expect(mail.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: `${BRANDING.company_name} <noreply@medvirtual.ai>`,
+        html: expect.stringContaining(
+          `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
+        ),
+      }),
+    );
+  });
+
+  it('honors an explicit empty-string logo_url override as intentional (not "unset")', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+      logo_url: '',
+    });
+    // An explicit '' override is honored as-is (distinct from an omitted/undefined field,
+    // which would fall back to the saved BRANDING.logo_url below).
+    expect(result.data.html).not.toContain(BRANDING.logo_url);
+    expect(result.data.html).toContain('src=""');
+  });
+
+  it('company_name override is reflected in testSend\'s mail "from" header', async () => {
+    const { service, mail } = await buildService();
+    await service.testSend(
+      'invite-signup',
+      { business_unit: 'medvirtual', company_name: 'Acme Corp' },
+      'user-1',
+      'admin@example.com',
+    );
+    expect(mail.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'Acme Corp <noreply@medvirtual.ai>' }),
+    );
+  });
+});

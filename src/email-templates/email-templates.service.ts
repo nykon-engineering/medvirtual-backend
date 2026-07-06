@@ -78,6 +78,7 @@ export class EmailTemplatesService {
         primaryColorHover: theme.primaryColorHover,
         companyName: theme.companyName,
         logoUrl: theme.logoUrl,
+        layoutPreset: 'default',
       },
       runtimeValues,
       dbTemplate.button_label,
@@ -307,7 +308,8 @@ export class EmailTemplatesService {
     const body = dto.body ?? template.body;
     const subject = dto.subject ?? template.subject;
 
-    const branding = await this.resolveBranding(buSlug);
+    const baseBranding = await this.resolveBranding(buSlug);
+    const branding = this.applyBrandingOverrides(baseBranding, dto);
     const html = this.renderHtml(
       body,
       template.headline ?? '',
@@ -334,7 +336,8 @@ export class EmailTemplatesService {
     const template = await this.findTemplateForBranding(key, buSlug);
     if (!template) throw new NotFoundException(`Template "${key}" not found`);
 
-    const branding = await this.resolveBranding(buSlug);
+    const baseBranding = await this.resolveBranding(buSlug);
+    const branding = this.applyBrandingOverrides(baseBranding, dto);
     const html = this.renderHtml(
       template.body,
       template.headline ?? '',
@@ -451,6 +454,7 @@ export class EmailTemplatesService {
           logoUrl: branding.logo_url ?? undefined,
           buttonColor: branding.button_color ?? undefined,
           buttonTextColor: branding.button_text_color ?? undefined,
+          layoutPreset: branding.layout_preset,
         };
       }
     }
@@ -461,6 +465,51 @@ export class EmailTemplatesService {
       logoUrl: undefined,
       buttonColor: undefined,
       buttonTextColor: undefined,
+      layoutPreset: 'default',
+    };
+  }
+
+  // Merges optional per-request branding overrides (unsaved modal edits) on top of the
+  // resolved DB/default branding. Uses `!== undefined` checks (not `??`) so an explicitly
+  // sent empty string overrides to empty, while an absent field falls back to the saved value.
+  private applyBrandingOverrides<
+    T extends {
+      primaryColor: string;
+      primaryColorHover: string;
+      companyName: string;
+      logoUrl?: string;
+      buttonColor?: string;
+      buttonTextColor?: string;
+      layoutPreset: string;
+    },
+  >(
+    branding: T,
+    overrides?: {
+      primary_color?: string;
+      secondary_color?: string;
+      logo_url?: string;
+      company_name?: string;
+      layout_preset?: string;
+    },
+  ): T {
+    if (!overrides) return branding;
+    return {
+      ...branding,
+      ...(overrides.primary_color !== undefined && {
+        primaryColor: overrides.primary_color,
+      }),
+      ...(overrides.secondary_color !== undefined && {
+        primaryColorHover: overrides.secondary_color,
+      }),
+      ...(overrides.logo_url !== undefined && {
+        logoUrl: overrides.logo_url,
+      }),
+      ...(overrides.company_name !== undefined && {
+        companyName: overrides.company_name,
+      }),
+      ...(overrides.layout_preset !== undefined && {
+        layoutPreset: overrides.layout_preset,
+      }),
     };
   }
 
@@ -474,6 +523,7 @@ export class EmailTemplatesService {
       logoUrl?: string;
       buttonColor?: string;
       buttonTextColor?: string;
+      layoutPreset: string;
     },
     overrides?: Record<string, string>,
     buttonLabel?: string | null,
@@ -499,6 +549,19 @@ export class EmailTemplatesService {
        </div>`
         : '';
 
+    // layout_preset is a raw Prisma String (not an enum), so any unrecognized/legacy
+    // value safely falls back to the "default" structure.
+    const knownPresets = ['default', 'minimal', 'hero'];
+    const preset = knownPresets.includes(branding.layoutPreset)
+      ? branding.layoutPreset
+      : 'default';
+
+    const headerHtml = this.renderHeaderForPreset(preset, branding, logoUrl);
+    const inlineLogoHtml =
+      preset === 'minimal'
+        ? `<div class="logo"><img src="${logoUrl}" alt="${branding.companyName} Logo" /></div>`
+        : '';
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -521,10 +584,9 @@ export class EmailTemplatesService {
 <body>
   <div class="email-wrapper">
     <div class="container">
-      <div style="background:${branding.primaryColor};padding:30px 20px;text-align:center;">
-        <img src="${logoUrl}" alt="${branding.companyName} Logo" style="max-width:200px;height:auto;" />
-      </div>
+      ${headerHtml}
       <div class="content">
+        ${inlineLogoHtml}
         ${filledHeadline ? `<div class="headline">${filledHeadline}</div>` : ''}
         <div class="body-text">${htmlBody}</div>
         ${buttonHtml}
@@ -536,6 +598,32 @@ export class EmailTemplatesService {
   </div>
 </body>
 </html>`;
+  }
+
+  // Returns only the pre-content header section for the given layout preset — the
+  // content/footer skeleton in renderHtml() stays identical across all presets.
+  private renderHeaderForPreset(
+    preset: string,
+    branding: { primaryColor: string; companyName: string },
+    logoUrl: string,
+  ): string {
+    switch (preset) {
+      case 'minimal':
+        // No banner section — the logo is rendered inline inside .content instead.
+        return '';
+
+      case 'hero':
+        return `<div style="background:${branding.primaryColor}33;padding:48px 20px;text-align:center;">
+        <div style="height:4px;width:64px;background:${branding.primaryColor};margin:0 auto 20px;border-radius:2px;"></div>
+        <img src="${logoUrl}" alt="${branding.companyName} Logo" style="max-width:220px;height:auto;" />
+      </div>`;
+
+      case 'default':
+      default:
+        return `<div style="background:${branding.primaryColor};padding:30px 20px;text-align:center;">
+        <img src="${logoUrl}" alt="${branding.companyName} Logo" style="max-width:200px;height:auto;" />
+      </div>`;
+    }
   }
 
   private async syncToPeer(
