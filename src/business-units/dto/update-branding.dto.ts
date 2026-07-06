@@ -42,4 +42,22 @@ export class UpdateBrandingDto {
   @IsOptional()
   @IsString()
   layout_preset?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Email button background color (hex). Falls back to primary_color when unset.',
+    example: '#01546B',
+  })
+  @IsOptional()
+  @IsHexColor()
+  button_color?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Email button text color (hex). Falls back to #ffffff when unset.',
+    example: '#ffffff',
+  })
+  @IsOptional()
+  @IsHexColor()
+  button_text_color?: string;
 }

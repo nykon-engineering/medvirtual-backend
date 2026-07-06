@@ -4,7 +4,7 @@ generator client {
 }
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("LOCAL_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -1412,15 +1412,17 @@ model EmailTemplateHistory {
 }
 
 model EmailBranding {
-  id              String   @id @default(uuid())
-  business_unit   String   @unique
-  primary_color   String
-  secondary_color String?
-  logo_url        String?
-  company_name    String
-  layout_preset   String   @default("default")
-  updated_by      String?
-  updated_at      DateTime @updatedAt
+  id                String   @id @default(uuid())
+  business_unit     String   @unique
+  primary_color     String
+  secondary_color   String?
+  logo_url          String?
+  company_name      String
+  layout_preset     String   @default("default")
+  button_color      String?
+  button_text_color String?
+  updated_by        String?
+  updated_at        DateTime @updatedAt
 
   businessUnit BusinessUnit         @relation(fields: [business_unit], references: [slug])
   history      EmailBrandingHistory[]

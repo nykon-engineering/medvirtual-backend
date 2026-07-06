@@ -549,4 +549,32 @@ describe('EmailTemplatesService.preview', () => {
       service.preview('ghost', { business_unit: 'berry-virtual' }),
     ).rejects.toThrow(NotFoundException);
   });
+
+  it('falls back to primary_color background and #ffffff text when button colors are unset', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toContain(
+      `background-color:${BRANDING.primary_color};color:#ffffff;`,
+    );
+  });
+
+  it('uses button_color and button_text_color from branding when set', async () => {
+    const { service } = await buildService({
+      emailBranding: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...BRANDING,
+          button_color: '#112233',
+          button_text_color: '#F0F0F0',
+        }),
+      },
+    });
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toContain(
+      'background-color:#112233;color:#F0F0F0;',
+    );
+  });
 });

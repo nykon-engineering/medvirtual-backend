@@ -8,6 +8,8 @@ export default function getVerificationCodeTemplate(
 ) {
   const primaryColor = theme?.primaryColor || '#01546B';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
 
   return `
 <!DOCTYPE html>
@@ -86,8 +88,8 @@ export default function getVerificationCodeTemplate(
     }
     .cta-button {
       display: inline-block;
-      background-color: ${primaryColor};
-      color: #ffffff !important;
+      background-color: ${buttonColor};
+      color: ${buttonTextColor} !important;
       padding: 14px 28px;
       text-decoration: none;
       border-radius: 30px;
@@ -98,13 +100,13 @@ export default function getVerificationCodeTemplate(
     }
     .cta-button:hover {
       background-color: ${theme?.primaryColorHover || '#013A4F'};
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:visited {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:link {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .closing {
       color: #333333;

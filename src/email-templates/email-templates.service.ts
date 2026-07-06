@@ -449,6 +449,8 @@ export class EmailTemplatesService {
           primaryColorHover: branding.secondary_color ?? '#013A4F',
           companyName: branding.company_name,
           logoUrl: branding.logo_url ?? undefined,
+          buttonColor: branding.button_color ?? undefined,
+          buttonTextColor: branding.button_text_color ?? undefined,
         };
       }
     }
@@ -457,6 +459,8 @@ export class EmailTemplatesService {
       primaryColorHover: '#013A4F',
       companyName: 'MedVirtual',
       logoUrl: undefined,
+      buttonColor: undefined,
+      buttonTextColor: undefined,
     };
   }
 
@@ -468,6 +472,8 @@ export class EmailTemplatesService {
       primaryColorHover: string;
       companyName: string;
       logoUrl?: string;
+      buttonColor?: string;
+      buttonTextColor?: string;
     },
     overrides?: Record<string, string>,
     buttonLabel?: string | null,
@@ -481,10 +487,13 @@ export class EmailTemplatesService {
 
     const htmlBody = filledBody.replace(/\n/g, '<br>');
 
+    const buttonBackgroundColor = branding.buttonColor ?? branding.primaryColor;
+    const buttonTextColor = branding.buttonTextColor ?? '#ffffff';
+
     const buttonHtml =
       buttonLabel && buttonUrl
         ? `<div style="text-align:left;margin:30px 0;">
-        <a href="${buttonUrl}" style="display:inline-block;background-color:${branding.primaryColor};color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
+        <a href="${buttonUrl}" style="display:inline-block;background-color:${buttonBackgroundColor};color:${buttonTextColor};padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
           ${buttonLabel}
         </a>
        </div>`

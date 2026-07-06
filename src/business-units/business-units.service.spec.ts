@@ -20,6 +20,8 @@ const BRANDING = {
   logo_url: 'https://staging.medvirtual.ai/logo.png',
   company_name: 'MedVirtual',
   layout_preset: 'default',
+  button_color: null,
+  button_text_color: null,
   updated_by: 'user-1',
   updated_at: new Date('2026-01-01'),
 };
@@ -203,6 +205,33 @@ describe('BusinessUnitsService.updateBranding', () => {
     // secondary_color should NOT be in the update payload
     const updateCall = (prisma.emailBranding.update as jest.Mock).mock.calls[0][0];
     expect(updateCall.data).not.toHaveProperty('secondary_color');
+  });
+
+  it('applies button_color and button_text_color and snapshots their previous values', async () => {
+    const { service, prisma } = makeService();
+    await service.updateBranding(
+      'medvirtual',
+      { button_color: '#112233', button_text_color: '#F0F0F0' },
+      'user-1',
+    );
+    expect(prisma.emailBranding.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          button_color: '#112233',
+          button_text_color: '#F0F0F0',
+        }),
+      }),
+    );
+    expect(prisma.emailBrandingHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshot: expect.objectContaining({
+            button_color: BRANDING.button_color,
+            button_text_color: BRANDING.button_text_color,
+          }),
+        }),
+      }),
+    );
   });
 
   it('throws NotFoundException when BU does not exist', async () => {

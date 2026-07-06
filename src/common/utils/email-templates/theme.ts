@@ -5,6 +5,8 @@ export interface EmailTheme {
   accentColor: string;
   logoUrl?: string;
   companyName: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
 }
 
 export function getEmailThemeByBusinessUnit(

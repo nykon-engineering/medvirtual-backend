@@ -50,6 +50,8 @@ export class BusinessUnitsService {
           logo_url: 'https://staging.medvirtual.ai/logo.png',
           company_name: dto.name,
           layout_preset: 'default',
+          button_color: null,
+          button_text_color: null,
           updated_by: userId,
         },
       }),
@@ -121,6 +123,8 @@ export class BusinessUnitsService {
           logo_url: current.logo_url,
           company_name: current.company_name,
           layout_preset: current.layout_preset,
+          button_color: current.button_color,
+          button_text_color: current.button_text_color,
         },
         changed_by: userId,
       },
@@ -141,6 +145,12 @@ export class BusinessUnitsService {
         }),
         ...(dto.layout_preset !== undefined && {
           layout_preset: dto.layout_preset,
+        }),
+        ...(dto.button_color !== undefined && {
+          button_color: dto.button_color,
+        }),
+        ...(dto.button_text_color !== undefined && {
+          button_text_color: dto.button_text_color,
         }),
         updated_by: userId,
       },
@@ -185,6 +195,8 @@ export class BusinessUnitsService {
       logo_url?: string;
       company_name?: string;
       layout_preset?: string;
+      button_color?: string;
+      button_text_color?: string;
     },
     originEnv: string,
   ) {
@@ -207,6 +219,8 @@ export class BusinessUnitsService {
           logo_url: branding.logo_url,
           company_name: branding.company_name,
           layout_preset: branding.layout_preset,
+          button_color: branding.button_color,
+          button_text_color: branding.button_text_color,
         },
         changed_by: 'sync',
       },
@@ -228,6 +242,12 @@ export class BusinessUnitsService {
         ...(payload.layout_preset !== undefined && {
           layout_preset: payload.layout_preset,
         }),
+        ...(payload.button_color !== undefined && {
+          button_color: payload.button_color,
+        }),
+        ...(payload.button_text_color !== undefined && {
+          button_text_color: payload.button_text_color,
+        }),
         updated_by: 'sync',
       },
     });
@@ -243,6 +263,8 @@ export class BusinessUnitsService {
       logo_url?: string | null;
       company_name: string;
       layout_preset: string;
+      button_color?: string | null;
+      button_text_color?: string | null;
     },
     userId: string,
   ) {
@@ -266,6 +288,8 @@ export class BusinessUnitsService {
         logo_url: branding.logo_url,
         company_name: branding.company_name,
         layout_preset: branding.layout_preset,
+        button_color: branding.button_color,
+        button_text_color: branding.button_text_color,
       }),
     });
 

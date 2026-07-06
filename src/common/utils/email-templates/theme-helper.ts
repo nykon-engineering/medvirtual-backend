@@ -33,6 +33,8 @@ async function getBrandingFromDb(
       accentColor: branding.primary_color,
       companyName: branding.company_name,
       logoUrl: branding.logo_url ?? undefined,
+      buttonColor: branding.button_color ?? undefined,
+      buttonTextColor: branding.button_text_color ?? undefined,
     };
   } catch {
     return null;

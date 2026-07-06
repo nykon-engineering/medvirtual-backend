@@ -126,6 +126,8 @@ export class BusinessUnitsController {
       logo_url?: string;
       company_name?: string;
       layout_preset?: string;
+      button_color?: string;
+      button_text_color?: string;
     },
     @Headers('x-sync-secret') secret: string,
     @Headers('x-sync-origin') origin: string,
