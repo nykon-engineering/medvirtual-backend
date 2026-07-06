@@ -201,7 +201,7 @@ export class ContactService {
             business_unit: org.business_unit,
             account_type: accountType,
             website_url: org.website_url,
-            referral_source: 'Alliance Partner',
+            referral_source: 'Alliance - Partner',
             hubspot_owner_id: hubspotOwnerId,
           },
         });
@@ -268,7 +268,7 @@ export class ContactService {
             referral_partner:
               org.referredByAffiliate?.affiliateProfile?.full_name,
             referral_partners_email: org.referredByAffiliate?.email,
-            referral_source: 'Alliance Partner',
+            referral_source: 'Alliance - Partner',
             referrals_industry:
               org.business_unit === 'Med Virtual' ? 'Medical' : 'Non-Medical',
             referred_to: hubspotOwnerId ?? '',
