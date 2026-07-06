@@ -577,6 +577,12 @@ export class EmailTemplatesService {
   ): string {
     const filledBody = this.applyPlaceholders(body, overrides);
     const filledHeadline = this.applyPlaceholders(headline, overrides);
+    const filledButtonUrl = buttonUrl
+      ? this.applyPlaceholders(buttonUrl, overrides)
+      : buttonUrl;
+    const filledButtonLabel = buttonLabel
+      ? this.applyPlaceholders(buttonLabel, overrides)
+      : buttonLabel;
     const logoUrl =
       branding.logoUrl ??
       `https://staging.medvirtual.ai/${branding.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
@@ -587,10 +593,10 @@ export class EmailTemplatesService {
     const buttonTextColor = branding.buttonTextColor ?? '#ffffff';
 
     const buttonHtml =
-      buttonLabel && buttonUrl
+      filledButtonLabel && filledButtonUrl
         ? `<div style="text-align:left;margin:30px 0;">
-        <a href="${buttonUrl}" style="display:inline-block;background-color:${buttonBackgroundColor};color:${buttonTextColor};padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
-          ${buttonLabel}
+        <a href="${filledButtonUrl}" style="display:inline-block;background-color:${buttonBackgroundColor};color:${buttonTextColor};padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
+          ${filledButtonLabel}
         </a>
        </div>`
         : '';
