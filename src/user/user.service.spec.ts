@@ -165,6 +165,33 @@ describe('UserService', () => {
       const countArgs = prismaMock.uSER.count.mock.calls[0][0];
       expect(countArgs.where.status).toBeUndefined();
     });
+
+    it('should AND each whitespace-separated token so a complete full name matches across first_name and last_name', async () => {
+      prismaMock.uSER.findMany.mockResolvedValue([]);
+      prismaMock.uSER.count.mockResolvedValue(0);
+
+      await service.getAllSystemUsers('Barbi Teste', 1, 10).catch(() => {});
+
+      const findManyArgs = prismaMock.uSER.findMany.mock.calls[0][0];
+      expect(findManyArgs.where.AND).toEqual([
+        {
+          OR: [
+            { first_name: { contains: 'Barbi', mode: 'insensitive' } },
+            { last_name: { contains: 'Barbi', mode: 'insensitive' } },
+            { email: { contains: 'Barbi', mode: 'insensitive' } },
+            { job_title: { contains: 'Barbi', mode: 'insensitive' } },
+          ],
+        },
+        {
+          OR: [
+            { first_name: { contains: 'Teste', mode: 'insensitive' } },
+            { last_name: { contains: 'Teste', mode: 'insensitive' } },
+            { email: { contains: 'Teste', mode: 'insensitive' } },
+            { job_title: { contains: 'Teste', mode: 'insensitive' } },
+          ],
+        },
+      ]);
+    });
   });
 
   describe('searchOrganizationUsers', () => {

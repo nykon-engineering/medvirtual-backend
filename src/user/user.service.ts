@@ -181,32 +181,21 @@ export class UserService {
 
     // Add search filter if provided
     if (search) {
-      whereClause.OR = [
-        {
-          first_name: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          last_name: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          email: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          job_title: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      ];
+      // Match each whitespace-separated token independently and AND them
+      // together, so a complete full name ("First Last") matches a user
+      // whose first_name and last_name live in different columns. A single OR
+      // per column would never match a full name, since no single column
+      // contains "First Last" as a substring.
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      whereClause.AND = tokens.map((token) => ({
+        OR: [
+          { first_name: { contains: token, mode: 'insensitive' } },
+          { last_name: { contains: token, mode: 'insensitive' } },
+          { email: { contains: token, mode: 'insensitive' } },
+          { job_title: { contains: token, mode: 'insensitive' } },
+        ],
+      }));
     }
 
     const [users, total] = await this.prisma.$transaction([
