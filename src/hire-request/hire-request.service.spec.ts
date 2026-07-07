@@ -73,6 +73,7 @@ const prismaMock = {
   interview: {
     create: jest.fn(),
     findMany: jest.fn(),
+    deleteMany: jest.fn(),
   },
   organization: {
     findUnique: jest.fn(),
@@ -912,6 +913,64 @@ describe('HireRequestService', () => {
   
       await expect(service.showMatchCandidates('hr1', user))
         .rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('updateStatus - interview_scheduled to sourcing', () => {
+    const hireRequestId = 'hr1';
+    const baseUser = { id: 'user1', organization_id: 'org1', role: 'system_admin' } as USER;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      jest.spyOn(service as any, 'verifyAssignUser').mockResolvedValue(true);
+      jest.spyOn(service as any, 'updateHireRequestStatus').mockResolvedValue(true);
+      jest.spyOn(service as any, 'findOne').mockResolvedValue({ status: 'interview_scheduled' });
+
+      prismaMock.panelCandidate.findMany.mockResolvedValue([]);
+      prismaMock.candidatePanel.findFirst.mockResolvedValue({
+        id: 'panel1',
+        panelCandidates: [],
+        interviews: [{ id: 'interview1' }],
+      });
+      prismaMock.candidatePanel.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.interview.deleteMany.mockResolvedValue({ count: 1 });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('resets CandidatePanel.status back to created and clears the scheduled interview', async () => {
+      await service.updateStatus(hireRequestId, { status: 'sourcing' }, baseUser);
+
+      // Regression guard: leaving interview_scheduled must not leave the
+      // panel's own status stuck at interview_scheduled, otherwise
+      // GET /hire-request/get-panels/all keeps bucketing the card under
+      // "Interview Scheduled" on the client side even though the hire
+      // request itself moved back to sourcing.
+      expect(prismaMock.candidatePanel.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { hire_request_id: hireRequestId },
+          data: expect.objectContaining({ status: 'created' }),
+        }),
+      );
+
+      expect(prismaMock.interview.deleteMany).toHaveBeenCalledWith({
+        where: { panel_id: 'panel1' },
+      });
+    });
+
+    it('does not touch CandidatePanel.status or delete interviews for panel_ready -> sourcing', async () => {
+      jest.spyOn(service as any, 'findOne').mockResolvedValue({ status: 'panel_ready' });
+
+      await service.updateStatus(hireRequestId, { status: 'sourcing' }, baseUser);
+
+      expect(prismaMock.candidatePanel.updateMany).toHaveBeenCalledWith({
+        where: { hire_request_id: hireRequestId },
+        data: { readable: false },
+      });
+      expect(prismaMock.interview.deleteMany).not.toHaveBeenCalled();
     });
   });
 

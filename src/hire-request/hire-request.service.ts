@@ -1931,12 +1931,29 @@ export class HireRequestService {
       //update panel to readable=false
       //update the hireRequest Status to sourcing
 
+      // Leaving interview_scheduled must also reset CandidatePanel.status
+      // and clear the stale Interview rows — otherwise GET
+      // /hire-request/get-panels/all (which buckets by CandidatePanel.status,
+      // not HireRequest.status) keeps showing the card under "Interview
+      // Scheduled" on the client side even though the hire request itself
+      // moved back to sourcing.
+      if (hireRequest.status == 'interview_scheduled' && panelExists) {
+        await this.prisma.interview.deleteMany({
+          where: {
+            panel_id: panelExists.id,
+          },
+        });
+      }
+
       const panelUpdated = await this.prisma.candidatePanel.updateMany({
         where: {
           hire_request_id: id,
         },
         data: {
           readable: false,
+          ...(hireRequest.status == 'interview_scheduled'
+            ? { status: 'created' as PanelStatus, scheduled_date: null }
+            : {}),
         },
       });
       const updatedRequest = await this.updateHireRequestStatus(
