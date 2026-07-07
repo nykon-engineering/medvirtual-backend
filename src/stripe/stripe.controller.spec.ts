@@ -5,6 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import { SecretsService } from '../secrets/secrets.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { getQueueToken } from '@nestjs/bullmq';
+import { PusherService } from '../pusher/pusher.service';
+import { InvoiceService } from '../invoice/invoice.service';
 
 describe('StripeController', () => {
   let stripeController: StripeController;
@@ -39,7 +41,10 @@ describe('StripeController', () => {
         { provide: SecretsService, useValue: mockSecretsService },
         { provide: 'REDIS_CLIENT', useValue: mockRedisClient },
         { provide: PrismaService, useValue: {} },
+        { provide: PusherService, useValue: { trigger: jest.fn(), authenticate: jest.fn() } },
         { provide: getQueueToken('invoice'), useValue: { getJob: jest.fn(), add: jest.fn() } },
+        { provide: getQueueToken('invoice-prebill-reconciliation'), useValue: { getJob: jest.fn(), add: jest.fn() } },
+        { provide: InvoiceService, useValue: { getInvoiceDetails: jest.fn() } },
       ],
     }).compile();
 
