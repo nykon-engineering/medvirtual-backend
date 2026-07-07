@@ -352,6 +352,23 @@ describe('EmailTemplatesService.update', () => {
     );
   });
 
+  it('persists category/functionality as null when explicitly cleared in the dto', async () => {
+    const { service, prisma } = await buildService();
+    await service.update(
+      'invite-signup',
+      { ...dto, category: null, functionality: null },
+      'user-1',
+    );
+    expect(prisma.emailTemplate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          category: null,
+          functionality: null,
+        }),
+      }),
+    );
+  });
+
   it('throws BadRequestException when body contains an undeclared placeholder', async () => {
     const { service } = await buildService();
     await expect(

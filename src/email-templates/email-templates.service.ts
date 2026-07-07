@@ -191,16 +191,25 @@ export class EmailTemplatesService {
       },
     });
 
+    // Uses `!== undefined` (not `??`) so a field explicitly sent as null/empty
+    // overwrites, while an omitted field keeps the previously saved value.
     const updated = await this.prisma.emailTemplate.update({
       where: { id: template.id },
       data: {
         subject: dto.subject,
-        headline: dto.headline ?? template.headline,
+        headline: dto.headline !== undefined ? dto.headline : template.headline,
         body: dto.body,
-        button_label: dto.button_label ?? template.button_label,
-        button_url: dto.button_url ?? template.button_url,
-        category: dto.category ?? template.category,
-        functionality: dto.functionality ?? template.functionality,
+        button_label:
+          dto.button_label !== undefined
+            ? dto.button_label
+            : template.button_label,
+        button_url:
+          dto.button_url !== undefined ? dto.button_url : template.button_url,
+        category: dto.category !== undefined ? dto.category : template.category,
+        functionality:
+          dto.functionality !== undefined
+            ? dto.functionality
+            : template.functionality,
         updated_by: userId,
       },
     });
@@ -443,12 +452,23 @@ export class EmailTemplatesService {
       where: { id: template.id },
       data: {
         subject: payload.subject,
-        headline: payload.headline ?? template.headline,
+        headline:
+          payload.headline !== undefined ? payload.headline : template.headline,
         body: payload.body,
-        button_label: payload.button_label ?? template.button_label,
-        button_url: payload.button_url ?? template.button_url,
-        category: payload.category ?? template.category,
-        functionality: payload.functionality ?? template.functionality,
+        button_label:
+          payload.button_label !== undefined
+            ? payload.button_label
+            : template.button_label,
+        button_url:
+          payload.button_url !== undefined
+            ? payload.button_url
+            : template.button_url,
+        category:
+          payload.category !== undefined ? payload.category : template.category,
+        functionality:
+          payload.functionality !== undefined
+            ? payload.functionality
+            : template.functionality,
         updated_by: 'sync',
       },
     });
