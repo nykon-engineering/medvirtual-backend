@@ -1286,6 +1286,7 @@ export class AffiliatesService {
         hubspot_id: true,
         invoice_amount: true,
         invoice_status: true,
+        payment_status: true,
         currency: true,
         paid_at: true,
         createdAt: true,
@@ -1294,10 +1295,25 @@ export class AffiliatesService {
       orderBy: { paid_at: 'asc' },
     });
 
-    const paidInvoices = invoices.filter(
-      (i) => i.invoice_status === 'paid' && i.paid_at != null,
+    // Canonical candidate-invoice rule (must match InvoicesService.computeIsCandidateInput
+    // and _backfillOnAssociation) — deliberately does NOT require paid_at, which frequently
+    // fails to resolve during HubSpot sync even for genuinely paid invoices.
+    const candidateInvoices = invoices.filter(
+      (i) =>
+        i.invoice_status === 'paid' &&
+        new Decimal(i.invoice_amount ?? 0).gt(0) &&
+        (i.payment_status === null || i.payment_status === 'succeeded'),
     );
-    const deploymentDate = paidInvoices[0]?.paid_at ?? null;
+
+    const firstCandidate = candidateInvoices[0];
+    // Prefer HubSpot's deployment_date as the eligibility anchor; otherwise use the earliest
+    // candidate invoice's paid_at, falling back to its created_at when paid_at never resolved
+    // so a real candidate invoice doesn't collapse the anchor back to null.
+    const deploymentDate =
+      org.deployment_date ??
+      firstCandidate?.paid_at ??
+      firstCandidate?.createdAt ??
+      null;
     const now = new Date();
     const daysSince =
       deploymentDate != null
@@ -1347,7 +1363,7 @@ export class AffiliatesService {
           daysSince !== null ? Math.floor(daysSince) : null,
         eligibility_window: eligibilityWindow,
         commission_status: commissionStatus,
-        projected_commission_count: paidInvoices.length,
+        projected_commission_count: candidateInvoices.length,
         affiliate_commission_percent:
           profile.commission_percent_default.toNumber(),
       },

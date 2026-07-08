@@ -36,6 +36,12 @@ const mockPrisma = {
     aggregate: jest.fn(),
     groupBy: jest.fn(),
   },
+  organization: {
+    findUnique: jest.fn(),
+  },
+  hubspotInvoiceSnapshot: {
+    findMany: jest.fn(),
+  },
   $transaction: jest.fn(),
 };
 
@@ -484,6 +490,133 @@ describe('AffiliatesService', () => {
           data: expect.not.objectContaining({ commission_percent_default: expect.anything() }),
         }),
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // previewAssociation
+  // -------------------------------------------------------------------------
+  describe('previewAssociation', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS);
+
+    const mockPreviewProfile = {
+      commission_percent_default: new (require('@prisma/client/runtime/library').Decimal)('10.00'),
+    };
+
+    const baseOrg = {
+      id: 'org-1',
+      name: 'Acme Health',
+      status: 'active',
+      email: 'contact@acme.com',
+      industry: null,
+      location: null,
+      hubspot_id: 'hs-org-1',
+      contact_first_name: 'Jane',
+      contact_last_name: 'Doe',
+      contact_email: 'jane@acme.com',
+      med_alliance_referral_status: null,
+      eligibility_start_at: null,
+      first_paid_invoice_at: null,
+      deployment_date: null,
+    };
+
+    const paidInvoice = (overrides: any = {}) => ({
+      id: 'inv-' + Math.random().toString(36).slice(2),
+      hubspot_id: 'hs-inv',
+      invoice_amount: new (require('@prisma/client/runtime/library').Decimal)('100.00'),
+      invoice_status: 'paid',
+      payment_status: null,
+      currency: 'USD',
+      paid_at: null,
+      createdAt: daysAgo(50),
+      hubspot_pdf_link: null,
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockPreviewProfile);
+    });
+
+    it('should mark eligible with full count when paid invoices have paid_at null (bug repro)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({ ...baseOrg, deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidInvoice({ createdAt: daysAgo(50) }),
+        paidInvoice({ createdAt: daysAgo(48) }),
+        paidInvoice({ createdAt: daysAgo(45) }),
+        paidInvoice({ createdAt: daysAgo(40) }),
+      ]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.eligibility_window).toBe('eligible');
+      expect(result.projection.projected_commission_count).toBe(4);
+    });
+
+    it('should remain eligible with full count when paid_at is resolved (regression guard)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({ ...baseOrg, deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidInvoice({ paid_at: daysAgo(50), createdAt: daysAgo(50) }),
+        paidInvoice({ paid_at: daysAgo(48), createdAt: daysAgo(48) }),
+        paidInvoice({ paid_at: daysAgo(45), createdAt: daysAgo(45) }),
+        paidInvoice({ paid_at: daysAgo(40), createdAt: daysAgo(40) }),
+      ]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.eligibility_window).toBe('eligible');
+      expect(result.projection.projected_commission_count).toBe(4);
+    });
+
+    it('should exclude zero-amount invoices from projected count', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({ ...baseOrg, deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidInvoice({ createdAt: daysAgo(50) }),
+        paidInvoice({
+          invoice_amount: new (require('@prisma/client/runtime/library').Decimal)('0.00'),
+          createdAt: daysAgo(48),
+        }),
+      ]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.projected_commission_count).toBe(1);
+    });
+
+    it('should exclude invoices with failed payment_status', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({ ...baseOrg, deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidInvoice({ createdAt: daysAgo(50) }),
+        paidInvoice({ payment_status: 'failed', createdAt: daysAgo(48) }),
+      ]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.projected_commission_count).toBe(1);
+    });
+
+    it('should return no_invoices when there are no invoices and no deployment_date', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({ ...baseOrg, deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.eligibility_window).toBe('no_invoices');
+      expect(result.projection.projected_commission_count).toBe(0);
+    });
+
+    it('should anchor on deployment_date when no invoice has resolved paid_at', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        ...baseOrg,
+        deployment_date: daysAgo(50),
+      });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidInvoice({ paid_at: null, createdAt: daysAgo(10) }),
+      ]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.eligibility_window).toBe('eligible');
     });
   });
 });
