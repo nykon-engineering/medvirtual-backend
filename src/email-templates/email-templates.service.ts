@@ -556,6 +556,8 @@ export class EmailTemplatesService {
       logo_url?: string;
       company_name?: string;
       layout_preset?: string;
+      button_color?: string;
+      button_text_color?: string;
     },
   ): T {
     if (!overrides) return branding;
@@ -575,6 +577,12 @@ export class EmailTemplatesService {
       }),
       ...(overrides.layout_preset !== undefined && {
         layoutPreset: overrides.layout_preset,
+      }),
+      ...(overrides.button_color !== undefined && {
+        buttonColor: overrides.button_color,
+      }),
+      ...(overrides.button_text_color !== undefined && {
+        buttonTextColor: overrides.button_text_color,
       }),
     };
   }

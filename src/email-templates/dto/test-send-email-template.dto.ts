@@ -51,4 +51,22 @@ export class TestSendEmailTemplateDto {
   @IsOptional()
   @IsString()
   layout_preset?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Unsaved button color override (hex). Falls back to saved branding when omitted.',
+    example: '#01546B',
+  })
+  @IsOptional()
+  @IsHexColor()
+  button_color?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Unsaved button text color override (hex). Falls back to saved branding when omitted.',
+    example: '#FFFFFF',
+  })
+  @IsOptional()
+  @IsHexColor()
+  button_text_color?: string;
 }
