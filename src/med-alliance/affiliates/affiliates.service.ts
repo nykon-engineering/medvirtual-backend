@@ -806,6 +806,10 @@ export class AffiliatesService {
             commission_amount: true,
             createdAt: true,
             organization: { select: { id: true, name: true } },
+            hubspot_invoice_snapshot_id: true,
+            hubspotInvoiceSnapshot: {
+              select: { hubspot_id: true, invoice_number: true },
+            },
           },
           orderBy: { createdAt: 'desc' as const },
           take: 50,

@@ -284,6 +284,22 @@ describe('AffiliatesService', () => {
         include: expect.any(Object),
       });
     });
+
+    it('should select the hubspot invoice snapshot relation for commissions', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+
+      await service.findOne('profile-1');
+
+      const callArg = mockPrisma.affiliateProfile.findUnique.mock.calls[0][0];
+      expect(callArg.include.commissions.select).toEqual(
+        expect.objectContaining({
+          hubspot_invoice_snapshot_id: true,
+          hubspotInvoiceSnapshot: {
+            select: { hubspot_id: true, invoice_number: true },
+          },
+        }),
+      );
+    });
   });
 
   // -------------------------------------------------------------------------

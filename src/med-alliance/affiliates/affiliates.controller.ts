@@ -392,6 +392,8 @@ export class AffiliatesController {
         amount: Number(c.commission_amount),
         status: c.status,
         date: c.createdAt.toISOString(),
+        invoice_id: c.hubspotInvoiceSnapshot?.hubspot_id ?? null,
+        name: c.hubspotInvoiceSnapshot?.invoice_number ?? null,
       })),
       payout_history: mapPayoutHistory(enriched.payoutHistory),
       user: {
@@ -573,6 +575,8 @@ export class AffiliatesController {
         amount: Number(c.commission_amount),
         status: c.status,
         date: c.createdAt.toISOString(),
+        invoice_id: c.hubspotInvoiceSnapshot?.hubspot_id ?? null,
+        name: c.hubspotInvoiceSnapshot?.invoice_number ?? null,
       })),
       payout_history: mapPayoutHistory(enriched.payoutHistory),
     };
