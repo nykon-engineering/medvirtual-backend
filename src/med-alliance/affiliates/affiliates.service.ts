@@ -778,6 +778,7 @@ export class AffiliatesService {
                 email: true,
                 status: true,
                 med_alliance_referral_status: true,
+                referral_stage: true,
                 createdAt: true,
               },
               orderBy: { createdAt: 'desc' as const },
