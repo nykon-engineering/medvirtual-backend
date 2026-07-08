@@ -1,5 +1,13 @@
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { AffiliateStatus } from './update-affiliate-profile.dto';
 
@@ -65,4 +73,14 @@ export class ListAffiliatesDto {
   @IsOptional()
   @IsEnum(['with_org', 'without_org'])
   organization?: 'with_org' | 'without_org';
+
+  @ApiPropertyOptional({
+    description:
+      'When true, return only affiliates payable right now: at least one eligible commission and a Bill.com vendor ID on file',
+    example: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  payable?: boolean;
 }

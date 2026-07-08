@@ -259,6 +259,53 @@ describe('AffiliatesService', () => {
 
       expect(result.pagination).toEqual({ page: 2, limit: 5, total: 0 });
     });
+
+    it('should not apply an AND clause when payable is omitted', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({});
+
+      const findManyArgs = mockPrisma.affiliateProfile.findMany.mock.calls[0][0];
+      expect(findManyArgs.where.AND).toBeUndefined();
+    });
+
+    it('should apply payable filter with eligible commissions and vendor id conditions', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ payable: true });
+
+      const findManyArgs = mockPrisma.affiliateProfile.findMany.mock.calls[0][0];
+      const countArgs = mockPrisma.affiliateProfile.count.mock.calls[0][0];
+
+      expect(findManyArgs.where.AND).toContainEqual({
+        commissions: { some: { status: 'eligible' } },
+      });
+      expect(findManyArgs.where.AND).toContainEqual({
+        OR: [
+          { contact: { hubspot_billcom_vendor_id: { not: null } } },
+          { user: { contact: { hubspot_billcom_vendor_id: { not: null } } } },
+        ],
+      });
+      expect(countArgs.where.AND).toEqual(findManyArgs.where.AND);
+    });
+
+    it('should combine payable with search without dropping either filter', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ payable: true, search: 'jane' });
+
+      const findManyArgs = mockPrisma.affiliateProfile.findMany.mock.calls[0][0];
+
+      expect(findManyArgs.where.AND).toContainEqual({
+        OR: [
+          { full_name: { contains: 'jane', mode: 'insensitive' } },
+          { user: { email: { contains: 'jane', mode: 'insensitive' } } },
+        ],
+      });
+      expect(findManyArgs.where.AND).toContainEqual({
+        commissions: { some: { status: 'eligible' } },
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -633,6 +680,23 @@ describe('AffiliatesService', () => {
       const result = await service.previewAssociation('profile-1', 'org-1');
 
       expect(result.projection.eligibility_window).toBe('eligible');
+    });
+
+    it('should report 0 projected commissions and an empty invoice list when eligibility window is expired', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        ...baseOrg,
+        deployment_date: daysAgo(400),
+      });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidInvoice({ paid_at: daysAgo(400), createdAt: daysAgo(400) }),
+        paidInvoice({ paid_at: daysAgo(390), createdAt: daysAgo(390) }),
+      ]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.eligibility_window).toBe('expired');
+      expect(result.projection.projected_commission_count).toBe(0);
+      expect(result.invoices).toEqual([]);
     });
   });
 });

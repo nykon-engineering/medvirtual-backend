@@ -551,6 +551,7 @@ export class AffiliatesService {
       status,
       banking,
       organization,
+      payable,
       sortOrder = 'desc',
     } = dto;
     const skip = (page - 1) * limit;
@@ -559,15 +560,23 @@ export class AffiliatesService {
     const where: any = {};
     if (status) where.status = status;
 
+    // Each filter below pushes an independent condition into `andConditions`
+    // rather than assigning to `where.OR` directly — banking, search, and
+    // payable all need their own OR clause, and writing them straight to
+    // `where.OR` would let the last one silently clobber the others.
+    const andConditions: any[] = [];
+
     // Banking filter: complete = affiliate has a hubspot_billcom_vendor_id on their contact
     // (either the direct AffiliateProfile.contact or their user.contact — mirrors banking_complete in findOwn).
     if (banking === 'complete') {
-      where.OR = [
-        { contact: { hubspot_billcom_vendor_id: { not: null } } },
-        { user: { contact: { hubspot_billcom_vendor_id: { not: null } } } },
-      ];
+      andConditions.push({
+        OR: [
+          { contact: { hubspot_billcom_vendor_id: { not: null } } },
+          { user: { contact: { hubspot_billcom_vendor_id: { not: null } } } },
+        ],
+      });
     } else if (banking === 'incomplete') {
-      where.AND = [
+      andConditions.push(
         {
           OR: [
             { contact: { is: null } },
@@ -581,14 +590,18 @@ export class AffiliatesService {
             { user: { contact: { hubspot_billcom_vendor_id: null } } },
           ],
         },
-      ];
+      );
     }
 
     if (search) {
-      where.OR = [
-        { full_name: { contains: search.trim(), mode: 'insensitive' } },
-        { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
-      ];
+      andConditions.push({
+        OR: [
+          { full_name: { contains: search.trim(), mode: 'insensitive' } },
+          {
+            user: { email: { contains: search.trim(), mode: 'insensitive' } },
+          },
+        ],
+      });
     }
 
     if (organization === 'with_org') {
@@ -596,6 +609,24 @@ export class AffiliatesService {
     } else if (organization === 'without_org') {
       where.user = { organization_id: null };
     }
+
+    // Payable = affiliate can have a payout request created right now: at
+    // least one eligible commission and a known Bill.com vendor id.
+    if (payable) {
+      andConditions.push(
+        { commissions: { some: { status: 'eligible' } } },
+        {
+          OR: [
+            { contact: { hubspot_billcom_vendor_id: { not: null } } },
+            {
+              user: { contact: { hubspot_billcom_vendor_id: { not: null } } },
+            },
+          ],
+        },
+      );
+    }
+
+    if (andConditions.length) where.AND = andConditions;
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.affiliateProfile.findMany({
@@ -1341,6 +1372,12 @@ export class AffiliatesService {
       commissionStatus = 'detected';
     }
 
+    // Once expired, the backfill creates zero commissions (early return before
+    // the commission-creation loop) — the preview must mirror that exactly,
+    // both in the projected count and in the invoice list shown to the admin.
+    const eligibleInvoicesForResponse =
+      eligibilityWindow === 'expired' ? [] : candidateInvoices;
+
     return {
       first_paid_invoice_at: deploymentDate?.toISOString() ?? null,
       organization: {
@@ -1352,7 +1389,7 @@ export class AffiliatesService {
         first_paid_invoice_at: org.first_paid_invoice_at?.toISOString() ?? null,
         deployment_date: org.deployment_date?.toISOString() ?? null,
       },
-      invoices: invoices.map((i) => ({
+      invoices: eligibleInvoicesForResponse.map((i) => ({
         id: i.id,
         hubspot_id: i.hubspot_id,
         invoice_amount: i.invoice_amount?.toString() ?? '0',
@@ -1368,7 +1405,7 @@ export class AffiliatesService {
           daysSince !== null ? Math.floor(daysSince) : null,
         eligibility_window: eligibilityWindow,
         commission_status: commissionStatus,
-        projected_commission_count: candidateInvoices.length,
+        projected_commission_count: eligibleInvoicesForResponse.length,
         affiliate_commission_percent:
           profile.commission_percent_default.toNumber(),
       },
