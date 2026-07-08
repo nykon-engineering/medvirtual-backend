@@ -1094,11 +1094,11 @@ export class AffiliatesService {
           },
         }),
         this.prisma.affiliatePayoutRequest.findMany({
-          where: { affiliate_id: userId, status: 'paid' },
-          orderBy: { paid_at: 'desc' },
-          take: 20,
+          where: { affiliate_id: userId },
+          orderBy: { createdAt: 'desc' },
           select: {
             id: true,
+            status: true,
             paid_amount: true,
             paid_at: true,
             payment_method: true,

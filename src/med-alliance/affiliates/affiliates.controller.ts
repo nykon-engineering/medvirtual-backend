@@ -45,6 +45,18 @@ function isBankingComplete(
   return !!billcomVendorId;
 }
 
+function mapPayoutHistory(payoutHistory: any[]) {
+  return payoutHistory.map((pr: any) => ({
+    id: pr.id,
+    payout_request_id: pr.id,
+    amount: Number(pr.paid_amount ?? pr.requested_amount ?? 0),
+    paid_at: pr.paid_at?.toISOString() ?? '',
+    payment_method: pr.payment_method ?? '',
+    transaction_reference: pr.transaction_reference ?? null,
+    status: pr.status,
+  }));
+}
+
 @ApiTags('med-alliance')
 @ApiBearerAuth()
 @Controller('med-alliance')
@@ -381,15 +393,7 @@ export class AffiliatesController {
         status: c.status,
         date: c.createdAt.toISOString(),
       })),
-      payout_history: enriched.payoutHistory.map((pr: any) => ({
-        id: pr.id,
-        payout_request_id: pr.id,
-        amount: Number(pr.paid_amount ?? pr.requested_amount ?? 0),
-        paid_at: pr.paid_at?.toISOString() ?? '',
-        payment_method: pr.payment_method ?? '',
-        transaction_reference: pr.transaction_reference ?? null,
-        status: 'paid' as const,
-      })),
+      payout_history: mapPayoutHistory(enriched.payoutHistory),
       user: {
         id: user?.id ?? null,
         first_name: user?.first_name ?? null,
@@ -570,15 +574,7 @@ export class AffiliatesController {
         status: c.status,
         date: c.createdAt.toISOString(),
       })),
-      payout_history: enriched.payoutHistory.map((pr: any) => ({
-        id: pr.id,
-        payout_request_id: pr.id,
-        amount: Number(pr.paid_amount ?? pr.requested_amount ?? 0),
-        paid_at: pr.paid_at?.toISOString() ?? '',
-        payment_method: pr.payment_method ?? '',
-        transaction_reference: pr.transaction_reference ?? null,
-        status: 'paid' as const,
-      })),
+      payout_history: mapPayoutHistory(enriched.payoutHistory),
     };
 
     return {

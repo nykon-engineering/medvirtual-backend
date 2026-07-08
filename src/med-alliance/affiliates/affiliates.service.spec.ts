@@ -28,6 +28,14 @@ const mockPrisma = {
   uSER: {
     findUnique: jest.fn(),
   },
+  affiliatePayoutRequest: {
+    aggregate: jest.fn(),
+    findMany: jest.fn(),
+  },
+  affiliateCommission: {
+    aggregate: jest.fn(),
+    groupBy: jest.fn(),
+  },
   $transaction: jest.fn(),
 };
 
@@ -269,6 +277,85 @@ describe('AffiliatesService', () => {
         where: { id: 'profile-1' },
         include: expect.any(Object),
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // findOneEnriched
+  // -------------------------------------------------------------------------
+  describe('findOneEnriched', () => {
+    const mixedStatusPayouts = [
+      { id: 'payout-21', status: 'requested', paid_amount: null, paid_at: null, payment_method: null, transaction_reference: null, requested_amount: '100.00' },
+      ...Array.from({ length: 20 }, (_, i) => ({
+        id: `payout-${i}`,
+        status: 'paid',
+        paid_amount: '50.00',
+        paid_at: new Date('2026-01-01'),
+        payment_method: 'ach',
+        transaction_reference: `ref-${i}`,
+        requested_amount: '50.00',
+      })),
+    ];
+
+    it('should return empty payout history when affiliate has no connected user', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue({
+        ...mockProfile,
+        user_id: null,
+      });
+
+      const result = await service.findOneEnriched('profile-1');
+
+      expect(result.payoutHistory).toEqual([]);
+      expect(mockPrisma.affiliatePayoutRequest.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should return the full payout history across all statuses, uncapped', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.affiliatePayoutRequest.aggregate.mockResolvedValue({
+        _sum: { requested_amount: 0 },
+      });
+      mockPrisma.affiliateCommission.aggregate.mockResolvedValue({
+        _sum: { commission_amount: 0 },
+      });
+      mockPrisma.affiliatePayoutRequest.findMany.mockResolvedValue(
+        mixedStatusPayouts,
+      );
+      mockPrisma.affiliateCommission.groupBy.mockResolvedValue([]);
+
+      const result = await service.findOneEnriched('profile-1');
+
+      // Reproduces the bug: the old query capped at 20 and filtered to
+      // status: 'paid' only, so a 21-item mixed-status list would have been
+      // truncated to 20 paid-only rows. The fix must return all 21.
+      expect(result.payoutHistory).toHaveLength(21);
+      expect(
+        result.payoutHistory.some((pr: any) => pr.status === 'requested'),
+      ).toBe(true);
+    });
+
+    it('should query payout requests without a status filter or take cap, ordered by createdAt desc', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.affiliatePayoutRequest.aggregate.mockResolvedValue({
+        _sum: { requested_amount: 0 },
+      });
+      mockPrisma.affiliateCommission.aggregate.mockResolvedValue({
+        _sum: { commission_amount: 0 },
+      });
+      mockPrisma.affiliatePayoutRequest.findMany.mockResolvedValue([]);
+      mockPrisma.affiliateCommission.groupBy.mockResolvedValue([]);
+
+      await service.findOneEnriched('profile-1');
+
+      expect(mockPrisma.affiliatePayoutRequest.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { affiliate_id: 'user-1' },
+          orderBy: { createdAt: 'desc' },
+          select: expect.objectContaining({ status: true }),
+        }),
+      );
+      const callArgs = mockPrisma.affiliatePayoutRequest.findMany.mock.calls[0][0];
+      expect(callArgs.take).toBeUndefined();
+      expect(callArgs.where.status).toBeUndefined();
     });
   });
 
