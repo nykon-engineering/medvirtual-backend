@@ -645,7 +645,17 @@ export class UserService {
           data: { user_id: null },
         });
 
-        // 8. Finally, delete the user
+        // 8. Reset affiliate profile status if this user was a connected/invited affiliate.
+        // Contact.user_id is now SET NULL on delete, so the Contact record survives —
+        // only the profile's status needs recomputing since it no longer has a user.
+        // updateMany (not update) is a no-op when no profile matches, matching the
+        // best-effort pattern used above for organizations/hire requests/tickets.
+        await tx.affiliateProfile.updateMany({
+          where: { user_id: id },
+          data: { status: 'pending' },
+        });
+
+        // 9. Finally, delete the user
         return await tx.uSER.delete({
           where: { id },
         });

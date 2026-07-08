@@ -19,13 +19,35 @@ describe('UserService', () => {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
       count: jest.fn(),
     },
     organization: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    session: {
+      deleteMany: jest.fn(),
+    },
+    emailVerification: {
+      deleteMany: jest.fn(),
     },
     emailInvitation: {
       create: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    ticketNotes: {
+      deleteMany: jest.fn(),
+    },
+    hireRequest: {
+      updateMany: jest.fn(),
+    },
+    ticket: {
+      updateMany: jest.fn(),
+    },
+    affiliateProfile: {
+      updateMany: jest.fn(),
     },
     // Resolve the array of query promises just like a real interactive transaction
     $transaction: jest.fn((operations: Promise<unknown>[]) =>
@@ -39,6 +61,7 @@ describe('UserService', () => {
 
   const hubspotServiceMock = {
     createContactInHubspot: jest.fn(),
+    deleteContactInHubspot: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -266,6 +289,110 @@ describe('UserService', () => {
       expect(findManyArgs.where.AND[1].OR[0]).toEqual({
         first_name: { contains: 'Doe', mode: 'insensitive' },
       });
+    });
+  });
+
+  describe('delete', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      // delete() uses callback-style interactive transactions
+      // (this.prisma.$transaction(async (tx) => {...})), unlike the
+      // array-style mock used elsewhere in this file. Override locally so the
+      // callback receives the prismaMock itself as the transaction client.
+      prismaMock.$transaction.mockImplementation(((
+        cb: (tx: typeof prismaMock) => unknown,
+      ) => cb(prismaMock)) as any);
+
+      prismaMock.organization.findMany.mockResolvedValue([]);
+      prismaMock.session.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.emailVerification.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.emailInvitation.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.ticketNotes.deleteMany.mockResolvedValue({ count: 0 });
+      prismaMock.organization.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.hireRequest.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.ticket.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.affiliateProfile.updateMany.mockResolvedValue({ count: 0 });
+      hubspotServiceMock.deleteContactInHubspot.mockResolvedValue(undefined);
+    });
+
+    const baseUser: any = {
+      id: 'user-1',
+      email: 'affiliate@test.com',
+      role: 'organization_admin',
+      status: 'invited',
+      hubspot_contact_id: null,
+    };
+
+    it('should reset the linked AffiliateProfile status to "pending" when deleting a user with an affiliate profile', async () => {
+      prismaMock.uSER.findUnique.mockResolvedValue(baseUser);
+      prismaMock.affiliateProfile.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.uSER.delete.mockResolvedValue(baseUser);
+
+      await service.delete('user-1', 'actor-1');
+
+      expect(prismaMock.affiliateProfile.updateMany).toHaveBeenCalledWith({
+        where: { user_id: 'user-1' },
+        data: { status: 'pending' },
+      });
+      expect(prismaMock.uSER.delete).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+      });
+    });
+
+    it('should not fail when deleting a user with no affiliate profile', async () => {
+      prismaMock.uSER.findUnique.mockResolvedValue(baseUser);
+      // updateMany with no matching profile is a no-op (count: 0)
+      prismaMock.affiliateProfile.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.uSER.delete.mockResolvedValue(baseUser);
+
+      await expect(service.delete('user-1', 'actor-1')).resolves.toEqual(
+        baseUser,
+      );
+
+      expect(prismaMock.affiliateProfile.updateMany).toHaveBeenCalledWith({
+        where: { user_id: 'user-1' },
+        data: { status: 'pending' },
+      });
+      expect(prismaMock.uSER.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw NotFoundException when the user does not exist', async () => {
+      prismaMock.uSER.findUnique.mockResolvedValue(null);
+
+      await expect(service.delete('missing', 'actor-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prismaMock.uSER.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when deleting an active super admin', async () => {
+      prismaMock.uSER.findUnique.mockResolvedValue({
+        ...baseUser,
+        role: 'system_super_admin',
+        status: 'active',
+      });
+
+      await expect(service.delete('user-1', 'actor-1')).rejects.toThrow(
+        new BadRequestException('Cannot delete Admin users for security reasons'),
+      );
+      expect(prismaMock.uSER.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when the user is the only admin/owner of an organization', async () => {
+      prismaMock.uSER.findUnique
+        .mockResolvedValueOnce(baseUser) // findById
+        .mockResolvedValue([]); // handled below via findMany
+      prismaMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Solo Org', owner_id: 'user-1' },
+      ]);
+      // No other admins in the org
+      prismaMock.uSER.findMany.mockResolvedValue([]);
+
+      await expect(service.delete('user-1', 'actor-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prismaMock.uSER.delete).not.toHaveBeenCalled();
     });
   });
 });
