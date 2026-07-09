@@ -3,7 +3,11 @@ import axios from 'axios';
 import { AffiliateCreationService } from './affiliate';
 import { PrismaService } from '../../prisma/prisma.service';
 import { HubspotAuditService } from '../hubspot-audit.service';
-import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from '@prisma/client';
+import {
+  HubspotAuditAction,
+  HubspotAuditSource,
+  HubspotEntityType,
+} from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 
 jest.mock('axios');
@@ -57,7 +61,9 @@ describe('AffiliateCreationService', () => {
   describe('execute() — success', () => {
     beforeEach(() => {
       // ensureContact POST (creates contact)
-      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-contact-111' } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { id: 'hs-contact-111' },
+      });
       prismaMock.uSER.update.mockResolvedValueOnce({});
       prismaMock.contact.updateMany.mockResolvedValueOnce({});
       // Growth Partner POST
@@ -116,7 +122,9 @@ describe('AffiliateCreationService', () => {
   describe('execute() — failure', () => {
     it('logs CREATE with success=false and throws BadRequestException on HTTP error', async () => {
       // ensureContact succeeds, Growth Partner POST fails
-      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-contact-111' } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { id: 'hs-contact-111' },
+      });
       prismaMock.uSER.update.mockResolvedValueOnce({});
       prismaMock.contact.updateMany.mockResolvedValueOnce({});
       mockedAxios.post.mockRejectedValueOnce({
@@ -124,7 +132,9 @@ describe('AffiliateCreationService', () => {
         message: 'Internal Server Error',
       });
 
-      await expect(service.execute(baseData, 'user-abc')).rejects.toThrow(BadRequestException);
+      await expect(service.execute(baseData, 'user-abc')).rejects.toThrow(
+        BadRequestException,
+      );
 
       expect(auditMock.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -139,7 +149,9 @@ describe('AffiliateCreationService', () => {
     });
 
     it('logs success=false with error.code on network error', async () => {
-      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-contact-111' } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { id: 'hs-contact-111' },
+      });
       prismaMock.uSER.update.mockResolvedValueOnce({});
       prismaMock.contact.updateMany.mockResolvedValueOnce({});
       mockedAxios.post.mockRejectedValueOnce({
@@ -147,7 +159,9 @@ describe('AffiliateCreationService', () => {
         code: 'ECONNRESET',
       });
 
-      await expect(service.execute(baseData)).rejects.toThrow(BadRequestException);
+      await expect(service.execute(baseData)).rejects.toThrow(
+        BadRequestException,
+      );
 
       expect(auditMock.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -163,7 +177,9 @@ describe('AffiliateCreationService', () => {
 
   describe('source inference', () => {
     it('uses user_action when actorUserId is provided', async () => {
-      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-contact-111' } });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { id: 'hs-contact-111' },
+      });
       prismaMock.uSER.update.mockResolvedValueOnce({});
       prismaMock.contact.updateMany.mockResolvedValueOnce({});
       mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-gp-001' } });
@@ -174,6 +190,181 @@ describe('AffiliateCreationService', () => {
       expect(auditMock.log).toHaveBeenCalledWith(
         expect.objectContaining({ source: HubspotAuditSource.user_action }),
       );
+    });
+  });
+
+  // ── ensureContact resilience ────────────────────────────────────────────────
+
+  describe('execute() — ensureContact resilience', () => {
+    const dataWithExistingId = {
+      ...baseData,
+      user: { ...baseData.user, hubspot_contact_id: 'hs-contact-stale' },
+    };
+
+    it('patches the existing contact successfully when the id is not stale', async () => {
+      mockedAxios.patch.mockResolvedValueOnce({ data: {} });
+      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-gp-776' } });
+      prismaMock.affiliateProfile.update.mockResolvedValueOnce({});
+
+      const result = await service.execute(dataWithExistingId, 'user-abc');
+
+      expect(result).toBe(true);
+      expect(mockedAxios.patch).toHaveBeenCalledTimes(1);
+      expect(mockedAxios.patch).toHaveBeenCalledWith(
+        expect.stringContaining('hs-contact-stale'),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('recovers from a stale existingContactId (404 on PATCH) by searching email and re-patching', async () => {
+      mockedAxios.patch.mockRejectedValueOnce({
+        response: { status: 404, data: {} },
+      });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { results: [{ id: 'hs-contact-found' }] },
+      });
+      mockedAxios.patch.mockResolvedValueOnce({ data: {} });
+      prismaMock.uSER.update.mockResolvedValueOnce({});
+      prismaMock.contact.updateMany.mockResolvedValueOnce({});
+      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-gp-777' } });
+      prismaMock.affiliateProfile.update.mockResolvedValueOnce({});
+
+      const result = await service.execute(dataWithExistingId, 'user-abc');
+
+      expect(result).toBe(true);
+      expect(mockedAxios.patch).toHaveBeenCalledTimes(2);
+      expect(mockedAxios.patch).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('hs-contact-found'),
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: HubspotEntityType.contact,
+          action: HubspotAuditAction.UPDATE,
+          success: true,
+          payload: expect.objectContaining({ recovery: 'stale_contact_id' }),
+        }),
+      );
+    });
+
+    it('falls through to create when stale id 404s and email search finds nothing', async () => {
+      mockedAxios.patch.mockRejectedValueOnce({
+        response: { status: 404, data: {} },
+      });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { total: 0, results: [] },
+      });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { id: 'hs-contact-new' },
+      });
+      prismaMock.uSER.update.mockResolvedValueOnce({});
+      prismaMock.contact.updateMany.mockResolvedValueOnce({});
+      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-gp-778' } });
+      prismaMock.affiliateProfile.update.mockResolvedValueOnce({});
+
+      const result = await service.execute(dataWithExistingId, 'user-abc');
+
+      expect(result).toBe(true);
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        'https://api.hubapi.com/crm/v3/objects/contacts',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('recovers from a 409 conflict on create by searching email and linking the existing contact', async () => {
+      mockedAxios.post.mockRejectedValueOnce({
+        response: {
+          status: 409,
+          data: { category: 'CONFLICT', message: 'Contact already exists' },
+        },
+      });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { results: [{ id: 'hs-contact-existing' }] },
+      });
+      mockedAxios.patch.mockResolvedValueOnce({ data: {} });
+      prismaMock.uSER.update.mockResolvedValueOnce({});
+      prismaMock.contact.updateMany.mockResolvedValueOnce({});
+      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-gp-779' } });
+      prismaMock.affiliateProfile.update.mockResolvedValueOnce({});
+
+      const result = await service.execute(baseData, 'user-abc');
+
+      expect(result).toBe(true);
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: HubspotEntityType.contact,
+          action: HubspotAuditAction.UPDATE,
+          payload: expect.objectContaining({
+            recovery: 'untracked_duplicate_conflict',
+          }),
+        }),
+      );
+    });
+
+    it('propagates a 409 conflict as-is when email search finds nothing (unrecoverable)', async () => {
+      mockedAxios.post.mockRejectedValueOnce({
+        response: {
+          status: 409,
+          data: { category: 'CONFLICT', message: 'Contact already exists' },
+        },
+      });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { total: 0, results: [] },
+      });
+
+      await expect(service.execute(baseData, 'user-abc')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('propagates a non-404 error on PATCH by existingContactId without attempting recovery', async () => {
+      mockedAxios.patch.mockRejectedValueOnce({
+        response: { status: 500, data: {} },
+        message: 'Server Error',
+      });
+
+      await expect(
+        service.execute(dataWithExistingId, 'user-abc'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockedAxios.post).not.toHaveBeenCalledWith(
+        expect.stringContaining('/search'),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('falls through to create when the stale-id email search itself throws', async () => {
+      mockedAxios.patch.mockRejectedValueOnce({
+        response: { status: 404, data: {} },
+      });
+      mockedAxios.post.mockRejectedValueOnce({ message: 'Search unavailable' });
+      mockedAxios.post.mockResolvedValueOnce({
+        data: { id: 'hs-contact-new-2' },
+      });
+      prismaMock.uSER.update.mockResolvedValueOnce({});
+      prismaMock.contact.updateMany.mockResolvedValueOnce({});
+      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-gp-780' } });
+      prismaMock.affiliateProfile.update.mockResolvedValueOnce({});
+
+      const result = await service.execute(dataWithExistingId, 'user-abc');
+
+      expect(result).toBe(true);
+    });
+
+    it('propagates a plain network error without attempting recovery', async () => {
+      mockedAxios.post.mockRejectedValueOnce({
+        message: 'Network Error',
+        code: 'ECONNRESET',
+      });
+
+      await expect(service.execute(baseData, 'user-abc')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockedAxios.patch).not.toHaveBeenCalled();
     });
   });
 });
