@@ -72,12 +72,70 @@ export class PayoutRequestsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Shared: reject creation if the affiliate has no Bill.com vendor ID.
+  // Mirrors the fallback chain used by BillComPayoutService.validateAndPreparePayment
+  // so a request can never be created if it would later fail at payment time.
+  // ---------------------------------------------------------------------------
+  private validateVendorIdForPayoutCreation(profile: {
+    contact?: { hubspot_billcom_vendor_id: string | null } | null;
+    user?: {
+      contact?: { hubspot_billcom_vendor_id: string | null } | null;
+    } | null;
+  }): void {
+    const vendorId =
+      profile.contact?.hubspot_billcom_vendor_id ??
+      profile.user?.contact?.hubspot_billcom_vendor_id ??
+      null;
+
+    if (!vendorId) {
+      throw new BadRequestException(
+        'Bill.com vendor ID is missing for this affiliate. Cannot create a payout request until a vendor ID is configured.',
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shared: validate that all requested commissions exist and are eligible.
+  // ---------------------------------------------------------------------------
+  private validateCommissionsEligible(
+    commissions: { id: string; status: string }[],
+    requestedIds: string[],
+  ): void {
+    if (commissions.length !== requestedIds.length) {
+      throw new BadRequestException(
+        'One or more commission IDs were not found',
+      );
+    }
+
+    const nonEligible = commissions.find((c) => c.status !== 'eligible');
+    if (nonEligible) {
+      throw new BadRequestException(
+        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Affiliate: submit a new payout request.
   // ---------------------------------------------------------------------------
   async create(dto: CreatePayoutRequestDto, currentUser: USER) {
-    const profile = await this.affiliatesService.requireActiveProfile(
+    const activeProfile = await this.affiliatesService.requireActiveProfile(
       currentUser.id,
     );
+
+    const profile = await this.prisma.affiliateProfile.findUniqueOrThrow({
+      where: { id: activeProfile.id },
+      select: {
+        id: true,
+        payout_preference_method: true,
+        contact: { select: { hubspot_billcom_vendor_id: true } },
+        user: {
+          select: { contact: { select: { hubspot_billcom_vendor_id: true } } },
+        },
+      },
+    });
+
+    this.validateVendorIdForPayoutCreation(profile);
 
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: dto.commission_ids } },
@@ -104,12 +162,7 @@ export class PayoutRequestsService {
       );
     }
 
-    const nonEligible = commissions.find((c) => c.status !== 'eligible');
-    if (nonEligible) {
-      throw new BadRequestException(
-        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
-      );
-    }
+    this.validateCommissionsEligible(commissions, dto.commission_ids);
 
     const requestedAmount = commissions.reduce(
       (acc, c) => acc.add(new Decimal(c.commission_amount)),
@@ -192,22 +245,28 @@ export class PayoutRequestsService {
     // 1. Resolve affiliate profile
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: dto.affiliate_profile_id },
-      select: { id: true, user_id: true, payout_preference_method: true },
+      select: {
+        id: true,
+        user_id: true,
+        payout_preference_method: true,
+        contact: { select: { hubspot_billcom_vendor_id: true } },
+        user: {
+          select: { contact: { select: { hubspot_billcom_vendor_id: true } } },
+        },
+      },
     });
     if (!profile) {
       throw new NotFoundException(
         `Affiliate profile not found: ${dto.affiliate_profile_id}`,
       );
     }
-    if (!profile.user_id) {
-      throw new BadRequestException(
-        'This affiliate has no connected user account. Invite the user first before creating a payout request.',
-      );
-    }
-    // Extract to a local const so TypeScript keeps the `string` type inside async callbacks.
-    const affiliateUserId: string = profile.user_id;
 
-    // 2. Validate commissions exist, belong to that affiliate, and are eligible
+    this.validateVendorIdForPayoutCreation(profile);
+
+    // 2. Validate commissions exist, belong to that affiliate, and are eligible.
+    // Commissions can only exist for a profile with a connected user (their
+    // affiliate_id is always the profile's user_id), so a foreign-commission
+    // mismatch here also naturally catches a profile with no connected user.
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: dto.commission_ids } },
       select: {
@@ -225,20 +284,17 @@ export class PayoutRequestsService {
     }
 
     const foreignCommission = commissions.find(
-      (c) => c.affiliate_id !== affiliateUserId,
+      (c) => c.affiliate_id !== profile.user_id,
     );
     if (foreignCommission) {
       throw new BadRequestException(
         'One or more commissions do not belong to this affiliate',
       );
     }
+    // Commission ownership matched profile.user_id, so it must be a non-null string.
+    const affiliateUserId: string = profile.user_id as string;
 
-    const nonEligible = commissions.find((c) => c.status !== 'eligible');
-    if (nonEligible) {
-      throw new BadRequestException(
-        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
-      );
-    }
+    this.validateCommissionsEligible(commissions, dto.commission_ids);
 
     // 3. Sum amounts
     const requestedAmount = commissions.reduce(
@@ -314,20 +370,27 @@ export class PayoutRequestsService {
   ): Promise<{ id: string; requested_amount: Decimal }> {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateProfileId },
-      select: { id: true, user_id: true, payout_preference_method: true },
+      select: {
+        id: true,
+        user_id: true,
+        payout_preference_method: true,
+        contact: { select: { hubspot_billcom_vendor_id: true } },
+        user: {
+          select: { contact: { select: { hubspot_billcom_vendor_id: true } } },
+        },
+      },
     });
     if (!profile) {
       throw new NotFoundException(
         `Affiliate profile not found: ${affiliateProfileId}`,
       );
     }
-    if (!profile.user_id) {
-      throw new BadRequestException(
-        'This affiliate has no connected user account and cannot receive a payout request.',
-      );
-    }
-    const affiliateUserId: string = profile.user_id;
 
+    this.validateVendorIdForPayoutCreation(profile);
+
+    // Commissions can only exist for a profile with a connected user (their
+    // affiliate_id is always the profile's user_id), so a foreign-commission
+    // mismatch here also naturally catches a profile with no connected user.
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: commissionIds } },
       select: {
@@ -345,20 +408,17 @@ export class PayoutRequestsService {
     }
 
     const foreignCommission = commissions.find(
-      (c) => c.affiliate_id !== affiliateUserId,
+      (c) => c.affiliate_id !== profile.user_id,
     );
     if (foreignCommission) {
       throw new BadRequestException(
         'One or more commissions do not belong to this affiliate',
       );
     }
+    // Commission ownership matched profile.user_id, so it must be a non-null string.
+    const affiliateUserId: string = profile.user_id as string;
 
-    const nonEligible = commissions.find((c) => c.status !== 'eligible');
-    if (nonEligible) {
-      throw new BadRequestException(
-        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
-      );
-    }
+    this.validateCommissionsEligible(commissions, commissionIds);
 
     const requestedAmount = commissions.reduce(
       (acc, c) => acc.add(new Decimal(c.commission_amount)),

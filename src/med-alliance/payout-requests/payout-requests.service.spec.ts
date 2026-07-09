@@ -33,6 +33,10 @@ const mockPrisma = {
     findUnique: jest.fn(),
     updateMany: jest.fn(),
   },
+  affiliateProfile: {
+    findUnique: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
+  },
   affiliatePayoutRequest: {
     create: jest.fn(),
     findUnique: jest.fn(),
@@ -79,6 +83,26 @@ const mockProfile = {
   payout_preference_method: 'ach',
 };
 
+// Profile shape as returned by the `affiliateProfile.findUnique`/`findUniqueOrThrow`
+// calls that back the vendor-ID check (includes contact + user.contact relations).
+const makeProfileWithVendor = (overrides: Partial<any> = {}) => ({
+  id: 'profile-1',
+  user_id: 'affiliate-1',
+  payout_preference_method: 'ach',
+  contact: { hubspot_billcom_vendor_id: 'vendor-123' },
+  user: { contact: { hubspot_billcom_vendor_id: null } },
+  ...overrides,
+});
+
+const makeProfileWithoutVendor = (overrides: Partial<any> = {}) => ({
+  id: 'profile-1',
+  user_id: 'affiliate-1',
+  payout_preference_method: 'ach',
+  contact: null,
+  user: { contact: null },
+  ...overrides,
+});
+
 const makeCommission = (overrides: Partial<any> = {}) => ({
   id: 'commission-1',
   affiliate_id: 'affiliate-1',
@@ -103,7 +127,14 @@ const makePayoutRequest = (overrides: Partial<any> = {}) => ({
   createdAt: new Date('2026-03-01'),
   updatedAt: new Date('2026-03-01'),
   commissions: [
-    { commission: { id: 'commission-1', commission_amount: '150.00', status: 'requested', organization: { id: 'org-1', name: 'Acme' } } },
+    {
+      commission: {
+        id: 'commission-1',
+        commission_amount: '150.00',
+        status: 'requested',
+        organization: { id: 'org-1', name: 'Acme' },
+      },
+    },
   ],
   ...overrides,
 });
@@ -117,10 +148,21 @@ describe('PayoutRequestsService', () => {
         PayoutRequestsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AffiliatesService, useValue: mockAffiliatesService },
-        { provide: AllianceNotificationsService, useValue: mockAllianceNotifications },
+        {
+          provide: AllianceNotificationsService,
+          useValue: mockAllianceNotifications,
+        },
         { provide: BillComPayoutService, useValue: mockBillComPayoutService },
         { provide: BillComService, useValue: mockBillComService },
-        { provide: Logger, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() } },
+        {
+          provide: Logger,
+          useValue: {
+            log: jest.fn(),
+            error: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -134,61 +176,108 @@ describe('PayoutRequestsService', () => {
   // create
   // -------------------------------------------------------------------------
   describe('create', () => {
-    const createDto = { commission_ids: ['commission-1'], payment_method: undefined } as any;
+    const createDto = {
+      commission_ids: ['commission-1'],
+      payment_method: undefined,
+    } as any;
 
     it('should throw ForbiddenException when affiliate profile is inactive or missing', async () => {
       mockAffiliatesService.requireActiveProfile.mockRejectedValue(
         new BadRequestException('Affiliate profile is inactive'),
       );
 
-      await expect(service.create(createDto, mockAffiliateUser)).rejects.toThrow();
+      await expect(
+        service.create(createDto, mockAffiliateUser),
+      ).rejects.toThrow();
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when the affiliate has no Bill.com vendor ID', async () => {
+      mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithoutVendor(),
+      );
+
+      await expect(
+        service.create(createDto, mockAffiliateUser),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Bill.com vendor ID is missing for this affiliate. Cannot create a payout request until a vendor ID is configured.',
+        ),
+      );
+      expect(mockPrisma.affiliateCommission.findMany).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when a commission ID is not found', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor(),
+      );
       // Return fewer commissions than requested (simulates missing ID)
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([]);
 
-      await expect(service.create(createDto, mockAffiliateUser)).rejects.toThrow(
+      await expect(
+        service.create(createDto, mockAffiliateUser),
+      ).rejects.toThrow(
         new BadRequestException('One or more commission IDs were not found'),
       );
     });
 
     it('should throw BadRequestException when a commission belongs to another affiliate', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor(),
+      );
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ affiliate_id: 'other-user' }),
       ]);
 
-      await expect(service.create(createDto, mockAffiliateUser)).rejects.toThrow(
-        new BadRequestException('One or more commissions do not belong to your account'),
+      await expect(
+        service.create(createDto, mockAffiliateUser),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'One or more commissions do not belong to your account',
+        ),
       );
     });
 
     it('should throw BadRequestException when a commission is not in "eligible" status', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor(),
+      );
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ status: 'detected' }),
       ]);
 
-      await expect(service.create(createDto, mockAffiliateUser)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.create(createDto, mockAffiliateUser),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should create payout request, junction records and update commissions in a transaction', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
-      mockPrisma.affiliateCommission.findMany.mockResolvedValue([makeCommission()]);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor(),
+      );
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission(),
+      ]);
 
       // $transaction receives a callback — execute it with a tx mock
       const txMock = {
-        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-1' }) },
-        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliatePayoutRequest: {
+          create: jest.fn().mockResolvedValue({ id: 'payout-1' }),
+        },
+        affiliatePayoutRequestCommission: {
+          createMany: jest.fn().mockResolvedValue({}),
+        },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makePayoutRequest());
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest(),
+      );
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
       const result = await service.create(createDto, mockAffiliateUser);
@@ -203,8 +292,12 @@ describe('PayoutRequestsService', () => {
           }),
         }),
       );
-      expect(txMock.affiliatePayoutRequestCommission.createMany).toHaveBeenCalledWith({
-        data: [{ payout_request_id: 'payout-1', commission_id: 'commission-1' }],
+      expect(
+        txMock.affiliatePayoutRequestCommission.createMany,
+      ).toHaveBeenCalledWith({
+        data: [
+          { payout_request_id: 'payout-1', commission_id: 'commission-1' },
+        ],
       });
       expect(txMock.affiliateCommission.updateMany).toHaveBeenCalledWith({
         where: { id: { in: ['commission-1'] } },
@@ -215,18 +308,27 @@ describe('PayoutRequestsService', () => {
 
     it('should calculate requested_amount as sum of commission_amounts', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor(),
+      );
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ id: 'c-1', commission_amount: '100.00' }),
         makeCommission({ id: 'c-2', commission_amount: '250.50' }),
       ]);
 
       const txMock = {
-        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-1' }) },
-        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliatePayoutRequest: {
+          create: jest.fn().mockResolvedValue({ id: 'payout-1' }),
+        },
+        affiliatePayoutRequestCommission: {
+          createMany: jest.fn().mockResolvedValue({}),
+        },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makePayoutRequest());
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest(),
+      );
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
       await service.create(
@@ -240,23 +342,34 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should use DTO payment_method when provided, otherwise fall back to profile default', async () => {
-      mockAffiliatesService.requireActiveProfile.mockResolvedValue({
-        ...mockProfile,
-        payout_preference_method: 'ach',
-      });
-      mockPrisma.affiliateCommission.findMany.mockResolvedValue([makeCommission()]);
+      mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor({ payout_preference_method: 'ach' }),
+      );
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission(),
+      ]);
 
       const txMock = {
-        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-1' }) },
-        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliatePayoutRequest: {
+          create: jest.fn().mockResolvedValue({ id: 'payout-1' }),
+        },
+        affiliatePayoutRequestCommission: {
+          createMany: jest.fn().mockResolvedValue({}),
+        },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makePayoutRequest());
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest(),
+      );
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
       // DTO overrides with 'wire'
-      await service.create({ commission_ids: ['commission-1'], payment_method: 'wire' } as any, mockAffiliateUser);
+      await service.create(
+        { commission_ids: ['commission-1'], payment_method: 'wire' } as any,
+        mockAffiliateUser,
+      );
 
       const createCall = txMock.affiliatePayoutRequest.create.mock.calls[0][0];
       expect(createCall.data.payment_method).toBe('wire');
@@ -264,15 +377,26 @@ describe('PayoutRequestsService', () => {
 
     it('should write audit log entries for payout request and each commission', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
-      mockPrisma.affiliateCommission.findMany.mockResolvedValue([makeCommission()]);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor(),
+      );
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission(),
+      ]);
 
       const txMock = {
-        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-1' }) },
-        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliatePayoutRequest: {
+          create: jest.fn().mockResolvedValue({ id: 'payout-1' }),
+        },
+        affiliatePayoutRequestCommission: {
+          createMany: jest.fn().mockResolvedValue({}),
+        },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makePayoutRequest());
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest(),
+      );
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
       await service.create(createDto, mockAffiliateUser);
@@ -341,9 +465,14 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should return the payout request when it belongs to the current affiliate', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makePayoutRequest());
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest(),
+      );
 
-      const result = await service.findOneForAffiliate('payout-1', mockAffiliateUser);
+      const result = await service.findOneForAffiliate(
+        'payout-1',
+        mockAffiliateUser,
+      );
 
       expect(result.id).toBe('payout-1');
     });
@@ -356,7 +485,12 @@ describe('PayoutRequestsService', () => {
     it('should return all payout requests without affiliate scoping', async () => {
       const requestWithDetails = {
         ...makePayoutRequest(),
-        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
         approvedBy: null,
       };
       mockPrisma.$transaction.mockResolvedValue([[requestWithDetails], 1]);
@@ -370,7 +504,9 @@ describe('PayoutRequestsService', () => {
     it('should filter by affiliate_id', async () => {
       mockPrisma.$transaction.mockResolvedValue([[], 0]);
 
-      const result = await service.findAllForAdmin({ affiliate_id: 'affiliate-99' });
+      const result = await service.findAllForAdmin({
+        affiliate_id: 'affiliate-99',
+      });
 
       expect(result.data).toHaveLength(0);
     });
@@ -391,10 +527,17 @@ describe('PayoutRequestsService', () => {
     it('should return payout request with affiliate and approvedBy details', async () => {
       const fullRequest = {
         ...makePayoutRequest({ status: 'approved', approved_by: 'admin-1' }),
-        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
         approvedBy: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
       };
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(fullRequest);
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        fullRequest,
+      );
 
       const result = await service.findOneForAdmin('payout-1');
 
@@ -430,7 +573,13 @@ describe('PayoutRequestsService', () => {
           ...makePayoutRequest(),
           commissions: [{ commission_id: 'commission-1' }],
         })
-        .mockResolvedValueOnce(makePayoutRequest({ status: 'approved', approved_amount: '150.00', approved_by: 'admin-1' }));
+        .mockResolvedValueOnce(
+          makePayoutRequest({
+            status: 'approved',
+            approved_amount: '150.00',
+            approved_by: 'admin-1',
+          }),
+        );
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
@@ -447,7 +596,10 @@ describe('PayoutRequestsService', () => {
 
       expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'approved', approved_by: 'admin-1' }),
+          data: expect.objectContaining({
+            status: 'approved',
+            approved_by: 'admin-1',
+          }),
         }),
       );
       // On approval, commissions should NOT be reverted
@@ -472,7 +624,10 @@ describe('PayoutRequestsService', () => {
 
       await service.decide(
         'payout-1',
-        { decision: 'rejected', rejection_reason: 'Insufficient documentation' },
+        {
+          decision: 'rejected',
+          rejection_reason: 'Insufficient documentation',
+        },
         mockAdminUser,
       );
 
@@ -499,7 +654,10 @@ describe('PayoutRequestsService', () => {
 
       await service.decide(
         'payout-1',
-        { decision: 'rejected', rejection_reason: 'Insufficient documentation' },
+        {
+          decision: 'rejected',
+          rejection_reason: 'Insufficient documentation',
+        },
         mockAdminUser,
       );
 
@@ -549,7 +707,10 @@ describe('PayoutRequestsService', () => {
 
     it('should throw BillComSessionRequiredException before any Bill.com/DB work when admin has no valid session', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
-        makePayoutRequest({ status: 'approved', commissions: [{ commission_id: 'c-1' }] }),
+        makePayoutRequest({
+          status: 'approved',
+          commissions: [{ commission_id: 'c-1' }],
+        }),
       );
       mockBillComService.hasValidSession.mockResolvedValue(false);
 
@@ -557,32 +718,52 @@ describe('PayoutRequestsService', () => {
         service.markPaid('payout-1', {}, mockAdminUser),
       ).rejects.toThrow(BillComSessionRequiredException);
 
-      expect(mockBillComPayoutService.validateAndPreparePayment).not.toHaveBeenCalled();
-      expect(mockBillComPayoutService.createBillAndPaymentForMarkPaid).not.toHaveBeenCalled();
+      expect(
+        mockBillComPayoutService.validateAndPreparePayment,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockBillComPayoutService.createBillAndPaymentForMarkPaid,
+      ).not.toHaveBeenCalled();
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('should not write to DB when validateAndPreparePayment throws (vendor ID missing)', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
-        makePayoutRequest({ status: 'approved', commissions: [{ commission_id: 'c-1' }] }),
+        makePayoutRequest({
+          status: 'approved',
+          commissions: [{ commission_id: 'c-1' }],
+        }),
       );
       mockBillComPayoutService.validateAndPreparePayment.mockRejectedValue(
-        new BadRequestException('Bill.com vendor ID is missing for this affiliate.'),
+        new BadRequestException(
+          'Bill.com vendor ID is missing for this affiliate.',
+        ),
       );
 
-      await expect(service.markPaid('payout-1', {}, mockAdminUser)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.markPaid('payout-1', {}, mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
 
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('should not write to DB when createBillAndPaymentForMarkPaid (Bill.com API) throws', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
-        makePayoutRequest({ status: 'approved', commissions: [{ commission_id: 'c-1' }] }),
+        makePayoutRequest({
+          status: 'approved',
+          commissions: [{ commission_id: 'c-1' }],
+        }),
       );
-      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockRejectedValue(new Error('Bill.com API error'));
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(
+        mockBillPayload,
+      );
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockRejectedValue(
+        new Error('Bill.com API error'),
+      );
 
-      await expect(service.markPaid('payout-1', {}, mockAdminUser)).rejects.toThrow();
+      await expect(
+        service.markPaid('payout-1', {}, mockAdminUser),
+      ).rejects.toThrow();
 
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     });
@@ -596,8 +777,12 @@ describe('PayoutRequestsService', () => {
         })
         .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
 
-      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(
+        mockBillPayload,
+      );
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(
+        mockBillResponse,
+      );
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
@@ -636,8 +821,12 @@ describe('PayoutRequestsService', () => {
         })
         .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
 
-      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(
+        mockBillPayload,
+      );
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(
+        mockBillResponse,
+      );
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
@@ -653,13 +842,19 @@ describe('PayoutRequestsService', () => {
 
       expect(txMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ event: 'bill_com_payment_initiated', new_status: 'processing' }),
+          data: expect.objectContaining({
+            event: 'bill_com_payment_initiated',
+            new_status: 'processing',
+          }),
         }),
       );
       expect(txMock.medAllianceAuditLog.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.arrayContaining([
-            expect.objectContaining({ entity_id: 'commission-1', new_status: 'paid' }),
+            expect.objectContaining({
+              entity_id: 'commission-1',
+              new_status: 'paid',
+            }),
           ]),
         }),
       );
@@ -673,8 +868,12 @@ describe('PayoutRequestsService', () => {
         })
         .mockResolvedValueOnce(makePayoutRequest({ status: 'processing' }));
 
-      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(mockBillPayload);
-      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(mockBillResponse);
+      mockBillComPayoutService.validateAndPreparePayment.mockResolvedValue(
+        mockBillPayload,
+      );
+      mockBillComPayoutService.createBillAndPaymentForMarkPaid.mockResolvedValue(
+        mockBillResponse,
+      );
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
@@ -712,11 +911,33 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should return audit entries ordered chronologically', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+      });
 
       const entries = [
-        { id: 'log-1', event: 'status_changed', old_status: null, new_status: 'requested', source: 'user', createdAt: new Date('2026-03-01'), actorUser: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate' } },
-        { id: 'log-2', event: 'admin_decision', old_status: 'requested', new_status: 'approved', source: 'admin_action', createdAt: new Date('2026-03-02'), actorUser: { id: 'admin-1', first_name: 'Admin', last_name: 'User' } },
+        {
+          id: 'log-1',
+          event: 'status_changed',
+          old_status: null,
+          new_status: 'requested',
+          source: 'user',
+          createdAt: new Date('2026-03-01'),
+          actorUser: {
+            id: 'affiliate-1',
+            first_name: 'Jane',
+            last_name: 'Affiliate',
+          },
+        },
+        {
+          id: 'log-2',
+          event: 'admin_decision',
+          old_status: 'requested',
+          new_status: 'approved',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-02'),
+          actorUser: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
+        },
       ];
       mockPrisma.medAllianceAuditLog.findMany.mockResolvedValue(entries);
 
@@ -734,11 +955,33 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should expose from_status/to_status aliases for the frontend timeline', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+      });
 
       const entries = [
-        { id: 'log-1', event: 'status_changed', old_status: null, new_status: 'requested', source: 'user', createdAt: new Date('2026-03-01'), actorUser: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate' } },
-        { id: 'log-2', event: 'admin_decision', old_status: 'requested', new_status: 'approved', source: 'admin_action', createdAt: new Date('2026-03-02'), actorUser: { id: 'admin-1', first_name: 'Admin', last_name: 'User' } },
+        {
+          id: 'log-1',
+          event: 'status_changed',
+          old_status: null,
+          new_status: 'requested',
+          source: 'user',
+          createdAt: new Date('2026-03-01'),
+          actorUser: {
+            id: 'affiliate-1',
+            first_name: 'Jane',
+            last_name: 'Affiliate',
+          },
+        },
+        {
+          id: 'log-2',
+          event: 'admin_decision',
+          old_status: 'requested',
+          new_status: 'approved',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-02'),
+          actorUser: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
+        },
       ];
       mockPrisma.medAllianceAuditLog.findMany.mockResolvedValue(entries);
 
@@ -760,17 +1003,75 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should upgrade generic events to descriptive, transition-specific actions', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+      });
 
       const entries = [
-        { id: 'l1', event: 'status_changed', old_status: null, new_status: 'requested', source: 'user', createdAt: new Date('2026-03-01'), actorUser: null },
-        { id: 'l2', event: 'status_changed', old_status: 'requested', new_status: 'under_review', source: 'admin_action', createdAt: new Date('2026-03-02'), actorUser: null },
-        { id: 'l3', event: 'admin_decision', old_status: 'under_review', new_status: 'approved', source: 'admin_action', createdAt: new Date('2026-03-03'), actorUser: null },
-        { id: 'l4', event: 'admin_decision', old_status: 'requested', new_status: 'rejected', source: 'admin_action', createdAt: new Date('2026-03-04'), actorUser: null },
-        { id: 'l5', event: 'status_changed', old_status: 'under_review', new_status: 'cancelled', source: 'admin_action', createdAt: new Date('2026-03-05'), actorUser: null },
-        { id: 'l6', event: 'status_changed', old_status: 'rejected', new_status: 'requested', source: 'admin_action', createdAt: new Date('2026-03-06'), actorUser: null },
+        {
+          id: 'l1',
+          event: 'status_changed',
+          old_status: null,
+          new_status: 'requested',
+          source: 'user',
+          createdAt: new Date('2026-03-01'),
+          actorUser: null,
+        },
+        {
+          id: 'l2',
+          event: 'status_changed',
+          old_status: 'requested',
+          new_status: 'under_review',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-02'),
+          actorUser: null,
+        },
+        {
+          id: 'l3',
+          event: 'admin_decision',
+          old_status: 'under_review',
+          new_status: 'approved',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-03'),
+          actorUser: null,
+        },
+        {
+          id: 'l4',
+          event: 'admin_decision',
+          old_status: 'requested',
+          new_status: 'rejected',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-04'),
+          actorUser: null,
+        },
+        {
+          id: 'l5',
+          event: 'status_changed',
+          old_status: 'under_review',
+          new_status: 'cancelled',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-05'),
+          actorUser: null,
+        },
+        {
+          id: 'l6',
+          event: 'status_changed',
+          old_status: 'rejected',
+          new_status: 'requested',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-06'),
+          actorUser: null,
+        },
         // Already-descriptive events are passed through untouched.
-        { id: 'l7', event: 'bill_com_payment_initiated', old_status: 'under_review', new_status: 'processing', source: 'admin_action', createdAt: new Date('2026-03-07'), actorUser: null },
+        {
+          id: 'l7',
+          event: 'bill_com_payment_initiated',
+          old_status: 'under_review',
+          new_status: 'processing',
+          source: 'admin_action',
+          createdAt: new Date('2026-03-07'),
+          actorUser: null,
+        },
       ];
       mockPrisma.medAllianceAuditLog.findMany.mockResolvedValue(entries);
 
@@ -802,10 +1103,18 @@ describe('PayoutRequestsService', () => {
 
     it('should return the current request without error when already cancelled (idempotent)', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique
-        .mockResolvedValueOnce({ id: 'payout-1', status: 'cancelled', commissions: [] })
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'cancelled',
+          commissions: [],
+        })
         .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
 
-      const result = await service.cancelPayoutRequest('payout-1', {}, mockAdminUser);
+      const result = await service.cancelPayoutRequest(
+        'payout-1',
+        {},
+        mockAdminUser,
+      );
 
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect((result as any).status).toBe('cancelled');
@@ -863,7 +1172,10 @@ describe('PayoutRequestsService', () => {
 
       expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'cancelled', cancelled_by: 'admin-1' }),
+          data: expect.objectContaining({
+            status: 'cancelled',
+            cancelled_by: 'admin-1',
+          }),
         }),
       );
       expect(txMock.affiliateCommission.updateMany).toHaveBeenCalledWith(
@@ -915,18 +1227,28 @@ describe('PayoutRequestsService', () => {
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
-      await service.cancelPayoutRequest('payout-1', { reason: 'Duplicate entry' }, mockAdminUser);
+      await service.cancelPayoutRequest(
+        'payout-1',
+        { reason: 'Duplicate entry' },
+        mockAdminUser,
+      );
 
       expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ cancellation_reason: 'Duplicate entry' }),
+          data: expect.objectContaining({
+            cancellation_reason: 'Duplicate entry',
+          }),
         }),
       );
     });
 
     it('should not call updateMany when there are no linked commissions', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique
-        .mockResolvedValueOnce({ id: 'payout-1', status: 'requested', commissions: [] })
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'requested',
+          commissions: [],
+        })
         .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
 
       const txMock = {
@@ -946,7 +1268,10 @@ describe('PayoutRequestsService', () => {
         .mockResolvedValueOnce({
           id: 'payout-1',
           status: 'requested',
-          commissions: [{ commission_id: 'commission-1' }, { commission_id: 'commission-2' }],
+          commissions: [
+            { commission_id: 'commission-1' },
+            { commission_id: 'commission-2' },
+          ],
         })
         .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled' }));
 
@@ -965,8 +1290,17 @@ describe('PayoutRequestsService', () => {
 
     it('should return the updated payout request with cancelled status', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique
-        .mockResolvedValueOnce({ id: 'payout-1', status: 'requested', commissions: [] })
-        .mockResolvedValueOnce(makePayoutRequest({ status: 'cancelled', cancellation_reason: 'Test' }));
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'requested',
+          commissions: [],
+        })
+        .mockResolvedValueOnce(
+          makePayoutRequest({
+            status: 'cancelled',
+            cancellation_reason: 'Test',
+          }),
+        );
 
       const txMock = {
         affiliatePayoutRequest: { update: jest.fn().mockResolvedValue({}) },
@@ -975,7 +1309,11 @@ describe('PayoutRequestsService', () => {
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
-      const result = await service.cancelPayoutRequest('payout-1', { reason: 'Test' }, mockAdminUser);
+      const result = await service.cancelPayoutRequest(
+        'payout-1',
+        { reason: 'Test' },
+        mockAdminUser,
+      );
 
       expect((result as any).status).toBe('cancelled');
       expect((result as any).id).toBe('payout-1');
@@ -1001,92 +1339,152 @@ describe('PayoutRequestsService', () => {
         findUnique: jest.fn().mockResolvedValue(null),
       };
 
-      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.createForAdmin(adminCreateDto, mockAdminUser),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException when profile has no linked user', async () => {
+    it('should throw BadRequestException when the affiliate has no Bill.com vendor ID', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: null, payout_preference_method: 'ach' }),
+        findUnique: jest.fn().mockResolvedValue(makeProfileWithoutVendor()),
       };
 
-      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
-        BadRequestException,
+      await expect(
+        service.createForAdmin(adminCreateDto, mockAdminUser),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Bill.com vendor ID is missing for this affiliate. Cannot create a payout request until a vendor ID is configured.',
+        ),
       );
+      expect(mockPrisma.affiliateCommission.findMany).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when a commission ID is not found', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+        findUnique: jest.fn().mockResolvedValue(makeProfileWithVendor()),
       };
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([]);
 
-      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
+      await expect(
+        service.createForAdmin(adminCreateDto, mockAdminUser),
+      ).rejects.toThrow(
         new BadRequestException('One or more commission IDs were not found'),
       );
     });
 
     it('should throw BadRequestException when commission belongs to a different affiliate', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+        findUnique: jest.fn().mockResolvedValue(makeProfileWithVendor()),
       };
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ affiliate_id: 'some-other-user' }),
       ]);
 
-      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
-        new BadRequestException('One or more commissions do not belong to this affiliate'),
+      await expect(
+        service.createForAdmin(adminCreateDto, mockAdminUser),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'One or more commissions do not belong to this affiliate',
+        ),
       );
     });
 
     it('should throw BadRequestException when commission is not eligible', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+        findUnique: jest.fn().mockResolvedValue(makeProfileWithVendor()),
       };
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ status: 'detected' }),
       ]);
 
-      await expect(service.createForAdmin(adminCreateDto, mockAdminUser)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.createForAdmin(adminCreateDto, mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should create payout request in transaction and return admin-shaped result', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: 'ach' }),
+        findUnique: jest.fn().mockResolvedValue(makeProfileWithVendor()),
       };
-      mockPrisma.affiliateCommission.findMany.mockResolvedValue([makeCommission()]);
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission(),
+      ]);
 
       const txMock = {
-        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-1' }) },
-        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliatePayoutRequest: {
+          create: jest.fn().mockResolvedValue({ id: 'payout-1' }),
+        },
+        affiliatePayoutRequestCommission: {
+          createMany: jest.fn().mockResolvedValue({}),
+        },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
       // findOneForAdmin calls findUnique with ADMIN_SELECT
       const adminRequest = {
         ...makePayoutRequest(),
-        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
-        affiliateProfile: { id: 'profile-1', payout_details: null, payout_preference_method: 'ach', payout_preference_reference: null, payout_preference_notes: null, createdAt: new Date() },
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
+        affiliateProfile: {
+          id: 'profile-1',
+          payout_details: null,
+          payout_preference_method: 'ach',
+          payout_preference_reference: null,
+          payout_preference_notes: null,
+          createdAt: new Date(),
+        },
         approvedBy: null,
         reviewedBy: null,
       };
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(adminRequest);
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        adminRequest,
+      );
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
-      const result = await service.createForAdmin(adminCreateDto, mockAdminUser);
+      const result = await service.createForAdmin(
+        adminCreateDto,
+        mockAdminUser,
+      );
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(txMock.affiliatePayoutRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'requested', affiliate_id: 'affiliate-1' }),
+          data: expect.objectContaining({
+            status: 'requested',
+            affiliate_id: 'affiliate-1',
+          }),
         }),
       );
       // Audit log: 1 for payout request + 1 per commission
       expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledTimes(2);
       expect(result).toBeDefined();
+    });
+
+    it('should not reject solely for having no connected user when vendor ID is present (falls through to commission ownership check instead)', async () => {
+      // The dedicated "no connected user" rejection has been removed. A profile
+      // with user_id: null and a vendor ID now proceeds past profile validation;
+      // it only fails afterwards if a requested commission doesn't match
+      // profile.user_id (commissions always carry a real USER id today).
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(makeProfileWithVendor({ user_id: null })),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({ affiliate_id: 'affiliate-1' }),
+      ]);
+
+      await expect(
+        service.createForAdmin(adminCreateDto, mockAdminUser),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'One or more commissions do not belong to this affiliate',
+        ),
+      );
     });
   });
 
@@ -1099,75 +1497,119 @@ describe('PayoutRequestsService', () => {
         findUnique: jest.fn().mockResolvedValue(null),
       };
 
-      await expect(service.createFromCron('profile-99', ['commission-1'])).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.createFromCron('profile-99', ['commission-1']),
+      ).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException when profile has no connected user', async () => {
+    it('should throw BadRequestException when the affiliate has no Bill.com vendor ID', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: null, payout_preference_method: null }),
+        findUnique: jest.fn().mockResolvedValue(makeProfileWithoutVendor()),
       };
 
-      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
-        BadRequestException,
+      await expect(
+        service.createFromCron('profile-1', ['commission-1']),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Bill.com vendor ID is missing for this affiliate. Cannot create a payout request until a vendor ID is configured.',
+        ),
       );
+      expect(mockPrisma.affiliateCommission.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should not reject solely for having no connected user when vendor ID is present (falls through to commission ownership check instead)', async () => {
+      (mockPrisma as any).affiliateProfile = {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(makeProfileWithVendor({ user_id: null })),
+      };
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({ affiliate_id: 'affiliate-1' }),
+      ]);
+
+      await expect(
+        service.createFromCron('profile-1', ['commission-1']),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException when a commission ID is not found', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(
+            makeProfileWithVendor({ payout_preference_method: null }),
+          ),
       };
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([]);
 
-      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
+      await expect(
+        service.createFromCron('profile-1', ['commission-1']),
+      ).rejects.toThrow(
         new BadRequestException('One or more commission IDs were not found'),
       );
     });
 
     it('should throw BadRequestException when commission belongs to a different affiliate', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(
+            makeProfileWithVendor({ payout_preference_method: null }),
+          ),
       };
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ affiliate_id: 'other-user' }),
       ]);
 
-      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.createFromCron('profile-1', ['commission-1']),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException when commission is not eligible', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(
+            makeProfileWithVendor({ payout_preference_method: null }),
+          ),
       };
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ status: 'pending_admin_confirmation' }),
       ]);
 
-      await expect(service.createFromCron('profile-1', ['commission-1'])).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.createFromCron('profile-1', ['commission-1']),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should create payout request and return id + requested_amount', async () => {
       (mockPrisma as any).affiliateProfile = {
-        findUnique: jest.fn().mockResolvedValue({ id: 'profile-1', user_id: 'affiliate-1', payout_preference_method: null }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(
+            makeProfileWithVendor({ payout_preference_method: null }),
+          ),
       };
       mockPrisma.affiliateCommission.findMany.mockResolvedValue([
         makeCommission({ commission_amount: '200.00' }),
       ]);
 
       const txMock = {
-        affiliatePayoutRequest: { create: jest.fn().mockResolvedValue({ id: 'payout-cron-1' }) },
-        affiliatePayoutRequestCommission: { createMany: jest.fn().mockResolvedValue({}) },
+        affiliatePayoutRequest: {
+          create: jest.fn().mockResolvedValue({ id: 'payout-cron-1' }),
+        },
+        affiliatePayoutRequestCommission: {
+          createMany: jest.fn().mockResolvedValue({}),
+        },
         affiliateCommission: { updateMany: jest.fn().mockResolvedValue({}) },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(txMock));
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
-      const result = await service.createFromCron('profile-1', ['commission-1']);
+      const result = await service.createFromCron('profile-1', [
+        'commission-1',
+      ]);
 
       expect(result.id).toBe('payout-cron-1');
       expect(result.requested_amount.toString()).toBe('200');
@@ -1230,7 +1672,12 @@ describe('PayoutRequestsService', () => {
   describe('findAllForAdmin — additional filters', () => {
     const adminRequest = () => ({
       ...makePayoutRequest(),
-      affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+      affiliate: {
+        id: 'affiliate-1',
+        first_name: 'Jane',
+        last_name: 'Affiliate',
+        email: 'jane@example.com',
+      },
       affiliateProfile: null,
       approvedBy: null,
       reviewedBy: null,
@@ -1275,12 +1722,22 @@ describe('PayoutRequestsService', () => {
     it('should post-filter by risk_flag=duplicate and update total', async () => {
       // Two rows with same affiliate_id to trigger duplicate risk
       const rows = [
-        { ...adminRequest(), affiliate_id: 'affiliate-1', createdAt: new Date('2026-03-01') },
-        { ...adminRequest(), affiliate_id: 'affiliate-1', createdAt: new Date('2026-03-02') },
+        {
+          ...adminRequest(),
+          affiliate_id: 'affiliate-1',
+          createdAt: new Date('2026-03-01'),
+        },
+        {
+          ...adminRequest(),
+          affiliate_id: 'affiliate-1',
+          createdAt: new Date('2026-03-02'),
+        },
       ];
       mockPrisma.$transaction.mockResolvedValue([rows, 2]);
 
-      const result = await service.findAllForAdmin({ risk_flag: 'duplicate' } as any);
+      const result = await service.findAllForAdmin({
+        risk_flag: 'duplicate',
+      } as any);
 
       expect(result.pagination.total).toBe(result.data.length);
     });
@@ -1292,7 +1749,9 @@ describe('PayoutRequestsService', () => {
       };
       mockPrisma.$transaction.mockResolvedValue([[row], 1]);
 
-      const result = await service.findAllForAdmin({ risk_flag: 'missing_banking' } as any);
+      const result = await service.findAllForAdmin({
+        risk_flag: 'missing_banking',
+      } as any);
 
       expect(result.pagination.total).toBe(result.data.length);
     });
@@ -1304,7 +1763,9 @@ describe('PayoutRequestsService', () => {
       };
       mockPrisma.$transaction.mockResolvedValue([[oldRow], 1]);
 
-      const result = await service.findAllForAdmin({ risk_flag: 'aging' } as any);
+      const result = await service.findAllForAdmin({
+        risk_flag: 'aging',
+      } as any);
 
       expect(result.data).toHaveLength(1);
       expect(result.data[0].is_aging).toBe(true);
@@ -1318,9 +1779,9 @@ describe('PayoutRequestsService', () => {
     it('should throw NotFoundException when payout request does not exist', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
 
-      await expect(service.startReview('payout-99', mockAdminUser)).rejects.toThrow(
-        new NotFoundException('Payout request not found'),
-      );
+      await expect(
+        service.startReview('payout-99', mockAdminUser),
+      ).rejects.toThrow(new NotFoundException('Payout request not found'));
     });
 
     it('should throw BadRequestException when status is not "requested"', async () => {
@@ -1329,9 +1790,9 @@ describe('PayoutRequestsService', () => {
         status: 'approved',
       });
 
-      await expect(service.startReview('payout-1', mockAdminUser)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.startReview('payout-1', mockAdminUser),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should update status to "under_review" and return admin-shaped result', async () => {
@@ -1339,7 +1800,12 @@ describe('PayoutRequestsService', () => {
         .mockResolvedValueOnce({ id: 'payout-1', status: 'requested' })
         .mockResolvedValueOnce({
           ...makePayoutRequest({ status: 'under_review' }),
-          affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+          affiliate: {
+            id: 'affiliate-1',
+            first_name: 'Jane',
+            last_name: 'Affiliate',
+            email: 'jane@example.com',
+          },
           affiliateProfile: null,
           approvedBy: null,
           reviewedBy: null,
@@ -1351,7 +1817,10 @@ describe('PayoutRequestsService', () => {
 
       expect(mockPrisma.affiliatePayoutRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'under_review', reviewed_by: 'admin-1' }),
+          data: expect.objectContaining({
+            status: 'under_review',
+            reviewed_by: 'admin-1',
+          }),
         }),
       );
       expect(result).toBeDefined();
@@ -1397,13 +1866,22 @@ describe('PayoutRequestsService', () => {
     it('should reopen from "under_review" to "requested" and clear reviewed fields', async () => {
       const adminRequest = {
         ...makePayoutRequest({ status: 'requested' }),
-        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
         affiliateProfile: null,
         approvedBy: null,
         reviewedBy: null,
       };
       mockPrisma.affiliatePayoutRequest.findUnique
-        .mockResolvedValueOnce({ id: 'payout-1', status: 'under_review', commissions: [] })
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'under_review',
+          commissions: [],
+        })
         .mockResolvedValueOnce(adminRequest);
 
       const txMock = {
@@ -1417,7 +1895,11 @@ describe('PayoutRequestsService', () => {
 
       expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'requested', reviewed_by: null, reviewed_at: null }),
+          data: expect.objectContaining({
+            status: 'requested',
+            reviewed_by: null,
+            reviewed_at: null,
+          }),
         }),
       );
     });
@@ -1425,13 +1907,22 @@ describe('PayoutRequestsService', () => {
     it('should reopen from "rejected" to "requested" and revert commissions', async () => {
       const adminRequest = {
         ...makePayoutRequest({ status: 'requested' }),
-        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
         affiliateProfile: null,
         approvedBy: null,
         reviewedBy: null,
       };
       mockPrisma.affiliatePayoutRequest.findUnique
-        .mockResolvedValueOnce({ id: 'payout-1', status: 'rejected', commissions: [{ commission_id: 'commission-1' }] })
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'rejected',
+          commissions: [{ commission_id: 'commission-1' }],
+        })
         .mockResolvedValueOnce(adminRequest);
 
       const txMock = {
@@ -1449,7 +1940,10 @@ describe('PayoutRequestsService', () => {
       });
       expect(txMock.affiliatePayoutRequest.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ status: 'requested', rejection_reason: null }),
+          data: expect.objectContaining({
+            status: 'requested',
+            rejection_reason: null,
+          }),
         }),
       );
     });
@@ -1457,13 +1951,22 @@ describe('PayoutRequestsService', () => {
     it('should reopen from "rejected" to "under_review"', async () => {
       const adminRequest = {
         ...makePayoutRequest({ status: 'under_review' }),
-        affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
         affiliateProfile: null,
         approvedBy: null,
         reviewedBy: null,
       };
       mockPrisma.affiliatePayoutRequest.findUnique
-        .mockResolvedValueOnce({ id: 'payout-1', status: 'rejected', commissions: [] })
+        .mockResolvedValueOnce({
+          id: 'payout-1',
+          status: 'rejected',
+          commissions: [],
+        })
         .mockResolvedValueOnce(adminRequest);
 
       const txMock = {
@@ -1487,18 +1990,23 @@ describe('PayoutRequestsService', () => {
   // addNote (lines 1015-1047)
   // -------------------------------------------------------------------------
   describe('addNote', () => {
-    const noteDto = { type: 'internal', content: 'This looks suspicious' } as any;
+    const noteDto = {
+      type: 'internal',
+      content: 'This looks suspicious',
+    } as any;
 
     it('should throw NotFoundException when payout request does not exist', async () => {
       mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(null);
 
-      await expect(service.addNote('payout-99', noteDto, mockAdminUser)).rejects.toThrow(
-        new NotFoundException('Payout request not found'),
-      );
+      await expect(
+        service.addNote('payout-99', noteDto, mockAdminUser),
+      ).rejects.toThrow(new NotFoundException('Payout request not found'));
     });
 
     it('should create and return the note with author name', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+      });
       (mockPrisma as any).payoutRequestNote = {
         create: jest.fn().mockResolvedValue({
           id: 'note-1',
@@ -1530,7 +2038,9 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should fall back to "Admin" when author is null', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+      });
       (mockPrisma as any).payoutRequestNote = {
         create: jest.fn().mockResolvedValue({
           id: 'note-1',
@@ -1564,7 +2074,9 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should return all notes with author names', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+      });
       (mockPrisma as any).payoutRequestNote = {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([
@@ -1609,7 +2121,9 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should return only user-type notes', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({ id: 'payout-1' });
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        id: 'payout-1',
+      });
       (mockPrisma as any).payoutRequestNote = {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([
@@ -1647,7 +2161,9 @@ describe('PayoutRequestsService', () => {
       };
 
       await expect(
-        service.updateNote('payout-1', 'note-99', { content: 'Updated' } as any),
+        service.updateNote('payout-1', 'note-99', {
+          content: 'Updated',
+        } as any),
       ).rejects.toThrow(new NotFoundException('Note not found'));
     });
 
@@ -1655,7 +2171,9 @@ describe('PayoutRequestsService', () => {
       (mockPrisma as any).payoutRequestNote = {
         create: jest.fn(),
         findMany: jest.fn(),
-        findFirst: jest.fn().mockResolvedValue({ id: 'note-1', payout_request_id: 'payout-1' }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'note-1', payout_request_id: 'payout-1' }),
         update: jest.fn().mockResolvedValue({
           id: 'note-1',
           type: 'internal',
@@ -1666,7 +2184,9 @@ describe('PayoutRequestsService', () => {
         delete: jest.fn(),
       };
 
-      const result = await service.updateNote('payout-1', 'note-1', { content: 'Updated content' } as any);
+      const result = await service.updateNote('payout-1', 'note-1', {
+        content: 'Updated content',
+      } as any);
 
       expect((mockPrisma as any).payoutRequestNote.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1693,7 +2213,9 @@ describe('PayoutRequestsService', () => {
         delete: jest.fn(),
       };
 
-      const result = await service.updateNote('payout-1', 'note-1', { content: 'Updated' } as any);
+      const result = await service.updateNote('payout-1', 'note-1', {
+        content: 'Updated',
+      } as any);
 
       expect(result.author).toBe('Admin');
     });
@@ -1712,25 +2234,29 @@ describe('PayoutRequestsService', () => {
         delete: jest.fn(),
       };
 
-      await expect(
-        service.deleteNote('payout-1', 'note-99'),
-      ).rejects.toThrow(new NotFoundException('Note not found'));
+      await expect(service.deleteNote('payout-1', 'note-99')).rejects.toThrow(
+        new NotFoundException('Note not found'),
+      );
     });
 
     it('should delete the note when found', async () => {
       (mockPrisma as any).payoutRequestNote = {
         create: jest.fn(),
         findMany: jest.fn(),
-        findFirst: jest.fn().mockResolvedValue({ id: 'note-1', payout_request_id: 'payout-1' }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: 'note-1', payout_request_id: 'payout-1' }),
         update: jest.fn(),
         delete: jest.fn().mockResolvedValue({}),
       };
 
       await service.deleteNote('payout-1', 'note-1');
 
-      expect((mockPrisma as any).payoutRequestNote.delete).toHaveBeenCalledWith({
-        where: { id: 'note-1' },
-      });
+      expect((mockPrisma as any).payoutRequestNote.delete).toHaveBeenCalledWith(
+        {
+          where: { id: 'note-1' },
+        },
+      );
     });
   });
 
@@ -1739,7 +2265,9 @@ describe('PayoutRequestsService', () => {
   // -------------------------------------------------------------------------
   describe('getStatusCounts', () => {
     it('should return zero counts when no payout requests exist', async () => {
-      (mockPrisma.affiliatePayoutRequest as any).groupBy = jest.fn().mockResolvedValue([]);
+      (mockPrisma.affiliatePayoutRequest as any).groupBy = jest
+        .fn()
+        .mockResolvedValue([]);
 
       const result = await service.getStatusCounts();
 
@@ -1756,12 +2284,14 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should populate counts from groupBy results', async () => {
-      (mockPrisma.affiliatePayoutRequest as any).groupBy = jest.fn().mockResolvedValue([
-        { status: 'requested', _count: { id: 5 } },
-        { status: 'under_review', _count: { id: 2 } },
-        { status: 'approved', _count: { id: 3 } },
-        { status: 'paid', _count: { id: 10 } },
-      ]);
+      (mockPrisma.affiliatePayoutRequest as any).groupBy = jest
+        .fn()
+        .mockResolvedValue([
+          { status: 'requested', _count: { id: 5 } },
+          { status: 'under_review', _count: { id: 2 } },
+          { status: 'approved', _count: { id: 3 } },
+          { status: 'paid', _count: { id: 10 } },
+        ]);
 
       const result = await service.getStatusCounts();
 
@@ -1780,7 +2310,12 @@ describe('PayoutRequestsService', () => {
   describe('mapCommissionStatus (via findOneForAdmin / findAllForAdmin)', () => {
     const makeAdminRaw = (commissionStatus: string) => ({
       ...makePayoutRequest(),
-      affiliate: { id: 'affiliate-1', first_name: 'Jane', last_name: 'Affiliate', email: 'jane@example.com' },
+      affiliate: {
+        id: 'affiliate-1',
+        first_name: 'Jane',
+        last_name: 'Affiliate',
+        email: 'jane@example.com',
+      },
       affiliateProfile: null,
       approvedBy: null,
       reviewedBy: null,
@@ -1801,15 +2336,21 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should map "paid" commission status to "approved_for_payout"', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('paid'));
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makeAdminRaw('paid'),
+      );
 
       const result = await service.findOneForAdmin('payout-1');
 
-      expect((result as any).commissions[0].decision).toBe('approved_for_payout');
+      expect((result as any).commissions[0].decision).toBe(
+        'approved_for_payout',
+      );
     });
 
     it('should map "requested" commission status to "pending_review"', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('requested'));
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makeAdminRaw('requested'),
+      );
 
       const result = await service.findOneForAdmin('payout-1');
 
@@ -1817,7 +2358,9 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should map "eligible" commission status to "pending_review"', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('eligible'));
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makeAdminRaw('eligible'),
+      );
 
       const result = await service.findOneForAdmin('payout-1');
 
@@ -1825,15 +2368,21 @@ describe('PayoutRequestsService', () => {
     });
 
     it('should map "rejected" commission status to "rejected_for_payout"', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('rejected'));
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makeAdminRaw('rejected'),
+      );
 
       const result = await service.findOneForAdmin('payout-1');
 
-      expect((result as any).commissions[0].decision).toBe('rejected_for_payout');
+      expect((result as any).commissions[0].decision).toBe(
+        'rejected_for_payout',
+      );
     });
 
     it('should map unknown commission status to "pending_review"', async () => {
-      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(makeAdminRaw('detected'));
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makeAdminRaw('detected'),
+      );
 
       const result = await service.findOneForAdmin('payout-1');
 
