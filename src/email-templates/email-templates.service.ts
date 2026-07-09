@@ -42,6 +42,18 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{quotaLimit}}': '100%',
 };
 
+// Per-variable defaults applied when a caller's runtimeValues map omits a
+// placeholder the template declares — keeps the copy readable (e.g. "Hello,
+// there!") instead of leaking the raw token when data is missing or a caller
+// used the wrong key name.
+const PLACEHOLDER_FALLBACKS: Record<string, string> = {
+  '{{firstName}}': 'there',
+  '{{userName}}': 'there',
+  '{{partnerName}}': 'there',
+  '{{companyName}}': 'your company',
+  '{{organizationName}}': 'your organization',
+};
+
 @Injectable()
 export class EmailTemplatesService {
   private readonly logger = new Logger(EmailTemplatesService.name);
@@ -490,7 +502,16 @@ export class EmailTemplatesService {
 
   applyPlaceholders(text: string, overrides?: Record<string, string>): string {
     const data = { ...SAMPLE_DATA, ...overrides };
-    return text.replace(/\{\{[^}]+\}\}/g, (match) => data[match] ?? match);
+    return text.replace(/\{\{[^}]+\}\}/g, (match) => {
+      if (data[match] !== undefined) return data[match];
+      if (PLACEHOLDER_FALLBACKS[match] !== undefined) {
+        this.logger.warn(
+          `Missing placeholder value for ${match}, using fallback`,
+        );
+        return PLACEHOLDER_FALLBACKS[match];
+      }
+      return match;
+    });
   }
 
   // Falls back to the default (null) template row when the requested business

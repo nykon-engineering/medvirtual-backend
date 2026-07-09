@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import axios from 'axios';
@@ -53,6 +54,8 @@ const USER_SELECT = {
 
 @Injectable()
 export class AffiliatesService {
+  private readonly logger = new Logger(AffiliatesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
@@ -114,13 +117,12 @@ export class AffiliatesService {
     // => Create Growth Partner in Hubspot
     try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log(
-        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
-        profile.id,
+      this.logger.log(
+        `[Hubspot] Growth Partner created in Hubspot for affiliate profile ID: ${profile.id}`,
       );
     } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
-      console.error('Failed to create Growth Partner in Hubspot:', error);
+      this.logger.error(`Failed to create Growth Partner in Hubspot: ${error}`);
       throw new BadRequestException(
         error.message ||
           'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
@@ -137,7 +139,7 @@ export class AffiliatesService {
       const tpl = await this.emailTemplates.getTemplateContent(
         'med-alliance-invitation',
         {
-          '{{partnerName}}': user.first_name,
+          '{{firstName}}': user.first_name,
           '{{companyName}}': theme?.companyName || 'MedVirtual',
         },
         theme || {
@@ -155,9 +157,8 @@ export class AffiliatesService {
         html: tpl?.html ?? fallbackHtml,
       });
     } catch (emailError) {
-      console.error(
-        'Failed to send Med Alliance invitation email:',
-        emailError,
+      this.logger.error(
+        `Failed to send Med Alliance invitation email: ${emailError}`,
       );
     }
 
@@ -218,6 +219,7 @@ export class AffiliatesService {
       {
         '{{inviteLink}}': inviteLink,
         '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+        '{{firstName}}': dto.first_name,
       },
       emailTheme || {
         primaryColor: '#01546B',
@@ -301,13 +303,12 @@ export class AffiliatesService {
     // => Create Growth Partner in Hubspot
     try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log(
-        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
-        profile.id,
+      this.logger.log(
+        `[Hubspot] Growth Partner created in Hubspot for affiliate profile ID: ${profile.id}`,
       );
     } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
-      console.error('Failed to create Growth Partner in Hubspot:', error);
+      this.logger.error(`Failed to create Growth Partner in Hubspot: ${error}`);
       throw new BadRequestException(
         error.message ||
           'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
@@ -383,6 +384,7 @@ export class AffiliatesService {
       {
         '{{inviteLink}}': inviteLink,
         '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+        '{{firstName}}': dto.first_name,
       },
       emailTheme || {
         primaryColor: '#01546B',
@@ -451,9 +453,8 @@ export class AffiliatesService {
         dto.company_name,
       )
       .catch((err) =>
-        console.error(
-          '[HubSpot] invite-user-for-affiliate background task failed:',
-          err,
+        this.logger.error(
+          `[HubSpot] invite-user-for-affiliate background task failed: ${err}`,
         ),
       );
 
@@ -489,6 +490,7 @@ export class AffiliatesService {
       {
         '{{inviteLink}}': inviteLink,
         '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+        '{{firstName}}': user.first_name,
       },
       emailTheme || {
         primaryColor: '#01546B',
@@ -895,7 +897,7 @@ export class AffiliatesService {
             `Affiliate commission percentage updated`,
           );
         } catch (err) {
-          console.error('[HubSpot] Failed to sync commission:', err);
+          this.logger.error(`[HubSpot] Failed to sync commission: ${err}`);
         }
       }
 
@@ -916,7 +918,7 @@ export class AffiliatesService {
               `Affiliate banking details updated`,
             );
           } catch (err) {
-            console.error('[HubSpot] Failed to sync banking data:', err);
+            this.logger.error(`[HubSpot] Failed to sync banking data: ${err}`);
           }
         } else if (details?.method === 'will_be_provided_later') {
           try {
@@ -927,7 +929,7 @@ export class AffiliatesService {
               `Affiliate banking details cleared`,
             );
           } catch (err) {
-            console.error('[HubSpot] Failed to clear banking data:', err);
+            this.logger.error(`[HubSpot] Failed to clear banking data: ${err}`);
           }
         }
       }
@@ -1001,9 +1003,8 @@ export class AffiliatesService {
     // => Create Growth Partner in Hubspot
     try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log(
-        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
-        profile.id,
+      this.logger.log(
+        `[Hubspot] Growth Partner created in Hubspot for affiliate profile ID: ${profile.id}`,
       );
     } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
@@ -1023,7 +1024,7 @@ export class AffiliatesService {
       const tplOrg = await this.emailTemplates.getTemplateContent(
         'med-alliance-org-invitation',
         {
-          '{{userName}}': currentUser.first_name,
+          '{{firstName}}': currentUser.first_name,
           '{{companyName}}': theme?.companyName || 'MedVirtual',
         },
         theme || {
@@ -1041,9 +1042,8 @@ export class AffiliatesService {
         html: tplOrg?.html ?? fallbackHtmlOrg,
       });
     } catch (emailError) {
-      console.error(
-        'Failed to send Med Alliance invitation email:',
-        emailError,
+      this.logger.error(
+        `Failed to send Med Alliance invitation email: ${emailError}`,
       );
     }
 
@@ -1264,9 +1264,8 @@ export class AffiliatesService {
       try {
         await this.affiliateCreationService.execute(updatedProfile);
       } catch (error) {
-        console.error(
-          '[HubSpot] Failed to recreate Growth Partner on reactivation:',
-          error,
+        this.logger.error(
+          `[HubSpot] Failed to recreate Growth Partner on reactivation: ${error}`,
         );
       }
     }
@@ -1621,7 +1620,7 @@ export class AffiliatesService {
         });
       } catch (err: any) {
         if (err?.code === 'P2002') continue;
-        console.error(
+        this.logger.error(
           `Backfill commission failed for invoice ${snapshot.id}: ${err?.message}`,
         );
       }
@@ -1662,7 +1661,7 @@ export class AffiliatesService {
             `Affiliate banking details cleared during profile reset`,
           );
         } catch (err) {
-          console.error('[HubSpot] Failed to clear banking data:', err);
+          this.logger.error(`[HubSpot] Failed to clear banking data: ${err}`);
         }
       }
     }

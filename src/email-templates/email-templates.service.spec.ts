@@ -170,6 +170,32 @@ describe('EmailTemplatesService.applyPlaceholders', () => {
     const result = service.applyPlaceholders('Hi {{userName}}', { '{{userName}}': 'Dr. House' });
     expect(result).toBe('Hi Dr. House');
   });
+
+  it('falls back to a friendly default when {{firstName}} is missing from overrides', () => {
+    const result = service.applyPlaceholders('Hello, {{firstName}}!', {
+      '{{companyName}}': 'Acme',
+    });
+    expect(result).toBe('Hello, there!');
+  });
+
+  it('logs a warning when a fallback is used', () => {
+    const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+    service.applyPlaceholders('Hello, {{firstName}}!', {});
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('{{firstName}}'),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('does not use a fallback (or warn) when the override value is provided', () => {
+    const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+    const result = service.applyPlaceholders('Hello, {{firstName}}!', {
+      '{{firstName}}': 'Jane',
+    });
+    expect(result).toBe('Hello, Jane!');
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });
 
 // ── findOne ────────────────────────────────────────────────────────────────────

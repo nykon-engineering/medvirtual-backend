@@ -220,6 +220,27 @@ describe('AffiliatesService', () => {
         }),
       );
     });
+
+    it('should request the welcome email template with {{firstName}} (not {{partnerName}}) so the greeting is never literal "Hello, {{firstName}}!"', async () => {
+      mockPrisma.uSER.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.affiliateProfile.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockProfile);
+      mockPrisma.affiliateProfile.create.mockResolvedValue(mockProfile);
+
+      const emailTemplates = (service as any).emailTemplates;
+
+      await service.create(createDto, mockAdminUser);
+
+      expect(emailTemplates.getTemplateContent).toHaveBeenCalledWith(
+        'med-alliance-invitation',
+        expect.objectContaining({ '{{firstName}}': mockUser.first_name }),
+        expect.anything(),
+      );
+      const [, runtimeValues] = (emailTemplates.getTemplateContent as jest.Mock)
+        .mock.calls[0];
+      expect(runtimeValues).not.toHaveProperty('{{partnerName}}');
+    });
   });
 
   // -------------------------------------------------------------------------
