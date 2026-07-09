@@ -51,6 +51,8 @@ import { ContactDeleteService } from './delete/contact';
 import { CompanyDeleteService } from './delete/company';
 import { HandlerContactCreation } from './handlers/contactCreation';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+import { HandlerContactDeletion } from './handlers/contactDeletion';
+import { HandlerContactMerge } from './handlers/contactMerge';
 import { HubspotAuditService } from './hubspot-audit.service';
 
 
@@ -268,6 +270,14 @@ const handlerContactPropertyChangeMock = {
   execute: jest.fn(),
 };
 
+const handlerContactDeletionMock = {
+  execute: jest.fn(),
+};
+
+const handlerContactMergeMock = {
+  execute: jest.fn(),
+};
+
 const auditServiceMock = {
   log: jest.fn(),
 };
@@ -341,6 +351,8 @@ describe('HubspotService => GetCandidates', () => {
         {provide: AffiliateUpdateService, useValue: AffiliateUpdateServiceMock},
         {provide: HandlerContactCreation, useValue: handlerContactCreationMock},
         {provide: HandlerContactPropertyChange, useValue: handlerContactPropertyChangeMock},
+        {provide: HandlerContactDeletion, useValue: handlerContactDeletionMock},
+        {provide: HandlerContactMerge, useValue: handlerContactMergeMock},
         {provide: HubspotAuditService, useValue: auditServiceMock},
       ],
     }).compile();
@@ -429,6 +441,8 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: AffiliateUpdateService, useValue: AffiliateUpdateServiceMock},
         {provide: HandlerContactCreation, useValue: handlerContactCreationMock},
         {provide: HandlerContactPropertyChange, useValue: handlerContactPropertyChangeMock},
+        {provide: HandlerContactDeletion, useValue: handlerContactDeletionMock},
+        {provide: HandlerContactMerge, useValue: handlerContactMergeMock},
         {provide: HubspotAuditService, useValue: auditServiceMock},
       ]
     }).compile();
@@ -529,6 +543,8 @@ function buildProviders(): any[] {
     { provide: AffiliateUpdateService, useValue: AffiliateUpdateServiceMock },
     { provide: HandlerContactCreation, useValue: handlerContactCreationMock },
     { provide: HandlerContactPropertyChange, useValue: handlerContactPropertyChangeMock },
+    { provide: HandlerContactDeletion, useValue: handlerContactDeletionMock },
+    { provide: HandlerContactMerge, useValue: handlerContactMergeMock },
     { provide: HubspotAuditService, useValue: auditServiceMock },
   ];
 }
@@ -797,6 +813,20 @@ describe('HubspotService => changeDataFromHubspot', () => {
     const data = [{ subscriptionType: 'contact.propertyChange', objectId: '101' }];
     await service.changeDataFromHubspot(data);
     expect(handlerContactPropertyChangeMock.execute).toHaveBeenCalledWith(data[0]);
+  });
+
+  it('should process contact.deletion', async () => {
+    handlerContactDeletionMock.execute.mockResolvedValue(undefined);
+    const data = [{ subscriptionType: 'contact.deletion', objectId: '102' }];
+    await service.changeDataFromHubspot(data);
+    expect(handlerContactDeletionMock.execute).toHaveBeenCalledWith(data[0]);
+  });
+
+  it('should process contact.merge', async () => {
+    handlerContactMergeMock.execute.mockResolvedValue(undefined);
+    const data = [{ subscriptionType: 'contact.merge', objectId: '103' }];
+    await service.changeDataFromHubspot(data);
+    expect(handlerContactMergeMock.execute).toHaveBeenCalledWith(data[0]);
   });
 
   it('should sort multiple events before processing', async () => {

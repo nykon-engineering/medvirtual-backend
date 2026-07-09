@@ -4,6 +4,7 @@ import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { CandidatesService } from '../candidate/candidates.service';
 import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { HandlerContactDeletion } from '../hubspot/handlers/contactDeletion';
 import systemReport from '../common/utils/email-templates/system-report';
 import clientUsersDeactivationReport from '../common/utils/email-templates/client-users-deactivation-report';
 import cronJobErrorReport from '../common/utils/email-templates/cron-job-error-report';
@@ -20,7 +21,7 @@ import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
-import { AffiliateStatus } from '@prisma/client';
+import { AffiliateStatus, HubspotAuditSource } from '@prisma/client';
 import {
   ReferralSyncService,
   SyncResult,
@@ -48,6 +49,7 @@ export class CronService {
     private readonly commissionDetection: CommissionDetectionService,
     private readonly allianceNotifications: AllianceNotificationsService,
     private readonly emailTemplates: EmailTemplatesService,
+    private readonly contactDeletion: HandlerContactDeletion,
   ) {}
 
   // ── EmailTemplatesService fallback helper ─────────────────────────────────
@@ -1413,6 +1415,67 @@ export class CronService {
     );
 
     return { updated, noContactInHubspot, noContactInDb, errors };
+  }
+
+  async sweepStaleContactIds(): Promise<{
+    checkedContacts: number;
+    checkedUsers: number;
+    cleared: number;
+    errors: string[];
+  }> {
+    const contacts = await this.prisma.contact.findMany({
+      where: { hubspot_id: { not: null } },
+      select: { hubspot_id: true },
+    });
+    const orphanUsers = await this.prisma.uSER.findMany({
+      where: { hubspot_contact_id: { not: null } },
+      select: { hubspot_contact_id: true },
+    });
+
+    // The same HubSpot id can live on both a Contact and a USER row — dedupe
+    // so we only hit HubSpot once per id even if the two pointers agree.
+    const idsToCheck = new Set<string>([
+      ...contacts.map((c) => c.hubspot_id as string),
+      ...orphanUsers.map((u) => u.hubspot_contact_id as string),
+    ]);
+
+    let cleared = 0;
+    const errors: string[] = [];
+
+    for (const hubspotId of idsToCheck) {
+      try {
+        await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/contacts/${hubspotId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
+        );
+        // 200 → still exists in HubSpot, nothing to do.
+      } catch (err) {
+        if (err.response?.status === 404) {
+          await this.contactDeletion.execute(
+            { objectId: hubspotId },
+            HubspotAuditSource.cron,
+          );
+          cleared++;
+        } else {
+          errors.push(`hubspot_id=${hubspotId}: ${err.message}`);
+        }
+      }
+    }
+
+    console.log(
+      `sweepStaleContactIds: checkedContacts=${contacts.length} checkedUsers=${orphanUsers.length} cleared=${cleared} errors=${errors.length}`,
+    );
+
+    return {
+      checkedContacts: contacts.length,
+      checkedUsers: orphanUsers.length,
+      cleared,
+      errors,
+    };
   }
 
   private buildHireRequestTitle(hr: {

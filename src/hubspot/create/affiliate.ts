@@ -130,9 +130,11 @@ export class AffiliateCreationService {
       data: { hubspot_contact_id: contactId },
     });
 
-    // Sync hubspot_id back to DB Contact if one was created for this user
+    // Always overwrite (not just when null) — a non-null hubspot_id here can
+    // itself be stale (contact deleted/merged in HubSpot), and leaving it in
+    // place would silently keep the drift this relink is meant to fix.
     await this.prisma.contact.updateMany({
-      where: { user_id: userId, hubspot_id: null },
+      where: { user_id: userId },
       data: { hubspot_id: contactId },
     });
   }

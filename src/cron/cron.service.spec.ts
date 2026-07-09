@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { HandlerContactDeletion } from '../hubspot/handlers/contactDeletion';
+import { HubspotAuditSource } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
@@ -20,6 +22,7 @@ describe('CronService', () => {
   let prismaServiceMock: any;
   let candidatesServiceMock: { processData: jest.Mock };
   let handlerObjectCreationMock: { execute: jest.Mock };
+  let contactDeletionMock: { execute: jest.Mock };
   let mailServiceMock: { sendMail: jest.Mock };
   let hireRequestServiceMock: Record<string, jest.Mock>;
   let positionRateConfigServiceMock: Record<string, jest.Mock>;
@@ -54,6 +57,10 @@ describe('CronService', () => {
     };
 
     handlerObjectCreationMock = {
+      execute: jest.fn(),
+    };
+
+    contactDeletionMock = {
       execute: jest.fn(),
     };
 
@@ -95,6 +102,7 @@ describe('CronService', () => {
         { provide: PrismaService, useValue: prismaServiceMock },
         { provide: CandidatesService, useValue: candidatesServiceMock },
         { provide: HandlerObjectCreation, useValue: handlerObjectCreationMock },
+        { provide: HandlerContactDeletion, useValue: contactDeletionMock },
         { provide: MailService, useValue: mailServiceMock },
         { provide: HireRequestService, useValue: hireRequestServiceMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
@@ -734,6 +742,96 @@ describe('CronService', () => {
       const result = await service.syncStaffHubspotDealStages();
 
       expect(result).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // sweepStaleContactIds
+  // ---------------------------------------------------------------------------
+  describe('sweepStaleContactIds', () => {
+    let axiosMock: jest.Mocked<typeof import('axios').default>;
+
+    beforeEach(() => {
+      prismaServiceMock.contact = {
+        findMany: jest.fn(),
+      };
+      prismaServiceMock.uSER = {
+        findMany: jest.fn(),
+      };
+      axiosMock = jest.requireMock('axios');
+      axiosMock.get = jest.fn();
+    });
+
+    it('should not clear anything when every HubSpot contact still exists', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-1' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([]);
+      axiosMock.get.mockResolvedValue({ data: {} });
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(contactDeletionMock.execute).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        checkedContacts: 1,
+        checkedUsers: 0,
+        cleared: 0,
+        errors: [],
+      });
+    });
+
+    it('should clear the stale pointer via contactDeletion when HubSpot returns 404', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-stale' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([]);
+      axiosMock.get.mockRejectedValue({ response: { status: 404 } });
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(contactDeletionMock.execute).toHaveBeenCalledWith(
+        { objectId: 'hs-stale' },
+        HubspotAuditSource.cron,
+      );
+      expect(result.cleared).toBe(1);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('should record non-404 errors and continue without clearing', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-broken' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([]);
+      axiosMock.get.mockRejectedValue(new Error('network error'));
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(contactDeletionMock.execute).not.toHaveBeenCalled();
+      expect(result.cleared).toBe(0);
+      expect(result.errors).toEqual([
+        'hubspot_id=hs-broken: network error',
+      ]);
+    });
+
+    it('should dedupe a HubSpot id shared by both a Contact and a USER row into a single check', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-shared' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([
+        { hubspot_contact_id: 'hs-shared' },
+      ]);
+      axiosMock.get.mockRejectedValue({ response: { status: 404 } });
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(axiosMock.get).toHaveBeenCalledTimes(1);
+      expect(contactDeletionMock.execute).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        checkedContacts: 1,
+        checkedUsers: 1,
+        cleared: 1,
+        errors: [],
+      });
     });
   });
 

@@ -691,6 +691,7 @@ model Contact {
   id                       String    @id @default(uuid())
   user_id                  String?    @unique
   hubspot_id               String?   @unique
+  hubspot_id_before_deletion String?
   organization_id          String?
   first_name               String?
   last_name                String?

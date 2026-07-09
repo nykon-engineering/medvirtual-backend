@@ -295,6 +295,21 @@ export class CronController {
     };
   }
 
+  @Get('sweep-stale-contact-ids')
+  @ApiOperation({
+    summary:
+      'Detect HubSpot contacts deleted/merged before webhook coverage existed and clear stale local pointers',
+  })
+  @ApiResponse({ status: 200, description: 'Stale contact id sweep completed' })
+  async sweepStaleContactIds() {
+    const result = await this.cron.sweepStaleContactIds();
+    return {
+      status: 200,
+      message: 'Stale contact id sweep completed',
+      data: result,
+    };
+  }
+
   @Get('sync-organizations-with-hubspot')
   @ApiOperation({
     summary:
