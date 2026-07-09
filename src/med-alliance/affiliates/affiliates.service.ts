@@ -1574,10 +1574,6 @@ export class AffiliatesService {
       const idempotencyKey = buildCommissionIdempotencyKey({
         affiliateId: affiliateUserId,
         hubspotInvoiceId: snapshot.hubspot_id,
-        paidAt: snapshot.paid_at,
-        baseAmount: snapshot.invoice_amount.toString(),
-        commissionPercent:
-          affiliateProfile.commission_percent_default.toString(),
       });
 
       try {
