@@ -865,7 +865,8 @@ model AffiliateCommission {
   // Scoped listing: all commissions for a given organization filtered by status
   @@index([organization_id, status], map: "idx_affiliate_commissions_org_status")
   @@index([status], map: "idx_affiliate_commissions_status")
-  @@index([hubspot_invoice_snapshot_id], map: "idx_affiliate_commissions_invoice_snapshot")
+  // Enforces one commission per invoice snapshot — closes the gap left by the hash-based idempotency_key
+  @@unique([hubspot_invoice_snapshot_id], map: "uq_affiliate_commissions_invoice_snapshot")
 }
 
 // AffiliatePayoutRequest
