@@ -402,6 +402,27 @@ describe('ReferredCompaniesService', () => {
       expect(result).not.toHaveProperty('hubspot_sync_status');
       expect(result).not.toHaveProperty('hubspot_sync_error');
     });
+
+    it('should select invoice_number alongside hubspot_id on the commission snapshot', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
+        referred_by_affiliate_id: 'user-1',
+      });
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(scopedOrg);
+
+      await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      const scopedCallArgs = mockPrisma.organization.findUnique.mock.calls[1][0];
+      expect(
+        scopedCallArgs.select.affiliateCommissions.select.hubspotInvoiceSnapshot
+          .select,
+      ).toEqual(
+        expect.objectContaining({
+          hubspot_id: true,
+          invoice_number: true,
+        }),
+      );
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -500,6 +521,23 @@ describe('ReferredCompaniesService', () => {
       expect(result).toHaveProperty('admin');
       expect(result).toHaveProperty('users');
       expect(result).toHaveProperty('referredByAffiliate');
+    });
+
+    it('should select invoice_number alongside hubspot_id on the commission snapshot', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(mockOrg);
+
+      await service.findOneForAdmin('org-1');
+
+      const callArgs = mockPrisma.organization.findUnique.mock.calls[0][0];
+      expect(
+        callArgs.select.affiliateCommissions.select.hubspotInvoiceSnapshot
+          .select,
+      ).toEqual(
+        expect.objectContaining({
+          hubspot_id: true,
+          invoice_number: true,
+        }),
+      );
     });
   });
 

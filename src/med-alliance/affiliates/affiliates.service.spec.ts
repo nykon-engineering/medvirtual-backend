@@ -31,10 +31,12 @@ const mockPrisma = {
   affiliatePayoutRequest: {
     aggregate: jest.fn(),
     findMany: jest.fn(),
+    findFirst: jest.fn(),
   },
   affiliateCommission: {
     aggregate: jest.fn(),
     groupBy: jest.fn(),
+    findMany: jest.fn(),
   },
   organization: {
     findUnique: jest.fn(),
@@ -425,6 +427,87 @@ describe('AffiliatesService', () => {
       const callArgs = mockPrisma.affiliatePayoutRequest.findMany.mock.calls[0][0];
       expect(callArgs.take).toBeUndefined();
       expect(callArgs.where.status).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getMyStats
+  // -------------------------------------------------------------------------
+  describe('getMyStats', () => {
+    beforeEach(() => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateCommission.aggregate.mockResolvedValue({
+        _sum: { commission_amount: '0' },
+      });
+      mockPrisma.affiliatePayoutRequest.aggregate.mockResolvedValue({
+        _sum: { requested_amount: '0' },
+      });
+      mockPrisma.affiliatePayoutRequest.findFirst.mockResolvedValue(null);
+    });
+
+    it('should join the hubspot invoice snapshot and expose invoice_number/invoice_hubspot_id', async () => {
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        {
+          id: 'commission-1',
+          organization_id: 'org-1',
+          organization: { id: 'org-1', name: 'Acme Health' },
+          hubspot_invoice_snapshot_id: 'snapshot-uuid-1',
+          hubspotInvoiceSnapshot: {
+            hubspot_id: '545991805202',
+            invoice_number: 'INV-1234',
+          },
+          base_amount_snapshot: '1000.00',
+          commission_percent_snapshot: '10.00',
+          commission_amount: '100.00',
+          status: 'eligible',
+          createdAt: new Date('2026-01-01'),
+        },
+      ]);
+
+      const result = await service.getMyStats(mockUser as any);
+
+      const findManyArgs = mockPrisma.affiliateCommission.findMany.mock.calls[0][0];
+      expect(findManyArgs.include).toEqual(
+        expect.objectContaining({
+          hubspotInvoiceSnapshot: {
+            select: { hubspot_id: true, invoice_number: true },
+          },
+        }),
+      );
+
+      expect(result.recent_commissions[0]).toEqual(
+        expect.objectContaining({
+          invoice_number: 'INV-1234',
+          invoice_hubspot_id: '545991805202',
+        }),
+      );
+      expect(result.recent_commissions[0]).not.toHaveProperty('invoice_id');
+    });
+
+    it('should return null invoice fields when no snapshot is joined', async () => {
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        {
+          id: 'commission-2',
+          organization_id: 'org-1',
+          organization: { id: 'org-1', name: 'Acme Health' },
+          hubspot_invoice_snapshot_id: 'snapshot-uuid-2',
+          hubspotInvoiceSnapshot: null,
+          base_amount_snapshot: '500.00',
+          commission_percent_snapshot: '10.00',
+          commission_amount: '50.00',
+          status: 'eligible',
+          createdAt: new Date('2026-01-02'),
+        },
+      ]);
+
+      const result = await service.getMyStats(mockUser as any);
+
+      expect(result.recent_commissions[0]).toEqual(
+        expect.objectContaining({
+          invoice_number: null,
+          invoice_hubspot_id: null,
+        }),
+      );
     });
   });
 

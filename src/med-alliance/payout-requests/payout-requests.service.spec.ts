@@ -476,6 +476,43 @@ describe('PayoutRequestsService', () => {
 
       expect(result.id).toBe('payout-1');
     });
+
+    it('should pass through the widened hubspotInvoiceSnapshot fields untouched', async () => {
+      const snapshot = {
+        id: 'snap-1',
+        invoice_amount: '150.00',
+        invoice_status: 'paid',
+        invoice_number: 'INV-001',
+        hubspot_id: 'hs-123',
+        currency: 'USD',
+        paid_at: new Date('2026-03-05'),
+        hubspot_pdf_link: 'https://hubspot.example.com/invoice.pdf',
+      };
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest({
+          commissions: [
+            {
+              commission: {
+                id: 'commission-1',
+                commission_amount: '150.00',
+                status: 'requested',
+                organization: { id: 'org-1', name: 'Acme' },
+                hubspotInvoiceSnapshot: snapshot,
+              },
+            },
+          ],
+        }),
+      );
+
+      const result = await service.findOneForAffiliate(
+        'payout-1',
+        mockAffiliateUser,
+      );
+
+      expect(
+        (result as any).commissions[0].commission.hubspotInvoiceSnapshot,
+      ).toEqual(snapshot);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -542,6 +579,92 @@ describe('PayoutRequestsService', () => {
       const result = await service.findOneForAdmin('payout-1');
 
       expect((result as any).approvedBy.id).toBe('admin-1');
+    });
+
+    it('should flatten the widened hubspotInvoiceSnapshot fields with the invoice_ prefix', async () => {
+      const fullRequest = {
+        ...makePayoutRequest({ status: 'approved', approved_by: 'admin-1' }),
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
+        approvedBy: { id: 'admin-1', first_name: 'Admin', last_name: 'User' },
+        commissions: [
+          {
+            commission: {
+              id: 'commission-1',
+              commission_amount: '150.00',
+              base_amount_snapshot: '1000.00',
+              commission_percent_snapshot: '15',
+              status: 'requested',
+              admin_decision_reason: null,
+              organization: { id: 'org-1', name: 'Acme' },
+              createdAt: new Date('2026-03-01'),
+              hubspotInvoiceSnapshot: {
+                id: 'snap-1',
+                invoice_amount: '150.00',
+                invoice_status: 'paid',
+                invoice_number: 'INV-001',
+                hubspot_id: 'hs-123',
+                currency: 'USD',
+                paid_at: new Date('2026-03-05'),
+                hubspot_pdf_link: 'https://hubspot.example.com/invoice.pdf',
+              },
+            },
+          },
+        ],
+      };
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        fullRequest,
+      );
+
+      const result = await service.findOneForAdmin('payout-1');
+      const commission = (result as any).commissions[0];
+
+      expect(commission.invoice_hubspot_id).toBe('hs-123');
+      expect(commission.invoice_currency).toBe('USD');
+      expect(commission.invoice_paid_at).toEqual(new Date('2026-03-05'));
+      expect(commission.invoice_pdf_link).toBe(
+        'https://hubspot.example.com/invoice.pdf',
+      );
+    });
+
+    it('should default the widened invoice fields to null when hubspotInvoiceSnapshot is null', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        ...makePayoutRequest(),
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
+        approvedBy: null,
+        commissions: [
+          {
+            commission: {
+              id: 'commission-1',
+              commission_amount: '150.00',
+              base_amount_snapshot: '1000.00',
+              commission_percent_snapshot: '15',
+              status: 'requested',
+              admin_decision_reason: null,
+              organization: { id: 'org-1', name: 'Acme' },
+              createdAt: new Date('2026-03-01'),
+              hubspotInvoiceSnapshot: null,
+            },
+          },
+        ],
+      });
+
+      const result = await service.findOneForAdmin('payout-1');
+      const commission = (result as any).commissions[0];
+
+      expect(commission.invoice_hubspot_id).toBeNull();
+      expect(commission.invoice_currency).toBeNull();
+      expect(commission.invoice_paid_at).toBeNull();
+      expect(commission.invoice_pdf_link).toBeNull();
     });
   });
 
@@ -2387,6 +2510,62 @@ describe('PayoutRequestsService', () => {
       const result = await service.findOneForAdmin('payout-1');
 
       expect((result as any).commissions[0].decision).toBe('pending_review');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Regression: commission `created_at` must be selected and mapped through
+  // -------------------------------------------------------------------------
+  describe('commission created_at (findOneForAdmin)', () => {
+    it('should select createdAt on the nested commission so it can be mapped', async () => {
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue(
+        makePayoutRequest(),
+      );
+
+      await service.findOneForAdmin('payout-1');
+
+      const callArgs =
+        mockPrisma.affiliatePayoutRequest.findUnique.mock.calls[0][0];
+      expect(
+        callArgs.select.commissions.select.commission.select.createdAt,
+      ).toBe(true);
+    });
+
+    it('should map the commission createdAt into created_at on the response', async () => {
+      const commissionCreatedAt = new Date('2026-03-01');
+      mockPrisma.affiliatePayoutRequest.findUnique.mockResolvedValue({
+        ...makePayoutRequest(),
+        affiliate: {
+          id: 'affiliate-1',
+          first_name: 'Jane',
+          last_name: 'Affiliate',
+          email: 'jane@example.com',
+        },
+        affiliateProfile: null,
+        approvedBy: null,
+        reviewedBy: null,
+        commissions: [
+          {
+            commission: {
+              id: 'c-1',
+              commission_amount: '150.00',
+              base_amount_snapshot: '1000.00',
+              commission_percent_snapshot: '15',
+              status: 'eligible',
+              admin_decision_reason: null,
+              organization: { id: 'org-1', name: 'Acme' },
+              hubspotInvoiceSnapshot: null,
+              createdAt: commissionCreatedAt,
+            },
+          },
+        ],
+      });
+
+      const result = await service.findOneForAdmin('payout-1');
+
+      expect((result as any).commissions[0].created_at).toBe(
+        commissionCreatedAt,
+      );
     });
   });
 });

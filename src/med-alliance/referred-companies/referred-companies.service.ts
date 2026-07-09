@@ -536,6 +536,7 @@ export class ReferredCompaniesService {
             hubspotInvoiceSnapshot: {
               select: {
                 hubspot_id: true,
+                invoice_number: true,
                 invoice_amount: true,
                 invoice_status: true,
                 paid_at: true,
@@ -750,6 +751,7 @@ export class ReferredCompaniesService {
             hubspotInvoiceSnapshot: {
               select: {
                 hubspot_id: true,
+                invoice_number: true,
                 invoice_amount: true,
                 invoice_status: true,
                 paid_at: true,

@@ -36,6 +36,7 @@ export const PAYOUT_REQUEST_SELECT = {
           commission_percent_snapshot: true,
           status: true,
           admin_decision_reason: true,
+          createdAt: true,
           organization: { select: { id: true, name: true } },
           hubspotInvoiceSnapshot: {
             select: {
@@ -43,6 +44,10 @@ export const PAYOUT_REQUEST_SELECT = {
               invoice_amount: true,
               invoice_status: true,
               invoice_number: true,
+              hubspot_id: true,
+              currency: true,
+              paid_at: true,
+              hubspot_pdf_link: true,
             },
           },
         },
@@ -168,6 +173,12 @@ export function shapeAdminRequest(raw: any, allRequestedIds?: Set<string>) {
       ),
       invoice_number:
         c.commission.hubspotInvoiceSnapshot?.invoice_number ?? null,
+      invoice_hubspot_id:
+        c.commission.hubspotInvoiceSnapshot?.hubspot_id ?? null,
+      invoice_currency: c.commission.hubspotInvoiceSnapshot?.currency ?? null,
+      invoice_paid_at: c.commission.hubspotInvoiceSnapshot?.paid_at ?? null,
+      invoice_pdf_link:
+        c.commission.hubspotInvoiceSnapshot?.hubspot_pdf_link ?? null,
       created_at: c.commission.createdAt ?? null,
     })),
     requested_amount: parseFloat(raw.requested_amount ?? '0'),

@@ -762,7 +762,12 @@ export class AffiliatesService {
           },
           orderBy: { createdAt: 'desc' },
           take: 5,
-          include: { organization: { select: { id: true, name: true } } },
+          include: {
+            organization: { select: { id: true, name: true } },
+            hubspotInvoiceSnapshot: {
+              select: { hubspot_id: true, invoice_number: true },
+            },
+          },
         }),
       ]);
 
@@ -780,7 +785,8 @@ export class AffiliatesService {
         id: c.id,
         organization_id: c.organization_id,
         organization_name: c.organization?.name ?? '',
-        invoice_id: c.hubspot_invoice_snapshot_id,
+        invoice_number: c.hubspotInvoiceSnapshot?.invoice_number ?? null,
+        invoice_hubspot_id: c.hubspotInvoiceSnapshot?.hubspot_id ?? null,
         base_amount: Number(c.base_amount_snapshot),
         commission_percentage: Number(c.commission_percent_snapshot),
         commission_amount: Number(c.commission_amount),
