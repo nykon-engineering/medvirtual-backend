@@ -98,7 +98,16 @@ const OFFER_PANEL_INCLUDE = {
     select: { id: true, first_name: true, last_name: true, email: true },
   },
   recipientCompany: {
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      name: true,
+      business_unit: true,
+      organization_role: true,
+      status: true,
+      admin: {
+        select: { id: true, first_name: true, last_name: true },
+      },
+    },
   },
   candidates: {
     select: {
@@ -143,6 +152,23 @@ export class OfferPanelsService {
         company_name: panel.recipient_org_name ?? null,
         name: panel.recipient_name,
         email: panel.recipient_email,
+        organization: panel.recipientCompany
+          ? {
+              id: panel.recipientCompany.id,
+              name: panel.recipientCompany.name,
+              business_unit: panel.recipientCompany.business_unit ?? null,
+              organization_role:
+                panel.recipientCompany.organization_role ?? null,
+              status: panel.recipientCompany.status ?? null,
+              admin: panel.recipientCompany.admin
+                ? {
+                    id: panel.recipientCompany.admin.id,
+                    first_name: panel.recipientCompany.admin.first_name,
+                    last_name: panel.recipientCompany.admin.last_name,
+                  }
+                : null,
+            }
+          : null,
       },
     };
   }

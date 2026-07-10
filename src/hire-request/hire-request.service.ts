@@ -923,7 +923,13 @@ export class HireRequestService {
       },
       include: {
         skills: true,
-        organization: true,
+        organization: {
+          include: {
+            admin: {
+              select: { id: true, first_name: true, last_name: true },
+            },
+          },
+        },
         createdBy: {
           select: {
             id: true,

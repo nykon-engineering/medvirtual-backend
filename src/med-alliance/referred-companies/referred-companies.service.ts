@@ -708,6 +708,11 @@ export class ReferredCompaniesService {
         email: true,
         phone: true,
         business_unit: true,
+        organization_role: true,
+        status: true,
+        admin: {
+          select: { id: true, first_name: true, last_name: true },
+        },
         industry: true,
         location: true,
         address: true,

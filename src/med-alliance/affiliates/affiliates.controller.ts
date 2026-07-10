@@ -171,6 +171,22 @@ export class AffiliatesController {
         banking_complete: isBankingComplete(vendorId),
         linked_company: user?.organization?.name ?? null,
         linked_company_id: user?.organization?.id ?? null,
+        organization: user?.organization
+          ? {
+              id: user.organization.id,
+              name: user.organization.name,
+              business_unit: user.organization.business_unit ?? null,
+              organization_role: user.organization.organization_role ?? null,
+              status: user.organization.status ?? null,
+              admin: user.organization.admin
+                ? {
+                    id: user.organization.admin.id,
+                    first_name: user.organization.admin.first_name,
+                    last_name: user.organization.admin.last_name,
+                  }
+                : null,
+            }
+          : null,
         referred_companies_count: user?._count?.referredOrganizations ?? 0,
         pending_payout_amount: 0,
         lifetime_commissions: 0,
@@ -365,6 +381,22 @@ export class AffiliatesController {
       banking_complete: isBankingComplete(vendorId),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
+      organization: user?.organization
+        ? {
+            id: user.organization.id,
+            name: user.organization.name,
+            business_unit: user.organization.business_unit ?? null,
+            organization_role: user.organization.organization_role ?? null,
+            status: user.organization.status ?? null,
+            admin: user.organization.admin
+              ? {
+                  id: user.organization.admin.id,
+                  first_name: user.organization.admin.first_name,
+                  last_name: user.organization.admin.last_name,
+                }
+              : null,
+          }
+        : null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
       pending_payout_amount: Number(
         enriched.pendingAgg._sum.requested_amount ?? 0,
@@ -549,6 +581,22 @@ export class AffiliatesController {
       banking_complete: isBankingComplete(vendorId),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
+      organization: user?.organization
+        ? {
+            id: user.organization.id,
+            name: user.organization.name,
+            business_unit: user.organization.business_unit ?? null,
+            organization_role: user.organization.organization_role ?? null,
+            status: user.organization.status ?? null,
+            admin: user.organization.admin
+              ? {
+                  id: user.organization.admin.id,
+                  first_name: user.organization.admin.first_name,
+                  last_name: user.organization.admin.last_name,
+                }
+              : null,
+          }
+        : null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
       pending_payout_amount: Number(
         enriched.pendingAgg._sum.requested_amount ?? 0,

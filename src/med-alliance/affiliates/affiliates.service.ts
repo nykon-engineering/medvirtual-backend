@@ -643,7 +643,18 @@ export class AffiliatesService {
           user: {
             select: {
               ...USER_SELECT,
-              organization: { select: { id: true, name: true } },
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  business_unit: true,
+                  organization_role: true,
+                  status: true,
+                  admin: {
+                    select: { id: true, first_name: true, last_name: true },
+                  },
+                },
+              },
               _count: { select: { referredOrganizations: true } },
               contact: {
                 select: {
@@ -835,6 +846,11 @@ export class AffiliatesService {
                 name: true,
                 business_unit: true,
                 hubspot_id: true,
+                organization_role: true,
+                status: true,
+                admin: {
+                  select: { id: true, first_name: true, last_name: true },
+                },
               },
             },
           },
