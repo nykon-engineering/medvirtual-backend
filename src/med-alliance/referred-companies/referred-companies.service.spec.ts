@@ -181,6 +181,7 @@ describe('ReferredCompaniesService', () => {
       mockOrganizationService.create.mockResolvedValue(mockOrg);
       mockOrganizationService.getById.mockResolvedValue(mockOrgWithEligibility);
       mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.update.mockResolvedValue({});
       mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
       mockPrisma.organization.findUnique.mockResolvedValue(mockOrgWithEligibility);
 
@@ -200,6 +201,39 @@ describe('ReferredCompaniesService', () => {
       );
       // final result includes eligibility fields
       expect(result).toEqual(mockOrgWithEligibility);
+    });
+
+    it('should write an immutable referral_submission_snapshot from the submitted DTO', async () => {
+      mockAffiliatesService.requireActiveProfile.mockResolvedValue({ id: 'profile-1', status: 'active' });
+      mockOrganizationService.create.mockResolvedValue(mockOrg);
+      mockOrganizationService.getById.mockResolvedValue(mockOrgWithEligibility);
+      mockEligibilityCheckService.runAndPersist.mockResolvedValue(undefined);
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.organization.findFirst.mockResolvedValue(null); // no soft duplicate
+      mockPrisma.organization.findUnique.mockResolvedValue(mockOrgWithEligibility);
+
+      await service.create(
+        { ...createDto, phone: '+1-555-0000', refer_to_user_id: 'refer-user-1' },
+        mockCurrentUser,
+      );
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith({
+        where: { id: mockOrg.id },
+        data: {
+          referral_submission_snapshot: expect.objectContaining({
+            name: 'Acme Corp',
+            industry: 'Healthcare',
+            website_url: 'https://acme.com',
+            location: 'New York',
+            phone: '+1-555-0000',
+            contact_first_name: 'John',
+            contact_last_name: 'Doe',
+            contact_email: 'contato@org1.com',
+            refer_to_user_id: 'refer-user-1',
+            submitted_at: expect.any(String),
+          }),
+        },
+      });
     });
 
     it('should return org with not_eligible when check blocks the referral', async () => {
@@ -538,6 +572,79 @@ describe('ReferredCompaniesService', () => {
           invoice_number: true,
         }),
       );
+    });
+
+    it('should select contact_email so the admin sheet is never missing it', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(mockOrg);
+
+      await service.findOneForAdmin('org-1');
+
+      const callArgs = mockPrisma.organization.findUnique.mock.calls[0][0];
+      expect(callArgs.select.contact_email).toBe(true);
+    });
+
+    it('should return referral_submission from the stored snapshot when present', async () => {
+      const snapshot = {
+        name: 'Acme Corp',
+        industry: 'Healthcare',
+        website_url: 'https://acme.com',
+        location: 'New York',
+        phone: '+1-555-0000',
+        contact_first_name: 'John',
+        contact_last_name: 'Doe',
+        contact_email: 'john.doe@acme.com',
+        refer_to_user_id: 'refer-user-1',
+        submitted_at: '2026-01-01T00:00:00.000Z',
+      };
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        ...mockOrg,
+        referral_submission_snapshot: snapshot,
+      });
+
+      const result = await service.findOneForAdmin('org-1');
+
+      expect((result as any).referral_submission).toEqual(snapshot);
+      expect((result as any).referral_submission_snapshot).toBeUndefined();
+    });
+
+    it('should return referral_submission as null for legacy companies with no snapshot', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        ...mockOrg,
+        referral_submission_snapshot: null,
+      });
+
+      const result = await service.findOneForAdmin('org-1');
+
+      expect((result as any).referral_submission).toBeNull();
+    });
+
+    it('should keep referral_submission unchanged when live org fields have drifted from HubSpot sync', async () => {
+      const snapshot = {
+        name: 'Acme Corp (as submitted)',
+        industry: 'Healthcare',
+        website_url: 'https://acme.com',
+        location: 'New York',
+        phone: '+1-555-0000',
+        contact_first_name: 'John',
+        contact_last_name: 'Doe',
+        contact_email: 'john.doe@acme.com',
+        refer_to_user_id: null,
+        submitted_at: '2026-01-01T00:00:00.000Z',
+      };
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        ...mockOrg,
+        name: 'Acme Corp (renamed via HubSpot sync)',
+        industry: 'Medical Devices',
+        phone: '+1-555-9999',
+        referral_submission_snapshot: snapshot,
+      });
+
+      const result = await service.findOneForAdmin('org-1');
+
+      expect((result as any).name).toBe('Acme Corp (renamed via HubSpot sync)');
+      expect((result as any).industry).toBe('Medical Devices');
+      expect((result as any).phone).toBe('+1-555-9999');
+      expect((result as any).referral_submission).toEqual(snapshot);
     });
   });
 

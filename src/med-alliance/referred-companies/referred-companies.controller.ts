@@ -228,7 +228,12 @@ export class ReferredCompaniesController {
   @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
   @ApiResponse({
     status: 200,
-    description: 'Referred company retrieved successfully',
+    description:
+      'Referred company retrieved successfully. Includes referral_submission — an ' +
+      'immutable snapshot (ReferralSubmissionSnapshotDto) of the referral form exactly ' +
+      'as the affiliate submitted it, or null for referrals created before this field ' +
+      'existed. Live organization fields (name, industry, website_url, location, phone) ' +
+      'may differ from the snapshot if HubSpot sync has since updated them.',
   })
   @ApiResponse({ status: 404, description: 'Referred company not found' })
   @ApiResponse({

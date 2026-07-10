@@ -171,6 +171,12 @@ model Organization {
   contact_last_name            String?
   contact_email                String?
 
+  // Immutable snapshot of the referral submission form, captured once at creation time.
+  // Never mutated afterward — protects against HubSpot sync silently overwriting
+  // name/industry/location/phone/website_url on the live row. Null for organizations
+  // created before this field existed.
+  referral_submission_snapshot Json?
+
   // User ID of the affiliate who referred this organization into the Med Alliance program
   referred_by_affiliate_id     String?
 

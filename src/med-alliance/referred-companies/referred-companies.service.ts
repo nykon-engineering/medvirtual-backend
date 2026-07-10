@@ -137,6 +137,27 @@ export class ReferredCompaniesService {
           );
       });
 
+      // Capture an immutable snapshot of exactly what the affiliate submitted, before
+      // any HubSpot sync (Step 4) can overwrite name/industry/location/phone/website_url.
+      const referredCompanyDto = dto as CreateReferredCompanyDto;
+      await this.prisma.organization.update({
+        where: { id: org.id },
+        data: {
+          referral_submission_snapshot: {
+            name: referredCompanyDto.name,
+            industry: referredCompanyDto.industry ?? null,
+            website_url: referredCompanyDto.website_url ?? null,
+            location: referredCompanyDto.location ?? null,
+            phone: referredCompanyDto.phone ?? null,
+            contact_first_name: referredCompanyDto.contact_first_name,
+            contact_last_name: referredCompanyDto.contact_last_name,
+            contact_email: referredCompanyDto.contact_email,
+            refer_to_user_id: referredCompanyDto.refer_to_user_id ?? null,
+            submitted_at: new Date().toISOString(),
+          },
+        },
+      });
+
       // Step 2: MA-004 — block if this company is already an active client.
       await this.eligibilityCheck.runAndPersist(org.id, currentUser.id, 'user');
 
@@ -696,6 +717,8 @@ export class ReferredCompaniesService {
         description: true,
         contact_first_name: true,
         contact_last_name: true,
+        contact_email: true,
+        referral_submission_snapshot: true,
         // MA status
         med_alliance_referral_status: true,
         eligibility_start_at: true,
@@ -789,7 +812,7 @@ export class ReferredCompaniesService {
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
-    const { eligibility_start_at, ...rest } = org;
+    const { eligibility_start_at, referral_submission_snapshot, ...rest } = org;
     return {
       ...rest,
       eligibility_start_at,
@@ -797,6 +820,7 @@ export class ReferredCompaniesService {
         org.med_alliance_referral_status,
         eligibility_start_at,
       ),
+      referral_submission: referral_submission_snapshot ?? null,
     };
   }
 
