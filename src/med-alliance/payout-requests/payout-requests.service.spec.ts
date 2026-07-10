@@ -1842,6 +1842,56 @@ describe('PayoutRequestsService', () => {
       expect(result.data).toHaveLength(1);
     });
 
+    it('should build a where.OR combining affiliate match and included commission id / invoice number match', async () => {
+      mockPrisma.$transaction.mockResolvedValue([[adminRequest()], 1]);
+
+      await service.findAllForAdmin({ search: 'INV-1234' });
+
+      const { where } = mockPrisma.affiliatePayoutRequest.findMany.mock.calls[0][0];
+      expect(where.OR).toEqual(
+        expect.arrayContaining([
+          {
+            affiliate: {
+              OR: [
+                { first_name: { contains: 'INV-1234', mode: 'insensitive' } },
+                { last_name: { contains: 'INV-1234', mode: 'insensitive' } },
+                { email: { contains: 'INV-1234', mode: 'insensitive' } },
+              ],
+            },
+          },
+          {
+            commissions: {
+              some: {
+                commission: {
+                  OR: [
+                    { id: { contains: 'INV-1234', mode: 'insensitive' } },
+                    {
+                      hubspotInvoiceSnapshot: {
+                        OR: [
+                          {
+                            invoice_number: {
+                              contains: 'INV-1234',
+                              mode: 'insensitive',
+                            },
+                          },
+                          {
+                            hubspot_id: {
+                              contains: 'INV-1234',
+                              mode: 'insensitive',
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+      );
+    });
+
     it('should post-filter by risk_flag=duplicate and update total', async () => {
       // Two rows with same affiliate_id to trigger duplicate risk
       const rows = [

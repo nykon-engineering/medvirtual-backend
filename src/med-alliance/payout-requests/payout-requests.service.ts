@@ -577,15 +577,45 @@ export class PayoutRequestsService {
       if (amount_max !== undefined)
         where.requested_amount.lte = new Decimal(amount_max);
     }
-    // B6: full-text search on affiliate name / email
+    // B6: full-text search on affiliate name/email, or by an included commission's id / invoice number
     if (search) {
-      where.affiliate = {
-        OR: [
-          { first_name: { contains: search, mode: 'insensitive' } },
-          { last_name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      };
+      where.OR = [
+        {
+          affiliate: {
+            OR: [
+              { first_name: { contains: search, mode: 'insensitive' } },
+              { last_name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        },
+        {
+          commissions: {
+            some: {
+              commission: {
+                OR: [
+                  { id: { contains: search, mode: 'insensitive' } },
+                  {
+                    hubspotInvoiceSnapshot: {
+                      OR: [
+                        {
+                          invoice_number: {
+                            contains: search,
+                            mode: 'insensitive',
+                          },
+                        },
+                        {
+                          hubspot_id: { contains: search, mode: 'insensitive' },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ];
     }
 
     const [rows, total] = await this.prisma.$transaction([

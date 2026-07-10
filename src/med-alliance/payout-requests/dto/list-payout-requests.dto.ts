@@ -61,10 +61,11 @@ export class ListPayoutRequestsDto {
   @IsUUID()
   affiliate_id?: string;
 
-  // B6: full-text search on affiliate name / email
+  // B6: full-text search on affiliate name/email, or included commission id / invoice number
   @ApiPropertyOptional({
-    description: 'Search by affiliate name or email',
-    example: 'Jane',
+    description:
+      'Search by affiliate name/email, or by an included commission id or invoice number (e.g. INV-1234)',
+    example: 'INV-1234',
   })
   @IsOptional()
   @IsString()
