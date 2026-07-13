@@ -784,6 +784,17 @@ describe('EmailTemplatesService.preview', () => {
       'background-color:#112233;color:#F0F0F0;',
     );
   });
+
+  it('renders a .cta-button:hover rule using the branding secondary_color', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toContain('class="cta-button"');
+    expect(result.data.html).toContain(
+      `.cta-button:hover {\n      background-color: ${BRANDING.secondary_color};`,
+    );
+  });
 });
 
 // ── layout presets ──────────────────────────────────────────────────────────────

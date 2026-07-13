@@ -644,7 +644,7 @@ export class EmailTemplatesService {
     const buttonHtml =
       filledButtonLabel && filledButtonUrl
         ? `<div style="text-align:left;margin:30px 0;">
-        <a href="${filledButtonUrl}" style="display:inline-block;background-color:${buttonBackgroundColor};color:${buttonTextColor};padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
+        <a href="${filledButtonUrl}" class="cta-button" style="display:inline-block;background-color:${buttonBackgroundColor};color:${buttonTextColor};padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
           ${filledButtonLabel}
         </a>
        </div>`
@@ -680,6 +680,23 @@ export class EmailTemplatesService {
     .body-text { color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px; }
     .footer { border-top: 1px solid #e9ecef; padding: 20px 30px; margin-top: 30px; }
     .footer p { color: #666666; font-size: 13px; margin: 0; }
+    .cta-button {
+      display: inline-block;
+      background-color: ${buttonBackgroundColor};
+      color: ${buttonTextColor} !important;
+      padding: 14px 28px;
+      text-decoration: none;
+      border-radius: 30px;
+      font-weight: 600;
+      font-size: 16px;
+      transition: background-color 0.2s ease;
+    }
+    .cta-button:hover {
+      background-color: ${branding.primaryColorHover};
+      color: ${buttonTextColor} !important;
+    }
+    .cta-button:visited { color: ${buttonTextColor} !important; }
+    .cta-button:link { color: ${buttonTextColor} !important; }
   </style>
 </head>
 <body>
