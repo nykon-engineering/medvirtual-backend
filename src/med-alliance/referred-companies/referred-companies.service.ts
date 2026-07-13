@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   MedAllianceReferralStatus,
   OrganizationStatus,
+  ReferralStage,
   USER,
 } from '@prisma/client';
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
@@ -16,7 +17,10 @@ import {
   BlockEligibilityDto,
   CommissionsAction,
 } from './dto/block-eligibility.dto';
-import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
+import {
+  AFFILIATE_VISIBLE_STATUSES,
+  ONE_YEAR_MS,
+} from '../../common/constant/commissions';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
@@ -822,6 +826,35 @@ export class ReferredCompaniesService {
     }
   }
 
+  /**
+   * Guards the stage transitions that involve the "canceled" stage.
+   *
+   * Leaving "canceled" must land on a stage consistent with the anchor date, so a
+   * previously-stored eligibility status can never silently revive:
+   *   - with an anchor date (deployment_date, or eligibility_start_at fallback), the
+   *     only valid destination is "deployed";
+   *   - without any anchor date, "deployed" is impossible (you cannot claim deployed
+   *     with no deployment date) — any other stage is fine.
+   * Entering "canceled" is always allowed here (status is reconciled by the caller).
+   */
+  private assertCancelTransitionAllowed(
+    fromStage: ReferralStage,
+    toStage: ReferralStage,
+    hasAnchorDate: boolean,
+  ): void {
+    if (fromStage !== 'canceled') return;
+    if (hasAnchorDate && toStage !== 'deployed') {
+      throw new BadRequestException(
+        'A canceled company with a prior deployment date can only be moved back to "deployed"',
+      );
+    }
+    if (!hasAnchorDate && toStage === 'deployed') {
+      throw new BadRequestException(
+        'Cannot move to "deployed" without a deployment date — set a deployment date first',
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Admin: confirm eligibility for a company that is pending or blocked (not_eligible).
   // Only executable once the company's deployment_date is set and in the past.
@@ -978,9 +1011,10 @@ export class ReferredCompaniesService {
 
   // ---------------------------------------------------------------------------
   // Admin: update the pipeline stage for a referred company.
-  // Note: this does not touch med_alliance_referral_status. If an admin manually moves the
-  // stage to 'deployed' without a real deployment_date, approveEligibility's own guard
-  // (deployment_date must be set and in the past) still protects against premature confirmation.
+  // Moving into "canceled" forces med_alliance_referral_status to not_eligible (without
+  // voiding commissions); moving out of "canceled" re-derives the status from the anchor
+  // date (expired if >1y old, else pending_confirmation) so a stale eligible can never
+  // silently revive. assertCancelTransitionAllowed enforces the valid destinations.
   // ---------------------------------------------------------------------------
   async updateReferralStage(
     id: string,
@@ -995,6 +1029,7 @@ export class ReferredCompaniesService {
         referral_stage: true,
         eligibility_start_at: true,
         deployment_date: true,
+        med_alliance_referral_status: true,
         referred_by_affiliate_id: true,
         referredByAffiliate: { select: { email: true, first_name: true } },
       },
@@ -1003,7 +1038,37 @@ export class ReferredCompaniesService {
     if (!org.referred_by_affiliate_id)
       throw new BadRequestException('Not a referred company');
 
+    const hasAnchorDate = !!(org.deployment_date ?? org.eligibility_start_at);
+    this.assertCancelTransitionAllowed(
+      org.referral_stage ?? 'referred',
+      dto.stage,
+      hasAnchorDate,
+    );
+
     const dataUpdate: Record<string, unknown> = { referral_stage: dto.stage };
+
+    // Reconcile med_alliance_referral_status with the stage change so a stored
+    // eligibility status can never survive a round-trip through "canceled".
+    let statusChangeMetadata: Record<string, unknown> | undefined;
+
+    if (dto.stage === 'canceled' && org.referral_stage !== 'canceled') {
+      dataUpdate.med_alliance_referral_status = 'not_eligible';
+      statusChangeMetadata = {
+        old_referral_status: org.med_alliance_referral_status,
+        new_referral_status: 'not_eligible',
+      };
+    } else if (org.referral_stage === 'canceled' && dto.stage !== 'canceled') {
+      const anchorDate = org.deployment_date ?? org.eligibility_start_at;
+      const newStatus =
+        anchorDate && Date.now() - anchorDate.getTime() > ONE_YEAR_MS
+          ? 'expired'
+          : 'pending_confirmation';
+      dataUpdate.med_alliance_referral_status = newStatus;
+      statusChangeMetadata = {
+        old_referral_status: org.med_alliance_referral_status,
+        new_referral_status: newStatus,
+      };
+    }
 
     // Use deployment_date as the anchor so eligibility_start_at reflects the actual deploy,
     // not the moment of this manual stage update.
@@ -1016,6 +1081,17 @@ export class ReferredCompaniesService {
       data: dataUpdate as any,
     });
 
+    const auditMetadata: Record<string, unknown> = {
+      ...(dataUpdate.eligibility_start_at
+        ? {
+            eligibility_start_at: (
+              dataUpdate.eligibility_start_at as Date
+            ).toISOString(),
+          }
+        : {}),
+      ...(statusChangeMetadata ?? {}),
+    };
+
     await this.prisma.medAllianceAuditLog.create({
       data: {
         entity_type: 'referred_company',
@@ -1026,13 +1102,10 @@ export class ReferredCompaniesService {
         reason: dto.reason ?? null,
         source: 'admin_action',
         actor_user_id: adminUser.id,
-        metadata: dataUpdate.eligibility_start_at
-          ? ({
-              eligibility_start_at: (
-                dataUpdate.eligibility_start_at as Date
-              ).toISOString(),
-            } as any)
-          : undefined,
+        metadata:
+          Object.keys(auditMetadata).length > 0
+            ? (auditMetadata as any)
+            : undefined,
       },
     });
 

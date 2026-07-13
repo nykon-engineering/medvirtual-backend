@@ -788,6 +788,8 @@ describe('ReferredCompaniesService', () => {
           id: 'org-1',
           referral_stage: 'referred',
           eligibility_start_at: null,
+          deployment_date: null,
+          med_alliance_referral_status: 'pending_confirmation',
           referred_by_affiliate_id: 'user-1',
         })
         .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'contacted' }));
@@ -829,6 +831,7 @@ describe('ReferredCompaniesService', () => {
           referral_stage: 'contract_signed',
           eligibility_start_at: null,
           deployment_date: deploymentDate,
+          med_alliance_referral_status: 'pending_confirmation',
           referred_by_affiliate_id: 'user-1',
         })
         .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'deployed' }));
@@ -860,6 +863,7 @@ describe('ReferredCompaniesService', () => {
           referral_stage: 'contract_signed',
           eligibility_start_at: null,
           deployment_date: null,
+          med_alliance_referral_status: 'pending_confirmation',
           referred_by_affiliate_id: 'user-1',
         })
         .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'deployed' }));
@@ -888,6 +892,8 @@ describe('ReferredCompaniesService', () => {
           id: 'org-1',
           referral_stage: 'contract_signed',
           eligibility_start_at: existingStart, // already running
+          deployment_date: null,
+          med_alliance_referral_status: 'pending_confirmation',
           referred_by_affiliate_id: 'user-1',
         })
         .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'deployed' }));
@@ -911,6 +917,8 @@ describe('ReferredCompaniesService', () => {
           id: 'org-1',
           referral_stage: 'referred',
           eligibility_start_at: null,
+          deployment_date: null,
+          med_alliance_referral_status: 'pending_confirmation',
           referred_by_affiliate_id: 'user-1',
         })
         .mockResolvedValueOnce(makeFullOrg({ referral_stage: 'contacted' }));
@@ -926,6 +934,304 @@ describe('ReferredCompaniesService', () => {
       expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ reason: 'Reached out via email' }),
+        }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // updateReferralStage canceled transition guard matrix
+  //
+  // Reconciles med_alliance_referral_status with the stage change when a company
+  // moves into or out of the "canceled" stage. See referred-companies.service.ts
+  // assertCancelTransitionAllowed + the status-change block in updateReferralStage.
+  // -------------------------------------------------------------------------
+  describe('updateReferralStage canceled transition guard matrix', () => {
+    const mockAdminUser = {
+      id: 'admin-1',
+      first_name: 'Admin',
+      last_name: 'User',
+      role: 'system_admin',
+    } as any;
+
+    const makeFullOrg = (overrides: Partial<any> = {}) => ({
+      ...mockOrg,
+      referral_stage: 'referred',
+      eligibility_start_at: null,
+      med_alliance_block_reason: null,
+      hubspot_id: null,
+      hubspot_sync_status: null,
+      hubspot_sync_error: null,
+      hubspot_synced_at: null,
+      first_paid_invoice_at: null,
+      referredByAffiliate: null,
+      referToUser: null,
+      users: [],
+      affiliateCommissions: [],
+      hubspotInvoiceSnapshots: [],
+      adminReviewCases: [],
+      ...overrides,
+    });
+
+    const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+
+    // mockReset drains any queued mockResolvedValueOnce values so a test that
+    // rejects before consuming the reload mock cannot leak into the next test
+    // (afterEach's clearAllMocks does not drain the once-queue).
+    beforeEach(() => {
+      mockPrisma.organization.findUnique.mockReset();
+      mockPrisma.organization.update.mockReset();
+      mockPrisma.affiliateCommission.findMany.mockReset();
+      mockPrisma.affiliateCommission.update.mockReset();
+      mockPrisma.medAllianceAuditLog.create.mockReset();
+    });
+
+    // Drain any queued mockResolvedValueOnce left by a rejecting test so it cannot
+    // leak into sibling describe blocks that rely on clearAllMocks (which does not
+    // reset the once-queue).
+    afterEach(() => {
+      mockPrisma.organization.findUnique.mockReset();
+    });
+
+    const setup = (firstOrg: Partial<any>) => {
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referred_by_affiliate_id: 'user-1',
+          referredByAffiliate: null,
+          eligibility_start_at: null,
+          deployment_date: null,
+          referral_stage: 'referred',
+          med_alliance_referral_status: 'pending_confirmation',
+          ...firstOrg,
+        })
+        .mockResolvedValueOnce(makeFullOrg({ referral_stage: firstOrg.referral_stage }));
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+    };
+
+    // 1 — into canceled from contract_signed → not_eligible, commissions untouched.
+    it('into canceled: sets not_eligible and NEVER voids commissions', async () => {
+      setup({
+        referral_stage: 'contract_signed',
+        med_alliance_referral_status: 'pending_confirmation',
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'canceled' as any },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            referral_stage: 'canceled',
+            med_alliance_referral_status: 'not_eligible',
+          }),
+        }),
+      );
+      // Key regression guard vs blockEligibility: no commission voiding here.
+      expect(mockPrisma.affiliateCommission.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.affiliateCommission.update).not.toHaveBeenCalled();
+    });
+
+    // 2 — into canceled while eligible → the stale eligible must flip to not_eligible.
+    it('into canceled: flips a stale eligible to not_eligible (core bug scenario)', async () => {
+      setup({
+        referral_stage: 'deployed',
+        med_alliance_referral_status: 'eligible',
+        deployment_date: daysAgo(30),
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'canceled' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData.med_alliance_referral_status).toBe('not_eligible');
+    });
+
+    // 3 — out of canceled, deployment_date 30 days ago, → deployed → pending_confirmation.
+    it('out of canceled → deployed with recent deployment_date: pending_confirmation', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: daysAgo(30),
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'deployed' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData.med_alliance_referral_status).toBe('pending_confirmation');
+    });
+
+    // 4 — out of canceled, deployment_date 400 days ago, → deployed → expired.
+    it('out of canceled → deployed with stale deployment_date (>365d): expired', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: daysAgo(400),
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'deployed' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData.med_alliance_referral_status).toBe('expired');
+    });
+
+    // 5 — out of canceled with anchor, target !== deployed → rejected, no update.
+    it('out of canceled with anchor → non-deployed target: rejected, no update', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: daysAgo(30),
+      });
+
+      await expect(
+        service.updateReferralStage(
+          'org-1',
+          { stage: 'contacted' as any },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'A canceled company with a prior deployment date can only be moved back to "deployed"',
+        ),
+      );
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    // 6 — out of canceled via eligibility_start_at fallback anchor (400d) → deployed → expired.
+    it('out of canceled → deployed via eligibility_start_at fallback anchor (>365d): expired', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: null,
+        eligibility_start_at: daysAgo(400),
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'deployed' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData.med_alliance_referral_status).toBe('expired');
+    });
+
+    // 7 — out of canceled with no anchor, target deployed → rejected.
+    it('out of canceled with no anchor → deployed: rejected', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: null,
+        eligibility_start_at: null,
+      });
+
+      await expect(
+        service.updateReferralStage(
+          'org-1',
+          { stage: 'deployed' as any },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Cannot move to "deployed" without a deployment date — set a deployment date first',
+        ),
+      );
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    // 8 — out of canceled with no anchor, target contacted → pending_confirmation.
+    it('out of canceled with no anchor → contacted: pending_confirmation', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: null,
+        eligibility_start_at: null,
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'contacted' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData.med_alliance_referral_status).toBe('pending_confirmation');
+    });
+
+    // 9 — out of canceled with no anchor, target in_negotiation → also allowed.
+    it('out of canceled with no anchor → in_negotiation: pending_confirmation', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: null,
+        eligibility_start_at: null,
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'in_negotiation' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData.med_alliance_referral_status).toBe('pending_confirmation');
+    });
+
+    // 10 — transition not involving canceled → status field must NOT be present.
+    it('referred → contacted (no canceled involved): does not touch med_alliance_referral_status', async () => {
+      setup({
+        referral_stage: 'referred',
+        med_alliance_referral_status: 'pending_confirmation',
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'contacted' as any },
+        mockAdminUser,
+      );
+
+      const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+      expect(updateData).not.toHaveProperty('med_alliance_referral_status');
+    });
+
+    // 11 — audit metadata captures the status change and keeps event='stage_changed'.
+    it('out of canceled → deployed: audit log captures status change metadata', async () => {
+      setup({
+        referral_stage: 'canceled',
+        med_alliance_referral_status: 'not_eligible',
+        deployment_date: daysAgo(400),
+      });
+
+      await service.updateReferralStage(
+        'org-1',
+        { stage: 'deployed' as any },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            event: 'stage_changed',
+            metadata: expect.objectContaining({
+              old_referral_status: 'not_eligible',
+              new_referral_status: 'expired',
+            }),
+          }),
         }),
       );
     });

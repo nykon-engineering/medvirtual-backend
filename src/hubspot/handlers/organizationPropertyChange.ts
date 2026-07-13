@@ -114,6 +114,7 @@ export class HandlerOrganizationPropertyChange {
     let priorDeploymentDate: Date | null = null;
     let referredByAffiliateId: string | null = null;
     let priorStatus: string | null = null;
+    let priorStage: string | null = null;
     if (fieldUpdated === 'deployment_date') {
       const fullOrg = await this.prisma.organization.findUnique({
         where: { id: organization.id },
@@ -121,11 +122,13 @@ export class HandlerOrganizationPropertyChange {
           referred_by_affiliate_id: true,
           deployment_date: true,
           med_alliance_referral_status: true,
+          referral_stage: true,
         },
       });
       priorDeploymentDate = fullOrg?.deployment_date ?? null;
       referredByAffiliateId = fullOrg?.referred_by_affiliate_id ?? null;
       priorStatus = fullOrg?.med_alliance_referral_status ?? null;
+      priorStage = fullOrg?.referral_stage ?? null;
     }
 
     if (event.propertyName !== 'hubspot_owner_id') {
@@ -175,7 +178,10 @@ export class HandlerOrganizationPropertyChange {
             reason: 'deployment_date removed in HubSpot — reopened for review',
             source: 'sync',
             actor_user_id: null,
-            metadata: { referral_stage: 'in_negotiation' } as any,
+            metadata: {
+              referral_stage: 'in_negotiation',
+              prior_stage: priorStage,
+            } as any,
           },
         });
       } else {
@@ -203,10 +209,16 @@ export class HandlerOrganizationPropertyChange {
               old_status: priorStatus,
               new_status: 'expired',
               reason:
-                'deployment_date synced from HubSpot — already more than 365 days in the past',
+                'deployment_date synced from HubSpot — already more than 365 days in the past' +
+                (priorStage === 'canceled'
+                  ? ' — company re-opened from canceled'
+                  : ''),
               source: 'sync',
               actor_user_id: null,
-              metadata: { deployment_date: deployDate.toISOString() } as any,
+              metadata: {
+                deployment_date: deployDate.toISOString(),
+                prior_stage: priorStage,
+              } as any,
             },
           });
         } else {
@@ -230,10 +242,16 @@ export class HandlerOrganizationPropertyChange {
               old_status: priorStatus,
               new_status: 'pending_confirmation',
               reason:
-                'deployment_date synced from HubSpot deploy_date_of_first_va',
+                'deployment_date synced from HubSpot deploy_date_of_first_va' +
+                (priorStage === 'canceled'
+                  ? ' — company re-opened from canceled'
+                  : ''),
               source: 'sync',
               actor_user_id: null,
-              metadata: { deployment_date: deployDate.toISOString() } as any,
+              metadata: {
+                deployment_date: deployDate.toISOString(),
+                prior_stage: priorStage,
+              } as any,
             },
           });
         }
