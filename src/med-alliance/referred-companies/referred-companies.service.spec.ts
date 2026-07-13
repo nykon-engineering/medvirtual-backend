@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReferredCompaniesService } from './referred-companies.service';
+import { CommissionsAction } from './dto/block-eligibility.dto';
 
 jest.mock('axios');
 import { EligibilityCheckService } from './eligibility-check.service';
@@ -220,6 +221,7 @@ describe('ReferredCompaniesService', () => {
       expect(mockPrisma.organization.update).toHaveBeenCalledWith({
         where: { id: mockOrg.id },
         data: {
+          med_alliance_referral_status: 'pending_confirmation',
           referral_submission_snapshot: expect.objectContaining({
             name: 'Acme Corp',
             industry: 'Healthcare',
@@ -649,9 +651,11 @@ describe('ReferredCompaniesService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // computeEffectiveStatus — 30-day gate (tested via findOneForAffiliate)
+  // Raw status passthrough — computeEffectiveStatus was removed; findOneForAffiliate
+  // must now return the stored med_alliance_referral_status verbatim, with no
+  // read-time downgrade based on eligibility_start_at age.
   // -------------------------------------------------------------------------
-  describe('computeEffectiveStatus — 30-day gate', () => {
+  describe('findOneForAffiliate — raw status passthrough', () => {
     const makeOrgWithStatus = (
       stored: string,
       eligibilityStartAt: Date | null,
@@ -671,31 +675,7 @@ describe('ReferredCompaniesService', () => {
       });
     });
 
-    it('should return "eligible" when stored=eligible and eligibility_start_at is in the past (< 30 days)', async () => {
-      // eligibility_start_at is already deployDate+30d, so even 10 days ago means
-      // the company has been past the stabilization window — status must be eligible.
-      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-      mockPrisma.organization.findUnique.mockResolvedValueOnce(
-        makeOrgWithStatus('eligible', tenDaysAgo),
-      );
-
-      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
-
-      expect((result as any).med_alliance_referral_status).toBe('eligible');
-    });
-
-    it('should return "eligible" when stored=eligible and deployed > 30 days and < 1 year ago', async () => {
-      const fortyDaysAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-      mockPrisma.organization.findUnique.mockResolvedValueOnce(
-        makeOrgWithStatus('eligible', fortyDaysAgo),
-      );
-
-      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
-
-      expect((result as any).med_alliance_referral_status).toBe('eligible');
-    });
-
-    it('should return "not_eligible" when stored=eligible but deployed > 1 year ago', async () => {
+    it('should return "eligible" verbatim regardless of eligibility_start_at age', async () => {
       const twoYearsAgo = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000);
       mockPrisma.organization.findUnique.mockResolvedValueOnce(
         makeOrgWithStatus('eligible', twoYearsAgo),
@@ -703,17 +683,17 @@ describe('ReferredCompaniesService', () => {
 
       const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
 
-      expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+      expect((result as any).med_alliance_referral_status).toBe('eligible');
     });
 
-    it('should return "not_eligible" when stored=eligible but eligibility_start_at is null', async () => {
+    it('should return "eligible" verbatim even when eligibility_start_at is null', async () => {
       mockPrisma.organization.findUnique.mockResolvedValueOnce(
         makeOrgWithStatus('eligible', null),
       );
 
       const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
 
-      expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+      expect((result as any).med_alliance_referral_status).toBe('eligible');
     });
 
     it('should pass through "not_eligible" unchanged', async () => {
@@ -725,6 +705,29 @@ describe('ReferredCompaniesService', () => {
       const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
 
       expect((result as any).med_alliance_referral_status).toBe('not_eligible');
+    });
+
+    it('should pass through "expired" unchanged', async () => {
+      const twoYearsAgo = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgWithStatus('expired', twoYearsAgo),
+      );
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect((result as any).med_alliance_referral_status).toBe('expired');
+    });
+
+    it('should pass through "pending_confirmation" unchanged', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgWithStatus('pending_confirmation', null),
+      );
+
+      const result = await service.findOneForAffiliate('org-1', mockCurrentUser);
+
+      expect((result as any).med_alliance_referral_status).toBe(
+        'pending_confirmation',
+      );
     });
   });
 
@@ -817,11 +820,8 @@ describe('ReferredCompaniesService', () => {
       expect((result as any).referral_stage).toBe('contacted');
     });
 
-    it('should set eligibility_start_at to deployment_date + 30 days when moving to "deployed"', async () => {
+    it('should set eligibility_start_at to the raw deployment_date (no offset) when moving to "deployed"', async () => {
       const deploymentDate = new Date('2026-02-16T00:00:00.000Z');
-      const expectedEligibility = new Date(
-        deploymentDate.getTime() + 30 * 24 * 60 * 60 * 1000,
-      );
 
       mockPrisma.organization.findUnique
         .mockResolvedValueOnce({
@@ -845,13 +845,13 @@ describe('ReferredCompaniesService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             referral_stage: 'deployed',
-            eligibility_start_at: expectedEligibility,
+            eligibility_start_at: deploymentDate,
           }),
         }),
       );
     });
 
-    it('should fall back to now + 30 days when deployment_date is null and moving to "deployed"', async () => {
+    it('should fall back to now (no offset) when deployment_date is null and moving to "deployed"', async () => {
       const before = Date.now();
 
       mockPrisma.organization.findUnique
@@ -873,13 +873,12 @@ describe('ReferredCompaniesService', () => {
       );
 
       const after = Date.now();
-      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
       const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
       const eligibility: Date = updateData.eligibility_start_at;
 
       expect(eligibility).toBeInstanceOf(Date);
-      expect(eligibility.getTime()).toBeGreaterThanOrEqual(before + THIRTY_DAYS_MS);
-      expect(eligibility.getTime()).toBeLessThanOrEqual(after + THIRTY_DAYS_MS);
+      expect(eligibility.getTime()).toBeGreaterThanOrEqual(before);
+      expect(eligibility.getTime()).toBeLessThanOrEqual(after);
     });
 
     it('should NOT overwrite eligibility_start_at when already set on move to "deployed"', async () => {
@@ -1059,7 +1058,50 @@ describe('ReferredCompaniesService', () => {
       );
     });
 
-    it('should block eligibility and void non-paid commissions', async () => {
+    it('should throw BadRequestException when confirming a company with no deployment_date', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
+        referred_by_affiliate_id: 'user-1',
+        med_alliance_referral_status: 'pending_confirmation',
+        eligibility_start_at: null,
+        deployment_date: null,
+      });
+
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'Too early', backfill: true },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException('Company has not been deployed yet'),
+      );
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when confirming a company with a future deployment_date', async () => {
+      const futureDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
+        referred_by_affiliate_id: 'user-1',
+        med_alliance_referral_status: 'pending_confirmation',
+        eligibility_start_at: null,
+        deployment_date: futureDate,
+      });
+
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'Too early', backfill: true },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException('deployment date is in the future'),
+      );
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    it('should block eligibility, void non-paid commissions when commissions_action=void', async () => {
       mockPrisma.organization.findUnique
         .mockResolvedValueOnce({
           id: 'org-1',
@@ -1077,7 +1119,7 @@ describe('ReferredCompaniesService', () => {
 
       await service.blockEligibility(
         'org-1',
-        { reason: 'Existing active client' },
+        { reason: 'Existing active client', commissions_action: CommissionsAction.void },
         mockAdminUser,
       );
 
@@ -1106,57 +1148,219 @@ describe('ReferredCompaniesService', () => {
           data: expect.objectContaining({
             event: 'eligibility_blocked',
             new_status: 'not_eligible',
-            metadata: { commissions_voided: 2 },
+            metadata: { commissions_action: 'void', commissions_voided: 2 },
           }),
         }),
       );
     });
 
-    it('should revert eligibility to pending confirmation and restore void commissions', async () => {
-      const deploymentDate = new Date('2026-01-15T00:00:00.000Z');
+    it('should block eligibility and leave commissions untouched when commissions_action=keep', async () => {
       mockPrisma.organization.findUnique
         .mockResolvedValueOnce({
           id: 'org-1',
           referred_by_affiliate_id: 'user-1',
-          med_alliance_referral_status: 'not_eligible',
-          deployment_date: deploymentDate,
-          eligibility_start_at: null,
+          med_alliance_referral_status: 'pending_confirmation',
         })
-        .mockResolvedValueOnce(makeAdminOrg({ eligibility_start_at: deploymentDate }));
+        .mockResolvedValueOnce(makeAdminOrg({ med_alliance_referral_status: 'not_eligible' }));
       mockPrisma.organization.update.mockResolvedValue({});
-      mockPrisma.affiliateCommission.findMany.mockResolvedValue([{ id: 'comm-void' }]);
-      mockPrisma.affiliateCommission.update.mockResolvedValue({});
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
-      await service.revertEligibility('org-1', mockAdminUser);
+      await service.blockEligibility(
+        'org-1',
+        { reason: 'Existing active client', commissions_action: CommissionsAction.keep },
+        mockAdminUser,
+      );
 
-      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'org-1' },
-          data: expect.objectContaining({
-            med_alliance_referral_status: 'pending_confirmation',
-            med_alliance_block_reason: null,
-            med_alliance_approval_note: null,
-            eligibility_start_at: deploymentDate,
-          }),
-        }),
-      );
-      expect(mockPrisma.affiliateCommission.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'comm-void' },
-          data: { status: 'detected' },
-        }),
-      );
+      expect(mockPrisma.affiliateCommission.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.affiliateCommission.update).not.toHaveBeenCalled();
       expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            event: 'eligibility_reverted',
-            old_status: 'not_eligible',
-            new_status: 'pending_confirmation',
-            metadata: { commissions_reverted: 1 },
+            event: 'eligibility_blocked',
+            new_status: 'not_eligible',
+            metadata: { commissions_action: 'keep', commissions_voided: 0 },
           }),
         }),
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // assertDeployedDecisionAllowed guard matrix — exercised via approveEligibility
+  // (confirm) and blockEligibility (block). Deployment_date is set to a valid
+  // past date for every case so only the status-matrix guard is under test
+  // (approveEligibility's own deployment_date guards are tested separately above).
+  // -------------------------------------------------------------------------
+  describe('assertDeployedDecisionAllowed guard matrix', () => {
+    const mockAdminUser = {
+      id: 'admin-1',
+      first_name: 'Admin',
+      last_name: 'User',
+      role: 'system_admin',
+    } as any;
+
+    const pastDeploymentDate = new Date('2026-01-15T00:00:00.000Z');
+
+    const makeOrgForConfirm = (status: string) => ({
+      id: 'org-1',
+      referred_by_affiliate_id: 'user-1',
+      med_alliance_referral_status: status,
+      eligibility_start_at: null,
+      deployment_date: pastDeploymentDate,
+    });
+
+    const makeOrgForBlock = (status: string) => ({
+      id: 'org-1',
+      referred_by_affiliate_id: 'user-1',
+      med_alliance_referral_status: status,
+    });
+
+    beforeEach(() => {
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([]);
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+      mockPrisma.organization.findUnique.mockImplementation((args: any) => {
+        // Second call within approve/block is the findOneForAdmin reload.
+        return Promise.resolve({ id: 'org-1' });
+      });
+    });
+
+    // --- confirm ---
+    it('confirm: allowed when status=pending_confirmation', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForConfirm('pending_confirmation'),
+      );
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'ok', backfill: true },
+          mockAdminUser,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('confirm: rejected when status=eligible', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForConfirm('eligible'),
+      );
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'ok', backfill: true },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(new BadRequestException('Company is already eligible'));
+    });
+
+    it('confirm: allowed when status=not_eligible', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForConfirm('not_eligible'),
+      );
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'ok', backfill: true },
+          mockAdminUser,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('confirm: rejected when status=expired', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForConfirm('expired'),
+      );
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'ok', backfill: true },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException('Cannot confirm an expired referral'),
+      );
+    });
+
+    // --- block ---
+    it('block: allowed when status=pending_confirmation', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForBlock('pending_confirmation'),
+      );
+      await expect(
+        service.blockEligibility(
+          'org-1',
+          { reason: 'block it', commissions_action: CommissionsAction.keep },
+          mockAdminUser,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('block: allowed when status=eligible', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForBlock('eligible'),
+      );
+      await expect(
+        service.blockEligibility(
+          'org-1',
+          { reason: 'block it', commissions_action: CommissionsAction.keep },
+          mockAdminUser,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('block: rejected when status=not_eligible', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForBlock('not_eligible'),
+      );
+      await expect(
+        service.blockEligibility(
+          'org-1',
+          { reason: 'block it', commissions_action: CommissionsAction.keep },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(new BadRequestException('Company is already blocked'));
+    });
+
+    it('block: rejected when status=expired', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(
+        makeOrgForBlock('expired'),
+      );
+      await expect(
+        service.blockEligibility(
+          'org-1',
+          { reason: 'block it', commissions_action: CommissionsAction.keep },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException('Cannot block an expired referral'),
+      );
+    });
+
+    it('confirm: rejected when org has no referred_by_affiliate_id', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        ...makeOrgForConfirm('pending_confirmation'),
+        referred_by_affiliate_id: null,
+      });
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'ok', backfill: true },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(new BadRequestException('Not a referred company'));
+    });
+
+    it('block: rejected when org has no referred_by_affiliate_id', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        ...makeOrgForBlock('pending_confirmation'),
+        referred_by_affiliate_id: null,
+      });
+      await expect(
+        service.blockEligibility(
+          'org-1',
+          { reason: 'block it', commissions_action: CommissionsAction.keep },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(new BadRequestException('Not a referred company'));
     });
   });
 

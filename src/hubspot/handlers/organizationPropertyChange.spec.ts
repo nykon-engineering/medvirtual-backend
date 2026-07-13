@@ -317,11 +317,16 @@ describe('HandlerOrganizationPropertyChange', () => {
     });
   });
 
-  it('should clear referral eligibility fields when deployment_date is cleared for a referred org', async () => {
+  it('should reset to in_negotiation + pending_confirmation when deployment_date is cleared for a referred org', async () => {
     prismaMock.organization.findUnique
       .mockResolvedValueOnce({ id: 'org-1', status: OrganizationStatus.active })
-      .mockResolvedValueOnce({ referred_by_affiliate_id: 'aff-1' });
+      .mockResolvedValueOnce({
+        referred_by_affiliate_id: 'aff-1',
+        deployment_date: new Date('2026-01-01T00:00:00.000Z'),
+        med_alliance_referral_status: 'eligible',
+      });
     prismaMock.organization.update.mockResolvedValue({});
+    prismaMock.medAllianceAuditLog.create.mockResolvedValue({});
 
     const result = await handler.execute({
       objectId: 1,
@@ -334,16 +339,77 @@ describe('HandlerOrganizationPropertyChange', () => {
       where: { id: 'org-1' },
       data: { deployment_date: null },
     });
-    // Second update: revert referral stage/eligibility.
+    // Second update: revert referral stage/eligibility to the resting pending state.
     expect(prismaMock.organization.update).toHaveBeenNthCalledWith(2, {
       where: { id: 'org-1' },
       data: {
-        referral_stage: 'referred',
-        med_alliance_referral_status: 'not_eligible',
+        referral_stage: 'in_negotiation',
+        med_alliance_referral_status: 'pending_confirmation',
         eligibility_start_at: null,
         med_alliance_block_reason: null,
       },
     });
+    expect(prismaMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          event: 'deployment_date_cleared',
+          old_status: 'eligible',
+          new_status: 'pending_confirmation',
+        }),
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it('should no-op (skip status/stage update) when deployment_date is cleared but was already null', async () => {
+    prismaMock.organization.findUnique
+      .mockResolvedValueOnce({ id: 'org-1', status: OrganizationStatus.active })
+      .mockResolvedValueOnce({
+        referred_by_affiliate_id: 'aff-1',
+        deployment_date: null,
+        med_alliance_referral_status: 'pending_confirmation',
+      });
+    prismaMock.organization.update.mockResolvedValue({});
+
+    const result = await handler.execute({
+      objectId: 1,
+      propertyName: 'deploy_date_of_first_va',
+      propertyValue: '',
+    });
+
+    // Only the generic field update runs — no second write, no audit log.
+    expect(prismaMock.organization.update).toHaveBeenCalledTimes(1);
+    expect(prismaMock.organization.update).toHaveBeenNthCalledWith(1, {
+      where: { id: 'org-1' },
+      data: { deployment_date: null },
+    });
+    expect(prismaMock.medAllianceAuditLog.create).not.toHaveBeenCalled();
+    expect(result).toBe(true);
+  });
+
+  it('should no-op (skip status/stage update) when deployment_date is re-delivered with the same timestamp', async () => {
+    const sameDate = new Date('2026-01-01T00:00:00.000Z');
+    prismaMock.organization.findUnique
+      .mockResolvedValueOnce({ id: 'org-1', status: OrganizationStatus.active })
+      .mockResolvedValueOnce({
+        referred_by_affiliate_id: 'aff-1',
+        deployment_date: sameDate,
+        med_alliance_referral_status: 'eligible',
+      });
+    prismaMock.organization.update.mockResolvedValue({});
+
+    const result = await handler.execute({
+      objectId: 1,
+      propertyName: 'deploy_date_of_first_va',
+      propertyValue: String(sameDate.getTime()),
+    });
+
+    expect(prismaMock.organization.update).toHaveBeenCalledTimes(1);
+    expect(prismaMock.organization.update).toHaveBeenNthCalledWith(1, {
+      where: { id: 'org-1' },
+      data: { deployment_date: sameDate },
+    });
+    expect(prismaMock.medAllianceAuditLog.create).not.toHaveBeenCalled();
     expect(result).toBe(true);
   });
 
@@ -366,11 +432,16 @@ describe('HandlerOrganizationPropertyChange', () => {
     });
   });
 
-  it('should revert referral fields when deployment_date is set to a future date for a referred org', async () => {
+  it('should mark deployed + pending_confirmation when deployment_date is set to a future date for a referred org', async () => {
     prismaMock.organization.findUnique
       .mockResolvedValueOnce({ id: 'org-1', status: OrganizationStatus.active })
-      .mockResolvedValueOnce({ referred_by_affiliate_id: 'aff-1' });
+      .mockResolvedValueOnce({
+        referred_by_affiliate_id: 'aff-1',
+        deployment_date: null,
+        med_alliance_referral_status: 'pending_confirmation',
+      });
     prismaMock.organization.update.mockResolvedValue({});
+    prismaMock.medAllianceAuditLog.create.mockResolvedValue({});
 
     const futureMs = Date.now() + 10 * 24 * 60 * 60 * 1000;
 
@@ -380,22 +451,75 @@ describe('HandlerOrganizationPropertyChange', () => {
       propertyValue: String(futureMs),
     });
 
-    expect(prismaMock.organization.update).toHaveBeenNthCalledWith(2, {
-      where: { id: 'org-1' },
-      data: {
-        referral_stage: 'referred',
-        med_alliance_referral_status: 'not_eligible',
-        eligibility_start_at: null,
-        med_alliance_block_reason: null,
-      },
+    // Future dates now land on deployed + pending_confirmation, same as recent-past dates —
+    // the deployment_date guard rejecting future dates lives in approveEligibility, not here.
+    expect(prismaMock.organization.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { id: 'org-1' },
+        data: expect.objectContaining({
+          referral_stage: 'deployed',
+          med_alliance_referral_status: 'pending_confirmation',
+        }),
+      }),
+    );
+    expect(prismaMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ event: 'eligibility_pending_confirmation' }),
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it('should mark deployed + expired and audit-log "eligibility_expired" when deployment_date is more than 365 days ago', async () => {
+    prismaMock.organization.findUnique
+      .mockResolvedValueOnce({ id: 'org-1', status: OrganizationStatus.active })
+      .mockResolvedValueOnce({
+        referred_by_affiliate_id: 'aff-1',
+        deployment_date: null,
+        med_alliance_referral_status: 'pending_confirmation',
+      });
+    prismaMock.organization.update.mockResolvedValue({});
+    prismaMock.medAllianceAuditLog.create.mockResolvedValue({});
+
+    const overAYearAgoMs = Date.now() - 400 * 24 * 60 * 60 * 1000;
+
+    const result = await handler.execute({
+      objectId: 1,
+      propertyName: 'deploy_date_of_first_va',
+      propertyValue: String(overAYearAgoMs),
     });
+
+    expect(prismaMock.organization.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { id: 'org-1' },
+        data: expect.objectContaining({
+          referral_stage: 'deployed',
+          med_alliance_referral_status: 'expired',
+          med_alliance_block_reason: null,
+        }),
+      }),
+    );
+    expect(prismaMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          event: 'eligibility_expired',
+          new_status: 'expired',
+        }),
+      }),
+    );
     expect(result).toBe(true);
   });
 
   it('should mark deployed + pending_confirmation and audit-log when deployment_date is 30+ days ago', async () => {
     prismaMock.organization.findUnique
       .mockResolvedValueOnce({ id: 'org-1', status: OrganizationStatus.active })
-      .mockResolvedValueOnce({ referred_by_affiliate_id: 'aff-1' });
+      .mockResolvedValueOnce({
+        referred_by_affiliate_id: 'aff-1',
+        deployment_date: null,
+        med_alliance_referral_status: 'pending_confirmation',
+      });
     prismaMock.organization.update.mockResolvedValue({});
     prismaMock.medAllianceAuditLog.create.mockResolvedValue({});
 
@@ -417,15 +541,24 @@ describe('HandlerOrganizationPropertyChange', () => {
         }),
       }),
     );
-    expect(prismaMock.medAllianceAuditLog.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ event: 'eligibility_pending_confirmation' }),
+      }),
+    );
     expect(result).toBe(true);
   });
 
-  it('should mark deployed + not_eligible when deployment_date is within the last 30 days', async () => {
+  it('should mark deployed + pending_confirmation when deployment_date is within the last 30 days', async () => {
     prismaMock.organization.findUnique
       .mockResolvedValueOnce({ id: 'org-1', status: OrganizationStatus.active })
-      .mockResolvedValueOnce({ referred_by_affiliate_id: 'aff-1' });
+      .mockResolvedValueOnce({
+        referred_by_affiliate_id: 'aff-1',
+        deployment_date: null,
+        med_alliance_referral_status: 'pending_confirmation',
+      });
     prismaMock.organization.update.mockResolvedValue({});
+    prismaMock.medAllianceAuditLog.create.mockResolvedValue({});
 
     const tenDaysAgoMs = Date.now() - 10 * 24 * 60 * 60 * 1000;
 
@@ -435,19 +568,17 @@ describe('HandlerOrganizationPropertyChange', () => {
       propertyValue: String(tenDaysAgoMs),
     });
 
+    // The 30-day stabilization window is gone — decisions are available immediately.
     expect(prismaMock.organization.update).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         where: { id: 'org-1' },
         data: expect.objectContaining({
           referral_stage: 'deployed',
-          med_alliance_referral_status: 'not_eligible',
+          med_alliance_referral_status: 'pending_confirmation',
         }),
       }),
     );
-    // Pre-existing behavior (out of scope for this fix): the audit-log write
-    // lives in the outer has-date block, so it fires for any non-future
-    // deployment date, not only the 30+ day case.
     expect(prismaMock.medAllianceAuditLog.create).toHaveBeenCalledTimes(1);
     expect(result).toBe(true);
   });

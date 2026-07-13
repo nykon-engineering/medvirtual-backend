@@ -1377,19 +1377,18 @@ export class AffiliatesService {
         ? (now.getTime() - deploymentDate.getTime()) / (1000 * 60 * 60 * 24)
         : null;
 
-    let eligibilityWindow: 'no_invoices' | 'too_new' | 'eligible' | 'expired';
-    let commissionStatus: 'detected' | 'pending_admin_confirmation' | null;
+    // Mirrors _backfillOnAssociation: decisions are available immediately once deployed,
+    // no 30-day stabilization tier. More than 365 days since deployment, the org expires.
+    let eligibilityWindow: 'no_invoices' | 'pending' | 'expired';
+    let commissionStatus: 'detected' | null;
     if (daysSince === null) {
       eligibilityWindow = 'no_invoices';
       commissionStatus = null;
-    } else if (daysSince >= 365) {
+    } else if (daysSince > 365) {
       eligibilityWindow = 'expired';
       commissionStatus = null;
-    } else if (daysSince >= 30) {
-      eligibilityWindow = 'eligible';
-      commissionStatus = 'pending_admin_confirmation';
     } else {
-      eligibilityWindow = 'too_new';
+      eligibilityWindow = 'pending';
       commissionStatus = 'detected';
     }
 
@@ -1498,7 +1497,6 @@ export class AffiliatesService {
     }
 
     const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const now = new Date();
 
     const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
@@ -1526,12 +1524,12 @@ export class AffiliatesService {
     const firstInvoiceDate = candidates[0]?.paid_at ?? now;
     // Prefer deployment_date from HubSpot as the anchor for eligibility calculations.
     const anchorDate = orgData?.deployment_date ?? firstInvoiceDate;
-    const eligibilityStartAt = new Date(anchorDate.getTime() + THIRTY_DAYS_MS);
     const daysSinceDeployment =
       (now.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24);
 
-    const isExpired = daysSinceDeployment >= 365;
-    const isEligible = !isExpired && daysSinceDeployment >= 30;
+    // Decisions are available immediately once deployed — no 30-day stabilization tier.
+    // More than 365 days since deployment_date, the org expires directly.
+    const isExpired = daysSinceDeployment > 365;
 
     await this.prisma.organization.update({
       where: { id: organizationId },
@@ -1541,13 +1539,11 @@ export class AffiliatesService {
         ...(candidates.length > 0 && {
           first_paid_invoice_at: firstInvoiceDate,
         }),
-        eligibility_start_at: eligibilityStartAt,
-        med_alliance_block_reason: isExpired
-          ? 'eligibility_expired: one-year window elapsed'
-          : null,
-        ...(isEligible && {
-          med_alliance_referral_status: 'pending_confirmation' as any,
-        }),
+        eligibility_start_at: anchorDate,
+        med_alliance_block_reason: null,
+        med_alliance_referral_status: (isExpired
+          ? 'expired'
+          : 'pending_confirmation') as any,
       },
     });
 
@@ -1556,21 +1552,17 @@ export class AffiliatesService {
         entity_type: 'referred_company',
         entity_id: organizationId,
         event: 'stage_changed',
-        old_status: 'not_eligible',
-        new_status: isEligible ? 'pending_confirmation' : 'not_eligible',
+        old_status: 'pending_confirmation',
+        new_status: isExpired ? 'expired' : 'pending_confirmation',
         reason:
           'Company associated by admin — retroactive deployment date set from first paid invoice',
         source: 'admin_action',
         actor_user_id: adminUser.id,
         metadata: {
           referral_stage: 'deployed',
-          eligibility_start_at: eligibilityStartAt.toISOString(),
+          eligibility_start_at: anchorDate.toISOString(),
           days_since_first_invoice: Math.floor(daysSinceDeployment),
-          result: isExpired
-            ? 'expired'
-            : isEligible
-              ? 'pending_confirmation'
-              : 'stabilization_window',
+          result: isExpired ? 'expired' : 'pending_confirmation',
         } as any,
       },
     });
@@ -1584,12 +1576,10 @@ export class AffiliatesService {
 
     if (!affiliateProfile || affiliateProfile.status !== 'active') return;
 
-    const commissionStatus = isEligible
-      ? 'pending_admin_confirmation'
-      : 'detected';
-    const auditEvent = isEligible
-      ? 'commission_pending_admin_confirmation'
-      : 'commission_detected';
+    // Company just landed on pending_confirmation (not yet confirmed eligible), so backfilled
+    // commissions start as 'detected' and wait for an admin decision.
+    const commissionStatus = 'detected';
+    const auditEvent = 'commission_detected';
 
     for (const snapshot of candidates) {
       const idempotencyKey = buildCommissionIdempotencyKey({

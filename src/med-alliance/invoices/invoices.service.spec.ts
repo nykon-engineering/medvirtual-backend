@@ -9,6 +9,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 const mockPrisma = {
   organization: {
     findUnique: jest.fn(),
+    findMany: jest.fn(),
+  },
+  affiliateProfile: {
+    findUnique: jest.fn(),
   },
   hubspotInvoiceSnapshot: {
     findMany: jest.fn(),
@@ -268,6 +272,164 @@ describe('InvoicesService', () => {
       const result = await service.listAllForAdmin({ page: 3, limit: 10 });
 
       expect(result.pagination).toEqual({ page: 3, limit: 10, total: 42 });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // getEligibleInvoicesForAffiliate
+  // -------------------------------------------------------------------------
+  describe('getEligibleInvoicesForAffiliate', () => {
+    const makeProfile = (overrides: Partial<any> = {}) => ({
+      id: 'profile-1',
+      user_id: 'affiliate-1',
+      status: 'active',
+      ...overrides,
+    });
+
+    it('should throw NotFoundException when affiliate profile does not exist', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.getEligibleInvoicesForAffiliate('profile-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when affiliate profile is not active', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(
+        makeProfile({ status: 'inactive' }),
+      );
+
+      await expect(
+        service.getEligibleInvoicesForAffiliate('profile-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when affiliate profile has no connected user', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(
+        makeProfile({ user_id: null }),
+      );
+
+      await expect(
+        service.getEligibleInvoicesForAffiliate('profile-1'),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should query orgs with referral_stage=deployed and status not expired (no 30-day tier)', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.organization.findMany.mockResolvedValue([]);
+
+      await service.getEligibleInvoicesForAffiliate('profile-1');
+
+      expect(mockPrisma.organization.findMany).toHaveBeenCalledWith({
+        where: {
+          referred_by_affiliate_id: 'affiliate-1',
+          referral_stage: 'deployed',
+          med_alliance_referral_status: { not: 'expired' },
+        },
+        select: { id: true },
+      });
+    });
+
+    it('should return an empty array when no deployed orgs qualify', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.organization.findMany.mockResolvedValue([]);
+
+      const result = await service.getEligibleInvoicesForAffiliate('profile-1');
+
+      expect(result).toEqual([]);
+      expect(mockPrisma.hubspotInvoiceSnapshot.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should return eligible invoices mapped to the row shape', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        {
+          id: 'snap-1',
+          hubspot_id: 'hs-inv-1',
+          organization_id: 'org-1',
+          invoice_amount: '1500.00',
+          payment_status: null,
+          currency: 'USD',
+          paid_at: new Date('2026-02-10'),
+          hubspot_pdf_link: 'https://hubspot.example/pdf',
+          invoice_number: 'INV-001',
+          organization: { name: 'Acme Corp' },
+        },
+      ]);
+
+      const result = await service.getEligibleInvoicesForAffiliate('profile-1');
+
+      expect(result).toEqual([
+        {
+          id: 'snap-1',
+          hubspot_id: 'hs-inv-1',
+          organization_id: 'org-1',
+          organization_name: 'Acme Corp',
+          invoice_amount: '1500.00',
+          currency: 'USD',
+          paid_at: new Date('2026-02-10'),
+          hubspot_pdf_link: 'https://hubspot.example/pdf',
+          invoice_number: 'INV-001',
+        },
+      ]);
+    });
+
+    it('should exclude invoices with a non-succeeded payment_status', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        {
+          id: 'snap-1',
+          hubspot_id: 'hs-inv-1',
+          organization_id: 'org-1',
+          invoice_amount: '1500.00',
+          payment_status: 'failed',
+          currency: 'USD',
+          paid_at: new Date('2026-02-10'),
+          hubspot_pdf_link: null,
+          invoice_number: 'INV-001',
+          organization: { name: 'Acme Corp' },
+        },
+        {
+          id: 'snap-2',
+          hubspot_id: 'hs-inv-2',
+          organization_id: 'org-1',
+          invoice_amount: '1000.00',
+          payment_status: 'succeeded',
+          currency: 'USD',
+          paid_at: new Date('2026-02-11'),
+          hubspot_pdf_link: null,
+          invoice_number: 'INV-002',
+          organization: { name: 'Acme Corp' },
+        },
+      ]);
+
+      const result = await service.getEligibleInvoicesForAffiliate('profile-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('snap-2');
+    });
+
+    it('should exclude invoices that already have a commission for this affiliate (query-level)', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([]);
+
+      await service.getEligibleInvoicesForAffiliate('profile-1');
+
+      expect(mockPrisma.hubspotInvoiceSnapshot.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organization_id: { in: ['org-1'] },
+            invoice_status: 'paid',
+            invoice_amount: { gt: 0 },
+            NOT: {
+              commissions: { some: { affiliate_id: 'affiliate-1' } },
+            },
+          }),
+        }),
+      );
     });
   });
 });

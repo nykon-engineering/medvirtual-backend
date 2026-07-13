@@ -108,6 +108,26 @@ export class HandlerOrganizationPropertyChange {
       return true;
     }
 
+    // For deployment_date, fetch state needed for the eligibility branch BEFORE the generic
+    // update below overwrites deployment_date — we need the prior value to detect a no-op
+    // (unchanged) HubSpot re-delivery, which must never overwrite a manual admin decision.
+    let priorDeploymentDate: Date | null = null;
+    let referredByAffiliateId: string | null = null;
+    let priorStatus: string | null = null;
+    if (fieldUpdated === 'deployment_date') {
+      const fullOrg = await this.prisma.organization.findUnique({
+        where: { id: organization.id },
+        select: {
+          referred_by_affiliate_id: true,
+          deployment_date: true,
+          med_alliance_referral_status: true,
+        },
+      });
+      priorDeploymentDate = fullOrg?.deployment_date ?? null;
+      referredByAffiliateId = fullOrg?.referred_by_affiliate_id ?? null;
+      priorStatus = fullOrg?.med_alliance_referral_status ?? null;
+    }
+
     if (event.propertyName !== 'hubspot_owner_id') {
       await this.prisma.organization.update({
         where: {
@@ -120,85 +140,103 @@ export class HandlerOrganizationPropertyChange {
     }
 
     if (fieldUpdated === 'deployment_date') {
-      const fullOrg = await this.prisma.organization.findUnique({
-        where: { id: organization.id },
-        select: { referred_by_affiliate_id: true },
-      });
+      if (!referredByAffiliateId) return true;
 
-      if (!fullOrg?.referred_by_affiliate_id) return true;
+      // No-op guard: HubSpot can re-deliver a webhook for a value that hasn't actually changed.
+      // Never let that spurious re-delivery overwrite a manual admin decision (eligible/not_eligible).
+      const unchanged =
+        (value === null && priorDeploymentDate === null) ||
+        (value !== null &&
+          priorDeploymentDate !== null &&
+          (value as Date).getTime() === priorDeploymentDate.getTime());
+      if (unchanged) return true;
 
       const now = new Date();
-      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
       if (value === null) {
-        // deployment_date cleared — revert to referred/not_eligible
+        // deployment_date cleared — company goes back into negotiation, resting on pending.
         await this.prisma.organization.update({
           where: { id: organization.id },
           data: {
-            referral_stage: 'referred' as any,
-            med_alliance_referral_status: 'not_eligible',
+            referral_stage: 'in_negotiation' as any,
+            med_alliance_referral_status: 'pending_confirmation' as any,
             eligibility_start_at: null,
             med_alliance_block_reason: null,
           },
         });
-      } else {
-        const deployDate = value as Date;
-        const eligibilityStartAt = new Date(
-          deployDate.getTime() + THIRTY_DAYS_MS,
-        );
-
-        if (deployDate > now) {
-          // Future date: revert to referred/not_eligible
-          await this.prisma.organization.update({
-            where: { id: organization.id },
-            data: {
-              referral_stage: 'referred' as any,
-              med_alliance_referral_status: 'not_eligible',
-              eligibility_start_at: null,
-              med_alliance_block_reason: null,
-            },
-          });
-        } else if (now.getTime() - deployDate.getTime() >= THIRTY_DAYS_MS) {
-          // 30+ days ago: deployed + pending_confirmation (admin must confirm)
-          await this.prisma.organization.update({
-            where: { id: organization.id },
-            data: {
-              referral_stage: 'deployed' as any,
-              med_alliance_referral_status: 'pending_confirmation' as any,
-              eligibility_start_at: eligibilityStartAt,
-              med_alliance_block_reason: null,
-            },
-          });
-        } else {
-          // Today or < 30 days ago: deployed + not_eligible (cron promotes after 30 days)
-          await this.prisma.organization.update({
-            where: { id: organization.id },
-            data: {
-              referral_stage: 'deployed' as any,
-              med_alliance_referral_status: 'not_eligible',
-              eligibility_start_at: eligibilityStartAt,
-              med_alliance_block_reason: null,
-            },
-          });
-        }
 
         await this.prisma.medAllianceAuditLog.create({
           data: {
             entity_type: 'referred_company',
             entity_id: organization.id,
-            event: 'eligibility_pending_confirmation',
-            old_status: null,
+            event: 'deployment_date_cleared',
+            old_status: priorStatus,
             new_status: 'pending_confirmation',
-            reason:
-              'deployment_date synced from HubSpot deploy_date_of_first_va — 30+ days elapsed',
+            reason: 'deployment_date removed in HubSpot — reopened for review',
             source: 'sync',
             actor_user_id: null,
-            metadata: {
-              deployment_date: deployDate.toISOString(),
-              eligibility_start_at: eligibilityStartAt.toISOString(),
-            } as any,
+            metadata: { referral_stage: 'in_negotiation' } as any,
           },
         });
+      } else {
+        const deployDate = value as Date;
+        const daysSinceDeploy =
+          (now.getTime() - deployDate.getTime()) / (24 * 60 * 60 * 1000);
+
+        if (daysSinceDeploy > 365) {
+          // More than 365 days in the past — expires directly, no decision window.
+          await this.prisma.organization.update({
+            where: { id: organization.id },
+            data: {
+              referral_stage: 'deployed' as any,
+              med_alliance_referral_status: 'expired' as any,
+              eligibility_start_at: deployDate,
+              med_alliance_block_reason: null,
+            },
+          });
+
+          await this.prisma.medAllianceAuditLog.create({
+            data: {
+              entity_type: 'referred_company',
+              entity_id: organization.id,
+              event: 'eligibility_expired',
+              old_status: priorStatus,
+              new_status: 'expired',
+              reason:
+                'deployment_date synced from HubSpot — already more than 365 days in the past',
+              source: 'sync',
+              actor_user_id: null,
+              metadata: { deployment_date: deployDate.toISOString() } as any,
+            },
+          });
+        } else {
+          // Within 365 days in the past, or a future date — pending, decision available
+          // immediately once in the past (approveEligibility rejects future dates itself).
+          await this.prisma.organization.update({
+            where: { id: organization.id },
+            data: {
+              referral_stage: 'deployed' as any,
+              med_alliance_referral_status: 'pending_confirmation' as any,
+              eligibility_start_at: deployDate,
+              med_alliance_block_reason: null,
+            },
+          });
+
+          await this.prisma.medAllianceAuditLog.create({
+            data: {
+              entity_type: 'referred_company',
+              entity_id: organization.id,
+              event: 'eligibility_pending_confirmation',
+              old_status: priorStatus,
+              new_status: 'pending_confirmation',
+              reason:
+                'deployment_date synced from HubSpot deploy_date_of_first_va',
+              source: 'sync',
+              actor_user_id: null,
+              metadata: { deployment_date: deployDate.toISOString() } as any,
+            },
+          });
+        }
       }
     }
 

@@ -162,13 +162,10 @@ export class HandlerInvoicePropertyChange {
   /**
    * Marks a referred organization as "deployed" when its first paid invoice is detected.
    *
-   * This helper intentionally does NOT mark the organization as "eligible".
-   * The Med Alliance flow requires a 30-day stabilization period after deployment;
-   * the daily cron is responsible for changing med_alliance_referral_status from
-   * "not_eligible" to "eligible" after that window has elapsed.
-   *
-   * execute() calls this before commission creation so the first commission
-   * follows the expected "detected" status during the 30-day stabilization window.
+   * This helper intentionally does NOT touch med_alliance_referral_status — Confirm/Block
+   * eligibility decisions become available to admins immediately once deployed, there is no
+   * waiting period. execute() calls this before commission creation so the first commission
+   * follows the expected "detected" status until an admin confirms eligibility.
    */
   private async markOrganizationDeployedFromFirstPaidInvoice(params: {
     organizationId: string;
@@ -233,9 +230,7 @@ export class HandlerInvoicePropertyChange {
       return false;
     }
 
-    const eligibilityStartAt = new Date(
-      params.firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
-    );
+    const eligibilityStartAt = params.firstInvoiceDate;
 
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.organization.updateMany({
@@ -260,8 +255,8 @@ export class HandlerInvoicePropertyChange {
           eligibility_start_at: eligibilityStartAt,
           first_paid_invoice_at: params.firstInvoiceDate,
           med_alliance_block_reason: null,
-          // med_alliance_referral_status intentionally stays as-is.
-          // New referrals should remain "not_eligible" until the 30-day cron promotes them.
+          // med_alliance_referral_status intentionally stays as-is — Confirm/Block are
+          // available to admins immediately once deployed, no waiting period.
         },
       });
 
@@ -280,7 +275,7 @@ export class HandlerInvoicePropertyChange {
           old_status: org.med_alliance_referral_status,
           new_status: org.med_alliance_referral_status,
           reason:
-            'First paid invoice - auto-transitioned to deployed stage; 30-day stabilization clock started',
+            'First paid invoice - auto-transitioned to deployed stage; eligibility decisions now available',
           source: 'sync',
           actor_user_id: null,
           metadata: {

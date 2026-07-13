@@ -18,8 +18,16 @@ const mockPrisma = {
     findMany: jest.fn(),
     count: jest.fn(),
     update: jest.fn(),
+    create: jest.fn(),
   },
   organization: {
+    findUnique: jest.fn(),
+    update: jest.fn(),
+  },
+  affiliateProfile: {
+    findUnique: jest.fn(),
+  },
+  hubspotInvoiceSnapshot: {
     findUnique: jest.fn(),
   },
   medAllianceAuditLog: {
@@ -837,6 +845,285 @@ describe('CommissionsService', () => {
           }),
         }),
       );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // createFromInvoices
+  // -------------------------------------------------------------------------
+  describe('createFromInvoices', () => {
+    const makeProfile = (overrides: Partial<any> = {}) => ({
+      id: 'profile-1',
+      user_id: 'affiliate-1',
+      status: 'active',
+      commission_percent_default: '10.00',
+      ...overrides,
+    });
+
+    const makeSnapshot = (overrides: Partial<any> = {}) => ({
+      id: 'snap-1',
+      hubspot_id: 'hs-inv-1',
+      organization_id: 'org-1',
+      invoice_status: 'paid',
+      invoice_amount: '1500.00',
+      payment_status: null,
+      paid_at: new Date('2026-02-10'),
+      ...overrides,
+    });
+
+    const makeOrg = (overrides: Partial<any> = {}) => ({
+      id: 'org-1',
+      referred_by_affiliate_id: 'affiliate-1',
+      med_alliance_block_reason: null,
+      med_alliance_referral_status: 'pending_confirmation',
+      eligibility_start_at: null,
+      first_paid_invoice_at: new Date('2026-01-15'),
+      referral_stage: 'deployed',
+      createdAt: new Date('2025-01-01'),
+      ...overrides,
+    });
+
+    it('should throw NotFoundException when affiliate profile does not exist', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createFromInvoices('profile-1', ['snap-1'], mockAdminUser),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException when affiliate profile is not active', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(
+        makeProfile({ status: 'inactive' }),
+      );
+
+      await expect(
+        service.createFromInvoices('profile-1', ['snap-1'], mockAdminUser),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should throw ForbiddenException when affiliate profile has no connected user', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(
+        makeProfile({ user_id: null }),
+      );
+
+      await expect(
+        service.createFromInvoices('profile-1', ['snap-1'], mockAdminUser),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should skip an invoice snapshot that does not exist', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(null);
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-missing'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 0, skipped: 1 });
+    });
+
+    it('should skip an invoice that fails re-validation (not paid)', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(
+        makeSnapshot({ invoice_status: 'open' }),
+      );
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 0, skipped: 1 });
+      expect(mockPrisma.organization.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should skip when org is not found or not referred by this affiliate', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(makeSnapshot());
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ referred_by_affiliate_id: 'someone-else' }),
+      );
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 0, skipped: 1 });
+    });
+
+    it('should skip when org has an active_client_block reason (MA-004)', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(makeSnapshot());
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({
+          med_alliance_block_reason:
+            'active_client_block: organization_active_by_email',
+        }),
+      );
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 0, skipped: 1 });
+      expect(mockPrisma.affiliateCommission.create).not.toHaveBeenCalled();
+    });
+
+    it('should skip (read-only) when org status is expired — no inline write', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(makeSnapshot());
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ med_alliance_referral_status: 'expired' }),
+      );
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 0, skipped: 1 });
+      // Expiry is read-only here — this file never writes med_alliance_referral_status itself.
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+      expect(mockPrisma.affiliateCommission.create).not.toHaveBeenCalled();
+    });
+
+    it('should skip when org referral_stage is canceled', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(makeSnapshot());
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ referral_stage: 'canceled' }),
+      );
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 0, skipped: 1 });
+    });
+
+    it('should transition org to deployed with a raw (no-offset) eligibility_start_at on first paid invoice', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      const snapshot = makeSnapshot({ paid_at: new Date('2026-03-01') });
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(snapshot);
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({
+          first_paid_invoice_at: null,
+          referral_stage: 'contract_signed',
+        }),
+      );
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+      mockPrisma.affiliateCommission.create.mockResolvedValue({ id: 'comm-new' });
+
+      await service.createFromInvoices('profile-1', ['snap-1'], mockAdminUser);
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: {
+            referral_stage: 'deployed',
+            eligibility_start_at: new Date('2026-03-01'),
+            first_paid_invoice_at: new Date('2026-03-01'),
+            med_alliance_block_reason: null,
+          },
+        }),
+      );
+    });
+
+    it('should NOT transition to deployed when org already has first_paid_invoice_at', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(makeSnapshot());
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockPrisma.affiliateCommission.create.mockResolvedValue({ id: 'comm-new' });
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.createFromInvoices('profile-1', ['snap-1'], mockAdminUser);
+
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    it('should create a commission as pending_admin_confirmation and write an audit log', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(makeSnapshot());
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockPrisma.affiliateCommission.create.mockResolvedValue({ id: 'comm-new' });
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 1, skipped: 0 });
+      expect(mockPrisma.affiliateCommission.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            affiliate_id: 'affiliate-1',
+            affiliate_profile_id: 'profile-1',
+            organization_id: 'org-1',
+            hubspot_invoice_snapshot_id: 'snap-1',
+            status: 'pending_admin_confirmation',
+          }),
+        }),
+      );
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            event: 'manual_commission_created',
+            new_status: 'pending_admin_confirmation',
+            source: 'admin_action',
+          }),
+        }),
+      );
+    });
+
+    it('should count as skipped when commission creation hits a P2002 unique constraint', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique.mockResolvedValue(makeSnapshot());
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      const uniqueError = Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+      });
+      mockPrisma.affiliateCommission.create.mockRejectedValue(uniqueError);
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 0, skipped: 1 });
+    });
+
+    it('should count as skipped and continue when commission creation fails with a non-P2002 error', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
+      mockPrisma.hubspotInvoiceSnapshot.findUnique
+        .mockResolvedValueOnce(makeSnapshot({ id: 'snap-1', hubspot_id: 'hs-inv-1' }))
+        .mockResolvedValueOnce(makeSnapshot({ id: 'snap-2', hubspot_id: 'hs-inv-2' }));
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockPrisma.affiliateCommission.create
+        .mockRejectedValueOnce(new Error('DB connection lost'))
+        .mockResolvedValueOnce({ id: 'comm-2' });
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.createFromInvoices(
+        'profile-1',
+        ['snap-1', 'snap-2'],
+        mockAdminUser,
+      );
+
+      expect(result).toEqual({ created: 1, skipped: 1 });
     });
   });
 });

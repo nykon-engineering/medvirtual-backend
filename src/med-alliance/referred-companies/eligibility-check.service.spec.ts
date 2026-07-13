@@ -202,33 +202,72 @@ describe('EligibilityCheckService', () => {
   // runAndPersist
   // -------------------------------------------------------------------------
   describe('runAndPersist', () => {
-    it('should update org with eligible status and write audit log when no match', async () => {
-      // check() returns eligible
+    it('should no-op (leave status untouched) and write audit log when no match and no prior block', async () => {
+      // check() returns eligible, and findUnique (both calls) returns an org
+      // with no prior active_client_block reason and an existing pending_confirmation status.
       mockPrisma.organization.findUnique.mockResolvedValue(
-        makeOrg({ hubspot_id: null, email: 'unique@acme.com' }),
+        makeOrg({
+          hubspot_id: null,
+          email: 'unique@acme.com',
+          med_alliance_referral_status: 'pending_confirmation',
+          med_alliance_block_reason: null,
+        }),
       );
       mockPrisma.organization.findFirst.mockResolvedValue(null);
-      mockPrisma.organization.update.mockResolvedValue({ id: 'org-1', med_alliance_referral_status: 'eligible' });
       mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
 
       const result = await service.runAndPersist('org-1', 'user-1', 'user');
 
-      expect(mockPrisma.organization.update).toHaveBeenCalledWith({
-        where: { id: 'org-1' },
-        data: {
-          med_alliance_referral_status: 'not_eligible',
-          med_alliance_block_reason: null,
-        },
-      });
+      // No update call — only the two findUnique reads (check() + current lookup) plus the
+      // final no-op findUnique read that stands in for `updated`.
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+      expect(mockPrisma.organization.findUnique).toHaveBeenCalledTimes(3);
       expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             entity_type: 'referred_company',
             entity_id: 'org-1',
             event: 'eligibility_check',
-            new_status: 'not_eligible',
+            old_status: 'pending_confirmation',
+            new_status: 'pending_confirmation',
             source: 'user',
             actor_user_id: 'user-1',
+            reason: null,
+          }),
+        }),
+      );
+      expect(result).toEqual(expect.objectContaining({ id: 'org-1' }));
+    });
+
+    it('should clear a prior active_client_block reason without touching status when no longer matched', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({
+          hubspot_id: null,
+          email: 'unique@acme.com',
+          med_alliance_referral_status: 'not_eligible',
+          med_alliance_block_reason:
+            'active_client_block: organization_active_by_email',
+        }),
+      );
+      mockPrisma.organization.findFirst.mockResolvedValue(null);
+      mockPrisma.organization.update.mockResolvedValue({
+        id: 'org-1',
+        med_alliance_referral_status: 'not_eligible',
+        med_alliance_block_reason: null,
+      });
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      const result = await service.runAndPersist('org-1', 'user-1', 'user');
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith({
+        where: { id: 'org-1' },
+        data: { med_alliance_block_reason: null },
+      });
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            old_status: 'not_eligible',
+            new_status: 'not_eligible',
             reason: null,
           }),
         }),

@@ -281,21 +281,23 @@ export class ReferredCompaniesController {
   }
 
   // PATCH /med-alliance/admin/referred-companies/:id/approve-eligibility
-  // Confirms eligibility for a company in pending_confirmation state.
+  // Confirms eligibility for a company that is pending or blocked (not_eligible).
+  // Only executable once deployment_date is set and in the past.
   // Accepts backfill flag to control whether past detected commissions are promoted.
   @Patch('admin/referred-companies/:id/approve-eligibility')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({
     summary:
-      'Confirm eligibility for a referred company in pending_confirmation state (admin)',
+      'Confirm eligibility for a referred company that is pending or blocked (admin)',
   })
   @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
   @ApiBody({ type: ApproveEligibilityDto })
   @ApiResponse({ status: 200, description: 'Eligibility confirmed' })
   @ApiResponse({
     status: 400,
-    description: 'Already eligible or not a referral',
+    description:
+      'Already eligible, already expired, not a referral, not yet deployed, or deployment date is in the future',
   })
   @ApiResponse({ status: 404, description: 'Referred company not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
@@ -309,18 +311,21 @@ export class ReferredCompaniesController {
   }
 
   // PATCH /med-alliance/admin/referred-companies/:id/block-eligibility
-  // Marks a company as not_eligible with a required reason and voids pending commissions.
+  // Marks a company as not_eligible with a required reason. Callable from pending or eligible.
   @Patch('admin/referred-companies/:id/block-eligibility')
   @HttpCode(200)
   @Roles(...ADMIN_ROLES)
   @ApiOperation({
     summary:
-      'Block eligibility for a referred company with a required reason (admin)',
+      'Block eligibility for a referred company that is pending or eligible (admin)',
   })
   @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
   @ApiBody({ type: BlockEligibilityDto })
   @ApiResponse({ status: 200, description: 'Eligibility blocked' })
-  @ApiResponse({ status: 400, description: 'Not a referred company' })
+  @ApiResponse({
+    status: 400,
+    description: 'Already blocked, already expired, or not a referred company',
+  })
   @ApiResponse({ status: 404, description: 'Referred company not found' })
   @ApiResponse({ status: 403, description: 'Access denied' })
   async blockEligibility(
@@ -330,35 +335,6 @@ export class ReferredCompaniesController {
   ) {
     const data = await this.service.blockEligibility(id, dto, admin);
     return { status: 200, message: 'Eligibility blocked', data };
-  }
-
-  // PATCH /med-alliance/admin/referred-companies/:id/revert-eligibility
-  // Reverts a company from eligible/not_eligible back to pending_confirmation for re-review.
-  @Patch('admin/referred-companies/:id/revert-eligibility')
-  @HttpCode(200)
-  @Roles(...ADMIN_ROLES)
-  @ApiOperation({
-    summary:
-      'Revert a referred company back to pending_confirmation for re-review (admin)',
-  })
-  @ApiParam({ name: 'id', description: 'Referred company (organization) UUID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Eligibility reverted to pending confirmation',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Already pending confirmation or not a referral',
-  })
-  @ApiResponse({ status: 404, description: 'Referred company not found' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
-  async revertEligibility(@Param('id') id: string, @CurrentUser() admin: USER) {
-    const data = await this.service.revertEligibility(id, admin);
-    return {
-      status: 200,
-      message: 'Eligibility reverted to pending confirmation',
-      data,
-    };
   }
 
   // POST /med-alliance/admin/referred-companies/:id/eligibility-check

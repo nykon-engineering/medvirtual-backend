@@ -184,21 +184,26 @@ model Organization {
   refer_to_user_id             String?
   referToUser                  USER?                   @relation("OrganizationReferTo", fields: [refer_to_user_id], references: [id])
 
-  // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL)
+  // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL).
+  // 'pending_confirmation' is the resting state (shown to users as "Pending"): new referrals start here and stay
+  // here through every non-deployed pipeline stage. Confirm/Block become available once referral_stage = deployed.
   med_alliance_referral_status MedAllianceReferralStatus?
-  // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
+  // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog).
+  // Cleared when status transitions to 'expired' — expiry no longer encodes itself as a reason string here.
   med_alliance_block_reason    String?
   // Admin note recorded when eligibility is manually approved
   med_alliance_approval_note   String?
-  // Anchor timestamp that starts the one-year eligibility window; set when the first paid invoice is received;
-  // cleared when the window expires so the status reflects not_eligible correctly.
+  // Anchor timestamp for the eligibility window — set to deployment_date (or first paid invoice date as a
+  // fallback) when the org is deployed; used by approveEligibility's backfill computation and for display.
   eligibility_start_at         DateTime?
   // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
   first_paid_invoice_at        DateTime?
   // Deployment date synced from HubSpot organization.deploy_date_of_first_va; preferred over first_paid_invoice_at for display.
+  // Confirm/Block eligibility actions are only available once this is set and in the past. More than 365 days
+  // in the past, the org is automatically moved to 'expired' (via webhook, sync, or the expiry cron sweep).
   deployment_date              DateTime?
   // Pipeline stage tracking where this referral is in the sales-to-deployment lifecycle.
-  // 'deployed' starts the 30-day stabilization clock (eligibility_start_at); cron promotes to eligible after 30 days.
+  // 'deployed' is when eligibility decisions (Confirm/Block) become available — no waiting period.
   referral_stage               ReferralStage?              @default(referred)
 
   // HubSpot sync state — only relevant for referred organizations
@@ -1205,10 +1210,13 @@ enum MedAllianceEntityType {
 // Eligibility status within the Med Alliance affiliate program.
 // Only populated on Organization records that have referred_by_affiliate_id set.
 // Does NOT affect OrganizationStatus — these are independent concerns.
+// pending_confirmation = resting state ("Pending" in the UI) — decisions unlock once the org is deployed.
+// expired = deployment_date passed 365 days without commissions being requested; terminal, no further decisions.
 enum MedAllianceReferralStatus {
   eligible
   not_eligible
   pending_confirmation
+  expired
 }
 
 // MA-006 — Reason why a review case was opened

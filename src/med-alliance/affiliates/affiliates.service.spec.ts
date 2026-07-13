@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AffiliatesService } from './affiliates.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
@@ -37,12 +37,17 @@ const mockPrisma = {
     aggregate: jest.fn(),
     groupBy: jest.fn(),
     findMany: jest.fn(),
+    create: jest.fn(),
   },
   organization: {
     findUnique: jest.fn(),
+    update: jest.fn(),
   },
   hubspotInvoiceSnapshot: {
     findMany: jest.fn(),
+  },
+  medAllianceAuditLog: {
+    create: jest.fn(),
   },
   $transaction: jest.fn(),
 };
@@ -705,7 +710,7 @@ describe('AffiliatesService', () => {
       mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockPreviewProfile);
     });
 
-    it('should mark eligible with full count when paid invoices have paid_at null (bug repro)', async () => {
+    it('should mark pending with full count when paid invoices have paid_at null (bug repro)', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue({ ...baseOrg, deployment_date: null });
       mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
         paidInvoice({ createdAt: daysAgo(50) }),
@@ -716,11 +721,14 @@ describe('AffiliatesService', () => {
 
       const result = await service.previewAssociation('profile-1', 'org-1');
 
-      expect(result.projection.eligibility_window).toBe('eligible');
+      // The 3-tier window (no_invoices/too_new/eligible/expired) is gone — anything within
+      // 365 days lands on the single 'pending' tier now (decisions are available immediately).
+      expect(result.projection.eligibility_window).toBe('pending');
+      expect(result.projection.commission_status).toBe('detected');
       expect(result.projection.projected_commission_count).toBe(4);
     });
 
-    it('should remain eligible with full count when paid_at is resolved (regression guard)', async () => {
+    it('should remain pending with full count when paid_at is resolved (regression guard)', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue({ ...baseOrg, deployment_date: null });
       mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
         paidInvoice({ paid_at: daysAgo(50), createdAt: daysAgo(50) }),
@@ -731,8 +739,24 @@ describe('AffiliatesService', () => {
 
       const result = await service.previewAssociation('profile-1', 'org-1');
 
-      expect(result.projection.eligibility_window).toBe('eligible');
+      expect(result.projection.eligibility_window).toBe('pending');
       expect(result.projection.projected_commission_count).toBe(4);
+    });
+
+    it('should mark pending even when deployment is very recent (no more too_new tier)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        ...baseOrg,
+        deployment_date: daysAgo(2),
+      });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidInvoice({ paid_at: daysAgo(2), createdAt: daysAgo(2) }),
+      ]);
+
+      const result = await service.previewAssociation('profile-1', 'org-1');
+
+      expect(result.projection.eligibility_window).toBe('pending');
+      expect(result.projection.commission_status).toBe('detected');
+      expect(result.projection.projected_commission_count).toBe(1);
     });
 
     it('should exclude zero-amount invoices from projected count', async () => {
@@ -769,6 +793,7 @@ describe('AffiliatesService', () => {
       const result = await service.previewAssociation('profile-1', 'org-1');
 
       expect(result.projection.eligibility_window).toBe('no_invoices');
+      expect(result.projection.commission_status).toBeNull();
       expect(result.projection.projected_commission_count).toBe(0);
     });
 
@@ -783,7 +808,7 @@ describe('AffiliatesService', () => {
 
       const result = await service.previewAssociation('profile-1', 'org-1');
 
-      expect(result.projection.eligibility_window).toBe('eligible');
+      expect(result.projection.eligibility_window).toBe('pending');
     });
 
     it('should report 0 projected commissions and an empty invoice list when eligibility window is expired', async () => {
@@ -799,8 +824,205 @@ describe('AffiliatesService', () => {
       const result = await service.previewAssociation('profile-1', 'org-1');
 
       expect(result.projection.eligibility_window).toBe('expired');
+      expect(result.projection.commission_status).toBeNull();
       expect(result.projection.projected_commission_count).toBe(0);
       expect(result.invoices).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // associateCompany / _backfillOnAssociation
+  // -------------------------------------------------------------------------
+  describe('associateCompany', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS);
+    const Decimal = require('@prisma/client/runtime/library').Decimal;
+
+    const mockProfile = {
+      id: 'profile-1',
+      user_id: 'affiliate-user-1',
+      status: 'active',
+      commission_percent_default: new Decimal('10.00'),
+    };
+
+    const paidSnapshot = (overrides: any = {}) => ({
+      id: 'snap-' + Math.random().toString(36).slice(2),
+      hubspot_id: 'hs-inv-' + Math.random().toString(36).slice(2),
+      invoice_amount: new Decimal('1500.00'),
+      payment_status: null,
+      paid_at: daysAgo(10),
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+      mockPrisma.affiliateCommission.create.mockResolvedValue({});
+      mockInvoiceIngestionService.run.mockResolvedValue(undefined);
+      mockHubspotService.setCompanyAffiliateReferral.mockResolvedValue(undefined);
+    });
+
+    it('should throw NotFoundException when affiliate profile does not exist', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.associateCompany('profile-1', 'org-1', mockAdminUser as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when affiliate has no connected user', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue({
+        ...mockProfile,
+        user_id: null,
+      });
+
+      await expect(
+        service.associateCompany('profile-1', 'org-1', mockAdminUser as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException when organization does not exist', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce(null);
+
+      await expect(
+        service.associateCompany('profile-1', 'org-1', mockAdminUser as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when org already has an affiliate referral', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        id: 'org-1',
+        referred_by_affiliate_id: 'someone-else',
+      });
+
+      await expect(
+        service.associateCompany('profile-1', 'org-1', mockAdminUser as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should set status to pending_confirmation (no 30-day tier) and anchor eligibility_start_at on the raw anchor date', async () => {
+      mockPrisma.affiliateProfile.findUnique
+        .mockResolvedValueOnce(mockProfile) // outer profile lookup
+        .mockResolvedValueOnce(mockProfile); // inner lookup in _backfillOnAssociation
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({ id: 'org-1', referred_by_affiliate_id: null }) // ownership check
+        .mockResolvedValueOnce({ hubspot_id: 'hs-org-1', deployment_date: null }); // backfill lookup
+      const anchorDate = daysAgo(10);
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidSnapshot({ paid_at: anchorDate }),
+      ]);
+      mockPrisma.affiliateProfile.count = jest.fn();
+
+      // findOne() is called at the end — stub whatever it needs minimally via findUnique.
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValueOnce(mockProfile);
+
+      await service.associateCompany('profile-1', 'org-1', mockAdminUser as any).catch(() => {});
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+        }),
+      );
+      const updateCallArgs = mockPrisma.organization.update.mock.calls.find(
+        (c: any) => c[0].data?.med_alliance_referral_status,
+      );
+      expect(updateCallArgs[0].data).toEqual(
+        expect.objectContaining({
+          referral_stage: 'deployed',
+          eligibility_start_at: anchorDate,
+          med_alliance_block_reason: null,
+          med_alliance_referral_status: 'pending_confirmation',
+        }),
+      );
+    });
+
+    it('should mark expired and skip commission backfill when anchor date is more than 365 days ago', async () => {
+      const oldAnchor = daysAgo(400);
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({ id: 'org-1', referred_by_affiliate_id: null })
+        .mockResolvedValueOnce({ hubspot_id: 'hs-org-1', deployment_date: oldAnchor });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidSnapshot({ paid_at: oldAnchor }),
+      ]);
+
+      await service.associateCompany('profile-1', 'org-1', mockAdminUser as any).catch(() => {});
+
+      const updateCallArgs = mockPrisma.organization.update.mock.calls.find(
+        (c: any) => c[0].data?.med_alliance_referral_status,
+      );
+      expect(updateCallArgs[0].data).toEqual(
+        expect.objectContaining({ med_alliance_referral_status: 'expired' }),
+      );
+      // No commission backfill once expired.
+      expect(mockPrisma.affiliateCommission.create).not.toHaveBeenCalled();
+    });
+
+    it('should always backfill commissions as "detected" (never pending_admin_confirmation) when not expired', async () => {
+      const anchorDate = daysAgo(5);
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({ id: 'org-1', referred_by_affiliate_id: null })
+        .mockResolvedValueOnce({ hubspot_id: 'hs-org-1', deployment_date: anchorDate });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([
+        paidSnapshot({ paid_at: anchorDate }),
+      ]);
+
+      await service.associateCompany('profile-1', 'org-1', mockAdminUser as any).catch(() => {});
+
+      expect(mockPrisma.affiliateCommission.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'detected' }),
+        }),
+      );
+    });
+
+    it('should run invoice ingestion before computing the backfill when org has a hubspot_id', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({ id: 'org-1', referred_by_affiliate_id: null })
+        .mockResolvedValueOnce({ hubspot_id: 'hs-org-1', deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([]);
+
+      await service.associateCompany('profile-1', 'org-1', mockAdminUser as any).catch(() => {});
+
+      expect(mockInvoiceIngestionService.run).toHaveBeenCalledWith('org-1', 'hs-org-1');
+    });
+
+    it('should return early (no eligibility-status update) when there are no candidate invoices and no deployment_date', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({ id: 'org-1', referred_by_affiliate_id: null })
+        .mockResolvedValueOnce({ hubspot_id: null, deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([]);
+
+      await service.associateCompany('profile-1', 'org-1', mockAdminUser as any).catch(() => {});
+
+      // The initial `referred_by_affiliate_id` link update always happens, but the
+      // backfill's eligibility-status update must NOT run in this early-return case.
+      const eligibilityUpdate = mockPrisma.organization.update.mock.calls.find(
+        (c: any) => c[0].data?.med_alliance_referral_status,
+      );
+      expect(eligibilityUpdate).toBeUndefined();
+      expect(mockPrisma.medAllianceAuditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('should call hubspot.setCompanyAffiliateReferral after associating', async () => {
+      mockPrisma.affiliateProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({ id: 'org-1', referred_by_affiliate_id: null })
+        .mockResolvedValueOnce({ hubspot_id: null, deployment_date: null });
+      mockPrisma.hubspotInvoiceSnapshot.findMany.mockResolvedValue([]);
+
+      await service.associateCompany('profile-1', 'org-1', mockAdminUser as any).catch(() => {});
+
+      expect(mockHubspotService.setCompanyAffiliateReferral).toHaveBeenCalledWith(
+        'org-1',
+        'affiliate-user-1',
+        mockAdminUser.id,
+      );
     });
   });
 });

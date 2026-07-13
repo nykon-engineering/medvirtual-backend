@@ -451,8 +451,8 @@ export class CommissionsService {
 
   // ---------------------------------------------------------------------------
   // Admin: unvoid a voided commission back to detected or pending_admin_confirmation.
-  // Restores to pending_admin_confirmation if the company is already eligible (30-day gate passed),
-  // otherwise restores to detected so the commission waits for the cron promotion.
+  // Restores to pending_admin_confirmation if the company is already confirmed eligible,
+  // otherwise restores to detected so it waits for an admin eligibility decision.
   // ---------------------------------------------------------------------------
   async unvoid(id: string, dto: { reason: string }, adminUser: USER) {
     const commission = await this.prisma.affiliateCommission.findUnique({
@@ -604,15 +604,13 @@ export class CommissionsService {
   // Admin: manually create commissions from selected paid HubSpot invoices.
   // Applies the same business guards as CommissionDetectionService.run() but
   // always sets status to 'pending_admin_confirmation' since the admin is
-  // explicitly initiating the creation (no 30-day hold needed).
+  // explicitly initiating the creation.
   // ---------------------------------------------------------------------------
   async createFromInvoices(
     affiliateProfileId: string,
     invoiceIds: string[],
     adminUser: USER,
   ): Promise<{ created: number; skipped: number }> {
-    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateProfileId },
       select: {
@@ -694,29 +692,9 @@ export class CommissionsService {
         continue;
       }
 
-      if (
-        org.med_alliance_referral_status === 'not_eligible' &&
-        org.first_paid_invoice_at &&
-        org.med_alliance_block_reason?.startsWith('eligibility_expired')
-      ) {
-        skipped++;
-        continue;
-      }
-
-      if (
-        org.med_alliance_referral_status === 'eligible' &&
-        org.eligibility_start_at &&
-        Date.now() - org.eligibility_start_at.getTime() > ONE_YEAR_MS
-      ) {
-        // Expire the eligibility window as a side-effect.
-        await this.prisma.organization.update({
-          where: { id: org.id },
-          data: {
-            med_alliance_referral_status: 'not_eligible',
-            med_alliance_block_reason:
-              'eligibility_expired: one-year window elapsed',
-          },
-        });
+      // Expiry is owned centrally by commission-detection.service.ts and the cron sweep
+      // (expireStaleEligibility) — this is now a read-only check, never a writer.
+      if (org.med_alliance_referral_status === 'expired') {
         skipped++;
         continue;
       }
@@ -729,14 +707,11 @@ export class CommissionsService {
       // Transition to deployed on first paid invoice (idempotent).
       if (!org.first_paid_invoice_at && org.referral_stage !== 'deployed') {
         const firstInvoiceDate = snapshot.paid_at ?? new Date();
-        const eligibilityStartAt = new Date(
-          firstInvoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000,
-        );
         await this.prisma.organization.update({
           where: { id: org.id },
           data: {
             referral_stage: 'deployed',
-            eligibility_start_at: eligibilityStartAt,
+            eligibility_start_at: firstInvoiceDate,
             first_paid_invoice_at: firstInvoiceDate,
             med_alliance_block_reason: null,
           },
@@ -754,7 +729,7 @@ export class CommissionsService {
             actor_user_id: adminUser.id,
             metadata: {
               referral_stage: 'deployed',
-              eligibility_start_at: eligibilityStartAt.toISOString(),
+              eligibility_start_at: firstInvoiceDate.toISOString(),
             } as any,
           },
         });

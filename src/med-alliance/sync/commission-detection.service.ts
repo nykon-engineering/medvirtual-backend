@@ -4,11 +4,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { buildCommissionIdempotencyKey } from '../../common/utils/commission-idempotency';
 import { AllianceNotificationsService } from '../notifications/notifications.service';
 
-// One year in milliseconds — used for the eligibility window and referral-age rule.
+// One year in milliseconds — the eligibility/expiry window, anchored on deployment_date.
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-
-// 30-day stabilization window: deployed companies must be deployed for this long before going eligible.
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class CommissionDetectionService {
@@ -28,17 +25,18 @@ export class CommissionDetectionService {
    *   - invoice_amount > 0
    *   - payment_status is null OR 'succeeded'
    *
-   * Eligibility lifecycle (updated):
-   *   1. Before first paid invoice       → not_eligible, no commissions created.
-   *   2. First paid invoice received     → markDeployed (referral_stage = deployed,
-   *                                        eligibility_start_at = now). Status stays not_eligible.
-   *                                        Cron promotes to eligible after 30 days.
-   *   3. Within 30-day stabilization     → not_eligible, commissions created as 'detected'.
-   *   4. After 30 days, within one year  → eligible (set by cron), new commissions as 'pending_admin_confirmation'.
-   *   5. One year after eligibility_start_at → expire: set not_eligible, skip commissions.
-   *   6. Referral older than one year with no first paid invoice → skip (referral-age rule).
-   *   7. Active-client block             → skip permanently (block_reason prefix check).
-   *   8. Churned                         → skip commission creation entirely.
+   * Eligibility lifecycle:
+   *   1. Before deployment              → pending_confirmation (resting state), no automatic cutoff.
+   *   2. First paid invoice received     → markDeployed (referral_stage = deployed) if not already
+   *                                        deployed via the HubSpot deployment_date webhook.
+   *                                        Confirm/Block become available to admins immediately.
+   *   3. Admin confirms                  → eligible; new commissions created as 'pending_admin_confirmation'.
+   *   4. More than 365 days since deployment_date → expire: set 'expired', skip commissions.
+   *      This is enforced here as an inline backstop (in addition to the cron sweep in
+   *      cron.service.ts#expireStaleEligibility) so a company stays correct even between cron runs.
+   *   5. Active-client block             → skip permanently (block_reason prefix check, MA-004 — unrelated
+   *                                        to eligibility status, never touched by this refactor).
+   *   6. Canceled                        → skip commission creation entirely.
    *
    * Idempotency: the idempotency_key is @unique in the DB.
    * If a commission already exists (Prisma P2002), the creation is silently skipped.
@@ -85,36 +83,27 @@ export class CommissionDetectionService {
 
     const now = new Date();
 
-    // Eligibility window expiry: eligible but eligibility_start_at (first_paid_invoice_at + 30 days) is older than one year.
-    if (
-      org.med_alliance_referral_status === 'eligible' &&
-      org.eligibility_start_at &&
-      now.getTime() - org.eligibility_start_at.getTime() > ONE_YEAR_MS
-    ) {
-      await this.expireEligibility(organizationId);
-      return { created: 0, skipped: 0 };
-    }
-
-    // Referral-age rule: never received a paid invoice AND referral itself is older than one year.
-    if (
-      org.med_alliance_referral_status === 'not_eligible' &&
-      !org.first_paid_invoice_at &&
-      now.getTime() - org.createdAt.getTime() > ONE_YEAR_MS
-    ) {
+    // Already expired — nothing further to do.
+    if (org.med_alliance_referral_status === 'expired') {
       this.logger.log(
-        `Org ${organizationId} referred > 1 year ago with no paid invoice — skipping`,
+        `Org ${organizationId} eligibility already expired — skipping commission detection`,
       );
       return { created: 0, skipped: 0 };
     }
 
-    // Window already expired in a prior run — block_reason signals expiry; first_paid_invoice_at is set.
+    // Inline expiry backstop: deployed more than 365 days ago and not yet marked expired.
+    // Catches pending_confirmation, eligible, AND not_eligible (blocked) orgs — the cron sweep
+    // (cron.service.ts#expireStaleEligibility) does the same, this just keeps things correct
+    // between cron runs whenever this org is touched by the sync pipeline. Canceled orgs are
+    // excluded — that stage is terminal and orthogonal to eligibility status (rule 8 / BR-13).
     if (
-      org.med_alliance_referral_status === 'not_eligible' &&
-      org.first_paid_invoice_at &&
-      org.med_alliance_block_reason?.startsWith('eligibility_expired')
+      org.referral_stage === 'deployed' &&
+      org.deployment_date &&
+      now.getTime() - org.deployment_date.getTime() > ONE_YEAR_MS
     ) {
-      this.logger.log(
-        `Org ${organizationId} eligibility window expired — skipping commission detection`,
+      await this.expireEligibility(
+        organizationId,
+        org.med_alliance_referral_status,
       );
       return { created: 0, skipped: 0 };
     }
@@ -167,8 +156,8 @@ export class CommissionDetectionService {
       return { created: 0, skipped: 0 };
     }
 
-    // First qualifying event: transition org to deployed stage and start the 30-day clock.
-    // Skip if already deployed or canceled (idempotent).
+    // First qualifying event: transition org to deployed stage (fallback path when no HubSpot
+    // deployment_date webhook has fired yet). Skip if already deployed or canceled (idempotent).
     if (
       !org.first_paid_invoice_at &&
       !org.deployment_date &&
@@ -179,9 +168,7 @@ export class CommissionDetectionService {
       await this.markDeployed(organizationId, firstInvoiceDate);
       // Update local org state so downstream logic sees the new values.
       org.referral_stage = 'deployed';
-      org.eligibility_start_at = new Date(
-        firstInvoiceDate.getTime() + THIRTY_DAYS_MS,
-      );
+      org.eligibility_start_at = firstInvoiceDate;
       org.first_paid_invoice_at = firstInvoiceDate;
     }
 
@@ -193,14 +180,9 @@ export class CommissionDetectionService {
       return { created: 0, skipped: 0 };
     }
 
-    // Determine commission status at creation time.
-    // New commissions go directly to pending_admin_confirmation if the company is already eligible
-    // (i.e. deployed > 30 days ago and within the one-year window).
-    const isEligibleNow =
-      org.med_alliance_referral_status === 'eligible' &&
-      org.eligibility_start_at != null &&
-      Date.now() >= org.eligibility_start_at.getTime() &&
-      Date.now() - org.eligibility_start_at.getTime() <= ONE_YEAR_MS;
+    // Determine commission status at creation time. New commissions go directly to
+    // pending_admin_confirmation if the company is already confirmed eligible.
+    const isEligibleNow = org.med_alliance_referral_status === 'eligible';
 
     const commissionStatus = isEligibleNow
       ? 'pending_admin_confirmation'
@@ -319,25 +301,22 @@ export class CommissionDetectionService {
 
   /**
    * Transitions a referred organization to the 'deployed' pipeline stage on its first paid invoice.
-   * Sets eligibility_start_at to NOW (deployment date — anchor for both 30-day and one-year windows)
-   * and first_paid_invoice_at to the actual invoice date (permanent audit field).
-   * med_alliance_referral_status stays 'not_eligible' — the cron promotes it to 'eligible' after 30 days.
+   * Fallback path for when no HubSpot deployment_date webhook has fired yet. Sets eligibility_start_at
+   * to the invoice date (no stabilization offset) and first_paid_invoice_at as a permanent audit field.
+   * med_alliance_referral_status is left untouched — Confirm/Block become available to admins
+   * immediately once deployed, there is no waiting period.
    */
   private async markDeployed(
     organizationId: string,
     firstInvoiceDate: Date,
   ): Promise<void> {
-    const eligibilityStartAt = new Date(
-      firstInvoiceDate.getTime() + THIRTY_DAYS_MS,
-    );
     await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
         referral_stage: 'deployed',
-        eligibility_start_at: eligibilityStartAt,
+        eligibility_start_at: firstInvoiceDate,
         first_paid_invoice_at: firstInvoiceDate,
         med_alliance_block_reason: null,
-        // med_alliance_referral_status intentionally stays 'not_eligible'
       },
     });
 
@@ -346,37 +325,37 @@ export class CommissionDetectionService {
         entity_type: 'referred_company',
         entity_id: organizationId,
         event: 'stage_changed',
-        old_status: 'not_eligible',
-        new_status: 'not_eligible',
+        old_status: 'pending_confirmation',
+        new_status: 'pending_confirmation',
         reason:
-          'First paid invoice — auto-transitioned to deployed stage; 30-day stabilization clock started',
+          'First paid invoice — auto-transitioned to deployed stage; eligibility decisions now available',
         source: 'sync',
         actor_user_id: null,
         metadata: {
           referral_stage: 'deployed',
-          eligibility_start_at: eligibilityStartAt.toISOString(),
+          eligibility_start_at: firstInvoiceDate.toISOString(),
         } as any,
       },
     });
 
     this.logger.log(
-      `Org ${organizationId} transitioned to deployed — eligibility_start_at=${eligibilityStartAt.toISOString()}`,
+      `Org ${organizationId} transitioned to deployed — eligibility_start_at=${firstInvoiceDate.toISOString()}`,
     );
   }
 
   /**
-   * Expires eligibility when the one-year window has passed.
-   * Preserves eligibility_start_at as a permanent record of when the company was deployed.
-   * Sets med_alliance_block_reason to signal expiry for downstream guards.
+   * Expires eligibility when deployment_date is more than 365 days in the past.
+   * Clears med_alliance_block_reason — expiry is now its own status, no reason-string encoding needed.
    */
-  private async expireEligibility(organizationId: string): Promise<void> {
+  private async expireEligibility(
+    organizationId: string,
+    oldStatus: string | null,
+  ): Promise<void> {
     await this.prisma.organization.update({
       where: { id: organizationId },
       data: {
-        med_alliance_referral_status: 'not_eligible',
-        // eligibility_start_at is preserved — it is the deployment date, not an eligibility anchor
-        med_alliance_block_reason:
-          'eligibility_expired: one-year window elapsed',
+        med_alliance_referral_status: 'expired',
+        med_alliance_block_reason: null,
       },
     });
 
@@ -385,9 +364,9 @@ export class CommissionDetectionService {
         entity_type: 'referred_company',
         entity_id: organizationId,
         event: 'eligibility_expired',
-        old_status: 'eligible',
-        new_status: 'not_eligible',
-        reason: 'One-year eligibility window elapsed',
+        old_status: oldStatus,
+        new_status: 'expired',
+        reason: 'One-year window since deployment_date elapsed',
         source: 'sync',
         actor_user_id: null,
         metadata: undefined,
@@ -395,7 +374,7 @@ export class CommissionDetectionService {
     });
 
     this.logger.log(
-      `Org ${organizationId} eligibility window expired — status set to not_eligible`,
+      `Org ${organizationId} eligibility window expired — status set to expired`,
     );
   }
 }
