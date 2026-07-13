@@ -90,7 +90,7 @@ export class EmailTemplatesService {
         primaryColorHover: theme.primaryColorHover,
         companyName: theme.companyName,
         logoUrl: theme.logoUrl,
-        layoutPreset: 'default',
+        layoutPreset: theme.layoutPreset ?? 'default',
       },
       runtimeValues,
       dbTemplate.button_label,

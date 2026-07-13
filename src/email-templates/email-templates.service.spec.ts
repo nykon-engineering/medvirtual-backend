@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EmailTemplatesService } from './email-templates.service';
+import { EmailTheme } from '../common/utils/email-templates/theme';
 
 // ── Shared fixtures ────────────────────────────────────────────────────────────
 
@@ -930,6 +931,67 @@ describe('EmailTemplatesService — branding overrides in preview/testSend', () 
     );
     expect(mail.sendMail).toHaveBeenCalledWith(
       expect.objectContaining({ from: 'Acme Corp <noreply@medvirtual.ai>' }),
+    );
+  });
+});
+
+// ── getTemplateContent (real transactional send path) ────────────────────────
+
+describe('EmailTemplatesService.getTemplateContent', () => {
+  const BASE_THEME = {
+    primaryColor: BRANDING.primary_color,
+    primaryColorHover: BRANDING.secondary_color,
+    secondaryColor: '#F8F9FA',
+    accentColor: BRANDING.primary_color,
+    companyName: BRANDING.company_name,
+    logoUrl: BRANDING.logo_url,
+  };
+
+  it('renders the solid banner div when theme.layoutPreset is "default"', async () => {
+    const { service } = await buildService();
+    const result = await service.getTemplateContent(
+      'invite-signup',
+      {},
+      { ...BASE_THEME, layoutPreset: 'default' },
+    );
+    expect(result.html).toContain(
+      `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
+    );
+  });
+
+  it('omits the colored banner and renders the logo inline when theme.layoutPreset is "minimal"', async () => {
+    const { service } = await buildService();
+    const result = await service.getTemplateContent(
+      'invite-signup',
+      {},
+      { ...BASE_THEME, layoutPreset: 'minimal' },
+    );
+    expect(result.html).not.toContain(
+      `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
+    );
+    expect(result.html).toContain('class="logo"');
+  });
+
+  it('renders a tinted hero header with an accent bar when theme.layoutPreset is "hero"', async () => {
+    const { service } = await buildService();
+    const result = await service.getTemplateContent(
+      'invite-signup',
+      {},
+      { ...BASE_THEME, layoutPreset: 'hero' },
+    );
+    expect(result.html).toContain(`background:${BRANDING.primary_color}33;`);
+    expect(result.html).toContain(
+      `background:${BRANDING.primary_color};margin:0 auto 20px;`,
+    );
+  });
+
+  it('falls back to the "default" structure when theme.layoutPreset is undefined', async () => {
+    const { service } = await buildService();
+    const result = await service.getTemplateContent('invite-signup', {}, {
+      ...BASE_THEME,
+    } as EmailTheme);
+    expect(result.html).toContain(
+      `background:${BRANDING.primary_color};padding:30px 20px;text-align:center;`,
     );
   });
 });
