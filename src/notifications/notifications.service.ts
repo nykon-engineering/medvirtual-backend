@@ -5,9 +5,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
-import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
+import {
+  getUserEmailTheme,
+  getBusinessUnitEmailTheme,
+  orgBusinessUnitToSlug,
+} from '../common/utils/email-templates/theme-helper';
 import { ticketTypeReverseDictionary } from '../common/dictionaries/ticket-type';
-import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
+import {
+  getEmailThemeByBusinessUnit,
+  EmailTheme,
+} from '../common/utils/email-templates/theme';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
@@ -25,13 +32,20 @@ export class NotificationsService {
     key: string,
     runtimeValues: Record<string, string>,
     theme: ReturnType<typeof getEmailThemeByBusinessUnit> | null,
+    businessUnit?: string | null,
   ): Promise<{ subject: string; html: string } | null> {
     try {
       if (!theme) return null;
+      // Callers pass the Organization/OfferPanel display value ("MedVirtual" /
+      // "Berry Virtual"), but EmailTemplate.business_unit is stored as a slug.
+      // Convert before the lookup so a BU-scoped template can actually match;
+      // getTemplateContent falls back to the global (null) row when none exists.
+      const businessUnitSlug = orgBusinessUnitToSlug(businessUnit ?? null);
       return await this.emailTemplates.getTemplateContent(
         key,
         runtimeValues,
         theme,
+        businessUnitSlug,
       );
     } catch {
       return null;
@@ -69,12 +83,16 @@ export class NotificationsService {
 
   private buildEmail(
     htmlInner: string,
-    theme?: any,
+    theme?: Partial<EmailTheme> | null,
     greeting?: string,
     closing?: string,
   ): string {
     const primaryColor = theme?.primaryColor || '#01546B';
     const companyName = theme?.companyName || 'MedVirtual';
+    // Honor the saved custom design (EmailBranding) in the fallback too, so the
+    // CTA button matches what getTemplateContent/renderHtml would produce.
+    const buttonColor = theme?.buttonColor || primaryColor;
+    const buttonTextColor = theme?.buttonTextColor || '#ffffff';
 
     return `
 <!DOCTYPE html>
@@ -128,8 +146,8 @@ export class NotificationsService {
     }
     .cta-button {
       display: inline-block;
-      background-color: ${theme?.primaryColor || primaryColor};
-      color: #ffffff !important;
+      background-color: ${buttonColor};
+      color: ${buttonTextColor} !important;
       padding: 14px 28px;
       text-decoration: none;
       border-radius: 30px;
@@ -140,13 +158,13 @@ export class NotificationsService {
     }
     .cta-button:hover {
       background-color: ${theme?.primaryColorHover || '#013A4F'};
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:visited {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:link {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .closing {
       color: #333333;
@@ -294,7 +312,8 @@ export class NotificationsService {
             )
             .join('')
         : '';
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -353,6 +372,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -457,7 +477,8 @@ export class NotificationsService {
       },
     });
 
-    const emailTheme = await getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -488,6 +509,7 @@ export class NotificationsService {
         '{{interviewLink}}': interviewLink,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
     return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -533,7 +555,8 @@ export class NotificationsService {
     const verb = action === 'edited' ? 'edited' : 'canceled';
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -568,6 +591,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -604,7 +628,8 @@ export class NotificationsService {
     const verb = action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -640,6 +665,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -684,7 +710,8 @@ export class NotificationsService {
     const verb = action === 'for_review' ? 'For Review' : action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -720,6 +747,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -799,7 +827,8 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -860,6 +889,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -909,7 +939,8 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -955,6 +986,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -1012,7 +1044,8 @@ export class NotificationsService {
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -1052,6 +1085,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -1104,7 +1138,8 @@ export class NotificationsService {
       : 'Not specified';
 
     // Get email theme by organization business unit
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -1150,6 +1185,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -1191,7 +1227,8 @@ export class NotificationsService {
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -1227,6 +1264,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
 
     return await this.mail.sendMail({
@@ -1351,7 +1389,8 @@ export class NotificationsService {
         'Unknown'
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -1392,6 +1431,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
     const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -1482,7 +1522,8 @@ export class NotificationsService {
         })
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
       hr.organization.business_unit,
     );
 
@@ -1509,6 +1550,7 @@ export class NotificationsService {
         '{{hrLink}}': detailUrl,
       },
       emailTheme,
+      hr.organization.business_unit,
     );
     const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
@@ -2374,7 +2416,10 @@ export class NotificationsService {
     additionalDetails?: string;
   }): Promise<void> {
     try {
-      const theme = getEmailThemeByBusinessUnit(payload.businessUnit);
+      const theme = await getBusinessUnitEmailTheme(
+        this.prisma,
+        payload.businessUnit,
+      );
       const inquiryType = payload.hasCandidate
         ? 'Viewed candidate'
         : 'General inquiry';
@@ -2446,6 +2491,7 @@ export class NotificationsService {
           '{{additionalDetails}}': payload.additionalDetails || 'N/A',
         },
         theme,
+        payload.businessUnit,
       );
 
       await this.mail.sendMail({
@@ -2482,7 +2528,10 @@ export class NotificationsService {
     });
     if (!panel) return false;
 
-    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
     const panelUrl = `${process.env.FRONTEND_URL}/modules/talent/client`;
     const candidateCount = panel._count.candidates;
     const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
@@ -2511,6 +2560,7 @@ export class NotificationsService {
         '{{panelLink}}': panelUrl,
       },
       theme,
+      panel.business_unit,
     );
 
     return this.mail.sendMail({
@@ -2540,7 +2590,10 @@ export class NotificationsService {
     });
     if (!panel || !panel.public_token) return false;
 
-    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
     const panelUrl = `${process.env.FRONTEND_URL}/modules/public/offer-panel/${panel.public_token}`;
     const candidateCount = panel._count.candidates;
     const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
@@ -2567,6 +2620,7 @@ export class NotificationsService {
         '{{panelLink}}': panelUrl,
       },
       theme,
+      panel.business_unit,
     );
 
     return this.mail.sendMail({
@@ -2594,7 +2648,10 @@ export class NotificationsService {
     });
     if (!panel?.createdBy?.email) return false;
 
-    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
     const panelUrl = `${process.env.FRONTEND_URL}/offer-panels?panel=${panel.id}`;
     const orgLabel = panel.recipient_org_name
       ? ` from ${panel.recipient_org_name}`
@@ -2620,6 +2677,7 @@ export class NotificationsService {
         '{{panelTitle}}': panel.title || '',
       },
       theme,
+      panel.business_unit,
     );
 
     return this.mail.sendMail({
@@ -2645,7 +2703,10 @@ export class NotificationsService {
     });
     if (!panel?.createdBy?.email) return false;
 
-    const theme = getEmailThemeByBusinessUnit(panel.business_unit);
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
     const panelUrl = `${process.env.FRONTEND_URL}/offer-panels?panel=${panel.id}`;
     const orgLabel = panel.recipient_org_name
       ? ` from ${panel.recipient_org_name}`
@@ -2671,6 +2732,7 @@ export class NotificationsService {
         '{{panelTitle}}': panel.title || '',
       },
       theme,
+      panel.business_unit,
     );
 
     return this.mail.sendMail({

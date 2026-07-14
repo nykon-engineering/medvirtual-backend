@@ -7,7 +7,9 @@ import {
 
 // Maps the Organization.business_unit display value to the EmailBranding slug.
 // Organization stores "Berry Virtual" / "MedVirtual"; EmailBranding uses "berry-virtual" / "medvirtual".
-function orgBusinessUnitToSlug(orgBusinessUnit: string | null): string | null {
+export function orgBusinessUnitToSlug(
+  orgBusinessUnit: string | null,
+): string | null {
   if (!orgBusinessUnit) return null;
   return orgBusinessUnit.toLowerCase().replace(/\s+/g, '-');
 }
@@ -40,6 +42,19 @@ async function getBrandingFromDb(
   } catch {
     return null;
   }
+}
+
+// Resolves the email theme for an organization's business_unit display value
+// (e.g. "MedVirtual" / "Berry Virtual"). Reads the saved custom design from the
+// DB, falling back to the hardcoded theme when no branding row exists.
+// Used by broadcast emails that target all org users (no single userId).
+export async function getBusinessUnitEmailTheme(
+  prisma: PrismaService,
+  orgBusinessUnit: string | null,
+): Promise<EmailTheme> {
+  const slug = orgBusinessUnitToSlug(orgBusinessUnit);
+  const dbTheme = await getBrandingFromDb(prisma, slug);
+  return dbTheme ?? getEmailThemeByBusinessUnit(orgBusinessUnit);
 }
 
 export async function isUserBerryVirtual(

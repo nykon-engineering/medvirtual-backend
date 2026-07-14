@@ -999,6 +999,72 @@ describe('NotificationsService', () => {
         expect.objectContaining({ html: expect.stringContaining('Not specified') }),
       );
     });
+
+    // Bug 1 — the DB template lookup must receive the business-unit *slug*
+    // (or null), not the display value 'MedVirtual'. Otherwise it never matches
+    // the seeded global template and the custom-design render is skipped.
+    it('should resolve the DB template (custom design) instead of falling back for a display-value business unit', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      // Template resolves only when the lookup value is the slug or null/undefined —
+      // i.e. NOT the raw display value 'MedVirtual'.
+      mockEmailTemplatesService.getTemplateContent.mockImplementation(
+        async (_key, _values, _theme, businessUnit) => {
+          if (businessUnit === undefined || businessUnit === null || businessUnit === 'medvirtual') {
+            return { subject: 'Interview Invite: DB', html: '<div>DB_RENDERED_TEMPLATE</div>' };
+          }
+          return null;
+        },
+      );
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      // Uses the DB-rendered template, not the buildEmail fallback.
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'Interview Invite: DB',
+          html: expect.stringContaining('DB_RENDERED_TEMPLATE'),
+        }),
+      );
+    });
+
+    // Bug 2 — when the DB template is missing and buildEmail() is used, the saved
+    // custom button color from EmailBranding must still be applied to the CTA button.
+    it('should apply the custom buttonColor in the buildEmail fallback', async () => {
+      (mockPrismaService as any).emailBranding = {
+        findUnique: jest.fn().mockResolvedValue({
+          business_unit: 'medvirtual',
+          primary_color: '#01546B',
+          secondary_color: '#013A4F',
+          logo_url: null,
+          company_name: 'MedVirtual',
+          button_color: '#FF00AA',
+          button_text_color: '#FFFFFF',
+          layout_preset: 'default',
+        }),
+      };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+      // Force the buildEmail fallback path.
+      mockEmailTemplatesService.getTemplateContent.mockResolvedValue(null);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ html: expect.stringContaining('#FF00AA') }),
+      );
+
+      delete (mockPrismaService as any).emailBranding;
+    });
   });
 
   describe('notifyHireRequestSourcingAssignee', () => {

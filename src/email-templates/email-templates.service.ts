@@ -73,9 +73,17 @@ export class EmailTemplatesService {
     theme: EmailTheme,
     businessUnit?: string | null,
   ): Promise<{ subject: string; html: string }> {
-    const dbTemplate = await this.prisma.emailTemplate.findFirst({
-      where: { key, business_unit: businessUnit ?? null, is_active: true },
-    });
+    // Prefer a BU-scoped active row; fall back to the global (null) row so
+    // callers that pass a business unit still resolve templates seeded globally.
+    const dbTemplate =
+      (await this.prisma.emailTemplate.findFirst({
+        where: { key, business_unit: businessUnit ?? null, is_active: true },
+      })) ??
+      (businessUnit
+        ? await this.prisma.emailTemplate.findFirst({
+            where: { key, business_unit: null, is_active: true },
+          })
+        : null);
 
     if (!dbTemplate) {
       return null as unknown as { subject: string; html: string };
@@ -91,6 +99,8 @@ export class EmailTemplatesService {
         companyName: theme.companyName,
         logoUrl: theme.logoUrl,
         layoutPreset: theme.layoutPreset ?? 'default',
+        buttonColor: theme.buttonColor,
+        buttonTextColor: theme.buttonTextColor,
       },
       runtimeValues,
       dbTemplate.button_label,
