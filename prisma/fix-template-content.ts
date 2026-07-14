@@ -222,6 +222,7 @@ async function main() {
   // 8. new-positions-alert
   // Source: /src/common/utils/email-templates/new-positions-alert.ts
   // Admin-only report — body is a table, kept as descriptive text
+  /*
   await fix({
     key: 'new-positions-alert',
     name: 'New VA Positions Alert',
@@ -236,6 +237,7 @@ async function main() {
     button_url: null,
     placeholders: ['{{positionCount}}', '{{positionsList}}'],
   });
+  */
 
   // 9. quarterly-payout-report
   // Source: /src/common/utils/email-templates/quarterly-payout-report.ts
@@ -258,6 +260,7 @@ async function main() {
 
   // 10. client-users-deactivation
   // Source: /src/common/utils/email-templates/client-users-deactivation-report.ts
+  /*
   await fix({
     key: 'client-users-deactivation',
     name: 'Client Users Deactivation Report',
@@ -274,6 +277,7 @@ async function main() {
     button_url: null,
     placeholders: ['{{reportDate}}', '{{deactivatedCount}}', '{{removedCount}}', '{{reportContent}}'],
   });
+  */
 
   // 11. med-alliance-deployed-companies
   // Source: /src/common/utils/email-templates/med-alliance-deployed-companies-report.ts
@@ -296,6 +300,7 @@ async function main() {
 
   // 12. system-report
   // Source: /src/common/utils/email-templates/system-report.ts
+  /*
   await fix({
     key: 'system-report',
     name: 'System Report',
@@ -312,9 +317,10 @@ async function main() {
     button_url: null,
     placeholders: ['{{availableCount}}', '{{endorsedCount}}', '{{withoutResumeCount}}', '{{failedParsingCount}}', '{{reportContent}}'],
   });
-
+  */
   // 13. cron-job-error
   // Source: /src/common/utils/email-templates/cron-job-error-report.ts
+  /*
   await fix({
     key: 'cron-job-error',
     name: 'Cron Job Error Report',
@@ -330,10 +336,12 @@ async function main() {
     button_url: null,
     placeholders: ['{{jobName}}', '{{errorTime}}', '{{errorMessage}}', '{{errorStack}}'],
   });
+  */
 
   // 14. google-token-expired
   // Source: /src/common/utils/email-templates/googleTokenExpired.ts
   // Original had "Hi Paulo" hardcoded — generalised with {{recipientName}}
+  /*
   await fix({
     key: 'google-token-expired',
     name: 'Google Token Expired',
@@ -347,10 +355,12 @@ async function main() {
     button_url: null,
     placeholders: ['{{recipientName}}'],
   });
+  */
 
   // 15. google-drive-failed
   // Source: /src/common/utils/email-templates/googledrive-failed.ts
   // Exact wording: "Hi MedVirtual Team, we got a error from ${candidateName} resume."
+  /*
   await fix({
     key: 'google-drive-failed',
     name: 'Google Drive Failed',
@@ -366,10 +376,12 @@ async function main() {
     button_url: null,
     placeholders: ['{{candidateName}}', '{{messageError}}'],
   });
+  */
 
   // 16. openai-quota-exceeded
   // Source: /src/common/utils/email-templates/insufficient_quota-openai.ts
   // Original had "Hi Shayan" hardcoded — generalised with {{recipientName}}
+  /*
   await fix({
     key: 'openai-quota-exceeded',
     name: 'OpenAI Quota Exceeded',
@@ -383,8 +395,9 @@ async function main() {
     button_url: null,
     placeholders: ['{{recipientName}}'],
   });
+  */
 
-  console.log('\n✅ All 16 existing templates corrected.');
+  console.log('\n✅ All 15 existing templates corrected.');
   console.log('\n🔧 Adding 20 new HR/Tickets templates...\n');
 
   // ── HIRE REQUEST templates ──────────────────────────────────────────────────
