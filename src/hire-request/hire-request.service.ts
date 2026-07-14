@@ -923,7 +923,13 @@ export class HireRequestService {
       },
       include: {
         skills: true,
-        organization: true,
+        organization: {
+          include: {
+            admin: {
+              select: { id: true, first_name: true, last_name: true },
+            },
+          },
+        },
         createdBy: {
           select: {
             id: true,
@@ -1151,6 +1157,13 @@ export class HireRequestService {
       case 'organization_admin':
         baseWhere = {
           organization: { id: user.organization_id },
+          //this condition is to avoid showing hire requests that have a cancellation ticket that is not resolved yet
+          tickets: {
+            none: {
+              type: 'hire_request_cancellation',
+              status: { not: 'resolved' },
+            },
+          },
           OR: [
             {
               status: {
@@ -1186,6 +1199,13 @@ export class HireRequestService {
       case 'system_admin':
         baseWhere = {
           status: { in: ['sourcing', 'for_review'] },
+          //this condition is to avoid showing hire requests that have a cancellation ticket that is not resolved yet
+          tickets: {
+            none: {
+              type: 'hire_request_cancellation',
+              status: { not: 'resolved' },
+            },
+          },
         };
         break;
     }
@@ -1917,12 +1937,29 @@ export class HireRequestService {
       //update panel to readable=false
       //update the hireRequest Status to sourcing
 
+      // Leaving interview_scheduled must also reset CandidatePanel.status
+      // and clear the stale Interview rows — otherwise GET
+      // /hire-request/get-panels/all (which buckets by CandidatePanel.status,
+      // not HireRequest.status) keeps showing the card under "Interview
+      // Scheduled" on the client side even though the hire request itself
+      // moved back to sourcing.
+      if (hireRequest.status == 'interview_scheduled' && panelExists) {
+        await this.prisma.interview.deleteMany({
+          where: {
+            panel_id: panelExists.id,
+          },
+        });
+      }
+
       const panelUpdated = await this.prisma.candidatePanel.updateMany({
         where: {
           hire_request_id: id,
         },
         data: {
           readable: false,
+          ...(hireRequest.status == 'interview_scheduled'
+            ? { status: 'created' as PanelStatus, scheduled_date: null }
+            : {}),
         },
       });
       const updatedRequest = await this.updateHireRequestStatus(

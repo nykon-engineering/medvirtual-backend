@@ -2,9 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AllianceNotificationsService } from './notifications.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
 
 const mockMail = { sendMail: jest.fn() };
 const mockPrisma = {};
+const mockEmailTemplates = { getTemplateContent: jest.fn().mockResolvedValue(null) };
 
 const affiliate = { email: 'partner@test.com', first_name: 'Jane' };
 
@@ -18,6 +20,7 @@ describe('AllianceNotificationsService', () => {
         AllianceNotificationsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: MailService, useValue: mockMail },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -384,25 +387,15 @@ describe('AllianceNotificationsService', () => {
   // ---------------------------------------------------------------------------
 
   describe('buildFrom (via email from field)', () => {
-    it('prefixes [DEV] when not in production', async () => {
-      process.env.ENVIRONMENT = 'DEV';
+    it('passes from without [DEV] prefix to MailService (prefix is applied by MailService)', async () => {
       await service.notifyCommissionEligible(affiliate, {
         organizationName: 'Org',
         commissionAmount: 10,
         commissionPercent: 5,
       });
       const call = mockMail.sendMail.mock.calls[0][0];
-      expect(call.from).toContain('[DEV]');
-    });
-
-    it('does not prefix [DEV] in production', async () => {
-      process.env.ENVIRONMENT = 'PROD';
-      await service.notifyCommissionEligible(affiliate, {
-        organizationName: 'Org',
-        commissionAmount: 10,
-        commissionPercent: 5,
-      });
-      const call = mockMail.sendMail.mock.calls[0][0];
+      expect(call.from).toContain('MedVirtual');
+      expect(call.from).toContain('noreply@medvirtual.ai');
       expect(call.from).not.toContain('[DEV]');
     });
   });

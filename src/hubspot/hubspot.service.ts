@@ -72,6 +72,8 @@ import { HandlerInvoicePropertyChange } from './handlers/invoicePropertyChange';
 import { HandlerInvoiceAssociationChange } from './handlers/invoiceAssociationChange';
 import { HandlerContactCreation } from './handlers/contactCreation';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+import { HandlerContactDeletion } from './handlers/contactDeletion';
+import { HandlerContactMerge } from './handlers/contactMerge';
 
 @Injectable()
 export class HubspotService {
@@ -125,6 +127,8 @@ export class HubspotService {
 
     private readonly contactCreation: HandlerContactCreation,
     private readonly contactPropertyChange: HandlerContactPropertyChange,
+    private readonly contactDeletion: HandlerContactDeletion,
+    private readonly contactMerge: HandlerContactMerge,
 
     private readonly audit: HubspotAuditService,
 
@@ -409,6 +413,14 @@ export class HubspotService {
 
           case 'contact.propertyChange':
             await this.contactPropertyChange.execute(event);
+            break;
+
+          case 'contact.deletion':
+            await this.contactDeletion.execute(event);
+            break;
+
+          case 'contact.merge':
+            await this.contactMerge.execute(event);
             break;
         }
 

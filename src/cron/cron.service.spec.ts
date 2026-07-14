@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CandidatesService } from '../candidate/candidates.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { HandlerContactDeletion } from '../hubspot/handlers/contactDeletion';
+import { HubspotAuditSource } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
@@ -11,6 +13,7 @@ import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-re
 import { ReferralSyncService } from '../med-alliance/sync/referral-sync.service';
 import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 jest.mock('axios');
 
@@ -19,6 +22,7 @@ describe('CronService', () => {
   let prismaServiceMock: any;
   let candidatesServiceMock: { processData: jest.Mock };
   let handlerObjectCreationMock: { execute: jest.Mock };
+  let contactDeletionMock: { execute: jest.Mock };
   let mailServiceMock: { sendMail: jest.Mock };
   let hireRequestServiceMock: Record<string, jest.Mock>;
   let positionRateConfigServiceMock: Record<string, jest.Mock>;
@@ -53,6 +57,10 @@ describe('CronService', () => {
     };
 
     handlerObjectCreationMock = {
+      execute: jest.fn(),
+    };
+
+    contactDeletionMock = {
       execute: jest.fn(),
     };
 
@@ -94,6 +102,7 @@ describe('CronService', () => {
         { provide: PrismaService, useValue: prismaServiceMock },
         { provide: CandidatesService, useValue: candidatesServiceMock },
         { provide: HandlerObjectCreation, useValue: handlerObjectCreationMock },
+        { provide: HandlerContactDeletion, useValue: contactDeletionMock },
         { provide: MailService, useValue: mailServiceMock },
         { provide: HireRequestService, useValue: hireRequestServiceMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
@@ -101,6 +110,7 @@ describe('CronService', () => {
         { provide: ReferralSyncService, useValue: referralSyncServiceMock },
         { provide: CommissionDetectionService, useValue: commissionDetectionServiceMock },
         { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
+        { provide: EmailTemplatesService, useValue: { getTemplateContent: jest.fn().mockResolvedValue(null) } },
       ],
     }).compile();
 
@@ -168,91 +178,78 @@ describe('CronService', () => {
   });
 
   // -------------------------------------------------------------------------
-  // promoteDeployedCompanies
+  // expireStaleEligibility
   // -------------------------------------------------------------------------
-  describe('promoteDeployedCompanies', () => {
+  describe('expireStaleEligibility', () => {
     it('should return zero counts when no orgs qualify', async () => {
       prismaServiceMock.organization.findMany.mockResolvedValue([]);
 
-      const result = await service.promoteDeployedCompanies();
+      const result = await service.expireStaleEligibility();
 
-      expect(result).toEqual({ companiesPromoted: 0, commissionsPromoted: 0, errors: [] });
+      expect(result).toEqual({ companiesExpired: 0, errors: [] });
       expect(prismaServiceMock.organization.update).not.toHaveBeenCalled();
-      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
+      expect(mailServiceMock.sendMail).not.toHaveBeenCalled();
     });
 
-    it('should move eligible orgs to pending confirmation without advancing commissions', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000); // 40 days ago
+    it('should expire multiple orgs starting from different statuses', async () => {
+      const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', eligibility_start_at: deployedAt },
-        { id: 'org-2', eligibility_start_at: deployedAt },
+        { id: 'org-1', name: 'Clinic A', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
+        { id: 'org-2', name: 'Clinic B', deployment_date: deployedAt, med_alliance_referral_status: 'eligible' },
+        { id: 'org-3', name: 'Clinic C', deployment_date: deployedAt, med_alliance_referral_status: 'not_eligible' },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      mailServiceMock.sendMail.mockResolvedValue({});
 
-      const result = await service.promoteDeployedCompanies();
+      const result = await service.expireStaleEligibility();
 
-      expect(result.companiesPromoted).toBe(2);
-      expect(result.commissionsPromoted).toBe(0);
+      expect(result.companiesExpired).toBe(3);
       expect(result.errors).toHaveLength(0);
-      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
-      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
+      expect(prismaServiceMock.organization.update).toHaveBeenCalledTimes(3);
     });
 
-    it('should set org status to pending_confirmation and clear block reason', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    it('should set org status to expired and clear block reason', async () => {
+      const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', eligibility_start_at: deployedAt },
+        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'not_eligible' },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      mailServiceMock.sendMail.mockResolvedValue({});
 
-      await service.promoteDeployedCompanies();
+      await service.expireStaleEligibility();
 
       expect(prismaServiceMock.organization.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'org-1' },
-          data: expect.objectContaining({
-            med_alliance_referral_status: 'pending_confirmation',
+          data: {
+            med_alliance_referral_status: 'expired',
             med_alliance_block_reason: null,
-          }),
+          },
         }),
       );
     });
 
-    it('should not promote detected commissions before admin confirmation', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    it('should write an eligibility_expired audit log with source=cron for each expired org', async () => {
+      const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', eligibility_start_at: deployedAt },
+        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'eligible' },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      mailServiceMock.sendMail.mockResolvedValue({});
 
-      await service.promoteDeployedCompanies();
-
-      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
-      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
-    });
-
-    it('should write eligibility_pending_confirmation audit log for each promoted org', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-      prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', eligibility_start_at: deployedAt },
-      ]);
-      prismaServiceMock.organization.update.mockResolvedValue({});
-      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-
-      await service.promoteDeployedCompanies();
+      await service.expireStaleEligibility();
 
       expect(prismaServiceMock.medAllianceAuditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             entity_type: 'referred_company',
             entity_id: 'org-1',
-            event: 'eligibility_pending_confirmation',
-            old_status: 'not_eligible',
-            new_status: 'pending_confirmation',
-            reason: '30-day deployment window elapsed — awaiting Super Admin confirmation',
+            event: 'eligibility_expired',
+            old_status: 'eligible',
+            new_status: 'expired',
             source: 'cron',
             actor_user_id: null,
           }),
@@ -260,79 +257,91 @@ describe('CronService', () => {
       );
     });
 
-    it('should not require detected commission lookup to complete promotion', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-      prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', eligibility_start_at: deployedAt },
-      ]);
-      prismaServiceMock.organization.update.mockResolvedValue({});
-      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-
-      const result = await service.promoteDeployedCompanies();
-
-      expect(result.companiesPromoted).toBe(1);
-      expect(result.commissionsPromoted).toBe(0);
-      expect(result.errors).toHaveLength(0);
-      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
-      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
-    });
-
     it('should catch per-org errors and continue processing remaining orgs', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-fail', eligibility_start_at: deployedAt },
-        { id: 'org-ok', eligibility_start_at: deployedAt },
+        { id: 'org-fail', name: 'Fail Co', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
+        { id: 'org-ok', name: 'Ok Co', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
       ]);
       prismaServiceMock.organization.update
-        .mockRejectedValueOnce(new Error('DB timeout'))  // org-fail throws
-        .mockResolvedValueOnce({});                       // org-ok succeeds
+        .mockRejectedValueOnce(new Error('DB timeout')) // org-fail throws
+        .mockResolvedValueOnce({}); // org-ok succeeds
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      mailServiceMock.sendMail.mockResolvedValue({});
 
-      const result = await service.promoteDeployedCompanies();
+      const result = await service.expireStaleEligibility();
 
-      expect(result.companiesPromoted).toBe(1);
+      expect(result.companiesExpired).toBe(1);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain('org-fail');
     });
 
-    it('should query orgs with correct date window constraints', async () => {
+    it('should query with the correct structural filters (deployed stage, referred, >=365 days, excludes already-expired)', async () => {
       prismaServiceMock.organization.findMany.mockResolvedValue([]);
 
-      await service.promoteDeployedCompanies();
+      await service.expireStaleEligibility();
 
       expect(prismaServiceMock.organization.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             referral_stage: 'deployed',
             referred_by_affiliate_id: { not: null },
-            AND: expect.arrayContaining([
-              expect.objectContaining({
-                OR: expect.arrayContaining([
-                  { med_alliance_referral_status: 'not_eligible' },
-                  { med_alliance_referral_status: null },
-                ]),
-              }),
-              expect.objectContaining({
-                OR: expect.arrayContaining([
-                  expect.objectContaining({
-                    deployment_date: expect.objectContaining({
-                      lte: expect.any(Date),
-                      gte: expect.any(Date),
-                    }),
-                  }),
-                  expect.objectContaining({
-                    deployment_date: null,
-                    first_paid_invoice_at: expect.objectContaining({
-                      lte: expect.any(Date),
-                      gte: expect.any(Date),
-                    }),
-                  }),
-                ]),
-              }),
-            ]),
+            deployment_date: expect.objectContaining({ lte: expect.any(Date) }),
+            med_alliance_referral_status: {
+              in: ['pending_confirmation', 'eligible', 'not_eligible'],
+            },
           }),
         }),
       );
+      // 'canceled' orgs are structurally excluded — a single referral_stage column
+      // can't simultaneously be 'deployed' and 'canceled', so no extra clause is needed.
+      // Already-expired orgs are excluded via the med_alliance_referral_status `in` filter.
+    });
+
+    it('should send the expired-eligibility report email when companies are expired', async () => {
+      const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'eligible' },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      mailServiceMock.sendMail.mockResolvedValue({});
+
+      await service.expireStaleEligibility();
+
+      expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: expect.stringContaining('Expired Eligibility Report'),
+        }),
+      );
+    });
+
+    it('should not send the report email when no companies are expired', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([]);
+
+      await service.expireStaleEligibility();
+
+      expect(mailServiceMock.sendMail).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // expireStaleEligibility — mail error catch branch
+  // -------------------------------------------------------------------------
+  describe('expireStaleEligibility — mail error branch', () => {
+    it('should swallow mail error when sendMail throws after companies are expired', async () => {
+      const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
+      ]);
+      prismaServiceMock.organization.update.mockResolvedValue({});
+      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
+      mailServiceMock.sendMail.mockRejectedValue(new Error('mail server down'));
+
+      const result = await service.expireStaleEligibility();
+
+      expect(result.companiesExpired).toBe(1);
+      expect(result.errors).toHaveLength(0);
     });
   });
 
@@ -736,6 +745,96 @@ describe('CronService', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // sweepStaleContactIds
+  // ---------------------------------------------------------------------------
+  describe('sweepStaleContactIds', () => {
+    let axiosMock: jest.Mocked<typeof import('axios').default>;
+
+    beforeEach(() => {
+      prismaServiceMock.contact = {
+        findMany: jest.fn(),
+      };
+      prismaServiceMock.uSER = {
+        findMany: jest.fn(),
+      };
+      axiosMock = jest.requireMock('axios');
+      axiosMock.get = jest.fn();
+    });
+
+    it('should not clear anything when every HubSpot contact still exists', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-1' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([]);
+      axiosMock.get.mockResolvedValue({ data: {} });
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(contactDeletionMock.execute).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        checkedContacts: 1,
+        checkedUsers: 0,
+        cleared: 0,
+        errors: [],
+      });
+    });
+
+    it('should clear the stale pointer via contactDeletion when HubSpot returns 404', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-stale' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([]);
+      axiosMock.get.mockRejectedValue({ response: { status: 404 } });
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(contactDeletionMock.execute).toHaveBeenCalledWith(
+        { objectId: 'hs-stale' },
+        HubspotAuditSource.cron,
+      );
+      expect(result.cleared).toBe(1);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('should record non-404 errors and continue without clearing', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-broken' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([]);
+      axiosMock.get.mockRejectedValue(new Error('network error'));
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(contactDeletionMock.execute).not.toHaveBeenCalled();
+      expect(result.cleared).toBe(0);
+      expect(result.errors).toEqual([
+        'hubspot_id=hs-broken: network error',
+      ]);
+    });
+
+    it('should dedupe a HubSpot id shared by both a Contact and a USER row into a single check', async () => {
+      prismaServiceMock.contact.findMany.mockResolvedValue([
+        { hubspot_id: 'hs-shared' },
+      ]);
+      prismaServiceMock.uSER.findMany.mockResolvedValue([
+        { hubspot_contact_id: 'hs-shared' },
+      ]);
+      axiosMock.get.mockRejectedValue({ response: { status: 404 } });
+
+      const result = await service.sweepStaleContactIds();
+
+      expect(axiosMock.get).toHaveBeenCalledTimes(1);
+      expect(contactDeletionMock.execute).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        checkedContacts: 1,
+        checkedUsers: 1,
+        cleared: 1,
+        errors: [],
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // getCandidateId
   // ---------------------------------------------------------------------------
   describe('getCandidateId', () => {
@@ -936,27 +1035,6 @@ describe('CronService', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // promoteDeployedCompanies — mail error catch branch (line 689)
-  // ---------------------------------------------------------------------------
-  describe('promoteDeployedCompanies — mail error branch', () => {
-    it('should swallow mail error when sendMail throws after companies are promoted', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-      prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', name: 'Clinic', eligibility_start_at: deployedAt },
-      ]);
-      prismaServiceMock.organization.update.mockResolvedValue({});
-      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-      prismaServiceMock.affiliateCommission.findMany.mockResolvedValue([]);
-      mailServiceMock.sendMail.mockRejectedValue(new Error('mail server down'));
-
-      const result = await service.promoteDeployedCompanies();
-
-      expect(result.companiesPromoted).toBe(1);
-      expect(result.errors).toHaveLength(0);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // syncOrganizationsWithHubspot
   // ---------------------------------------------------------------------------
   describe('syncOrganizationsWithHubspot', () => {
@@ -971,10 +1049,9 @@ describe('CronService', () => {
       };
     });
 
-    it('should process a single org when organization_id is provided', async () => {
+    it('should process a single org when organization_id is provided, without querying findMany', async () => {
       const syncResult = { organizationId: 'org-1', phaseA: { outcome: 'already_matched' } };
       referralSyncServiceMock.run.mockResolvedValue(syncResult);
-      prismaServiceMock.organization.findMany.mockResolvedValue([]); // no orgs to promote
 
       const result = await service.syncOrganizationsWithHubspot('org-1');
 
@@ -983,24 +1060,30 @@ describe('CronService', () => {
       expect(result.processed).toBe(1);
       expect(result.syncFailed).toBe(0);
       expect(result.syncResults).toHaveLength(1);
+      // The old inline 30-day-promotion block is gone — findMany is never
+      // called on this path anymore.
+      expect(prismaServiceMock.organization.findMany).not.toHaveBeenCalled();
     });
 
-    it('should query all referred orgs when no organization_id is given', async () => {
-      prismaServiceMock.organization.findMany
-        .mockResolvedValueOnce([{ id: 'org-a' }, { id: 'org-b' }]) // referred orgs
-        .mockResolvedValueOnce([]); // no deployable orgs
+    it('should query all active orgs when no organization_id is given', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-a' },
+        { id: 'org-b' },
+      ]);
       referralSyncServiceMock.run.mockResolvedValue({ organizationId: 'x', phaseA: { outcome: 'already_matched' } });
 
       const result = await service.syncOrganizationsWithHubspot();
 
       expect(referralSyncServiceMock.run).toHaveBeenCalledTimes(2);
       expect(result.processed).toBe(2);
+      expect(prismaServiceMock.organization.findMany).toHaveBeenCalledTimes(1);
     });
 
     it('should increment syncFailed and continue when referralSync.run throws', async () => {
-      prismaServiceMock.organization.findMany
-        .mockResolvedValueOnce([{ id: 'org-fail' }, { id: 'org-ok' }])
-        .mockResolvedValueOnce([]);
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-fail' },
+        { id: 'org-ok' },
+      ]);
       referralSyncServiceMock.run
         .mockRejectedValueOnce(new Error('hubspot down'))
         .mockResolvedValueOnce({ organizationId: 'org-ok', phaseA: { outcome: 'synced' } });
@@ -1012,59 +1095,12 @@ describe('CronService', () => {
       expect(result.syncResults).toHaveLength(1);
     });
 
-    it('should move deployed orgs that passed the 30-day window to pending confirmation', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    it('should return only processed/syncFailed/syncResults (no promotion fields)', async () => {
       referralSyncServiceMock.run.mockResolvedValue({ organizationId: 'org-1', phaseA: { outcome: 'already_matched' } });
-
-      // When organization_id is provided, orgIds is built directly — no findMany for referred orgs.
-      // Only the deployed-orgs promotion query hits findMany.
-      prismaServiceMock.organization.findMany.mockResolvedValueOnce([
-        { id: 'org-1', name: 'Clinic', eligibility_start_at: deployedAt },
-      ]);
-      prismaServiceMock.organization.update.mockResolvedValue({});
-      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
 
       const result = await service.syncOrganizationsWithHubspot('org-1');
 
-      expect(result.companiesPromoted).toBe(1);
-      expect(result.commissionsPromoted).toBe(0);
-      expect(result.promotionErrors).toHaveLength(0);
-      expect(prismaServiceMock.organization.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'org-1' },
-          data: expect.objectContaining({ med_alliance_referral_status: 'pending_confirmation' }),
-        }),
-      );
-      expect(prismaServiceMock.affiliateCommission.findMany).not.toHaveBeenCalled();
-      expect(prismaServiceMock.affiliateCommission.update).not.toHaveBeenCalled();
-    });
-
-    it('should return promotionErrors when a per-org promotion fails', async () => {
-      const deployedAt = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-      referralSyncServiceMock.run.mockResolvedValue({ organizationId: 'org-1', phaseA: { outcome: 'already_matched' } });
-
-      prismaServiceMock.organization.findMany.mockResolvedValueOnce([
-        { id: 'org-1', name: 'Clinic', eligibility_start_at: deployedAt },
-      ]);
-      prismaServiceMock.organization.update.mockRejectedValue(new Error('DB error'));
-      prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
-
-      const result = await service.syncOrganizationsWithHubspot('org-1');
-
-      expect(result.promotionErrors).toHaveLength(1);
-      expect(result.promotionErrors[0]).toContain('org-1');
-    });
-
-    it('should return zero promotion counts when no deployed orgs qualify', async () => {
-      referralSyncServiceMock.run.mockResolvedValue({ organizationId: 'org-1', phaseA: { outcome: 'already_matched' } });
-      prismaServiceMock.organization.findMany
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]); // no qualifying deployed orgs
-
-      const result = await service.syncOrganizationsWithHubspot('org-1');
-
-      expect(result.companiesPromoted).toBe(0);
-      expect(result.commissionsPromoted).toBe(0);
+      expect(Object.keys(result).sort()).toEqual(['processed', 'syncFailed', 'syncResults']);
     });
   });
 });

@@ -326,16 +326,27 @@ export class StaffService {
     }
 
     if (search) {
-      where.OR = [
-        { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
-        { hubspot_client_name: { contains: search, mode: 'insensitive' } },
-        { hubspot_company_name: { contains: search, mode: 'insensitive' } },
-        {
-          candidate: { first_name: { contains: search, mode: 'insensitive' } },
-        },
-        { candidate: { last_name: { contains: search, mode: 'insensitive' } } },
-        { candidate: { email: { contains: search, mode: 'insensitive' } } },
-      ];
+      // Match each whitespace-separated token independently and AND them
+      // together, so a complete full name ("Svetlana Petrova") matches a staff
+      // whose first_name and last_name live in different columns. A single OR
+      // per column would never match a full name, since no single column
+      // contains "Svetlana Petrova" as a substring.
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      where.AND = tokens.map((token) => ({
+        OR: [
+          { hubspot_deal_name: { contains: token, mode: 'insensitive' } },
+          { hubspot_client_name: { contains: token, mode: 'insensitive' } },
+          { hubspot_company_name: { contains: token, mode: 'insensitive' } },
+          {
+            candidate: { first_name: { contains: token, mode: 'insensitive' } },
+          },
+          {
+            candidate: { last_name: { contains: token, mode: 'insensitive' } },
+          },
+          { candidate: { email: { contains: token, mode: 'insensitive' } } },
+        ],
+      }));
     }
 
     const queryOptions: any = {
@@ -511,20 +522,30 @@ export class StaffService {
     }
 
     if (search) {
-      andConditions.push({
-        OR: [
-          { hireRequest: { title: { contains: search, mode: 'insensitive' } } },
-          {
-            candidate: {
-              first_name: { contains: search, mode: 'insensitive' },
+      // AND each whitespace-separated token so a complete full name matches
+      // across first_name/last_name columns (see searchStaff for rationale).
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      for (const token of tokens) {
+        andConditions.push({
+          OR: [
+            {
+              hireRequest: { title: { contains: token, mode: 'insensitive' } },
             },
-          },
-          {
-            candidate: { last_name: { contains: search, mode: 'insensitive' } },
-          },
-          { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
-        ],
-      });
+            {
+              candidate: {
+                first_name: { contains: token, mode: 'insensitive' },
+              },
+            },
+            {
+              candidate: {
+                last_name: { contains: token, mode: 'insensitive' },
+              },
+            },
+            { hubspot_deal_name: { contains: token, mode: 'insensitive' } },
+          ],
+        });
+      }
     }
 
     if (andConditions.length > 0) {
@@ -676,23 +697,29 @@ export class StaffService {
     ];
 
     if (search) {
-      where.OR = [
-        {
-          hireRequest: {
-            title: { contains: search, mode: 'insensitive' },
+      // AND each whitespace-separated token so a complete full name matches
+      // across first_name/last_name columns (see searchStaff for rationale).
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      where.AND = tokens.map((token) => ({
+        OR: [
+          {
+            hireRequest: {
+              title: { contains: token, mode: 'insensitive' },
+            },
           },
-        },
-        {
-          candidate: {
-            first_name: { contains: search, mode: 'insensitive' },
+          {
+            candidate: {
+              first_name: { contains: token, mode: 'insensitive' },
+            },
           },
-        },
-        {
-          candidate: {
-            last_name: { contains: search, mode: 'insensitive' },
+          {
+            candidate: {
+              last_name: { contains: token, mode: 'insensitive' },
+            },
           },
-        },
-      ];
+        ],
+      }));
     }
 
     if (start_date_from || start_date_to) {

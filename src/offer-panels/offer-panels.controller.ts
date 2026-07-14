@@ -145,9 +145,14 @@ export class OfferPanelsController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_admin', 'system_super_admin')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'List offer panels that include a given candidate (admin)' })
+  @ApiOperation({
+    summary: 'List offer panels that include a given candidate (admin)',
+  })
   @ApiParam({ name: 'candidateId', type: String, description: 'Candidate ID' })
-  @ApiResponse({ status: 200, description: 'Offer panels retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Offer panels retrieved successfully',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findByCandidateId(@Param('candidateId') candidateId: string) {

@@ -45,6 +45,18 @@ function isBankingComplete(
   return !!billcomVendorId;
 }
 
+function mapPayoutHistory(payoutHistory: any[]) {
+  return payoutHistory.map((pr: any) => ({
+    id: pr.id,
+    payout_request_id: pr.id,
+    amount: Number(pr.paid_amount ?? pr.requested_amount ?? 0),
+    paid_at: pr.paid_at?.toISOString() ?? '',
+    payment_method: pr.payment_method ?? '',
+    transaction_reference: pr.transaction_reference ?? null,
+    status: pr.status,
+  }));
+}
+
 @ApiTags('med-alliance')
 @ApiBearerAuth()
 @Controller('med-alliance')
@@ -159,6 +171,22 @@ export class AffiliatesController {
         banking_complete: isBankingComplete(vendorId),
         linked_company: user?.organization?.name ?? null,
         linked_company_id: user?.organization?.id ?? null,
+        organization: user?.organization
+          ? {
+              id: user.organization.id,
+              name: user.organization.name,
+              business_unit: user.organization.business_unit ?? null,
+              organization_role: user.organization.organization_role ?? null,
+              status: user.organization.status ?? null,
+              admin: user.organization.admin
+                ? {
+                    id: user.organization.admin.id,
+                    first_name: user.organization.admin.first_name,
+                    last_name: user.organization.admin.last_name,
+                  }
+                : null,
+            }
+          : null,
         referred_companies_count: user?._count?.referredOrganizations ?? 0,
         pending_payout_amount: 0,
         lifetime_commissions: 0,
@@ -353,6 +381,22 @@ export class AffiliatesController {
       banking_complete: isBankingComplete(vendorId),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
+      organization: user?.organization
+        ? {
+            id: user.organization.id,
+            name: user.organization.name,
+            business_unit: user.organization.business_unit ?? null,
+            organization_role: user.organization.organization_role ?? null,
+            status: user.organization.status ?? null,
+            admin: user.organization.admin
+              ? {
+                  id: user.organization.admin.id,
+                  first_name: user.organization.admin.first_name,
+                  last_name: user.organization.admin.last_name,
+                }
+              : null,
+          }
+        : null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
       pending_payout_amount: Number(
         enriched.pendingAgg._sum.requested_amount ?? 0,
@@ -371,6 +415,7 @@ export class AffiliatesController {
           id: org.id,
           name: org.name,
           referral_status: org.med_alliance_referral_status ?? org.status,
+          referral_stage: org.referral_stage ?? null,
           total_commissions: commsByOrgMap[org.id] ?? 0,
         }),
       ),
@@ -380,16 +425,10 @@ export class AffiliatesController {
         amount: Number(c.commission_amount),
         status: c.status,
         date: c.createdAt.toISOString(),
+        invoice_id: c.hubspotInvoiceSnapshot?.hubspot_id ?? null,
+        name: c.hubspotInvoiceSnapshot?.invoice_number ?? null,
       })),
-      payout_history: enriched.payoutHistory.map((pr: any) => ({
-        id: pr.id,
-        payout_request_id: pr.id,
-        amount: Number(pr.paid_amount ?? pr.requested_amount ?? 0),
-        paid_at: pr.paid_at?.toISOString() ?? '',
-        payment_method: pr.payment_method ?? '',
-        transaction_reference: pr.transaction_reference ?? null,
-        status: 'paid' as const,
-      })),
+      payout_history: mapPayoutHistory(enriched.payoutHistory),
       user: {
         id: user?.id ?? null,
         first_name: user?.first_name ?? null,
@@ -542,6 +581,22 @@ export class AffiliatesController {
       banking_complete: isBankingComplete(vendorId),
       linked_company: user?.organization?.name ?? null,
       linked_company_id: user?.organization?.id ?? null,
+      organization: user?.organization
+        ? {
+            id: user.organization.id,
+            name: user.organization.name,
+            business_unit: user.organization.business_unit ?? null,
+            organization_role: user.organization.organization_role ?? null,
+            status: user.organization.status ?? null,
+            admin: user.organization.admin
+              ? {
+                  id: user.organization.admin.id,
+                  first_name: user.organization.admin.first_name,
+                  last_name: user.organization.admin.last_name,
+                }
+              : null,
+          }
+        : null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
       pending_payout_amount: Number(
         enriched.pendingAgg._sum.requested_amount ?? 0,
@@ -560,6 +615,7 @@ export class AffiliatesController {
           id: org.id,
           name: org.name,
           referral_status: org.med_alliance_referral_status ?? org.status,
+          referral_stage: org.referral_stage ?? null,
           total_commissions: commsByOrgMap[org.id] ?? 0,
         }),
       ),
@@ -569,16 +625,10 @@ export class AffiliatesController {
         amount: Number(c.commission_amount),
         status: c.status,
         date: c.createdAt.toISOString(),
+        invoice_id: c.hubspotInvoiceSnapshot?.hubspot_id ?? null,
+        name: c.hubspotInvoiceSnapshot?.invoice_number ?? null,
       })),
-      payout_history: enriched.payoutHistory.map((pr: any) => ({
-        id: pr.id,
-        payout_request_id: pr.id,
-        amount: Number(pr.paid_amount ?? pr.requested_amount ?? 0),
-        paid_at: pr.paid_at?.toISOString() ?? '',
-        payment_method: pr.payment_method ?? '',
-        transaction_reference: pr.transaction_reference ?? null,
-        status: 'paid' as const,
-      })),
+      payout_history: mapPayoutHistory(enriched.payoutHistory),
     };
 
     return {

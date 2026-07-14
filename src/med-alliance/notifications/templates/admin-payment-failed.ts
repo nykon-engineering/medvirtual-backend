@@ -16,6 +16,8 @@ export function adminPaymentFailedTemplate(
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
   const ctaLink = `${process.env.FRONTEND_URL}/med-alliance/payout-requests`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
@@ -40,7 +42,7 @@ export function adminPaymentFailedTemplate(
     .detail-table td:first-child { color: #666666; width: 45%; }
     .detail-table td:last-child { font-weight: 600; }
     .error-msg { background-color: #f8f9fa; border-radius: 6px; padding: 12px 16px; font-family: monospace; font-size: 13px; color: #495057; margin-top: 4px; word-break: break-all; }
-    .cta-button { display: inline-block; background-color: ${primaryColor}; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .cta-button { display: inline-block; background-color: ${buttonColor}; color: ${buttonTextColor} !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
     .cta-button:hover { background-color: ${primaryColorHover}; }
     .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
     .sender { color: #333333; font-size: 16px; }

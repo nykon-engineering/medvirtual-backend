@@ -42,8 +42,11 @@ export class TicketService {
             name: true,
             email: true,
             business_unit: true,
+            organization_role: true,
             status: true,
-            admin_id: true,
+            admin: {
+              select: { id: true, first_name: true, last_name: true },
+            },
           },
         },
         user: {
@@ -111,6 +114,19 @@ export class TicketService {
             recipient_email: true,
             recipient_org_name: true,
             recipient_type: true,
+            recipient_company_id: true,
+            recipientCompany: {
+              select: {
+                id: true,
+                name: true,
+                business_unit: true,
+                organization_role: true,
+                status: true,
+                admin: {
+                  select: { id: true, first_name: true, last_name: true },
+                },
+              },
+            },
             view_count: true,
             viewed_at: true,
             decided_at: true,
@@ -556,6 +572,7 @@ export class TicketService {
             : { disconnect: true },
         },
       });
+      
       if (!ticketUpdated)
         throw new BadRequestException('Failed to reassign ticket');
 

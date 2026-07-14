@@ -61,6 +61,8 @@ import { AffiliateCreationService } from './create/affiliate';
 import { AffiliateUpdateService } from './update/affiliate';
 import { HandlerContactCreation } from './handlers/contactCreation';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+import { HandlerContactDeletion } from './handlers/contactDeletion';
+import { HandlerContactMerge } from './handlers/contactMerge';
 
 jest.mock('axios');
 jest.mock('@hubspot/api-client', () => ({
@@ -110,6 +112,8 @@ const handlers = {
   comissionCreation: makeMock(),
   contactCreation: makeMock(),
   contactPropertyChange: makeMock(),
+  contactDeletion: makeMock(),
+  contactMerge: makeMock(),
   hireRequestCreation: makeMock(),
   hireRequestUpdate: makeMock(),
   organizationCreationService: makeMock(),
@@ -173,6 +177,8 @@ async function buildModule(): Promise<HubspotService> {
       { provide: HandlerComissionCreation, useValue: handlers.comissionCreation },
       { provide: HandlerContactCreation, useValue: handlers.contactCreation },
       { provide: HandlerContactPropertyChange, useValue: handlers.contactPropertyChange },
+      { provide: HandlerContactDeletion, useValue: handlers.contactDeletion },
+      { provide: HandlerContactMerge, useValue: handlers.contactMerge },
     ],
   }).compile();
 
@@ -390,6 +396,36 @@ describe('HubspotService => changeDataFromHubspot (webhook audit logging)', () =
         expect.objectContaining({
           entityType: HubspotEntityType.contact,
           action: HubspotAuditAction.UPDATE,
+          success: true,
+        }),
+      );
+    });
+
+    it('contact.deletion → logs DELETE', async () => {
+      await service.changeDataFromHubspot([
+        { subscriptionType: 'contact.deletion', objectId: 502 },
+      ]);
+
+      expect(handlers.contactDeletion.execute).toHaveBeenCalledTimes(1);
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: HubspotEntityType.contact,
+          action: HubspotAuditAction.DELETE,
+          success: true,
+        }),
+      );
+    });
+
+    it('contact.merge → logs SYNC', async () => {
+      await service.changeDataFromHubspot([
+        { subscriptionType: 'contact.merge', objectId: 503 },
+      ]);
+
+      expect(handlers.contactMerge.execute).toHaveBeenCalledTimes(1);
+      expect(auditMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: HubspotEntityType.contact,
+          action: HubspotAuditAction.SYNC,
           success: true,
         }),
       );

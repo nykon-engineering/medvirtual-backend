@@ -4,6 +4,7 @@ import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { CandidatesService } from '../candidate/candidates.service';
 import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
+import { HandlerContactDeletion } from '../hubspot/handlers/contactDeletion';
 import systemReport from '../common/utils/email-templates/system-report';
 import clientUsersDeactivationReport from '../common/utils/email-templates/client-users-deactivation-report';
 import cronJobErrorReport from '../common/utils/email-templates/cron-job-error-report';
@@ -12,21 +13,23 @@ import quarterlyPayoutReport, {
   PayoutReportEntry,
   PayoutReportFailure,
 } from '../common/utils/email-templates/quarterly-payout-report';
-import medAllianceDeployedCompaniesReport, {
-  PromotedCompanyEntry,
-} from '../common/utils/email-templates/med-alliance-deployed-companies-report';
+import medAllianceExpiredEligibilityReport, {
+  ExpiredCompanyEntry,
+} from '../common/utils/email-templates/med-alliance-expired-eligibility-report';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { PayoutRequestsService } from '../med-alliance/payout-requests/payout-requests.service';
-import { AffiliateStatus } from '@prisma/client';
+import { AffiliateStatus, HubspotAuditSource } from '@prisma/client';
 import {
   ReferralSyncService,
   SyncResult,
 } from '../med-alliance/sync/referral-sync.service';
 import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
+import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
 
 type Event = {
   objectId?: string;
@@ -45,7 +48,29 @@ export class CronService {
     private readonly referralSync: ReferralSyncService,
     private readonly commissionDetection: CommissionDetectionService,
     private readonly allianceNotifications: AllianceNotificationsService,
+    private readonly emailTemplates: EmailTemplatesService,
+    private readonly contactDeletion: HandlerContactDeletion,
   ) {}
+
+  // ── EmailTemplatesService fallback helper ─────────────────────────────────
+  // Only subject/headline come from DB; the complex report body (tables, data)
+  // remains hardcoded. Returns null when template is not found so callers
+  // fall back to the original hardcoded subject + html.
+  private async getCronTplContent(
+    key: string,
+    runtimeValues: Record<string, string>,
+  ): Promise<{ subject: string; html: string } | null> {
+    try {
+      const theme = getEmailThemeByBusinessUnit('MedVirtual');
+      return await this.emailTemplates.getTemplateContent(
+        key,
+        runtimeValues,
+        theme,
+      );
+    } catch {
+      return null;
+    }
+  }
 
   async reRunPipeline(statusDto: reRunPipelineDto): Promise<boolean> {
     //return false;
@@ -244,11 +269,18 @@ export class CronService {
         failedResumeParsing,
         withoutHeadshot,
       );
+      const tplSystem = await this.getCronTplContent('system-report', {
+        '{{availableCount}}': String(availableCandidates),
+        '{{endorsedCount}}': String(endorsedCandidates),
+        '{{withoutResumeCount}}': String(withoutResume),
+        '{{failedParsingCount}}': String(failedResumeParsing?.length ?? 0),
+        '{{reportContent}}': '(see attached report)',
+      });
       const mailSent = await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: 'shayan@regenta.ai',
         cc: ['paulo@regenta.ai', 'hanieh@medvirtual.ai'],
-        subject: 'System Report',
+        subject: tplSystem?.subject ?? 'System Report',
         html: emailBody,
       });
       if (!mailSent) {
@@ -405,11 +437,20 @@ export class CronService {
         new Date(),
       );
 
+      const tplDeactivation = await this.getCronTplContent(
+        'client-users-deactivation',
+        {
+          '{{reportDate}}': new Date().toLocaleDateString('en-US'),
+          '{{deactivatedCount}}': String(usersToDeactivate.length),
+          '{{removedCount}}': String(invitedUsersToDelete.length),
+          '{{reportContent}}': '(see attached report)',
+        },
+      );
       await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: 'paulo@regenta.ai',
         cc: ['paulo@regenta.ai'],
-        subject: 'Client Users Deactivation Report',
+        subject: tplDeactivation?.subject ?? 'Client Users Deactivation Report',
         html: emailBody,
       });
 
@@ -423,11 +464,19 @@ export class CronService {
           error,
           new Date(),
         );
+        const tplCronError = await this.getCronTplContent('cron-job-error', {
+          '{{jobName}}': 'deactivate-client-users-no-staff',
+          '{{errorTime}}': new Date().toISOString(),
+          '{{errorMessage}}': error?.message || String(error),
+          '{{errorStack}}': error?.stack || '',
+        });
         await this.mailService.sendMail({
           from: 'MedVirtual <noreply@medvirtual.ai>',
           to: 'paulo@regenta.ai',
           cc: ['paulo@regenta.ai'],
-          subject: '[ERROR] Client Users Deactivation Cron Job Failed',
+          subject:
+            tplCronError?.subject ??
+            '[ERROR] Client Users Deactivation Cron Job Failed',
           html: emailBody,
         });
       } catch (mailError) {
@@ -525,11 +574,16 @@ export class CronService {
       }
 
       const emailBody = newPositionsAlert(newPositions);
+      const tplPositions = await this.getCronTplContent('new-positions-alert', {
+        '{{positionCount}}': String(newPositions.length),
+        '{{positionsList}}': newPositions.join(', '),
+      });
       await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: 'shayan@regenta.ai',
         cc: ['paulo@regenta.ai'],
-        subject: '[Action Required] New VA Positions Found',
+        subject:
+          tplPositions?.subject ?? '[Action Required] New VA Positions Found',
         html: emailBody,
       });
 
@@ -612,10 +666,25 @@ export class CronService {
       .reduce((sum, s) => sum + parseFloat(s.totalAmount), 0)
       .toFixed(2);
 
+    const quarterlyDate = runAt.toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    });
+    const tplQuarterly = await this.getCronTplContent(
+      'quarterly-payout-report',
+      {
+        '{{reportDate}}': quarterlyDate,
+        '{{successCount}}': String(successes.length),
+        '{{totalAmount}}': totalAmount,
+        '{{failureCount}}': String(failures.length),
+        '{{reportContent}}': '(see attached report)',
+      },
+    );
     await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
       to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
-      subject: `Quarterly Payout Report — ${runAt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
+      subject:
+        tplQuarterly?.subject ?? `Quarterly Payout Report — ${quarterlyDate}`,
       html: quarterlyPayoutReport(successes, failures, runAt),
     });
 
@@ -932,66 +1001,54 @@ export class CronService {
     return { updated, skipped, failed };
   }
 
-  async promoteDeployedCompanies(): Promise<{
-    companiesPromoted: number;
-    commissionsPromoted: number;
+  /**
+   * Sweeps referred companies whose deployment_date passed 365 days ago and marks them
+   * 'expired'. Replaces the old 30-day promotion behavior — decisions (Confirm/Block) are now
+   * available immediately on deploy, so there is nothing left to "promote" after 30 days.
+   *
+   * referral_stage: 'deployed' structurally excludes 'canceled' orgs already (a single enum
+   * column can't hold both values at once) — no extra exclusion clause is needed here, unlike
+   * the notIn-style guards used elsewhere in this codebase for the same canceled-org rule.
+   */
+  async expireStaleEligibility(): Promise<{
+    companiesExpired: number;
     errors: string[];
   }> {
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
     const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
 
     const orgs = await this.prisma.organization.findMany({
       where: {
         referral_stage: 'deployed' as any,
-        referred_by_affiliate_id: { not: null }, // deploy only orgs which were referred by an affiliate
-        AND: [
-          {
-            OR: [
-              { med_alliance_referral_status: 'not_eligible' as any },
-              { med_alliance_referral_status: null },
-              // Exclude pending_confirmation — those are already waiting for admin review
-            ],
-          },
-          {
-            OR: [
-              { deployment_date: { lte: thirtyDaysAgo, gte: oneYearAgo } },
-              {
-                deployment_date: null,
-                first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
-              },
-            ],
-          },
-        ],
+        referred_by_affiliate_id: { not: null },
+        deployment_date: { lte: oneYearAgo },
+        med_alliance_referral_status: {
+          in: ['pending_confirmation', 'eligible', 'not_eligible'] as any,
+        },
       },
       select: {
         id: true,
         name: true,
-        eligibility_start_at: true,
         deployment_date: true,
-        first_paid_invoice_at: true,
+        med_alliance_referral_status: true,
       },
     });
 
-    let companiesPromoted = 0;
-    let commissionsPromoted = 0;
+    let companiesExpired = 0;
     const errors: string[] = [];
-    const promotedEntries: PromotedCompanyEntry[] = [];
+    const expiredEntries: ExpiredCompanyEntry[] = [];
 
     for (const org of orgs) {
       try {
         console.log(
-          `Evaluating org ${org.id} (${org.name}) for promotion: deployment_date=${org.deployment_date}, first_paid_invoice_at=${org.first_paid_invoice_at}`,
+          `Expiring org ${org.id} (${org.name}): deployment_date=${org.deployment_date}, status=${org.med_alliance_referral_status}`,
         );
-        
-        // Set to pending_confirmation — a Super Admin must manually confirm or block.
-        // Commission promotion happens only when the admin confirms eligibility.
+
         await this.prisma.organization.update({
           where: { id: org.id },
           data: {
-            med_alliance_referral_status: 'pending_confirmation' as any,
+            med_alliance_referral_status: 'expired' as any,
             med_alliance_block_reason: null,
           },
         });
@@ -999,64 +1056,79 @@ export class CronService {
           data: {
             entity_type: 'referred_company',
             entity_id: org.id,
-            event: 'eligibility_pending_confirmation',
-            old_status: 'not_eligible',
-            new_status: 'pending_confirmation',
-            reason: '30-day deployment window elapsed — awaiting Super Admin confirmation',
+            event: 'eligibility_expired',
+            old_status: org.med_alliance_referral_status,
+            new_status: 'expired',
+            reason: 'Cron sweep — deployment_date passed 365 days',
             source: 'cron',
             actor_user_id: null,
             metadata: {
-              eligibility_start_at: org.eligibility_start_at?.toISOString(),
+              deployment_date: org.deployment_date?.toISOString(),
             } as any,
           },
         });
-        companiesPromoted++;
+        companiesExpired++;
 
-        promotedEntries.push({
+        expiredEntries.push({
           orgId: org.id,
           orgName: org.name ?? org.id,
-          eligibilityStartAt: org.eligibility_start_at
-            ? org.eligibility_start_at.toLocaleDateString('en-US', {
+          deploymentDate: org.deployment_date
+            ? org.deployment_date.toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
               })
             : 'N/A',
-          commissionsPromoted: 0,
+          previousStatus: org.med_alliance_referral_status ?? 'unknown',
         });
-        
       } catch (err: any) {
-        const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
+        const msg = `Failed to expire org ${org.id}: ${err?.message ?? err}`;
         console.error(msg);
         errors.push(msg);
       }
     }
 
     console.log(
-      `promoteDeployedCompanies: companies=${companiesPromoted}, commissions=${commissionsPromoted}, errors=${errors.length}`,
+      `expireStaleEligibility: expired=${companiesExpired}, errors=${errors.length}`,
     );
 
-    if (companiesPromoted > 0) {
+    if (companiesExpired > 0) {
       try {
+        const runDate = now.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
+        const tplExpired = await this.getCronTplContent(
+          'med-alliance-expired-eligibility',
+          {
+            '{{reportDate}}': runDate,
+            '{{expiredCount}}': String(companiesExpired),
+            '{{errorCount}}': String(errors.length),
+            '{{reportContent}}': '(see attached report)',
+          },
+        );
         await this.mailService.sendMail({
           from: 'MedVirtual <noreply@medvirtual.ai>',
           to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
-          subject: `Med Alliance — Deployed Companies Report (${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
-          html: medAllianceDeployedCompaniesReport(
-            promotedEntries,
+          subject:
+            tplExpired?.subject ??
+            `Med Alliance — Expired Eligibility Report (${runDate})`,
+          html: medAllianceExpiredEligibilityReport(
+            expiredEntries,
             errors,
             now,
           ),
         });
       } catch (mailError) {
         console.error(
-          'promoteDeployedCompanies: failed to send report email:',
+          'expireStaleEligibility: failed to send report email:',
           mailError,
         );
       }
     }
 
-    return { companiesPromoted, commissionsPromoted, errors };
+    return { companiesExpired, errors };
   }
 
   /**
@@ -1064,23 +1136,18 @@ export class CronService {
    *   1. Resolves hubspot_id (Phase A — HubSpot company matching).
    *   2. Ingests invoices and creates missing HubspotInvoiceSnapshot records (Phase B).
    *   3. Detects commissions and transitions org to 'deployed' on first paid invoice.
-   *   4. Promotes organizations that have been deployed for 30+ days to 'eligible'
-   *      and advances their 'detected' commissions to 'pending_admin_confirmation'.
+   *
+   * The old step 4 (promote deployed orgs to 'eligible' after 30 days) is gone — Confirm/Block
+   * decisions are available to admins immediately on deploy. Stale eligibility (>365 days since
+   * deployment_date) is expired by expireStaleEligibility(), not here.
    *
    * @param organizationId - Single org to process. If omitted, all referred orgs are processed.
    */
   async syncOrganizationsWithHubspot(organizationId?: string): Promise<{
     processed: number;
     syncFailed: number;
-    companiesPromoted: number;
-    commissionsPromoted: number;
     syncResults: SyncResult[];
-    promotionErrors: string[];
   }> {
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-    const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-    const now = new Date();
-
     console.log('Organization ID provided:', organizationId);
 
     let orgIds: string[];
@@ -1115,60 +1182,14 @@ export class CronService {
       }
     }
 
-    // Promote deployed orgs that have passed the 30-day stabilization window
-    const thirtyDaysAgo = new Date(now.getTime() - THIRTY_DAYS_MS);
-    const oneYearAgo = new Date(now.getTime() - ONE_YEAR_MS);
-    console.log('OrgsID to check for promotion:', orgIds);
-
-    const deployedOrgs = await this.prisma.organization.findMany({
-      where: {
-        id: { in: orgIds },
-        referral_stage: 'deployed' as any,
-        first_paid_invoice_at: { lte: thirtyDaysAgo, gte: oneYearAgo },
-        // Only pick up not_eligible — skip pending_confirmation (already waiting for admin)
-        med_alliance_referral_status: 'not_eligible',
-      },
-      select: { id: true, name: true, eligibility_start_at: true },
-    });
-
-    console.log('Deployed orgs eligible for promotion:', deployedOrgs);
-
-    let companiesPromoted = 0;
-    const commissionsPromoted = 0;
-    const promotionErrors: string[] = [];
-
-    for (const org of deployedOrgs) {
-      try {
-        // Set to pending_confirmation — Super Admin must confirm or block.
-        // Commission promotion happens only when the admin confirms eligibility.
-        await this.prisma.organization.update({
-          where: { id: org.id },
-          data: {
-            med_alliance_referral_status: 'pending_confirmation' as any,
-            med_alliance_block_reason: null,
-          },
-        });
-
-        companiesPromoted++;
-      } catch (err: any) {
-        const msg = `Failed to promote org ${org.id}: ${err?.message ?? err}`;
-        console.error(`syncOrganizationsWithHubspot: ${msg}`);
-        promotionErrors.push(msg);
-      }
-    }
-
     console.log(
-      `syncOrganizationsWithHubspot: processed=${orgIds.length} syncFailed=${syncFailed} ` +
-        `companiesPromoted=${companiesPromoted} commissionsPromoted=${commissionsPromoted}`,
+      `syncOrganizationsWithHubspot: processed=${orgIds.length} syncFailed=${syncFailed}`,
     );
 
     return {
       processed: orgIds.length,
       syncFailed,
-      companiesPromoted,
-      commissionsPromoted,
       syncResults,
-      promotionErrors,
     };
   }
 
@@ -1329,6 +1350,67 @@ export class CronService {
     );
 
     return { updated, noContactInHubspot, noContactInDb, errors };
+  }
+
+  async sweepStaleContactIds(): Promise<{
+    checkedContacts: number;
+    checkedUsers: number;
+    cleared: number;
+    errors: string[];
+  }> {
+    const contacts = await this.prisma.contact.findMany({
+      where: { hubspot_id: { not: null } },
+      select: { hubspot_id: true },
+    });
+    const orphanUsers = await this.prisma.uSER.findMany({
+      where: { hubspot_contact_id: { not: null } },
+      select: { hubspot_contact_id: true },
+    });
+
+    // The same HubSpot id can live on both a Contact and a USER row — dedupe
+    // so we only hit HubSpot once per id even if the two pointers agree.
+    const idsToCheck = new Set<string>([
+      ...contacts.map((c) => c.hubspot_id as string),
+      ...orphanUsers.map((u) => u.hubspot_contact_id as string),
+    ]);
+
+    let cleared = 0;
+    const errors: string[] = [];
+
+    for (const hubspotId of idsToCheck) {
+      try {
+        await axios.get(
+          `https://api.hubapi.com/crm/v3/objects/contacts/${hubspotId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
+        );
+        // 200 → still exists in HubSpot, nothing to do.
+      } catch (err) {
+        if (err.response?.status === 404) {
+          await this.contactDeletion.execute(
+            { objectId: hubspotId },
+            HubspotAuditSource.cron,
+          );
+          cleared++;
+        } else {
+          errors.push(`hubspot_id=${hubspotId}: ${err.message}`);
+        }
+      }
+    }
+
+    console.log(
+      `sweepStaleContactIds: checkedContacts=${contacts.length} checkedUsers=${orphanUsers.length} cleared=${cleared} errors=${errors.length}`,
+    );
+
+    return {
+      checkedContacts: contacts.length,
+      checkedUsers: orphanUsers.length,
+      cleared,
+      errors,
+    };
   }
 
   private buildHireRequestTitle(hr: {

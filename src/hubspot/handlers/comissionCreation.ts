@@ -77,9 +77,6 @@ export class HandlerComissionCreation {
       const idempotencyKey = buildCommissionIdempotencyKey({
         affiliateId: invoiceExists.organization.referredByAffiliate.id,
         hubspotInvoiceId: invoiceExists.hubspot_id,
-        paidAt: invoiceExists.paid_at,
-        baseAmount: baseAmmount.toString(),
-        commissionPercent: comissionAmount.toString(),
       });
 
       const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;

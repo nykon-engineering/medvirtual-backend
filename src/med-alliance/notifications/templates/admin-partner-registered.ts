@@ -14,6 +14,8 @@ export function adminPartnerRegisteredTemplate(
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
   const ctaLink = `${process.env.FRONTEND_URL}/med-alliance/affiliate-partners`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
@@ -36,7 +38,7 @@ export function adminPartnerRegisteredTemplate(
     .detail-table td { padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; }
     .detail-table td:first-child { color: #666666; width: 45%; }
     .detail-table td:last-child { font-weight: 600; }
-    .cta-button { display: inline-block; background-color: ${primaryColor}; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .cta-button { display: inline-block; background-color: ${buttonColor}; color: ${buttonTextColor} !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
     .cta-button:hover { background-color: ${primaryColorHover}; }
     .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
     .sender { color: #333333; font-size: 16px; }

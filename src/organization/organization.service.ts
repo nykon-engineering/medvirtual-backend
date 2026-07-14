@@ -426,8 +426,12 @@ export class OrganizationService {
       };
     }
 
-    // Add admin filter (only for system_super_admin)
-    if (admin && user.role === 'system_super_admin') {
+    // Add admin filter (available for system_super_admin and system_admin,
+    // both of which already have unrestricted base visibility above)
+    if (
+      admin &&
+      (user.role === 'system_super_admin' || user.role === 'system_admin')
+    ) {
       whereClause.admin_id = admin;
     }
 

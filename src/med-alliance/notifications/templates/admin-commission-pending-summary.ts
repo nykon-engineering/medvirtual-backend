@@ -21,6 +21,8 @@ export function adminCommissionPendingSummaryTemplate(
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
   const ctaLink = `${process.env.FRONTEND_URL}/med-alliance/admin/commissions`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
@@ -67,7 +69,7 @@ export function adminCommissionPendingSummaryTemplate(
     .highlight-box { background-color: #f0faf8; border-left: 4px solid ${primaryColor}; padding: 14px 18px; border-radius: 4px; margin: 24px 0; }
     .highlight-box .amount { font-size: 22px; font-weight: 700; color: ${primaryColor}; }
     .highlight-box .label { font-size: 13px; color: #666666; margin-top: 2px; }
-    .cta-button { display: inline-block; background-color: ${primaryColor}; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .cta-button { display: inline-block; background-color: ${buttonColor}; color: ${buttonTextColor} !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
     .cta-button:hover { background-color: ${primaryColorHover}; }
     .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
     .sender { color: #333333; font-size: 16px; }

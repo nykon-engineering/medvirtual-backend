@@ -8,32 +8,19 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   MedAllianceReferralStatus,
   OrganizationStatus,
+  ReferralStage,
   USER,
 } from '@prisma/client';
 import { UpdateReferralStageDto } from './dto/update-referral-stage.dto';
 import { ApproveEligibilityDto } from './dto/approve-eligibility.dto';
-import { BlockEligibilityDto } from './dto/block-eligibility.dto';
-
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-
-/**
- * Returns the effective eligibility status for display.
- * Checks the one-year window at read-time so the UI stays accurate without requiring a cron.
- *
- * eligibilityStartAt is already deployment_date + 30 days — the 30-day stabilization offset
- * is baked into the field value, so this function only needs the upper-bound check.
- */
-function computeEffectiveStatus(
-  stored: MedAllianceReferralStatus | null,
-  eligibilityStartAt: Date | null,
-): MedAllianceReferralStatus | null {
-  if (stored !== 'eligible') return stored;
-  if (!eligibilityStartAt) return 'not_eligible';
-  const elapsed = Date.now() - eligibilityStartAt.getTime();
-  if (elapsed > ONE_YEAR_MS) return 'not_eligible';
-  return 'eligible';
-}
-import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
+import {
+  BlockEligibilityDto,
+  CommissionsAction,
+} from './dto/block-eligibility.dto';
+import {
+  AFFILIATE_VISIBLE_STATUSES,
+  ONE_YEAR_MS,
+} from '../../common/constant/commissions';
 import { AffiliatesService } from '../affiliates/affiliates.service';
 import { EligibilityCheckService } from './eligibility-check.service';
 import { ReferralSyncService } from '../sync/referral-sync.service';
@@ -135,6 +122,30 @@ export class ReferredCompaniesService {
           .catch((e) =>
             console.error('[rollback] Failed to delete organization:', e),
           );
+      });
+
+      // Capture an immutable snapshot of exactly what the affiliate submitted, before
+      // any HubSpot sync (Step 4) can overwrite name/industry/location/phone/website_url.
+      // Also set the eligibility resting state explicitly here rather than relying on
+      // eligibilityCheck.runAndPersist (Step 2), which no longer writes a default status.
+      const referredCompanyDto = dto as CreateReferredCompanyDto;
+      await this.prisma.organization.update({
+        where: { id: org.id },
+        data: {
+          med_alliance_referral_status: 'pending_confirmation',
+          referral_submission_snapshot: {
+            name: referredCompanyDto.name,
+            industry: referredCompanyDto.industry ?? null,
+            website_url: referredCompanyDto.website_url ?? null,
+            location: referredCompanyDto.location ?? null,
+            phone: referredCompanyDto.phone ?? null,
+            contact_first_name: referredCompanyDto.contact_first_name,
+            contact_last_name: referredCompanyDto.contact_last_name,
+            contact_email: referredCompanyDto.contact_email,
+            refer_to_user_id: referredCompanyDto.refer_to_user_id ?? null,
+            submitted_at: new Date().toISOString(),
+          },
+        },
       });
 
       // Step 2: MA-004 — block if this company is already an active client.
@@ -466,16 +477,10 @@ export class ReferredCompaniesService {
         commission_status = 'pending';
       }
 
-      const { affiliateCommissions: _, eligibility_start_at, ...rest } = org;
-      return {
-        ...rest,
-        med_alliance_referral_status: computeEffectiveStatus(
-          org.med_alliance_referral_status,
-          eligibility_start_at,
-        ),
-        my_commissions,
-        commission_status,
-      };
+      // affiliateCommissions is destructured out — replaced by the computed aggregates above.
+      const { affiliateCommissions, ...rest } = org;
+      void affiliateCommissions;
+      return { ...rest, my_commissions, commission_status };
     });
 
     return { data, pagination: { page, limit, total } };
@@ -536,6 +541,7 @@ export class ReferredCompaniesService {
             hubspotInvoiceSnapshot: {
               select: {
                 hubspot_id: true,
+                invoice_number: true,
                 invoice_amount: true,
                 invoice_status: true,
                 paid_at: true,
@@ -547,15 +553,7 @@ export class ReferredCompaniesService {
       },
     });
 
-    if (!org) return org;
-    const { eligibility_start_at, ...rest } = org;
-    return {
-      ...rest,
-      med_alliance_referral_status: computeEffectiveStatus(
-        org.med_alliance_referral_status,
-        eligibility_start_at,
-      ),
-    };
+    return org;
   }
 
   // ---------------------------------------------------------------------------
@@ -651,19 +649,12 @@ export class ReferredCompaniesService {
         .reduce((sum: number, c) => sum + Number(c.commission_amount), 0);
       const has_open_review = (org._count?.adminReviewCases ?? 0) > 0;
 
-      const {
-        affiliateCommissions: _,
-        _count: __,
-        eligibility_start_at,
-        ...rest
-      } = org;
+      // affiliateCommissions and _count are destructured out — replaced by the aggregates above.
+      const { affiliateCommissions, _count, ...rest } = org;
+      void affiliateCommissions;
+      void _count;
       return {
         ...rest,
-        eligibility_start_at,
-        med_alliance_referral_status: computeEffectiveStatus(
-          org.med_alliance_referral_status,
-          eligibility_start_at,
-        ),
         total_paid,
         total_pending,
         has_open_review,
@@ -686,6 +677,11 @@ export class ReferredCompaniesService {
         email: true,
         phone: true,
         business_unit: true,
+        organization_role: true,
+        status: true,
+        admin: {
+          select: { id: true, first_name: true, last_name: true },
+        },
         industry: true,
         location: true,
         address: true,
@@ -695,6 +691,8 @@ export class ReferredCompaniesService {
         description: true,
         contact_first_name: true,
         contact_last_name: true,
+        contact_email: true,
+        referral_submission_snapshot: true,
         // MA status
         med_alliance_referral_status: true,
         eligibility_start_at: true,
@@ -750,6 +748,7 @@ export class ReferredCompaniesService {
             hubspotInvoiceSnapshot: {
               select: {
                 hubspot_id: true,
+                invoice_number: true,
                 invoice_amount: true,
                 invoice_status: true,
                 paid_at: true,
@@ -787,19 +786,78 @@ export class ReferredCompaniesService {
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
-    const { eligibility_start_at, ...rest } = org;
+    const { referral_submission_snapshot, ...rest } = org;
     return {
       ...rest,
-      eligibility_start_at,
-      med_alliance_referral_status: computeEffectiveStatus(
-        org.med_alliance_referral_status,
-        eligibility_start_at,
-      ),
+      referral_submission: referral_submission_snapshot ?? null,
     };
   }
 
+  /**
+   * Shared guard for the Confirm/Block eligibility decisions. Decisions only exist once the
+   * company is deployed; pending allows both, eligible only allows block, not_eligible (blocked)
+   * only allows confirm (un-block), and expired allows neither.
+   *
+   *   status          | confirm | block
+   *   pending          | yes     | yes
+   *   eligible         | no      | yes
+   *   not_eligible     | yes     | no
+   *   expired          | no      | no
+   */
+  private assertDeployedDecisionAllowed(
+    org: {
+      referred_by_affiliate_id: string | null;
+      med_alliance_referral_status: MedAllianceReferralStatus | null;
+    },
+    action: 'confirm' | 'block',
+  ): void {
+    if (!org.referred_by_affiliate_id) {
+      throw new BadRequestException('Not a referred company');
+    }
+    const status = org.med_alliance_referral_status;
+    if (status === 'expired') {
+      throw new BadRequestException(`Cannot ${action} an expired referral`);
+    }
+    if (action === 'confirm' && status === 'eligible') {
+      throw new BadRequestException('Company is already eligible');
+    }
+    if (action === 'block' && status === 'not_eligible') {
+      throw new BadRequestException('Company is already blocked');
+    }
+  }
+
+  /**
+   * Guards the stage transitions that involve the "canceled" stage.
+   *
+   * Leaving "canceled" must land on a stage consistent with the anchor date, so a
+   * previously-stored eligibility status can never silently revive:
+   *   - with an anchor date (deployment_date, or eligibility_start_at fallback), the
+   *     only valid destination is "deployed";
+   *   - without any anchor date, "deployed" is impossible (you cannot claim deployed
+   *     with no deployment date) — any other stage is fine.
+   * Entering "canceled" is always allowed here (status is reconciled by the caller).
+   */
+  private assertCancelTransitionAllowed(
+    fromStage: ReferralStage,
+    toStage: ReferralStage,
+    hasAnchorDate: boolean,
+  ): void {
+    if (fromStage !== 'canceled') return;
+    if (hasAnchorDate && toStage !== 'deployed') {
+      throw new BadRequestException(
+        'A canceled company with a prior deployment date can only be moved back to "deployed"',
+      );
+    }
+    if (!hasAnchorDate && toStage === 'deployed') {
+      throw new BadRequestException(
+        'Cannot move to "deployed" without a deployment date — set a deployment date first',
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
-  // Admin: confirm eligibility for a company in pending_confirmation state.
+  // Admin: confirm eligibility for a company that is pending or blocked (not_eligible).
+  // Only executable once the company's deployment_date is set and in the past.
   // backfill=true  → promote detected commissions to pending_admin_confirmation.
   // backfill=false → void detected commissions and re-anchor eligibility_start_at to now.
   // ---------------------------------------------------------------------------
@@ -820,12 +878,15 @@ export class ReferredCompaniesService {
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
-    if (!org.referred_by_affiliate_id)
-      throw new BadRequestException('Not a referred company');
-    if (org.med_alliance_referral_status === 'eligible')
-      throw new BadRequestException('Company is already eligible');
+    this.assertDeployedDecisionAllowed(org, 'confirm');
 
+    if (!org.deployment_date) {
+      throw new BadRequestException('Company has not been deployed yet');
+    }
     const now = new Date();
+    if (org.deployment_date > now) {
+      throw new BadRequestException('deployment date is in the future');
+    }
 
     // backfill=true: preserve existing anchor so the 1-year window is correct.
     // backfill=false: re-anchor to today so only future invoices generate commission.
@@ -881,13 +942,10 @@ export class ReferredCompaniesService {
 
   // ---------------------------------------------------------------------------
   // Admin: block eligibility — mark company as not_eligible with a required reason.
-  // Voids all detected + pending_admin_confirmation commissions.
+  // Callable from pending or eligible (per assertDeployedDecisionAllowed's matrix).
+  // commissions_action controls whether pending commissions are voided or left untouched.
   // ---------------------------------------------------------------------------
-  async blockEligibility(
-    id: string,
-    dto: BlockEligibilityDto,
-    admin: USER,
-  ) {
+  async blockEligibility(id: string, dto: BlockEligibilityDto, admin: USER) {
     const org = await this.prisma.organization.findUnique({
       where: { id },
       select: {
@@ -898,8 +956,7 @@ export class ReferredCompaniesService {
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
-    if (!org.referred_by_affiliate_id)
-      throw new BadRequestException('Not a referred company');
+    this.assertDeployedDecisionAllowed(org, 'block');
 
     const oldStatus = org.med_alliance_referral_status;
 
@@ -913,20 +970,23 @@ export class ReferredCompaniesService {
       },
     });
 
-    // Void all non-paid commissions for this org.
-    const commissionsToVoid = await this.prisma.affiliateCommission.findMany({
-      where: {
-        organization_id: id,
-        status: { in: ['detected', 'pending_admin_confirmation'] },
-      },
-      select: { id: true },
-    });
-
-    for (const commission of commissionsToVoid) {
-      await this.prisma.affiliateCommission.update({
-        where: { id: commission.id },
-        data: { status: 'void' },
+    let commissionsVoided = 0;
+    if (dto.commissions_action === CommissionsAction.void) {
+      const commissionsToVoid = await this.prisma.affiliateCommission.findMany({
+        where: {
+          organization_id: id,
+          status: { in: ['detected', 'pending_admin_confirmation'] },
+        },
+        select: { id: true },
       });
+
+      for (const commission of commissionsToVoid) {
+        await this.prisma.affiliateCommission.update({
+          where: { id: commission.id },
+          data: { status: 'void' },
+        });
+      }
+      commissionsVoided = commissionsToVoid.length;
     }
 
     await this.prisma.medAllianceAuditLog.create({
@@ -940,80 +1000,8 @@ export class ReferredCompaniesService {
         source: 'admin_action',
         actor_user_id: admin.id,
         metadata: {
-          commissions_voided: commissionsToVoid.length,
-        } as any,
-      },
-    });
-
-    return this.findOneForAdmin(id);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Admin: revert eligibility back to pending_confirmation for re-review.
-  // Reverts void commissions (set by a prior block/confirm) back to detected.
-  // ---------------------------------------------------------------------------
-  async revertEligibility(id: string, admin: USER) {
-    const org = await this.prisma.organization.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        referred_by_affiliate_id: true,
-        med_alliance_referral_status: true,
-        deployment_date: true,
-        eligibility_start_at: true,
-      },
-    });
-
-    if (!org) throw new NotFoundException('Referred company not found');
-    if (!org.referred_by_affiliate_id)
-      throw new BadRequestException('Not a referred company');
-    if (org.med_alliance_referral_status === 'pending_confirmation')
-      throw new BadRequestException('Company is already pending confirmation');
-
-    const oldStatus = org.med_alliance_referral_status;
-
-    // Restore eligibility_start_at from deployment_date when re-opening a blocked company
-    // that had its window cleared, so the countdown is correct.
-    const restoredEligibilityStart =
-      org.eligibility_start_at ?? org.deployment_date ?? null;
-
-    await this.prisma.organization.update({
-      where: { id },
-      data: {
-        med_alliance_referral_status: 'pending_confirmation',
-        med_alliance_block_reason: null,
-        med_alliance_approval_note: null,
-        eligibility_start_at: restoredEligibilityStart,
-      },
-    });
-
-    // Revert void commissions back to detected so the admin can review them.
-    // void is only written by admin block/confirm actions, so reverting all void
-    // commissions for this org is safe.
-    const voidCommissions = await this.prisma.affiliateCommission.findMany({
-      where: { organization_id: id, status: 'void' },
-      select: { id: true },
-    });
-
-    for (const commission of voidCommissions) {
-      await this.prisma.affiliateCommission.update({
-        where: { id: commission.id },
-        data: { status: 'detected' },
-      });
-    }
-
-    await this.prisma.medAllianceAuditLog.create({
-      data: {
-        entity_type: 'referred_company',
-        entity_id: id,
-        event: 'eligibility_reverted',
-        old_status: oldStatus,
-        new_status: 'pending_confirmation',
-        reason: 'Admin re-opened for review',
-        source: 'admin_action',
-        actor_user_id: admin.id,
-        metadata: {
-          commissions_reverted: voidCommissions.length,
+          commissions_action: dto.commissions_action,
+          commissions_voided: commissionsVoided,
         } as any,
       },
     });
@@ -1023,7 +1011,10 @@ export class ReferredCompaniesService {
 
   // ---------------------------------------------------------------------------
   // Admin: update the pipeline stage for a referred company.
-  // Starting the deployed stage also starts the 30-day eligibility clock.
+  // Moving into "canceled" forces med_alliance_referral_status to not_eligible (without
+  // voiding commissions); moving out of "canceled" re-derives the status from the anchor
+  // date (expired if >1y old, else pending_confirmation) so a stale eligible can never
+  // silently revive. assertCancelTransitionAllowed enforces the valid destinations.
   // ---------------------------------------------------------------------------
   async updateReferralStage(
     id: string,
@@ -1038,6 +1029,7 @@ export class ReferredCompaniesService {
         referral_stage: true,
         eligibility_start_at: true,
         deployment_date: true,
+        med_alliance_referral_status: true,
         referred_by_affiliate_id: true,
         referredByAffiliate: { select: { email: true, first_name: true } },
       },
@@ -1046,20 +1038,59 @@ export class ReferredCompaniesService {
     if (!org.referred_by_affiliate_id)
       throw new BadRequestException('Not a referred company');
 
+    const hasAnchorDate = !!(org.deployment_date ?? org.eligibility_start_at);
+    this.assertCancelTransitionAllowed(
+      org.referral_stage ?? 'referred',
+      dto.stage,
+      hasAnchorDate,
+    );
+
     const dataUpdate: Record<string, unknown> = { referral_stage: dto.stage };
 
-    // Use deployment_date as the anchor so the eligibility clock reflects the actual deploy, not the moment of manual stage update.
+    // Reconcile med_alliance_referral_status with the stage change so a stored
+    // eligibility status can never survive a round-trip through "canceled".
+    let statusChangeMetadata: Record<string, unknown> | undefined;
+
+    if (dto.stage === 'canceled' && org.referral_stage !== 'canceled') {
+      dataUpdate.med_alliance_referral_status = 'not_eligible';
+      statusChangeMetadata = {
+        old_referral_status: org.med_alliance_referral_status,
+        new_referral_status: 'not_eligible',
+      };
+    } else if (org.referral_stage === 'canceled' && dto.stage !== 'canceled') {
+      const anchorDate = org.deployment_date ?? org.eligibility_start_at;
+      const newStatus =
+        anchorDate && Date.now() - anchorDate.getTime() > ONE_YEAR_MS
+          ? 'expired'
+          : 'pending_confirmation';
+      dataUpdate.med_alliance_referral_status = newStatus;
+      statusChangeMetadata = {
+        old_referral_status: org.med_alliance_referral_status,
+        new_referral_status: newStatus,
+      };
+    }
+
+    // Use deployment_date as the anchor so eligibility_start_at reflects the actual deploy,
+    // not the moment of this manual stage update.
     if (dto.stage === 'deployed' && !org.eligibility_start_at) {
-      const anchor = org.deployment_date ?? new Date();
-      dataUpdate.eligibility_start_at = new Date(
-        anchor.getTime() + 30 * 24 * 60 * 60 * 1000,
-      );
+      dataUpdate.eligibility_start_at = org.deployment_date ?? new Date();
     }
 
     await this.prisma.organization.update({
       where: { id },
       data: dataUpdate as any,
     });
+
+    const auditMetadata: Record<string, unknown> = {
+      ...(dataUpdate.eligibility_start_at
+        ? {
+            eligibility_start_at: (
+              dataUpdate.eligibility_start_at as Date
+            ).toISOString(),
+          }
+        : {}),
+      ...(statusChangeMetadata ?? {}),
+    };
 
     await this.prisma.medAllianceAuditLog.create({
       data: {
@@ -1071,13 +1102,10 @@ export class ReferredCompaniesService {
         reason: dto.reason ?? null,
         source: 'admin_action',
         actor_user_id: adminUser.id,
-        metadata: dataUpdate.eligibility_start_at
-          ? ({
-              eligibility_start_at: (
-                dataUpdate.eligibility_start_at as Date
-              ).toISOString(),
-            } as any)
-          : undefined,
+        metadata:
+          Object.keys(auditMetadata).length > 0
+            ? (auditMetadata as any)
+            : undefined,
       },
     });
 

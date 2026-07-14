@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import axios from 'axios';
@@ -37,6 +38,7 @@ import { MedAllianceInvitationForOrgUsers } from '../../common/utils/email-templ
 import { MedAllianceInviteSignup } from '../../common/utils/email-templates/med-alliance-invite-signup';
 import { AFFILIATE_VISIBLE_STATUSES } from '../../common/constant/commissions';
 import { AllianceNotificationsService } from '../notifications/notifications.service';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
 
 // Fields returned for the linked user — never expose password or sensitive tokens.
 const USER_SELECT = {
@@ -52,6 +54,8 @@ const USER_SELECT = {
 
 @Injectable()
 export class AffiliatesService {
+  private readonly logger = new Logger(AffiliatesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
@@ -60,6 +64,7 @@ export class AffiliatesService {
     private readonly hubspot: HubspotService,
     private readonly invoiceIngestion: InvoiceIngestionService,
     private readonly allianceNotifications: AllianceNotificationsService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
 
   // Shared helper: ensure a user has an active AffiliateProfile.
@@ -75,11 +80,6 @@ export class AffiliatesService {
       throw new ForbiddenException('Affiliate profile is inactive');
     }
     return profile;
-  }
-
-  private buildFromWithPrefix(from: string): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? from : `[DEV] ${from}`;
   }
 
   async create(dto: CreateAffiliateProfileDto, adminUser: USER) {
@@ -117,33 +117,48 @@ export class AffiliatesService {
     // => Create Growth Partner in Hubspot
     try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log(
-        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
-        profile.id,
+      this.logger.log(
+        `[Hubspot] Growth Partner created in Hubspot for affiliate profile ID: ${profile.id}`,
       );
     } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
-      console.error('Failed to create Growth Partner in Hubspot:', error);
+      this.logger.error(`Failed to create Growth Partner in Hubspot: ${error}`);
       throw new BadRequestException(
         error.message ||
           'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
       );
     }
 
-    // Send invitation email to the new affiliate.
     try {
       const theme = await getUserEmailTheme(this.prisma, dto.user_id);
+      const fallbackSubject = `You're now a ${theme?.companyName || 'MedVirtual'} Med Alliance Partner — here's what's next`;
+      const fallbackHtml = MedAllianceInvitation(
+        user.first_name,
+        theme ?? undefined,
+      );
+      const tpl = await this.emailTemplates.getTemplateContent(
+        'med-alliance-invitation',
+        {
+          '{{firstName}}': user.first_name,
+          '{{companyName}}': theme?.companyName || 'MedVirtual',
+        },
+        theme || {
+          primaryColor: '#01546B',
+          primaryColorHover: '#013A4F',
+          secondaryColor: '#F8F9FA',
+          accentColor: '#00B2E2',
+          companyName: 'MedVirtual',
+        },
+      );
       await this.mailService.sendMail({
-        from: this.buildFromWithPrefix('MedVirtual <noreply@medvirtual.ai>'),
+        from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
         to: user.email,
-        subject: `You're now a ${theme?.companyName || 'MedVirtual'} Med Alliance Partner — here's what's next`,
-        html: MedAllianceInvitation(user.first_name, theme ?? undefined),
+        subject: tpl?.subject ?? fallbackSubject,
+        html: tpl?.html ?? fallbackHtml,
       });
     } catch (emailError) {
-      // Do not fail the whole request if the email could not be delivered.
-      console.error(
-        'Failed to send Med Alliance invitation email:',
-        emailError,
+      this.logger.error(
+        `Failed to send Med Alliance invitation email: ${emailError}`,
       );
     }
 
@@ -187,25 +202,38 @@ export class AffiliatesService {
 
     // Theme is resolved from the admin's org since the new user has no org yet
     const emailTheme = await getUserEmailTheme(this.prisma, adminUser.id);
-
-    // Send signup link via email
     const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
     const inviteLink =
       emailTheme?.companyName === 'Berry Virtual'
         ? `${baseInviteLink}&company=berry`
         : baseInviteLink;
-    const emailBody = MedAllianceInviteSignup(
+
+    const fallbackSubject = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`;
+    const fallbackHtml = MedAllianceInviteSignup(
       inviteLink,
       emailTheme || undefined,
       dto.first_name,
     );
+    const tpl = await this.emailTemplates.getTemplateContent(
+      'med-alliance-invite-signup',
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+        '{{firstName}}': dto.first_name,
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
+    );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: dto.email,
-      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
-      html: emailBody,
+      subject: tpl?.subject ?? fallbackSubject,
+      html: tpl?.html ?? fallbackHtml,
       headers: {
         'X-Mailer': `${emailTheme?.companyName || 'MedVirtual'} Platform`,
         'X-Priority': '3',
@@ -275,13 +303,12 @@ export class AffiliatesService {
     // => Create Growth Partner in Hubspot
     try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log(
-        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
-        profile.id,
+      this.logger.log(
+        `[Hubspot] Growth Partner created in Hubspot for affiliate profile ID: ${profile.id}`,
       );
     } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
-      console.error('Failed to create Growth Partner in Hubspot:', error);
+      this.logger.error(`Failed to create Growth Partner in Hubspot: ${error}`);
       throw new BadRequestException(
         error.message ||
           'Failed to create Growth Partner in Hubspot. The affiliate profile has not been created. Please try again later.',
@@ -351,17 +378,33 @@ export class AffiliatesService {
         ? `${baseInviteLink}&company=berry`
         : baseInviteLink;
 
+    const fallbackSubject2 = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`;
+    const tpl2 = await this.emailTemplates.getTemplateContent(
+      'med-alliance-invite-signup',
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+        '{{firstName}}': dto.first_name,
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
+    );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: dto.email,
-      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
-      html: MedAllianceInviteSignup(
-        inviteLink,
-        emailTheme || undefined,
-        dto.first_name,
-      ),
+      subject: tpl2?.subject ?? fallbackSubject2,
+      html:
+        tpl2?.html ??
+        MedAllianceInviteSignup(
+          inviteLink,
+          emailTheme || undefined,
+          dto.first_name,
+        ),
     });
     if (!mailSent)
       throw new BadRequestException('Failed to send invitation email');
@@ -410,16 +453,18 @@ export class AffiliatesService {
         dto.company_name,
       )
       .catch((err) =>
-        console.error(
-          '[HubSpot] invite-user-for-affiliate background task failed:',
-          err,
+        this.logger.error(
+          `[HubSpot] invite-user-for-affiliate background task failed: ${err}`,
         ),
       );
 
     return this.findOneEnriched(id);
   }
 
-  async reInviteAffiliateUser(affiliateId: string, adminUserId: string): Promise<string> {
+  async reInviteAffiliateUser(
+    affiliateId: string,
+    adminUserId: string,
+  ): Promise<string> {
     const affiliate = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateId },
       include: { user: true },
@@ -439,17 +484,33 @@ export class AffiliatesService {
         ? `${baseInviteLink}&company=berry`
         : baseInviteLink;
 
+    const fallbackSubjectReinvite = `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`;
+    const tplReinvite = await this.emailTemplates.getTemplateContent(
+      'med-alliance-invite-signup',
+      {
+        '{{inviteLink}}': inviteLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+        '{{firstName}}': user.first_name,
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
+    );
     const mailSent = await this.mailService.sendMail({
-      from: this.buildFromWithPrefix(
-        `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      ),
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: user.email,
-      subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Affiliate Account Setup`,
-      html: MedAllianceInviteSignup(
-        inviteLink,
-        emailTheme || undefined,
-        user.first_name,
-      ),
+      subject: tplReinvite?.subject ?? fallbackSubjectReinvite,
+      html:
+        tplReinvite?.html ??
+        MedAllianceInviteSignup(
+          inviteLink,
+          emailTheme || undefined,
+          user.first_name,
+        ),
     });
     if (!mailSent)
       throw new BadRequestException('Failed to send re-invitation email');
@@ -492,6 +553,7 @@ export class AffiliatesService {
       status,
       banking,
       organization,
+      payable,
       sortOrder = 'desc',
     } = dto;
     const skip = (page - 1) * limit;
@@ -500,36 +562,48 @@ export class AffiliatesService {
     const where: any = {};
     if (status) where.status = status;
 
-    // Banking filter: complete = has real payout details (not will_be_provided_later).
+    // Each filter below pushes an independent condition into `andConditions`
+    // rather than assigning to `where.OR` directly — banking, search, and
+    // payable all need their own OR clause, and writing them straight to
+    // `where.OR` would let the last one silently clobber the others.
+    const andConditions: any[] = [];
+
+    // Banking filter: complete = affiliate has a hubspot_billcom_vendor_id on their contact
+    // (either the direct AffiliateProfile.contact or their user.contact — mirrors banking_complete in findOwn).
     if (banking === 'complete') {
-      where.AND = [
-        { payout_details: { not: null } },
-        {
-          NOT: {
-            payout_details: {
-              path: ['method'],
-              equals: 'will_be_provided_later',
-            },
-          },
-        },
-      ];
+      andConditions.push({
+        OR: [
+          { contact: { hubspot_billcom_vendor_id: { not: null } } },
+          { user: { contact: { hubspot_billcom_vendor_id: { not: null } } } },
+        ],
+      });
     } else if (banking === 'incomplete') {
-      where.OR = [
-        { payout_details: null },
+      andConditions.push(
         {
-          payout_details: {
-            path: ['method'],
-            equals: 'will_be_provided_later',
-          },
+          OR: [
+            { contact: { is: null } },
+            { contact: { hubspot_billcom_vendor_id: null } },
+          ],
         },
-      ];
+        {
+          OR: [
+            { user: { is: null } },
+            { user: { contact: { is: null } } },
+            { user: { contact: { hubspot_billcom_vendor_id: null } } },
+          ],
+        },
+      );
     }
 
     if (search) {
-      where.OR = [
-        { full_name: { contains: search.trim(), mode: 'insensitive' } },
-        { user: { email: { contains: search.trim(), mode: 'insensitive' } } },
-      ];
+      andConditions.push({
+        OR: [
+          { full_name: { contains: search.trim(), mode: 'insensitive' } },
+          {
+            user: { email: { contains: search.trim(), mode: 'insensitive' } },
+          },
+        ],
+      });
     }
 
     if (organization === 'with_org') {
@@ -537,6 +611,24 @@ export class AffiliatesService {
     } else if (organization === 'without_org') {
       where.user = { organization_id: null };
     }
+
+    // Payable = affiliate can have a payout request created right now: at
+    // least one eligible commission and a known Bill.com vendor id.
+    if (payable) {
+      andConditions.push(
+        { commissions: { some: { status: 'eligible' } } },
+        {
+          OR: [
+            { contact: { hubspot_billcom_vendor_id: { not: null } } },
+            {
+              user: { contact: { hubspot_billcom_vendor_id: { not: null } } },
+            },
+          ],
+        },
+      );
+    }
+
+    if (andConditions.length) where.AND = andConditions;
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.affiliateProfile.findMany({
@@ -551,7 +643,18 @@ export class AffiliatesService {
           user: {
             select: {
               ...USER_SELECT,
-              organization: { select: { id: true, name: true } },
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  business_unit: true,
+                  organization_role: true,
+                  status: true,
+                  admin: {
+                    select: { id: true, first_name: true, last_name: true },
+                  },
+                },
+              },
               _count: { select: { referredOrganizations: true } },
               contact: {
                 select: {
@@ -672,7 +775,12 @@ export class AffiliatesService {
           },
           orderBy: { createdAt: 'desc' },
           take: 5,
-          include: { organization: { select: { id: true, name: true } } },
+          include: {
+            organization: { select: { id: true, name: true } },
+            hubspotInvoiceSnapshot: {
+              select: { hubspot_id: true, invoice_number: true },
+            },
+          },
         }),
       ]);
 
@@ -690,7 +798,8 @@ export class AffiliatesService {
         id: c.id,
         organization_id: c.organization_id,
         organization_name: c.organization?.name ?? '',
-        invoice_id: c.hubspot_invoice_snapshot_id,
+        invoice_number: c.hubspotInvoiceSnapshot?.invoice_number ?? null,
+        invoice_hubspot_id: c.hubspotInvoiceSnapshot?.hubspot_id ?? null,
         base_amount: Number(c.base_amount_snapshot),
         commission_percentage: Number(c.commission_percent_snapshot),
         commission_amount: Number(c.commission_amount),
@@ -719,6 +828,7 @@ export class AffiliatesService {
                 email: true,
                 status: true,
                 med_alliance_referral_status: true,
+                referral_stage: true,
                 createdAt: true,
               },
               orderBy: { createdAt: 'desc' as const },
@@ -736,6 +846,11 @@ export class AffiliatesService {
                 name: true,
                 business_unit: true,
                 hubspot_id: true,
+                organization_role: true,
+                status: true,
+                admin: {
+                  select: { id: true, first_name: true, last_name: true },
+                },
               },
             },
           },
@@ -747,6 +862,10 @@ export class AffiliatesService {
             commission_amount: true,
             createdAt: true,
             organization: { select: { id: true, name: true } },
+            hubspot_invoice_snapshot_id: true,
+            hubspotInvoiceSnapshot: {
+              select: { hubspot_id: true, invoice_number: true },
+            },
           },
           orderBy: { createdAt: 'desc' as const },
           take: 50,
@@ -794,7 +913,7 @@ export class AffiliatesService {
             `Affiliate commission percentage updated`,
           );
         } catch (err) {
-          console.error('[HubSpot] Failed to sync commission:', err);
+          this.logger.error(`[HubSpot] Failed to sync commission: ${err}`);
         }
       }
 
@@ -815,7 +934,7 @@ export class AffiliatesService {
               `Affiliate banking details updated`,
             );
           } catch (err) {
-            console.error('[HubSpot] Failed to sync banking data:', err);
+            this.logger.error(`[HubSpot] Failed to sync banking data: ${err}`);
           }
         } else if (details?.method === 'will_be_provided_later') {
           try {
@@ -826,7 +945,7 @@ export class AffiliatesService {
               `Affiliate banking details cleared`,
             );
           } catch (err) {
-            console.error('[HubSpot] Failed to clear banking data:', err);
+            this.logger.error(`[HubSpot] Failed to clear banking data: ${err}`);
           }
         }
       }
@@ -900,9 +1019,8 @@ export class AffiliatesService {
     // => Create Growth Partner in Hubspot
     try {
       await this.affiliateCreationService.execute(newAffiliateData);
-      console.log(
-        '[Hubspot] Growth Partner created in Hubspot for affiliate profile ID:',
-        profile.id,
+      this.logger.log(
+        `[Hubspot] Growth Partner created in Hubspot for affiliate profile ID: ${profile.id}`,
       );
     } catch (error) {
       await this.prisma.affiliateProfile.delete({ where: { id: profile.id } });
@@ -914,19 +1032,34 @@ export class AffiliatesService {
 
     try {
       const theme = await getUserEmailTheme(this.prisma, currentUser.id);
+      const fallbackSubjectOrg = `Welcome to the Med Alliance Program, ${currentUser.first_name}`;
+      const fallbackHtmlOrg = MedAllianceInvitationForOrgUsers(
+        currentUser.first_name,
+        theme ?? undefined,
+      );
+      const tplOrg = await this.emailTemplates.getTemplateContent(
+        'med-alliance-org-invitation',
+        {
+          '{{firstName}}': currentUser.first_name,
+          '{{companyName}}': theme?.companyName || 'MedVirtual',
+        },
+        theme || {
+          primaryColor: '#01546B',
+          primaryColorHover: '#013A4F',
+          secondaryColor: '#F8F9FA',
+          accentColor: '#00B2E2',
+          companyName: 'MedVirtual',
+        },
+      );
       await this.mailService.sendMail({
-        from: process.env.MAIL_FROM || 'noreply@medvirtual.ai',
+        from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
         to: currentUser.email,
-        subject: `Welcome to the Med Alliance Program, ${currentUser.first_name}`,
-        html: MedAllianceInvitationForOrgUsers(
-          currentUser.first_name,
-          theme ?? undefined,
-        ),
+        subject: tplOrg?.subject ?? fallbackSubjectOrg,
+        html: tplOrg?.html ?? fallbackHtmlOrg,
       });
     } catch (emailError) {
-      console.error(
-        'Failed to send Med Alliance invitation email:',
-        emailError,
+      this.logger.error(
+        `Failed to send Med Alliance invitation email: ${emailError}`,
       );
     }
 
@@ -1019,11 +1152,11 @@ export class AffiliatesService {
           },
         }),
         this.prisma.affiliatePayoutRequest.findMany({
-          where: { affiliate_id: userId, status: 'paid' },
-          orderBy: { paid_at: 'desc' },
-          take: 20,
+          where: { affiliate_id: userId },
+          orderBy: { createdAt: 'desc' },
           select: {
             id: true,
+            status: true,
             paid_amount: true,
             paid_at: true,
             payment_method: true,
@@ -1147,9 +1280,8 @@ export class AffiliatesService {
       try {
         await this.affiliateCreationService.execute(updatedProfile);
       } catch (error) {
-        console.error(
-          '[HubSpot] Failed to recreate Growth Partner on reactivation:',
-          error,
+        this.logger.error(
+          `[HubSpot] Failed to recreate Growth Partner on reactivation: ${error}`,
         );
       }
     }
@@ -1211,6 +1343,7 @@ export class AffiliatesService {
         hubspot_id: true,
         invoice_amount: true,
         invoice_status: true,
+        payment_status: true,
         currency: true,
         paid_at: true,
         createdAt: true,
@@ -1219,31 +1352,51 @@ export class AffiliatesService {
       orderBy: { paid_at: 'asc' },
     });
 
-    const paidInvoices = invoices.filter(
-      (i) => i.invoice_status === 'paid' && i.paid_at != null,
+    // Canonical candidate-invoice rule (must match InvoicesService.computeIsCandidateInput
+    // and _backfillOnAssociation) — deliberately does NOT require paid_at, which frequently
+    // fails to resolve during HubSpot sync even for genuinely paid invoices.
+    const candidateInvoices = invoices.filter(
+      (i) =>
+        i.invoice_status === 'paid' &&
+        new Decimal(i.invoice_amount ?? 0).gt(0) &&
+        (i.payment_status === null || i.payment_status === 'succeeded'),
     );
-    const deploymentDate = paidInvoices[0]?.paid_at ?? null;
+
+    const firstCandidate = candidateInvoices[0];
+    // Prefer HubSpot's deployment_date as the eligibility anchor; otherwise use the earliest
+    // candidate invoice's paid_at, falling back to its created_at when paid_at never resolved
+    // so a real candidate invoice doesn't collapse the anchor back to null.
+    const deploymentDate =
+      org.deployment_date ??
+      firstCandidate?.paid_at ??
+      firstCandidate?.createdAt ??
+      null;
     const now = new Date();
     const daysSince =
       deploymentDate != null
         ? (now.getTime() - deploymentDate.getTime()) / (1000 * 60 * 60 * 24)
         : null;
 
-    let eligibilityWindow: 'no_invoices' | 'too_new' | 'eligible' | 'expired';
-    let commissionStatus: 'detected' | 'pending_admin_confirmation' | null;
+    // Mirrors _backfillOnAssociation: decisions are available immediately once deployed,
+    // no 30-day stabilization tier. More than 365 days since deployment, the org expires.
+    let eligibilityWindow: 'no_invoices' | 'pending' | 'expired';
+    let commissionStatus: 'detected' | null;
     if (daysSince === null) {
       eligibilityWindow = 'no_invoices';
       commissionStatus = null;
-    } else if (daysSince >= 365) {
+    } else if (daysSince > 365) {
       eligibilityWindow = 'expired';
       commissionStatus = null;
-    } else if (daysSince >= 30) {
-      eligibilityWindow = 'eligible';
-      commissionStatus = 'pending_admin_confirmation';
     } else {
-      eligibilityWindow = 'too_new';
+      eligibilityWindow = 'pending';
       commissionStatus = 'detected';
     }
+
+    // Once expired, the backfill creates zero commissions (early return before
+    // the commission-creation loop) — the preview must mirror that exactly,
+    // both in the projected count and in the invoice list shown to the admin.
+    const eligibleInvoicesForResponse =
+      eligibilityWindow === 'expired' ? [] : candidateInvoices;
 
     return {
       first_paid_invoice_at: deploymentDate?.toISOString() ?? null,
@@ -1256,7 +1409,7 @@ export class AffiliatesService {
         first_paid_invoice_at: org.first_paid_invoice_at?.toISOString() ?? null,
         deployment_date: org.deployment_date?.toISOString() ?? null,
       },
-      invoices: invoices.map((i) => ({
+      invoices: eligibleInvoicesForResponse.map((i) => ({
         id: i.id,
         hubspot_id: i.hubspot_id,
         invoice_amount: i.invoice_amount?.toString() ?? '0',
@@ -1272,7 +1425,7 @@ export class AffiliatesService {
           daysSince !== null ? Math.floor(daysSince) : null,
         eligibility_window: eligibilityWindow,
         commission_status: commissionStatus,
-        projected_commission_count: paidInvoices.length,
+        projected_commission_count: eligibleInvoicesForResponse.length,
         affiliate_commission_percent:
           profile.commission_percent_default.toNumber(),
       },
@@ -1344,7 +1497,6 @@ export class AffiliatesService {
     }
 
     const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const now = new Date();
 
     const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
@@ -1372,12 +1524,12 @@ export class AffiliatesService {
     const firstInvoiceDate = candidates[0]?.paid_at ?? now;
     // Prefer deployment_date from HubSpot as the anchor for eligibility calculations.
     const anchorDate = orgData?.deployment_date ?? firstInvoiceDate;
-    const eligibilityStartAt = new Date(anchorDate.getTime() + THIRTY_DAYS_MS);
     const daysSinceDeployment =
       (now.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24);
 
-    const isExpired = daysSinceDeployment >= 365;
-    const isEligible = !isExpired && daysSinceDeployment >= 30;
+    // Decisions are available immediately once deployed — no 30-day stabilization tier.
+    // More than 365 days since deployment_date, the org expires directly.
+    const isExpired = daysSinceDeployment > 365;
 
     await this.prisma.organization.update({
       where: { id: organizationId },
@@ -1387,11 +1539,11 @@ export class AffiliatesService {
         ...(candidates.length > 0 && {
           first_paid_invoice_at: firstInvoiceDate,
         }),
-        eligibility_start_at: eligibilityStartAt,
-        med_alliance_block_reason: isExpired
-          ? 'eligibility_expired: one-year window elapsed'
-          : null,
-        ...(isEligible && { med_alliance_referral_status: 'pending_confirmation' as any }),
+        eligibility_start_at: anchorDate,
+        med_alliance_block_reason: null,
+        med_alliance_referral_status: (isExpired
+          ? 'expired'
+          : 'pending_confirmation') as any,
       },
     });
 
@@ -1400,21 +1552,17 @@ export class AffiliatesService {
         entity_type: 'referred_company',
         entity_id: organizationId,
         event: 'stage_changed',
-        old_status: 'not_eligible',
-        new_status: isEligible ? 'pending_confirmation' : 'not_eligible',
+        old_status: 'pending_confirmation',
+        new_status: isExpired ? 'expired' : 'pending_confirmation',
         reason:
           'Company associated by admin — retroactive deployment date set from first paid invoice',
         source: 'admin_action',
         actor_user_id: adminUser.id,
         metadata: {
           referral_stage: 'deployed',
-          eligibility_start_at: eligibilityStartAt.toISOString(),
+          eligibility_start_at: anchorDate.toISOString(),
           days_since_first_invoice: Math.floor(daysSinceDeployment),
-          result: isExpired
-            ? 'expired'
-            : isEligible
-              ? 'pending_confirmation'
-              : 'stabilization_window',
+          result: isExpired ? 'expired' : 'pending_confirmation',
         } as any,
       },
     });
@@ -1428,21 +1576,15 @@ export class AffiliatesService {
 
     if (!affiliateProfile || affiliateProfile.status !== 'active') return;
 
-    const commissionStatus = isEligible
-      ? 'pending_admin_confirmation'
-      : 'detected';
-    const auditEvent = isEligible
-      ? 'commission_pending_admin_confirmation'
-      : 'commission_detected';
+    // Company just landed on pending_confirmation (not yet confirmed eligible), so backfilled
+    // commissions start as 'detected' and wait for an admin decision.
+    const commissionStatus = 'detected';
+    const auditEvent = 'commission_detected';
 
     for (const snapshot of candidates) {
       const idempotencyKey = buildCommissionIdempotencyKey({
         affiliateId: affiliateUserId,
         hubspotInvoiceId: snapshot.hubspot_id,
-        paidAt: snapshot.paid_at,
-        baseAmount: snapshot.invoice_amount.toString(),
-        commissionPercent:
-          affiliateProfile.commission_percent_default.toString(),
       });
 
       try {
@@ -1484,7 +1626,7 @@ export class AffiliatesService {
         });
       } catch (err: any) {
         if (err?.code === 'P2002') continue;
-        console.error(
+        this.logger.error(
           `Backfill commission failed for invoice ${snapshot.id}: ${err?.message}`,
         );
       }
@@ -1525,7 +1667,7 @@ export class AffiliatesService {
             `Affiliate banking details cleared during profile reset`,
           );
         } catch (err) {
-          console.error('[HubSpot] Failed to clear banking data:', err);
+          this.logger.error(`[HubSpot] Failed to clear banking data: ${err}`);
         }
       }
     }

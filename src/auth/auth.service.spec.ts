@@ -6,7 +6,10 @@ import { UserService } from '../user/user.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AffiliateUpdateService } from '../hubspot/update/affiliate';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { generateVerificationCode } from '../common/utils/generateCode.util';
+
+const mockEmailTemplates = { getTemplateContent: jest.fn().mockResolvedValue(null) };
 
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
@@ -64,6 +67,7 @@ describe('AuthService - signIn', () => {
         { provide: MailService, useValue: mailMock },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -366,6 +370,7 @@ describe('AuthService - Signup', () => {
         { provide: MailService, useValue: mailmock },
         { provide: PrismaService, useValue: prismamock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -488,6 +493,7 @@ describe('AuthService - inviteUser', () => {
         { provide: MailService, useValue: mailServiceMock },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -559,6 +565,7 @@ describe('AuthService - getUser', () => {
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismamock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -647,6 +654,7 @@ describe('AuthService - invitedUserSignup', () => {
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismamock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ]
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -785,6 +793,7 @@ describe('AuthService - resendCode', () => {
         { provide: MailService, useValue: mailServiceMock },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -844,6 +853,7 @@ describe('AuthService - reInviteUser', () => {
         { provide: MailService, useValue: mailServiceMock },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -895,6 +905,7 @@ describe('AuthService - verifyCode', () => {
         { provide: MailService, useValue: { sendMail: jest.fn() } },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -964,6 +975,7 @@ describe('AuthService - logout', () => {
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1015,6 +1027,7 @@ describe('AuthService - updatePassword', () => {
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1077,6 +1090,7 @@ describe('AuthService - signIn (additional branches)', () => {
         { provide: MailService, useValue: { sendMail: jest.fn() } },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1160,6 +1174,7 @@ describe('AuthService - verifyCode (additional branches)', () => {
         { provide: MailService, useValue: { sendMail: jest.fn() } },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1211,6 +1226,7 @@ describe('AuthService - logout (additional)', () => {
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1245,6 +1261,7 @@ describe('AuthService - inviteUser (additional branches)', () => {
         { provide: MailService, useValue: mailServiceMock },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1296,6 +1313,7 @@ describe('AuthService - getUser (additional)', () => {
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1326,6 +1344,7 @@ describe('AuthService - invitedUserSignup (additional branches)', () => {
         { provide: MailService, useValue: {} },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);
@@ -1401,6 +1420,7 @@ describe('AuthService - reInviteUser (additional branches)', () => {
         { provide: MailService, useValue: mailServiceMock },
         { provide: PrismaService, useValue: prismaMock },
         { provide: AffiliateUpdateService, useValue: { reactivate: jest.fn() } },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
     service = module.get<AuthService>(AuthService);

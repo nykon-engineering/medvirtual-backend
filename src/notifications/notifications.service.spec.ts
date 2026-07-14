@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -29,12 +30,17 @@ describe('NotificationsService', () => {
     sendMail: jest.fn(),
   };
 
+  const mockEmailTemplatesService = {
+    getTemplateContent: jest.fn().mockResolvedValue(null),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationsService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: MailService, useValue: mockMailService },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplatesService },
       ],
     }).compile();
 
@@ -53,57 +59,6 @@ describe('NotificationsService', () => {
 
   afterEach(() => {
     delete process.env.ENVIRONMENT;
-  });
-
-  describe('sendMailWithPrefix', () => {
-    const baseOptions = {
-      from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: ['user@example.com'],
-      subject: 'Test Subject',
-      html: '<p>Test</p>',
-    };
-
-    beforeEach(() => {
-      mockMailService.sendMail.mockResolvedValue(true);
-    });
-
-    it('should add [DEV] prefix to from in non-production environment', async () => {
-      // ENVIRONMENT is deleted in global beforeEach → non-prod
-      await (service as any).sendMailWithPrefix(baseOptions);
-
-      expect(mockMailService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ from: '[DEV] MedVirtual <noreply@medvirtual.ai>' }),
-      );
-    });
-
-    it('should NOT add prefix when ENVIRONMENT=PROD', async () => {
-      process.env.ENVIRONMENT = 'PROD';
-
-      await (service as any).sendMailWithPrefix(baseOptions);
-
-      expect(mockMailService.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ from: 'MedVirtual <noreply@medvirtual.ai>' }),
-      );
-    });
-
-    it('should preserve all other email properties unchanged', async () => {
-      await (service as any).sendMailWithPrefix(baseOptions);
-
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
-        to: ['user@example.com'],
-        subject: 'Test Subject',
-        html: '<p>Test</p>',
-      });
-    });
-
-    it('should propagate the return value from mail.sendMail', async () => {
-      mockMailService.sendMail.mockResolvedValue(false);
-
-      const result = await (service as any).sendMailWithPrefix(baseOptions);
-
-      expect(result).toBe(false);
-    });
   });
 
   describe('buildEmail', () => {
@@ -263,32 +218,42 @@ describe('NotificationsService', () => {
 
     it('should send notification for edited hire request', async () => {
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyHireRequestClientChange('hr1', 'edited');
 
       expect(result).toBe(true);
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
-        to: ['assignee@example.com'],
-        subject: 'Hire Request edited: Senior Developer',
-        html: expect.stringContaining('Hire Request EDITED'),
-      });
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: expect.stringContaining('MedVirtual'),
+          to: expect.arrayContaining(['assignee@example.com']),
+          subject: 'Hire Request edited: Senior Developer',
+          html: expect.stringContaining('Hire Request EDITED'),
+        }),
+      );
     });
 
     it('should send notification for canceled hire request', async () => {
       mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany.mockResolvedValue([
+        { id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' },
+      ]);
       mockMailService.sendMail.mockResolvedValue(true);
 
       const result = await service.notifyHireRequestClientChange('hr1', 'canceled');
 
       expect(result).toBe(true);
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
-        to: ['assignee@example.com'],
-        subject: 'Hire Request canceled: Senior Developer',
-        html: expect.stringContaining('Hire Request CANCELED'),
-      });
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: expect.stringContaining('MedVirtual'),
+          to: expect.arrayContaining(['assignee@example.com']),
+          subject: 'Hire Request canceled: Senior Developer',
+          html: expect.stringContaining('Hire Request CANCELED'),
+        }),
+      );
     });
 
     it('should throw NotFoundException when hire request not found', async () => {
@@ -339,12 +304,14 @@ describe('NotificationsService', () => {
         where: { id: 'hr1' },
         select: expect.any(Object),
       });
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
-        to: ['assignee@example.com'],
-        subject: 'Hire Request Assigned: Senior Developer',
-        html: expect.stringContaining('Hire Request'),
-      });
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: expect.stringContaining('MedVirtual'),
+          to: expect.arrayContaining(['assignee@example.com']),
+          subject: 'Hire Request Assigned: Senior Developer',
+          html: expect.stringContaining('Hire Request'),
+        }),
+      );
     });
 
     it('should throw NotFoundException when hire request not found', async () => {
@@ -451,7 +418,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
+          from: 'Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -474,7 +441,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
+          from: 'MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -537,7 +504,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
+          from: 'Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -560,7 +527,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
+          from: 'MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -597,7 +564,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '[DEV] Berry Virtual <noreply@medvirtual.ai>',
+          from: 'Berry Virtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -621,7 +588,7 @@ describe('NotificationsService', () => {
 
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
+          from: 'MedVirtual <noreply@medvirtual.ai>',
         })
       );
     });
@@ -655,7 +622,7 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledTimes(2); // Once for creator, once for assignee
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
+          from: expect.stringContaining('MedVirtual'),
           to: expect.arrayContaining([expect.any(String)]),
           subject: expect.stringMatching(/Ticket Created|Bug Report/),
           html: expect.stringContaining('Bug Report'),
@@ -685,12 +652,14 @@ describe('NotificationsService', () => {
       const result = await service.notifyTicketEvent(mockTicket, 'assigned');
 
       expect(result).toBe(true);
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
-        to: expect.arrayContaining([expect.any(String)]),
-        subject: expect.stringContaining('Bug Report'),
-        html: expect.stringContaining('The ticket was <strong>assigned</strong>'),
-      });
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: expect.stringContaining('MedVirtual'),
+          to: expect.arrayContaining([expect.any(String)]),
+          subject: expect.stringContaining('Bug Report'),
+          html: expect.stringContaining('The ticket was <strong>assigned</strong>'),
+        }),
+      );
     });
 
     it('should send notification for closed ticket', async () => {
@@ -701,12 +670,14 @@ describe('NotificationsService', () => {
       const result = await service.notifyTicketEvent(mockTicket, 'closed');
 
       expect(result).toBe(true);
-      expect(mockMailService.sendMail).toHaveBeenCalledWith({
-        from: '[DEV] MedVirtual <noreply@medvirtual.ai>',
-        to: expect.arrayContaining([expect.any(String)]),
-        subject: expect.stringContaining('Bug Report'),
-        html: expect.stringContaining('The ticket was <strong>closed</strong>'),
-      });
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: expect.stringContaining('MedVirtual'),
+          to: expect.arrayContaining([expect.any(String)]),
+          subject: expect.stringContaining('Bug Report'),
+          html: expect.stringContaining('The ticket was <strong>closed</strong>'),
+        }),
+      );
     });
 
     it('should throw NotFoundException when ticket not found', async () => {
@@ -1027,6 +998,142 @@ describe('NotificationsService', () => {
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({ html: expect.stringContaining('Not specified') }),
       );
+    });
+
+    // Bug 1 — the DB template lookup must receive the business-unit *slug*
+    // (or null), not the display value 'MedVirtual'. Otherwise it never matches
+    // the seeded global template and the custom-design render is skipped.
+    it('should resolve the DB template (custom design) instead of falling back for a display-value business unit', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      // Template resolves only when the lookup value is the slug or null/undefined —
+      // i.e. NOT the raw display value 'MedVirtual'.
+      mockEmailTemplatesService.getTemplateContent.mockImplementation(
+        async (_key, _values, _theme, businessUnit) => {
+          if (businessUnit === undefined || businessUnit === null || businessUnit === 'medvirtual') {
+            return { subject: 'Interview Invite: DB', html: '<div>DB_RENDERED_TEMPLATE</div>' };
+          }
+          return null;
+        },
+      );
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      // Uses the DB-rendered template, not the buildEmail fallback.
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'Interview Invite: DB',
+          html: expect.stringContaining('DB_RENDERED_TEMPLATE'),
+        }),
+      );
+    });
+
+    // Bug 2 — when the DB template is missing and buildEmail() is used, the saved
+    // custom button color from EmailBranding must still be applied to the CTA button.
+    it('should apply the custom buttonColor in the buildEmail fallback', async () => {
+      (mockPrismaService as any).emailBranding = {
+        findUnique: jest.fn().mockResolvedValue({
+          business_unit: 'medvirtual',
+          primary_color: '#01546B',
+          secondary_color: '#013A4F',
+          logo_url: null,
+          company_name: 'MedVirtual',
+          button_color: '#FF00AA',
+          button_text_color: '#FFFFFF',
+          layout_preset: 'default',
+        }),
+      };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+      // Force the buildEmail fallback path.
+      mockEmailTemplatesService.getTemplateContent.mockResolvedValue(null);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ html: expect.stringContaining('#FF00AA') }),
+      );
+
+      delete (mockPrismaService as any).emailBranding;
+    });
+
+    // The DB template body uses {{pairingLinkLine}} instead of hardcoding
+    // "Pairing Link: {{interviewLink}}", so the whole line disappears when there
+    // is no link. The button is always rendered: it falls back to a "Go to
+    // platform" button pointing at the login URL when no pairing link exists.
+    it('should drop the pairing line and fall back to a platform login button when there is no link', async () => {
+      const hrWithoutLink = {
+        ...mockHireRequest,
+        panels: [
+          {
+            id: 'panel1',
+            interviews: [{ id: 'int1', scheduled_date: new Date('2024-03-15'), link: null }],
+            panelCandidates: [],
+          },
+        ],
+      };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrWithoutLink);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+      // Force the buildEmail fallback so we can inspect the rendered html too.
+      mockEmailTemplatesService.getTemplateContent.mockResolvedValue(null);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockEmailTemplatesService.getTemplateContent).toHaveBeenCalledWith(
+        'hr-interview-scheduled',
+        expect.objectContaining({
+          '{{pairingLinkLine}}': '',
+          '{{ctaLabel}}': 'Go to platform',
+          '{{ctaUrl}}': expect.stringContaining('/login'),
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+      // Fallback html: no Pairing Link line, no '#' link, but a platform button.
+      const sentHtml = mockMailService.sendMail.mock.calls[0][0].html;
+      expect(sentHtml).not.toContain('Pairing Link:');
+      expect(sentHtml).not.toContain('href="#"');
+      expect(sentHtml).toContain('Go to platform');
+      expect(sentHtml).toContain('/login');
+    });
+
+    it('should show the pairing line and a Join meeting button when a link exists', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+      mockEmailTemplatesService.getTemplateContent.mockResolvedValue(null);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockEmailTemplatesService.getTemplateContent).toHaveBeenCalledWith(
+        'hr-interview-scheduled',
+        expect.objectContaining({
+          '{{pairingLinkLine}}': 'Pairing Link: https://meet.example.com/abc',
+          '{{ctaLabel}}': 'Join meeting',
+          '{{ctaUrl}}': 'https://meet.example.com/abc',
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+      const sentHtml = mockMailService.sendMail.mock.calls[0][0].html;
+      expect(sentHtml).toContain('Pairing Link:');
+      expect(sentHtml).toContain('Join meeting');
     });
   });
 
@@ -1588,6 +1695,7 @@ describe('NotificationsService', () => {
       expect(result).toBe(true);
       expect(mockMailService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
+          from: expect.stringContaining('MedVirtual'),
           to: ['creator@example.com'],
           subject: expect.stringContaining('IN PROGRESS'),
         }),

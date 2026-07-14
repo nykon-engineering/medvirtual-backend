@@ -110,24 +110,53 @@ export class AffiliateCreationService {
     }
   }
 
-  private async ensureContact(
+  private isNotFound(error: any): boolean {
+    return error?.response?.status === 404;
+  }
+
+  private isConflict(error: any): boolean {
+    return (
+      error?.response?.status === 409 ||
+      error?.response?.data?.category === 'CONFLICT'
+    );
+  }
+
+  private async relinkContact(
     userId: string,
-    firstName: string,
-    lastName: string,
-    email: string,
-    existingContactId: string | null,
-    phone?: string,
-    companyName?: string,
-  ): Promise<string | null> {
-    if (existingContactId) {
-      // Update existing contact with Referral qualification and lead source
-      await axios.patch(
-        `https://api.hubapi.com/crm/v3/objects/contacts/${existingContactId}`,
+    contactId: string,
+  ): Promise<void> {
+    await this.prisma.uSER.update({
+      where: { id: userId },
+      data: { hubspot_contact_id: contactId },
+    });
+
+    // Always overwrite (not just when null) — a non-null hubspot_id here can
+    // itself be stale (contact deleted/merged in HubSpot), and leaving it in
+    // place would silently keep the drift this relink is meant to fix.
+    await this.prisma.contact.updateMany({
+      where: { user_id: userId },
+      data: { hubspot_id: contactId },
+    });
+  }
+
+  private async findContactIdByEmail(email: string): Promise<string | null> {
+    try {
+      const response = await axios.post(
+        'https://api.hubapi.com/crm/v3/objects/contacts/search',
         {
-          properties: {
-            qualification_status: 'Referral',
-            latest_lead_source: 'Referral',
-          },
+          filterGroups: [
+            {
+              filters: [
+                {
+                  propertyName: 'email',
+                  operator: 'EQ',
+                  value: email.toLowerCase(),
+                },
+              ],
+            },
+          ],
+          limit: 1,
+          properties: ['email'],
         },
         {
           headers: {
@@ -136,44 +165,121 @@ export class AffiliateCreationService {
           },
         },
       );
-      return existingContactId;
+      return response.data?.results?.[0]?.id ?? null;
+    } catch {
+      // Search failing should not itself throw — caller treats null as "not found".
+      return null;
+    }
+  }
+
+  private async ensureContact(
+    userId: string,
+    firstName: string,
+    lastName: string,
+    email: string,
+    existingContactId: string | null,
+    phone?: string,
+    companyName?: string,
+    actorUserId?: string,
+    source?: HubspotAuditSource,
+  ): Promise<string | null> {
+    const headers = {
+      Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    };
+    const contactProperties = {
+      qualification_status: 'Referral',
+      latest_lead_source: 'Referral',
+    };
+
+    if (existingContactId) {
+      try {
+        // Update existing contact with Referral qualification and lead source
+        await axios.patch(
+          `https://api.hubapi.com/crm/v3/objects/contacts/${existingContactId}`,
+          { properties: contactProperties },
+          { headers },
+        );
+        return existingContactId;
+      } catch (error) {
+        if (!this.isNotFound(error)) throw error;
+
+        // Stale hubspot_contact_id (contact deleted/merged in HubSpot — BR-9).
+        // Recover by email instead of failing the whole action.
+        const foundId = await this.findContactIdByEmail(email);
+        if (foundId) {
+          await axios.patch(
+            `https://api.hubapi.com/crm/v3/objects/contacts/${foundId}`,
+            { properties: contactProperties },
+            { headers },
+          );
+          await this.relinkContact(userId, foundId);
+          void this.audit.log({
+            actorUserId,
+            entityType: HubspotEntityType.contact,
+            entityId: userId,
+            hubspotObjectId: foundId,
+            hubspotObjectType: 'contacts',
+            action: HubspotAuditAction.UPDATE,
+            source: source ?? HubspotAuditSource.user_action,
+            success: true,
+            payload: {
+              email,
+              recovery: 'stale_contact_id',
+              staleId: existingContactId,
+            },
+          });
+          return foundId;
+        }
+        // No contact found by email either — fall through to create below.
+      }
     }
 
-    const response = await axios.post(
-      'https://api.hubapi.com/crm/v3/objects/contacts',
-      {
-        properties: {
-          firstname: firstName,
-          lastname: lastName,
-          email: email,
-          phone: phone ?? '',
-          company: companyName ?? '',
-          qualification_status: 'Referral',
-          latest_lead_source: 'Referral',
+    try {
+      const response = await axios.post(
+        'https://api.hubapi.com/crm/v3/objects/contacts',
+        {
+          properties: {
+            firstname: firstName,
+            lastname: lastName,
+            email: email,
+            phone: phone ?? '',
+            company: companyName ?? '',
+            ...contactProperties,
+          },
         },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-      },
-    );
+        { headers },
+      );
 
-    const contactId: string = response.data.id;
+      const contactId: string = response.data.id;
+      await this.relinkContact(userId, contactId);
+      return contactId;
+    } catch (error) {
+      if (!this.isConflict(error)) throw error;
 
-    await this.prisma.uSER.update({
-      where: { id: userId },
-      data: { hubspot_contact_id: contactId },
-    });
+      // HubSpot already has a contact with this email but we had no id on record.
+      const foundId = await this.findContactIdByEmail(email);
+      if (!foundId) throw error; // conflict claimed but unrecoverable — propagate
 
-    // Sync hubspot_id back to DB Contact if one was created for this user
-    await this.prisma.contact.updateMany({
-      where: { user_id: userId, hubspot_id: null },
-      data: { hubspot_id: contactId },
-    });
-
-    return contactId;
+      await axios.patch(
+        `https://api.hubapi.com/crm/v3/objects/contacts/${foundId}`,
+        { properties: contactProperties },
+        { headers },
+      );
+      await this.relinkContact(userId, foundId);
+      void this.audit.log({
+        actorUserId,
+        entityType: HubspotEntityType.contact,
+        entityId: userId,
+        hubspotObjectId: foundId,
+        hubspotObjectType: 'contacts',
+        action: HubspotAuditAction.UPDATE,
+        source: source ?? HubspotAuditSource.user_action,
+        success: true,
+        payload: { email, recovery: 'untracked_duplicate_conflict' },
+      });
+      return foundId;
+    }
   }
 
   async execute(data: any, actorUserId?: string): Promise<any> {
@@ -189,6 +295,8 @@ export class AffiliateCreationService {
         data.user.hubspot_contact_id ?? null,
         data.user.phone ?? undefined,
         data.user.contact?.company_name ?? undefined,
+        actorUserId,
+        source,
       );
 
       const associations: {

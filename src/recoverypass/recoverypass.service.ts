@@ -14,6 +14,7 @@ import { RecoveryForgotPasswordDto } from './dto/recoveryForgotPassword.dto';
 import getResetPasswordTemplate from '../common/utils/email-templates/reset-password';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { RecoveryResetPasswordDto } from './dto/recoveryResetPassword.dto';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
 export class RecoverypassService {
@@ -23,6 +24,7 @@ export class RecoverypassService {
     private readonly user: UserService,
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
 
   async forgotPassword(data: RecoveryForgotPasswordDto): Promise<boolean> {
@@ -70,22 +72,35 @@ export class RecoverypassService {
       },
     });
 
-    // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, user.id);
+    const resetLink = `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`;
 
-    // Send verification code via email
-    const emailBody = getResetPasswordTemplate(
+    const fallbackSubject = `Reset Your MedVirtual Password - Action Required`;
+    const fallbackHtml = getResetPasswordTemplate(
       user.first_name,
-      `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`,
+      resetLink,
       emailTheme || undefined,
     );
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-
+    const tplContent = await this.emailTemplates.getTemplateContent(
+      'reset-password',
+      {
+        '{{userName}}': user.first_name,
+        '{{resetLink}}': resetLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
+    );
     const mailSent = await this.mail.sendMail({
-      from: `${!isProduction ? '[DEV] ' : ''}MedVirtual <noreply@medvirtual.ai>`,
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: user.email,
-      subject: `Reset Your MedVirtual Password - Action Required`,
-      html: emailBody,
+      subject: tplContent?.subject ?? fallbackSubject,
+      html: tplContent?.html ?? fallbackHtml,
       headers: {
         'X-Mailer': 'MedVirtual Platform',
         'X-Priority': '3',

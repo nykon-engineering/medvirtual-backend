@@ -171,6 +171,12 @@ model Organization {
   contact_last_name            String?
   contact_email                String?
 
+  // Immutable snapshot of the referral submission form, captured once at creation time.
+  // Never mutated afterward — protects against HubSpot sync silently overwriting
+  // name/industry/location/phone/website_url on the live row. Null for organizations
+  // created before this field existed.
+  referral_submission_snapshot Json?
+
   // User ID of the affiliate who referred this organization into the Med Alliance program
   referred_by_affiliate_id     String?
 
@@ -178,21 +184,26 @@ model Organization {
   refer_to_user_id             String?
   referToUser                  USER?                   @relation("OrganizationReferTo", fields: [refer_to_user_id], references: [id])
 
-  // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL)
+  // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL).
+  // 'pending_confirmation' is the resting state (shown to users as "Pending"): new referrals start here and stay
+  // here through every non-deployed pipeline stage. Confirm/Block become available once referral_stage = deployed.
   med_alliance_referral_status MedAllianceReferralStatus?
-  // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog)
+  // Human-readable reason stored when referral is blocked (also written to MedAllianceAuditLog).
+  // Cleared when status transitions to 'expired' — expiry no longer encodes itself as a reason string here.
   med_alliance_block_reason    String?
   // Admin note recorded when eligibility is manually approved
   med_alliance_approval_note   String?
-  // Anchor timestamp that starts the one-year eligibility window; set when the first paid invoice is received;
-  // cleared when the window expires so the status reflects not_eligible correctly.
+  // Anchor timestamp for the eligibility window — set to deployment_date (or first paid invoice date as a
+  // fallback) when the org is deployed; used by approveEligibility's backfill computation and for display.
   eligibility_start_at         DateTime?
   // Audit record of the first paid invoice date that triggered eligibility; never cleared after being set.
   first_paid_invoice_at        DateTime?
   // Deployment date synced from HubSpot organization.deploy_date_of_first_va; preferred over first_paid_invoice_at for display.
+  // Confirm/Block eligibility actions are only available once this is set and in the past. More than 365 days
+  // in the past, the org is automatically moved to 'expired' (via webhook, sync, or the expiry cron sweep).
   deployment_date              DateTime?
   // Pipeline stage tracking where this referral is in the sales-to-deployment lifecycle.
-  // 'deployed' starts the 30-day stabilization clock (eligibility_start_at); cron promotes to eligible after 30 days.
+  // 'deployed' is when eligibility decisions (Confirm/Block) become available — no waiting period.
   referral_stage               ReferralStage?              @default(referred)
 
   // HubSpot sync state — only relevant for referred organizations
@@ -691,6 +702,7 @@ model Contact {
   id                       String    @id @default(uuid())
   user_id                  String?    @unique
   hubspot_id               String?   @unique
+  hubspot_id_before_deletion String?
   organization_id          String?
   first_name               String?
   last_name                String?
@@ -708,7 +720,7 @@ model Contact {
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt
 
-  user             USER?            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user             USER?            @relation(fields: [user_id], references: [id], onDelete: SetNull)
   organization     Organization?    @relation(fields: [organization_id], references: [id])
   affiliateProfiles AffiliateProfile[]
 
@@ -865,7 +877,8 @@ model AffiliateCommission {
   // Scoped listing: all commissions for a given organization filtered by status
   @@index([organization_id, status], map: "idx_affiliate_commissions_org_status")
   @@index([status], map: "idx_affiliate_commissions_status")
-  @@index([hubspot_invoice_snapshot_id], map: "idx_affiliate_commissions_invoice_snapshot")
+  // Enforces one commission per invoice snapshot — closes the gap left by the hash-based idempotency_key
+  @@unique([hubspot_invoice_snapshot_id], map: "uq_affiliate_commissions_invoice_snapshot")
 }
 
 // AffiliatePayoutRequest
@@ -1197,10 +1210,13 @@ enum MedAllianceEntityType {
 // Eligibility status within the Med Alliance affiliate program.
 // Only populated on Organization records that have referred_by_affiliate_id set.
 // Does NOT affect OrganizationStatus — these are independent concerns.
+// pending_confirmation = resting state ("Pending" in the UI) — decisions unlock once the org is deployed.
+// expired = deployment_date passed 365 days without commissions being requested; terminal, no further decisions.
 enum MedAllianceReferralStatus {
   eligible
   not_eligible
   pending_confirmation
+  expired
 }
 
 // MA-006 — Reason why a review case was opened
@@ -1349,4 +1365,102 @@ model OfferPanelCandidate {
   @@unique([offer_panel_id, candidate_id], name: "idx_offer_panel_candidates_unique")
   @@index([offer_panel_id], map: "idx_offer_panel_candidates_panel_id")
   @@index([candidate_id],   map: "idx_offer_panel_candidates_candidate_id")
+}
+
+// ─── Editable Emails ─────────────────────────────────────────────────────────
+
+model BusinessUnit {
+  id         String   @id @default(uuid())
+  slug       String   @unique
+  name       String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  created_by String?
+
+  branding  EmailBranding?
+  templates EmailTemplate[]
+
+  @@index([is_active], map: "idx_business_units_is_active")
+}
+
+model EmailTemplate {
+  id            String   @id @default(uuid())
+  key           String
+  name          String
+  description   String?
+  subject       String
+  headline      String?
+  body          String
+  button_label  String?
+  button_url    String?
+  category      String?
+  functionality String?
+  placeholders  Json     @default("[]")
+  business_unit String?
+  is_active     Boolean  @default(true)
+  updated_by    String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  businessUnit BusinessUnit?          @relation(fields: [business_unit], references: [slug])
+  history      EmailTemplateHistory[]
+
+  @@unique([key, business_unit], map: "idx_email_templates_key_bu")
+  @@index([key],           map: "idx_email_templates_key")
+  @@index([business_unit], map: "idx_email_templates_bu")
+  @@index([is_active],     map: "idx_email_templates_is_active")
+  @@index([category],      map: "idx_email_templates_category")
+  @@index([functionality], map: "idx_email_templates_functionality")
+}
+
+model EmailTemplateHistory {
+  id            String   @id @default(uuid())
+  template_id   String
+  subject       String
+  headline      String?
+  body          String
+  button_label  String?
+  button_url    String?
+  category      String?
+  functionality String?
+  changed_by    String
+  changed_at    DateTime @default(now())
+  reason        String?
+
+  template EmailTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@index([template_id], map: "idx_email_template_history_template_id")
+  @@index([changed_at],  map: "idx_email_template_history_changed_at")
+}
+
+model EmailBranding {
+  id                String   @id @default(uuid())
+  business_unit     String   @unique
+  primary_color     String
+  secondary_color   String?
+  logo_url          String?
+  company_name      String
+  layout_preset     String   @default("default")
+  button_color      String?
+  button_text_color String?
+  updated_by        String?
+  updated_at        DateTime @updatedAt
+
+  businessUnit BusinessUnit         @relation(fields: [business_unit], references: [slug])
+  history      EmailBrandingHistory[]
+
+  @@index([business_unit], map: "idx_email_branding_bu")
+}
+
+model EmailBrandingHistory {
+  id         String   @id @default(uuid())
+  branding_id String
+  snapshot   Json
+  changed_by String
+  changed_at DateTime @default(now())
+
+  branding EmailBranding @relation(fields: [branding_id], references: [id], onDelete: Cascade)
+
+  @@index([branding_id], map: "idx_email_branding_history_branding_id")
+  @@index([changed_at],  map: "idx_email_branding_history_changed_at")
 }

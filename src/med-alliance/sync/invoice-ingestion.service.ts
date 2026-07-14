@@ -132,7 +132,7 @@ export class InvoiceIngestionService {
             },
           },
         );
-        
+
         const props = response.data?.properties ?? {};
 
         const paymentResults: Array<{ id: string }> =

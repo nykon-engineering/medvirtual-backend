@@ -6,6 +6,7 @@ import { MailModule } from '../../mail/mail.module';
 import { HubspotModule } from '../../hubspot/hubspot.module';
 import { SyncModule } from '../sync/sync.module';
 import { AllianceNotificationsModule } from '../notifications/notifications.module';
+import { EmailTemplatesModule } from '../../email-templates/email-templates.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AllianceNotificationsModule } from '../notifications/notifications.modu
     HubspotModule,
     SyncModule,
     AllianceNotificationsModule,
+    EmailTemplatesModule,
   ],
   controllers: [AffiliatesController],
   providers: [AffiliatesService],

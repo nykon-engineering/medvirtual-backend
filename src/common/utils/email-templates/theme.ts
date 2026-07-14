@@ -5,6 +5,9 @@ export interface EmailTheme {
   accentColor: string;
   logoUrl?: string;
   companyName: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
+  layoutPreset?: string;
 }
 
 export function getEmailThemeByBusinessUnit(
@@ -18,6 +21,8 @@ export function getEmailThemeByBusinessUnit(
         secondaryColor: '#F8F9FA',
         accentColor: '#FD7171',
         companyName: 'Berry Virtual',
+        logoUrl: 'https://staging.medvirtual.ai/logobv.png',
+        layoutPreset: 'default',
       };
     case 'MedVirtual':
     default:
@@ -27,6 +32,8 @@ export function getEmailThemeByBusinessUnit(
         secondaryColor: '#F8F9FA',
         accentColor: '#00B2E2',
         companyName: 'MedVirtual',
+        logoUrl: 'https://staging.medvirtual.ai/logo.png',
+        layoutPreset: 'default',
       };
   }
 }

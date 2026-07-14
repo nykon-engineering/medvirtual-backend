@@ -348,6 +348,15 @@ describe('BillComService', () => {
         data: { billcom_device: 'existing-device-label' },
       });
     });
+
+    it('does NOT persist billcom_device (regression guard: premature persistence caused a BDC_5324 retry loop)', async () => {
+      mockPrisma.uSER.findUniqueOrThrow.mockResolvedValue({ ...baseUser });
+      mockedAxios.post.mockResolvedValue({ data: { setupId: 'setup-1' } } as any);
+
+      await service.addPhoneForMfaSetup('admin-1', 'sess-1', '+14155552671');
+
+      expect(mockPrisma.uSER.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('validatePhoneForMfaSetup', () => {

@@ -126,6 +126,15 @@ export class ReviewCasesService {
       item.reason_code === AdminReviewReasonCode.multiple_hubspot_matches &&
       dto.hubspot_company_id
     ) {
+      const currentStatus = item.organization?.med_alliance_referral_status;
+      // Never overwrite a sticky manual/terminal decision (eligible or expired) — resolving
+      // this review case is a MA-005 sync-correctness fix, not a new eligibility decision.
+      // From pending or not_eligible (blocked), moving to pending is a legitimate un-block.
+      const statusUpdate =
+        currentStatus === 'eligible' || currentStatus === 'expired'
+          ? {}
+          : { med_alliance_referral_status: 'pending_confirmation' as any };
+
       await this.prisma.organization.update({
         where: { id: item.organization_id },
         data: {
@@ -133,8 +142,7 @@ export class ReviewCasesService {
           hubspot_sync_status: 'synced',
           hubspot_sync_error: null,
           hubspot_synced_at: new Date(),
-          // Set to pending_confirmation so Super Admin must explicitly confirm eligibility
-          med_alliance_referral_status: 'pending_confirmation' as any,
+          ...statusUpdate,
         },
       });
       this.logger.log(

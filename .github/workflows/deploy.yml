@@ -34,6 +34,11 @@ jobs:
       - name: 🧱 Prisma generate (Node 20)
         run: npx prisma generate
 
+      - name: 🗄️ Run Prisma migrations (Prod)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+        run: npx prisma migrate deploy
+
       - name: 🔨 Build with webpack
         run: npx webpack --config webpack.config.js
 

@@ -13,6 +13,7 @@ import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationReactivation } from './handlers/organizationReactivation';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 
@@ -56,6 +57,8 @@ import { ContactUpdateService } from './update/contact';
 import { ContactDeleteService } from './delete/contact';
 import { HandlerContactCreation } from './handlers/contactCreation';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
+import { HandlerContactDeletion } from './handlers/contactDeletion';
+import { HandlerContactMerge } from './handlers/contactMerge';
 
 import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
@@ -73,6 +76,7 @@ import { HubspotAuditService } from './hubspot-audit.service';
     HandlerOrganizationCreation,
     HandlerOrganizationPropertyChange,
     HandlerOrganizationDeletion,
+    HandlerOrganizationReactivation,
     HandlerOrganizationMerge,
     HandlerOrganizationAssociationChange,
     HandlerOwnerCreation,
@@ -102,6 +106,8 @@ import { HubspotAuditService } from './hubspot-audit.service';
     ContactDeleteService,
     HandlerContactCreation,
     HandlerContactPropertyChange,
+    HandlerContactDeletion,
+    HandlerContactMerge,
     CompanyDeleteService,
     HandlerInvoiceCreation,
     HandlerInvoicePropertyChange,
@@ -128,6 +134,7 @@ import { HubspotAuditService } from './hubspot-audit.service';
     AffiliateCreationService,
     AffiliateUpdateService,
     HubspotAuditService,
+    HandlerContactDeletion,
   ],
 })
 export class HubspotModule {}

@@ -178,12 +178,16 @@ The project includes VS Code configurations for debugging:
 # View database in Prisma Studio
 npx prisma studio
 
-# Reset database
+# Reset database (local only)
 npx prisma migrate reset
 
-# Deploy migrations
-npx prisma migrate deploy
+# Create a new migration (local only)
+npx prisma migrate dev --name <migration-name>
 ```
+
+> **Do not run `npx prisma migrate deploy` manually.** Migration deployment to stage and production is automated by the CI/CD pipeline:
+> - Push to `dev` → migrations applied to the **stage** database automatically
+> - Merge PR into `main` → migrations applied to the **production** database automatically
 
 ## 🤝 Contributing
 

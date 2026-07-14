@@ -27,11 +27,6 @@ export class UserService {
     private readonly hubspotService: HubspotService,
   ) {}
 
-  private buildFromWithPrefix(from: string): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? from : `[DEV] ${from}`;
-  }
-
   async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
     const { password, ...rest } = userData;
     const hash = await bcrypt.hash(password, 10);
@@ -166,6 +161,7 @@ export class UserService {
     search?: string,
     page?: number,
     perPage?: number,
+    status?: string,
   ): Promise<any> {
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
@@ -176,34 +172,30 @@ export class UserService {
       role: { in: ['system_admin', 'system_super_admin'] },
     };
 
+    // Status is a literal column on USER ('active' | 'inactive' | 'invited'),
+    // the same value the list already returns and the frontend displays.
+    // Filtering here (shared by findMany and count) keeps meta.total accurate.
+    if (status) {
+      whereClause.status = status;
+    }
+
     // Add search filter if provided
     if (search) {
-      whereClause.OR = [
-        {
-          first_name: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          last_name: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          email: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          job_title: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      ];
+      // Match each whitespace-separated token independently and AND them
+      // together, so a complete full name ("First Last") matches a user
+      // whose first_name and last_name live in different columns. A single OR
+      // per column would never match a full name, since no single column
+      // contains "First Last" as a substring.
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      whereClause.AND = tokens.map((token) => ({
+        OR: [
+          { first_name: { contains: token, mode: 'insensitive' } },
+          { last_name: { contains: token, mode: 'insensitive' } },
+          { email: { contains: token, mode: 'insensitive' } },
+          { job_title: { contains: token, mode: 'insensitive' } },
+        ],
+      }));
     }
 
     const [users, total] = await this.prisma.$transaction([
@@ -515,6 +507,12 @@ export class UserService {
         throw new NotFoundException(`User not found`);
       }
 
+      if (userData.status === 'active' && currentUser.verified === false) {
+        throw new BadRequestException(
+          'Cannot activate a user who has not completed email verification.',
+        );
+      }
+
       //verify user to update status
       if (
         userData.job_title &&
@@ -647,7 +645,17 @@ export class UserService {
           data: { user_id: null },
         });
 
-        // 8. Finally, delete the user
+        // 8. Reset affiliate profile status if this user was a connected/invited affiliate.
+        // Contact.user_id is now SET NULL on delete, so the Contact record survives —
+        // only the profile's status needs recomputing since it no longer has a user.
+        // updateMany (not update) is a no-op when no profile matches, matching the
+        // best-effort pattern used above for organizations/hire requests/tickets.
+        await tx.affiliateProfile.updateMany({
+          where: { user_id: id },
+          data: { status: 'pending' },
+        });
+
+        // 9. Finally, delete the user
         return await tx.uSER.delete({
           where: { id },
         });
@@ -691,12 +699,21 @@ export class UserService {
     };
 
     if (search) {
-      whereClause.OR = [
-        { first_name: { contains: search, mode: 'insensitive' } },
-        { last_name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { job_title: { contains: search, mode: 'insensitive' } },
-      ];
+      // Match each whitespace-separated token independently and AND them
+      // together, so a complete full name ("First Last") matches a user
+      // whose first_name and last_name live in different columns. A single OR
+      // per column would never match a full name, since no single column
+      // contains "First Last" as a substring.
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      whereClause.AND = tokens.map((token) => ({
+        OR: [
+          { first_name: { contains: token, mode: 'insensitive' } },
+          { last_name: { contains: token, mode: 'insensitive' } },
+          { email: { contains: token, mode: 'insensitive' } },
+          { job_title: { contains: token, mode: 'insensitive' } },
+        ],
+      }));
     }
 
     if (status) {
@@ -1066,9 +1083,7 @@ export class UserService {
           : baseInviteLink;
       const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
-        from: this.buildFromWithPrefix(
-          `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-        ),
+        from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
         to: inviteData.email,
         subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
         html: emailBody,

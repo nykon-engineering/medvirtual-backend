@@ -72,12 +72,70 @@ export class PayoutRequestsService {
   }
 
   // ---------------------------------------------------------------------------
+  // Shared: reject creation if the affiliate has no Bill.com vendor ID.
+  // Mirrors the fallback chain used by BillComPayoutService.validateAndPreparePayment
+  // so a request can never be created if it would later fail at payment time.
+  // ---------------------------------------------------------------------------
+  private validateVendorIdForPayoutCreation(profile: {
+    contact?: { hubspot_billcom_vendor_id: string | null } | null;
+    user?: {
+      contact?: { hubspot_billcom_vendor_id: string | null } | null;
+    } | null;
+  }): void {
+    const vendorId =
+      profile.contact?.hubspot_billcom_vendor_id ??
+      profile.user?.contact?.hubspot_billcom_vendor_id ??
+      null;
+
+    if (!vendorId) {
+      throw new BadRequestException(
+        'Bill.com vendor ID is missing for this affiliate. Cannot create a payout request until a vendor ID is configured.',
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shared: validate that all requested commissions exist and are eligible.
+  // ---------------------------------------------------------------------------
+  private validateCommissionsEligible(
+    commissions: { id: string; status: string }[],
+    requestedIds: string[],
+  ): void {
+    if (commissions.length !== requestedIds.length) {
+      throw new BadRequestException(
+        'One or more commission IDs were not found',
+      );
+    }
+
+    const nonEligible = commissions.find((c) => c.status !== 'eligible');
+    if (nonEligible) {
+      throw new BadRequestException(
+        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Affiliate: submit a new payout request.
   // ---------------------------------------------------------------------------
   async create(dto: CreatePayoutRequestDto, currentUser: USER) {
-    const profile = await this.affiliatesService.requireActiveProfile(
+    const activeProfile = await this.affiliatesService.requireActiveProfile(
       currentUser.id,
     );
+
+    const profile = await this.prisma.affiliateProfile.findUniqueOrThrow({
+      where: { id: activeProfile.id },
+      select: {
+        id: true,
+        payout_preference_method: true,
+        contact: { select: { hubspot_billcom_vendor_id: true } },
+        user: {
+          select: { contact: { select: { hubspot_billcom_vendor_id: true } } },
+        },
+      },
+    });
+
+    this.validateVendorIdForPayoutCreation(profile);
 
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: dto.commission_ids } },
@@ -104,12 +162,7 @@ export class PayoutRequestsService {
       );
     }
 
-    const nonEligible = commissions.find((c) => c.status !== 'eligible');
-    if (nonEligible) {
-      throw new BadRequestException(
-        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
-      );
-    }
+    this.validateCommissionsEligible(commissions, dto.commission_ids);
 
     const requestedAmount = commissions.reduce(
       (acc, c) => acc.add(new Decimal(c.commission_amount)),
@@ -192,22 +245,28 @@ export class PayoutRequestsService {
     // 1. Resolve affiliate profile
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: dto.affiliate_profile_id },
-      select: { id: true, user_id: true, payout_preference_method: true },
+      select: {
+        id: true,
+        user_id: true,
+        payout_preference_method: true,
+        contact: { select: { hubspot_billcom_vendor_id: true } },
+        user: {
+          select: { contact: { select: { hubspot_billcom_vendor_id: true } } },
+        },
+      },
     });
     if (!profile) {
       throw new NotFoundException(
         `Affiliate profile not found: ${dto.affiliate_profile_id}`,
       );
     }
-    if (!profile.user_id) {
-      throw new BadRequestException(
-        'This affiliate has no connected user account. Invite the user first before creating a payout request.',
-      );
-    }
-    // Extract to a local const so TypeScript keeps the `string` type inside async callbacks.
-    const affiliateUserId: string = profile.user_id;
 
-    // 2. Validate commissions exist, belong to that affiliate, and are eligible
+    this.validateVendorIdForPayoutCreation(profile);
+
+    // 2. Validate commissions exist, belong to that affiliate, and are eligible.
+    // Commissions can only exist for a profile with a connected user (their
+    // affiliate_id is always the profile's user_id), so a foreign-commission
+    // mismatch here also naturally catches a profile with no connected user.
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: dto.commission_ids } },
       select: {
@@ -225,20 +284,17 @@ export class PayoutRequestsService {
     }
 
     const foreignCommission = commissions.find(
-      (c) => c.affiliate_id !== affiliateUserId,
+      (c) => c.affiliate_id !== profile.user_id,
     );
     if (foreignCommission) {
       throw new BadRequestException(
         'One or more commissions do not belong to this affiliate',
       );
     }
+    // Commission ownership matched profile.user_id, so it must be a non-null string.
+    const affiliateUserId: string = profile.user_id as string;
 
-    const nonEligible = commissions.find((c) => c.status !== 'eligible');
-    if (nonEligible) {
-      throw new BadRequestException(
-        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
-      );
-    }
+    this.validateCommissionsEligible(commissions, dto.commission_ids);
 
     // 3. Sum amounts
     const requestedAmount = commissions.reduce(
@@ -314,20 +370,27 @@ export class PayoutRequestsService {
   ): Promise<{ id: string; requested_amount: Decimal }> {
     const profile = await this.prisma.affiliateProfile.findUnique({
       where: { id: affiliateProfileId },
-      select: { id: true, user_id: true, payout_preference_method: true },
+      select: {
+        id: true,
+        user_id: true,
+        payout_preference_method: true,
+        contact: { select: { hubspot_billcom_vendor_id: true } },
+        user: {
+          select: { contact: { select: { hubspot_billcom_vendor_id: true } } },
+        },
+      },
     });
     if (!profile) {
       throw new NotFoundException(
         `Affiliate profile not found: ${affiliateProfileId}`,
       );
     }
-    if (!profile.user_id) {
-      throw new BadRequestException(
-        'This affiliate has no connected user account and cannot receive a payout request.',
-      );
-    }
-    const affiliateUserId: string = profile.user_id;
 
+    this.validateVendorIdForPayoutCreation(profile);
+
+    // Commissions can only exist for a profile with a connected user (their
+    // affiliate_id is always the profile's user_id), so a foreign-commission
+    // mismatch here also naturally catches a profile with no connected user.
     const commissions = await this.prisma.affiliateCommission.findMany({
       where: { id: { in: commissionIds } },
       select: {
@@ -345,20 +408,17 @@ export class PayoutRequestsService {
     }
 
     const foreignCommission = commissions.find(
-      (c) => c.affiliate_id !== affiliateUserId,
+      (c) => c.affiliate_id !== profile.user_id,
     );
     if (foreignCommission) {
       throw new BadRequestException(
         'One or more commissions do not belong to this affiliate',
       );
     }
+    // Commission ownership matched profile.user_id, so it must be a non-null string.
+    const affiliateUserId: string = profile.user_id as string;
 
-    const nonEligible = commissions.find((c) => c.status !== 'eligible');
-    if (nonEligible) {
-      throw new BadRequestException(
-        `Commission ${nonEligible.id} is not eligible for payout (status: ${nonEligible.status})`,
-      );
-    }
+    this.validateCommissionsEligible(commissions, commissionIds);
 
     const requestedAmount = commissions.reduce(
       (acc, c) => acc.add(new Decimal(c.commission_amount)),
@@ -517,15 +577,45 @@ export class PayoutRequestsService {
       if (amount_max !== undefined)
         where.requested_amount.lte = new Decimal(amount_max);
     }
-    // B6: full-text search on affiliate name / email
+    // B6: full-text search on affiliate name/email, or by an included commission's id / invoice number
     if (search) {
-      where.affiliate = {
-        OR: [
-          { first_name: { contains: search, mode: 'insensitive' } },
-          { last_name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      };
+      where.OR = [
+        {
+          affiliate: {
+            OR: [
+              { first_name: { contains: search, mode: 'insensitive' } },
+              { last_name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        },
+        {
+          commissions: {
+            some: {
+              commission: {
+                OR: [
+                  { id: { contains: search, mode: 'insensitive' } },
+                  {
+                    hubspotInvoiceSnapshot: {
+                      OR: [
+                        {
+                          invoice_number: {
+                            contains: search,
+                            mode: 'insensitive',
+                          },
+                        },
+                        {
+                          hubspot_id: { contains: search, mode: 'insensitive' },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ];
     }
 
     const [rows, total] = await this.prisma.$transaction([
@@ -730,9 +820,7 @@ export class PayoutRequestsService {
 
     // Phase 0: fail fast if this admin has no valid Bill.com session yet —
     // before any Bill.com validation or DB work runs.
-    const hasSession = await this.billComService.hasValidSession(
-      adminUser.id,
-    );
+    const hasSession = await this.billComService.hasValidSession(adminUser.id);
     if (!hasSession) {
       throw new BillComSessionRequiredException();
     }
@@ -1223,15 +1311,56 @@ export class PayoutRequestsService {
 
     return entries.map((e) => ({
       id: e.id,
-      action: e.event,
+      action: this.resolveAuditAction(e.event, e.old_status, e.new_status),
       actor: e.actorUser
         ? `${e.actorUser.first_name} ${e.actorUser.last_name}`.trim()
         : 'System',
       timestamp: e.createdAt,
       notes: e.reason ?? undefined,
+      // Frontend Activity timeline renders a from → to status pill pair.
+      from_status: e.old_status,
+      to_status: e.new_status,
+      // Legacy aliases kept for backward compatibility with existing consumers.
       old_status: e.old_status,
       new_status: e.new_status,
     }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Derive a descriptive, title-caseable action for the timeline.
+  // Historically most transitions were stored with the generic event
+  // "status_changed"; here we upgrade those to a status-specific action so the
+  // frontend can render a meaningful title. Already-descriptive events
+  // (e.g. bill_com_payment_initiated) are passed through untouched.
+  // ---------------------------------------------------------------------------
+  private resolveAuditAction(
+    event: string,
+    oldStatus: string | null,
+    newStatus: string | null,
+  ): string {
+    const genericEvents = new Set(['status_changed', 'admin_decision']);
+    if (!genericEvents.has(event)) return event;
+
+    switch (newStatus) {
+      case 'requested':
+        return oldStatus === null ? 'request_submitted' : 'request_reopened';
+      case 'under_review':
+        return 'review_started';
+      case 'approved':
+        return 'request_approved';
+      case 'rejected':
+        return 'request_rejected';
+      case 'processing':
+        return 'payment_processing';
+      case 'paid':
+        return 'payment_completed';
+      case 'cancelled':
+        return 'request_cancelled';
+      case 'failed':
+        return 'payment_failed';
+      default:
+        return event;
+    }
   }
 
   // ---------------------------------------------------------------------------

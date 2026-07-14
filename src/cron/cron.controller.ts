@@ -194,20 +194,20 @@ export class CronController {
     };
   }
 
-  @Get('promote-deployed-companies')
+  @Get('expire-stale-eligibility')
   @ApiOperation({
     summary:
-      'Promote referred companies deployed 30+ days to eligible status and move their commissions to pending admin confirmation',
+      'Expire referred companies whose deployment_date passed 365 days, regardless of their current eligibility decision',
   })
   @ApiResponse({
     status: 200,
-    description: 'Deployed companies promotion completed',
+    description: 'Stale eligibility expiry sweep completed',
   })
-  async promoteDeployedCompanies() {
-    const result = await this.cron.promoteDeployedCompanies();
+  async expireStaleEligibility() {
+    const result = await this.cron.expireStaleEligibility();
     return {
       status: 200,
-      message: 'Deployed companies promotion completed',
+      message: 'Stale eligibility expiry sweep completed',
       data: result,
     };
   }
@@ -291,6 +291,21 @@ export class CronController {
     return {
       status: 200,
       message: 'Affiliate contact reconciliation completed',
+      data: result,
+    };
+  }
+
+  @Get('sweep-stale-contact-ids')
+  @ApiOperation({
+    summary:
+      'Detect HubSpot contacts deleted/merged before webhook coverage existed and clear stale local pointers',
+  })
+  @ApiResponse({ status: 200, description: 'Stale contact id sweep completed' })
+  async sweepStaleContactIds() {
+    const result = await this.cron.sweepStaleContactIds();
+    return {
+      status: 200,
+      message: 'Stale contact id sweep completed',
       data: result,
     };
   }
