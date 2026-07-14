@@ -795,6 +795,17 @@ describe('EmailTemplatesService.preview', () => {
       `.cta-button:hover {\n      background-color: ${BRANDING.secondary_color};`,
     );
   });
+
+  it('adds a lang="x-cta-btn" attribute-selector hover rule that survives Gmail/Outlook class-name mangling', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toContain('lang="x-cta-btn"');
+    expect(result.data.html).toContain(
+      `* [lang~="x-cta-btn"]:hover {\n      background-color: ${BRANDING.secondary_color} !important;`,
+    );
+  });
 });
 
 // ── layout presets ──────────────────────────────────────────────────────────────
