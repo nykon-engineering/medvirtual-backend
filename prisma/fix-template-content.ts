@@ -46,7 +46,9 @@ async function fix(patch: {
         button_url: patch.button_url,
         placeholders: patch.placeholders,
         ...(patch.name && { name: patch.name }),
-        ...(patch.description !== undefined && { description: patch.description }),
+        ...(patch.description !== undefined && {
+          description: patch.description,
+        }),
       },
     });
     console.log(`  ✅ updated  ${patch.key}`);
@@ -73,7 +75,7 @@ async function fix(patch: {
 // ── Corrections ───────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('\n🔧 Fixing 16 existing email templates...\n');
+  console.log('\n🔧 Fixing 54 existing email templates...\n');
 
   // 1. invite-signup
   // Source: /src/common/utils/email-templates/invite-signup.ts
@@ -129,7 +131,11 @@ async function main() {
       '⏰ Important: This code will expire in 10 minutes for security reasons.',
     button_label: 'Verify Account',
     button_url: '{{verificationUrl}}',
-    placeholders: ['{{verificationCode}}', '{{verificationUrl}}', '{{companyName}}'],
+    placeholders: [
+      '{{verificationCode}}',
+      '{{verificationUrl}}',
+      '{{companyName}}',
+    ],
   });
 
   // 4. schedule-interview
@@ -157,7 +163,8 @@ async function main() {
   await fix({
     key: 'med-alliance-invite-signup',
     name: 'Med Alliance — Affiliate Invitation (New User)',
-    description: 'Sent to invite a new affiliate to the Med Alliance program (requires account setup).',
+    description:
+      'Sent to invite a new affiliate to the Med Alliance program (requires account setup).',
     subject: 'Med Alliance Partner Account Setup',
     headline: 'Hello, {{firstName}}!',
     body:
@@ -178,7 +185,8 @@ async function main() {
   await fix({
     key: 'med-alliance-invitation',
     name: 'Med Alliance — Partner Invitation (Existing User)',
-    description: 'Sent to existing users invited to become Med Alliance partners.',
+    description:
+      'Sent to existing users invited to become Med Alliance partners.',
     subject: "You've been invited to join the Med Alliance Program",
     headline: 'Hello, {{firstName}}!',
     body:
@@ -202,7 +210,8 @@ async function main() {
   await fix({
     key: 'med-alliance-org-invitation',
     name: 'Med Alliance — Organization User Invitation',
-    description: 'Sent to organization users enrolled in the Med Alliance program.',
+    description:
+      'Sent to organization users enrolled in the Med Alliance program.',
     subject: "You've been invited to join the Med Alliance Program",
     headline: 'Hello, {{firstName}}!',
     body:
@@ -244,7 +253,8 @@ async function main() {
   await fix({
     key: 'quarterly-payout-report',
     name: 'Quarterly Payout Report',
-    description: 'Sent to admins with quarterly automatic payout requests summary.',
+    description:
+      'Sent to admins with quarterly automatic payout requests summary.',
     subject: 'Quarterly Report — Automatic Payout Requests',
     headline: 'Quarterly Report — Automatic Payout Requests',
     body:
@@ -255,7 +265,13 @@ async function main() {
       'Details:\n{{reportContent}}',
     button_label: null,
     button_url: null,
-    placeholders: ['{{reportDate}}', '{{successCount}}', '{{totalAmount}}', '{{failureCount}}', '{{reportContent}}'],
+    placeholders: [
+      '{{reportDate}}',
+      '{{successCount}}',
+      '{{totalAmount}}',
+      '{{failureCount}}',
+      '{{reportContent}}',
+    ],
   });
 
   // 10. client-users-deactivation
@@ -284,7 +300,8 @@ async function main() {
   await fix({
     key: 'med-alliance-deployed-companies',
     name: 'Med Alliance — Deployed Companies Report',
-    description: 'Daily report sent to admins of companies promoted in Med Alliance.',
+    description:
+      'Daily report sent to admins of companies promoted in Med Alliance.',
     subject: 'Med Alliance — Deployed Companies Report',
     headline: 'Med Alliance — Deployed Companies Report',
     body:
@@ -295,7 +312,13 @@ async function main() {
       'Details:\n{{reportContent}}',
     button_label: null,
     button_url: null,
-    placeholders: ['{{reportDate}}', '{{promotedCount}}', '{{totalCommissions}}', '{{errorCount}}', '{{reportContent}}'],
+    placeholders: [
+      '{{reportDate}}',
+      '{{promotedCount}}',
+      '{{totalCommissions}}',
+      '{{errorCount}}',
+      '{{reportContent}}',
+    ],
   });
 
   // 12. system-report
@@ -407,7 +430,8 @@ async function main() {
   await fix({
     key: 'hr-placement-completed',
     name: 'Hire Request — Placement Completed',
-    description: 'Sent to assignees when a hire request is marked as placement completed.',
+    description:
+      'Sent to assignees when a hire request is marked as placement completed.',
     subject: 'Placement completed: {{hrTitle}}',
     headline: 'Placement Completed',
     body:
@@ -421,7 +445,15 @@ async function main() {
       'Please proceed with onboarding steps.',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{salaryRange}}', '{{startDate}}', '{{selectedCandidates}}', '{{hrLink}}'],
+    placeholders: [
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{salaryRange}}',
+      '{{startDate}}',
+      '{{selectedCandidates}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 18. hr-interview-scheduled
@@ -429,7 +461,8 @@ async function main() {
   await fix({
     key: 'hr-interview-scheduled',
     name: 'Hire Request — Interview Scheduled',
-    description: 'Sent to all active organization users when an interview is scheduled.',
+    description:
+      'Sent to all active organization users when an interview is scheduled.',
     subject: 'Interview Invite: {{roleType}} - {{availability}}',
     headline: 'You have been invited to an Interview.',
     body:
@@ -440,7 +473,17 @@ async function main() {
       '{{pairingLinkLine}}',
     button_label: '{{ctaLabel}}',
     button_url: '{{ctaUrl}}',
-    placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{startDate}}', '{{interviewDate}}', '{{pairingLinkLine}}', '{{ctaLabel}}', '{{ctaUrl}}'],
+    placeholders: [
+      '{{roleType}}',
+      '{{availability}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{startDate}}',
+      '{{interviewDate}}',
+      '{{pairingLinkLine}}',
+      '{{ctaLabel}}',
+      '{{ctaUrl}}',
+    ],
   });
 
   // 19. hr-client-change
@@ -448,7 +491,8 @@ async function main() {
   await fix({
     key: 'hr-client-change',
     name: 'Hire Request — Edited or Canceled by Client',
-    description: 'Sent to assignees when a client edits or cancels a hire request.',
+    description:
+      'Sent to assignees when a client edits or cancels a hire request.',
     subject: 'Hire Request {{action}}: {{hrTitle}}',
     headline: 'Hire Request {{actionUpper}}',
     body:
@@ -458,7 +502,14 @@ async function main() {
       'Description: {{hrDescription}}',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{action}}', '{{actionUpper}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{hrLink}}'],
+    placeholders: [
+      '{{action}}',
+      '{{actionUpper}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 20. hr-sourcing-assigned
@@ -466,7 +517,8 @@ async function main() {
   await fix({
     key: 'hr-sourcing-assigned',
     name: 'Hire Request — Sourcing Assigned',
-    description: 'Sent to the assigned sourcer when a hire request moves to sourcing stage.',
+    description:
+      'Sent to the assigned sourcer when a hire request moves to sourcing stage.',
     subject: 'Hire Request sourcing: {{hrTitle}}',
     headline: 'Hire Request Moved to Sourcing',
     body:
@@ -477,7 +529,13 @@ async function main() {
       'Description: {{hrDescription}}',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{assigneeName}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{hrLink}}'],
+    placeholders: [
+      '{{assigneeName}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 21. hr-concierge-assigned
@@ -485,7 +543,8 @@ async function main() {
   await fix({
     key: 'hr-concierge-assigned',
     name: 'Hire Request — Ready for Review',
-    description: 'Sent to assignees when a hire request is ready for concierge review.',
+    description:
+      'Sent to assignees when a hire request is ready for concierge review.',
     subject: 'Hire Request For Review: {{hrTitle}}',
     headline: 'Hire Request Ready For Review',
     body:
@@ -496,7 +555,13 @@ async function main() {
       'Description: {{hrDescription}}',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{assigneeName}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{hrLink}}'],
+    placeholders: [
+      '{{assigneeName}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 22. hr-created
@@ -504,7 +569,8 @@ async function main() {
   await fix({
     key: 'hr-created',
     name: 'Hire Request — Assigned to User',
-    description: 'Sent when a hire request is created and assigned (to sourcing, staffing coordinator, or standard assignee).',
+    description:
+      'Sent when a hire request is created and assigned (to sourcing, staffing coordinator, or standard assignee).',
     subject: 'Hire Request Assigned: {{hrTitle}}',
     headline: '{{assignmentType}}',
     body:
@@ -520,7 +586,19 @@ async function main() {
       'Please review the details and take appropriate action.',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{assigneeName}}', '{{assignmentType}}', '{{assignmentRole}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{availability}}', '{{salaryRange}}', '{{startDate}}', '{{hrStatus}}', '{{hrLink}}'],
+    placeholders: [
+      '{{assigneeName}}',
+      '{{assignmentType}}',
+      '{{assignmentRole}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{availability}}',
+      '{{salaryRange}}',
+      '{{startDate}}',
+      '{{hrStatus}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 23. hr-back-to-sourcing
@@ -528,7 +606,8 @@ async function main() {
   await fix({
     key: 'hr-back-to-sourcing',
     name: 'Hire Request — Back to Sourcing',
-    description: 'Sent to the assigned sourcer when a hire request is sent back to sourcing.',
+    description:
+      'Sent to the assigned sourcer when a hire request is sent back to sourcing.',
     subject: 'Hire Request Back to sourcing: {{hrTitle}}',
     headline: 'Back to Sourcing',
     body:
@@ -544,7 +623,17 @@ async function main() {
       'Please review the details and take appropriate action.',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{assigneeName}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{availability}}', '{{salaryRange}}', '{{startDate}}', '{{hrStatus}}', '{{hrLink}}'],
+    placeholders: [
+      '{{assigneeName}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{availability}}',
+      '{{salaryRange}}',
+      '{{startDate}}',
+      '{{hrStatus}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 24. hr-panel-ready-client
@@ -552,7 +641,8 @@ async function main() {
   await fix({
     key: 'hr-panel-ready-client',
     name: 'Hire Request — Candidate Panel Ready (Client)',
-    description: 'Sent to all active organization users when the candidate panel is ready for their review.',
+    description:
+      'Sent to all active organization users when the candidate panel is ready for their review.',
     subject: 'Your candidate panel is ready: {{hrTitle}}',
     headline: 'Your candidate panel is ready for review!',
     body:
@@ -566,7 +656,15 @@ async function main() {
       'Please review the details and candidates within this panel.',
     button_label: 'View Candidates',
     button_url: '{{hrLink}}',
-    placeholders: ['{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{availability}}', '{{salaryRange}}', '{{startDate}}', '{{hrLink}}'],
+    placeholders: [
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{availability}}',
+      '{{salaryRange}}',
+      '{{startDate}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 25. hr-panel-ready-internal
@@ -574,7 +672,8 @@ async function main() {
   await fix({
     key: 'hr-panel-ready-internal',
     name: 'Hire Request — Panel Reviewed and Ready (Internal)',
-    description: 'Sent to the assigned sourcer when the panel has been reviewed and is ready.',
+    description:
+      'Sent to the assigned sourcer when the panel has been reviewed and is ready.',
     subject: 'Panel Reviewed and Ready: {{hrTitle}}',
     headline: 'Panel Ready',
     body:
@@ -590,7 +689,17 @@ async function main() {
       'Please review the details and take appropriate action.',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{assigneeName}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{availability}}', '{{salaryRange}}', '{{startDate}}', '{{hrStatus}}', '{{hrLink}}'],
+    placeholders: [
+      '{{assigneeName}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{availability}}',
+      '{{salaryRange}}',
+      '{{startDate}}',
+      '{{hrStatus}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 26. hr-candidates-endorsed
@@ -598,7 +707,8 @@ async function main() {
   await fix({
     key: 'hr-candidates-endorsed',
     name: 'Hire Request — New Candidates Endorsed',
-    description: 'Sent to assignees when new candidates are added to a hire request.',
+    description:
+      'Sent to assignees when new candidates are added to a hire request.',
     subject: 'New candidates in Hire Request: {{hrTitle}}',
     headline: 'New Candidates in Hire Request',
     body:
@@ -609,7 +719,13 @@ async function main() {
       'Description: {{hrDescription}}',
     button_label: 'View Hire Request Details',
     button_url: '{{hrLink}}',
-    placeholders: ['{{assigneeName}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{hrLink}}'],
+    placeholders: [
+      '{{assigneeName}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 27. hr-winner-selected
@@ -617,7 +733,8 @@ async function main() {
   await fix({
     key: 'hr-winner-selected',
     name: 'Hire Request — Completed (Winner Selected)',
-    description: 'Sent to organization admins when a candidate is selected and the hire request is completed.',
+    description:
+      'Sent to organization admins when a candidate is selected and the hire request is completed.',
     subject: 'Hire Request Completed: {{roleType}} - {{availability}}.',
     headline: 'Hire Request Completed',
     body:
@@ -631,7 +748,17 @@ async function main() {
       'Please review the details and proceed with the next steps.',
     button_label: 'Review Hire Request',
     button_url: '{{hrLink}}',
-    placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{hrDescription}}', '{{salaryRange}}', '{{startDate}}', '{{winnerName}}', '{{hrLink}}'],
+    placeholders: [
+      '{{roleType}}',
+      '{{availability}}',
+      '{{hrTitle}}',
+      '{{orgName}}',
+      '{{hrDescription}}',
+      '{{salaryRange}}',
+      '{{startDate}}',
+      '{{winnerName}}',
+      '{{hrLink}}',
+    ],
   });
 
   // 28. hr-awaiting-decision
@@ -639,8 +766,10 @@ async function main() {
   await fix({
     key: 'hr-awaiting-decision',
     name: 'Hire Request — Awaiting Decision',
-    description: 'Sent to organization admins when a hire request is marked as awaiting decision.',
-    subject: 'Your hire request has been marked as awaiting decision: {{roleType}} - {{availability}}',
+    description:
+      'Sent to organization admins when a hire request is marked as awaiting decision.',
+    subject:
+      'Your hire request has been marked as awaiting decision: {{roleType}} - {{availability}}',
     headline: 'Hire Request Awaiting Decision',
     body:
       'Your hire request has been marked as awaiting decision.\n\n' +
@@ -648,7 +777,12 @@ async function main() {
       'Please review and make your decision.',
     button_label: 'Review Hire Request',
     button_url: '{{hrLink}}',
-    placeholders: ['{{roleType}}', '{{availability}}', '{{scheduledDate}}', '{{hrLink}}'],
+    placeholders: [
+      '{{roleType}}',
+      '{{availability}}',
+      '{{scheduledDate}}',
+      '{{hrLink}}',
+    ],
   });
 
   // ── TICKET templates ────────────────────────────────────────────────────────
@@ -671,7 +805,15 @@ async function main() {
       'Description:\n{{ticketDescription}}',
     button_label: 'View Ticket Details',
     button_url: '{{ticketLink}}',
-    placeholders: ['{{status}}', '{{ticketTitle}}', '{{orgName}}', '{{ticketType}}', '{{createdDate}}', '{{ticketDescription}}', '{{ticketLink}}'],
+    placeholders: [
+      '{{status}}',
+      '{{ticketTitle}}',
+      '{{orgName}}',
+      '{{ticketType}}',
+      '{{createdDate}}',
+      '{{ticketDescription}}',
+      '{{ticketLink}}',
+    ],
   });
 
   // 30. ticket-reopened
@@ -691,7 +833,14 @@ async function main() {
       'Description:\n{{ticketDescription}}',
     button_label: 'View Ticket Details',
     button_url: '{{ticketLink}}',
-    placeholders: ['{{ticketTitle}}', '{{orgName}}', '{{ticketType}}', '{{createdDate}}', '{{ticketDescription}}', '{{ticketLink}}'],
+    placeholders: [
+      '{{ticketTitle}}',
+      '{{orgName}}',
+      '{{ticketType}}',
+      '{{createdDate}}',
+      '{{ticketDescription}}',
+      '{{ticketLink}}',
+    ],
   });
 
   // 31. ticket-event
@@ -699,7 +848,8 @@ async function main() {
   await fix({
     key: 'ticket-event',
     name: 'Ticket — Event Notification',
-    description: 'Sent when a ticket event occurs (created, assigned, updated, resolved, closed).',
+    description:
+      'Sent when a ticket event occurs (created, assigned, updated, resolved, closed).',
     subject: 'Ticket {{event}}: {{ticketTitle}}',
     headline: 'Ticket {{event}}',
     body:
@@ -710,7 +860,70 @@ async function main() {
       'Description:\n{{ticketDescription}}',
     button_label: 'View Ticket Details',
     button_url: '{{ticketLink}}',
-    placeholders: ['{{event}}', '{{ticketTitle}}', '{{orgName}}', '{{ticketType}}', '{{ticketDescription}}', '{{ticketLink}}'],
+    placeholders: [
+      '{{event}}',
+      '{{ticketTitle}}',
+      '{{orgName}}',
+      '{{ticketType}}',
+      '{{ticketDescription}}',
+      '{{ticketLink}}',
+    ],
+  });
+
+  // 31b. ticket-created-admin
+  // Source: notifyTicketEvent (isSystemAdmin && event === 'created' branch)
+  await fix({
+    key: 'ticket-created-admin',
+    name: 'Ticket — Created (Admin)',
+    description:
+      'Sent to system admins when a new ticket is created, with the admin-oriented layout.',
+    subject: '{{emailTitle}}',
+    headline: '{{emailTitle}}',
+    body:
+      'Type: {{ticketType}}\n' +
+      'Title: {{ticketTitle}}\n' +
+      'Organization: {{orgName}}\n' +
+      '{{staffLine}}{{candidateLine}}{{descriptionBlock}}',
+    button_label: 'View Ticket Details',
+    button_url: '{{ticketLink}}',
+    placeholders: [
+      '{{emailTitle}}',
+      '{{ticketType}}',
+      '{{ticketTitle}}',
+      '{{orgName}}',
+      '{{staffLine}}',
+      '{{candidateLine}}',
+      '{{descriptionBlock}}',
+      '{{ticketLink}}',
+    ],
+  });
+
+  // 31c. ticket-assigned
+  // Source: notifyTicketEvent (else branch, event === 'assigned' — Reassign action)
+  await fix({
+    key: 'ticket-assigned',
+    name: 'Ticket — Assigned',
+    description:
+      'Sent to the assignee/creator when a ticket is assigned via the Reassign action.',
+    subject: 'Ticket assigned: {{ticketTitle}}',
+    headline: 'Ticket Assigned',
+    body:
+      'The ticket was assigned.\n\n' +
+      'Title: {{ticketTitle}}\n' +
+      'Organization: {{orgName}}\n' +
+      'Type: {{ticketType}}\n' +
+      '{{staffLine}}{{candidateLine}}{{descriptionBlock}}',
+    button_label: 'View Ticket Details',
+    button_url: '{{ticketLink}}',
+    placeholders: [
+      '{{ticketTitle}}',
+      '{{orgName}}',
+      '{{ticketType}}',
+      '{{staffLine}}',
+      '{{candidateLine}}',
+      '{{descriptionBlock}}',
+      '{{ticketLink}}',
+    ],
   });
 
   // 32. ticket-note-added
@@ -718,7 +931,8 @@ async function main() {
   await fix({
     key: 'ticket-note-added',
     name: 'Ticket — New Response / Note Added',
-    description: 'Sent to the ticket assignee or creator when a new note/response is added.',
+    description:
+      'Sent to the ticket assignee or creator when a new note/response is added.',
     subject: 'You received a response on your ticket: {{ticketTitle}}',
     headline: 'New Response on Your Ticket',
     body:
@@ -729,7 +943,13 @@ async function main() {
       '{{noteContent}}',
     button_label: 'View Ticket Details',
     button_url: '{{ticketLink}}',
-    placeholders: ['{{ticketTitle}}', '{{orgName}}', '{{authorName}}', '{{noteContent}}', '{{ticketLink}}'],
+    placeholders: [
+      '{{ticketTitle}}',
+      '{{orgName}}',
+      '{{authorName}}',
+      '{{noteContent}}',
+      '{{ticketLink}}',
+    ],
   });
 
   // ── OFFER PANEL templates ───────────────────────────────────────────────────
@@ -739,7 +959,8 @@ async function main() {
   await fix({
     key: 'offer-panel-created',
     name: 'Offer Panel — Candidates Selected for You',
-    description: 'Sent to the client when candidates are pre-selected in an offer panel.',
+    description:
+      'Sent to the client when candidates are pre-selected in an offer panel.',
     subject: '{{candidateLabel}} picked for you — {{companyName}}',
     headline: 'Candidates selected for you',
     body:
@@ -748,7 +969,13 @@ async function main() {
       'Review them at your convenience and let us know your thoughts.',
     button_label: 'View Candidates',
     button_url: '{{panelLink}}',
-    placeholders: ['{{candidateLabel}}', '{{companyName}}', '{{createdByName}}', '{{candidateCount}}', '{{panelLink}}'],
+    placeholders: [
+      '{{candidateLabel}}',
+      '{{companyName}}',
+      '{{createdByName}}',
+      '{{candidateCount}}',
+      '{{panelLink}}',
+    ],
   });
 
   // 34. offer-panel-accepted
@@ -756,7 +983,8 @@ async function main() {
   await fix({
     key: 'offer-panel-accepted',
     name: 'Offer Panel — Accepted by Client',
-    description: 'Sent to the panel creator when the client accepts the offer panel.',
+    description:
+      'Sent to the panel creator when the client accepts the offer panel.',
     subject: 'Your offer was accepted',
     headline: 'Offer Panel Accepted',
     body:
@@ -767,7 +995,12 @@ async function main() {
       'Panel Title: {{panelTitle}}',
     button_label: null,
     button_url: null,
-    placeholders: ['{{recipientName}}', '{{recipientOrg}}', '{{recipientEmail}}', '{{panelTitle}}'],
+    placeholders: [
+      '{{recipientName}}',
+      '{{recipientOrg}}',
+      '{{recipientEmail}}',
+      '{{panelTitle}}',
+    ],
   });
 
   // 35. offer-panel-declined
@@ -775,7 +1008,8 @@ async function main() {
   await fix({
     key: 'offer-panel-declined',
     name: 'Offer Panel — Declined by Client',
-    description: 'Sent to the panel creator when the client declines the offer panel.',
+    description:
+      'Sent to the panel creator when the client declines the offer panel.',
     subject: 'Your offer was declined',
     headline: 'Offer Panel Declined',
     body:
@@ -786,7 +1020,12 @@ async function main() {
       'Panel Title: {{panelTitle}}',
     button_label: null,
     button_url: null,
-    placeholders: ['{{recipientName}}', '{{recipientOrg}}', '{{recipientEmail}}', '{{panelTitle}}'],
+    placeholders: [
+      '{{recipientName}}',
+      '{{recipientOrg}}',
+      '{{recipientEmail}}',
+      '{{panelTitle}}',
+    ],
   });
 
   // ── TALENT POOL template ────────────────────────────────────────────────────
@@ -796,7 +1035,8 @@ async function main() {
   await fix({
     key: 'talent-pool-lead-new',
     name: 'Talent Pool — New Lead',
-    description: 'Sent to the owner when a new lead is submitted via the talent pool.',
+    description:
+      'Sent to the owner when a new lead is submitted via the talent pool.',
     subject: 'New talent pool lead: {{leadName}} — {{organization}}',
     headline: 'New Talent Pool Lead',
     body:
@@ -810,7 +1050,15 @@ async function main() {
       'Additional Details: {{additionalDetails}}',
     button_label: null,
     button_url: null,
-    placeholders: ['{{leadName}}', '{{leadEmail}}', '{{organization}}', '{{websiteUrl}}', '{{languagePreference}}', '{{mainNeed}}', '{{additionalDetails}}'],
+    placeholders: [
+      '{{leadName}}',
+      '{{leadEmail}}',
+      '{{organization}}',
+      '{{websiteUrl}}',
+      '{{languagePreference}}',
+      '{{mainNeed}}',
+      '{{additionalDetails}}',
+    ],
   });
 
   console.log('\n✅ All 20 HR/Tickets templates added.');
@@ -823,18 +1071,26 @@ async function main() {
   await fix({
     key: 'alliance-commission-eligible',
     name: 'Med Alliance — Commission Eligible',
-    description: 'Sent to the affiliate when a commission becomes eligible for payout.',
-    subject: 'Your commission is ready — ${{commissionAmount}} from {{organizationName}}',
-    headline: "Great news! Your commission is now eligible for payout.",
+    description:
+      'Sent to the affiliate when a commission becomes eligible for payout.',
+    subject:
+      'Your commission is ready — ${{commissionAmount}} from {{organizationName}}',
+    headline: 'Great news! Your commission is now eligible for payout.',
     body:
       'Hi {{firstName}},\n\n' +
-      'Your commission from {{organizationName}} is now eligible for payout. This means you can request a transfer to your account whenever you\'re ready.\n\n' +
+      "Your commission from {{organizationName}} is now eligible for payout. This means you can request a transfer to your account whenever you're ready.\n\n" +
       'Commission amount: ${{commissionAmount}}\n' +
       'Commission rate: {{commissionPercent}}% from {{organizationName}}\n\n' +
       'Head to your earnings dashboard to request your payout — it only takes a moment.',
     button_label: 'View My Earnings',
     button_url: '{{earningsUrl}}',
-    placeholders: ['{{firstName}}', '{{organizationName}}', '{{commissionAmount}}', '{{commissionPercent}}', '{{earningsUrl}}'],
+    placeholders: [
+      '{{firstName}}',
+      '{{organizationName}}',
+      '{{commissionAmount}}',
+      '{{commissionPercent}}',
+      '{{earningsUrl}}',
+    ],
   });
 
   // 38. alliance-payout-cancelled
@@ -842,7 +1098,8 @@ async function main() {
   await fix({
     key: 'alliance-payout-cancelled',
     name: 'Med Alliance — Payout Cancelled',
-    description: 'Sent to the affiliate when their payout request is cancelled.',
+    description:
+      'Sent to the affiliate when their payout request is cancelled.',
     subject: 'Update on your payout request of ${{totalAmount}}',
     headline: 'Your payout request has been cancelled.',
     body:
@@ -853,7 +1110,12 @@ async function main() {
       'The good news: all commissions from this request have been returned to your available balance. You can submit a new payout request for them at any time from your dashboard.',
     button_label: 'View My Payouts',
     button_url: '{{payoutsUrl}}',
-    placeholders: ['{{firstName}}', '{{totalAmount}}', '{{cancellationReason}}', '{{payoutsUrl}}'],
+    placeholders: [
+      '{{firstName}}',
+      '{{totalAmount}}',
+      '{{cancellationReason}}',
+      '{{payoutsUrl}}',
+    ],
   });
 
   // 39. alliance-payout-processing
@@ -863,7 +1125,8 @@ async function main() {
     name: 'Med Alliance — Payout Processing',
     description: 'Sent to the affiliate when their payout is being processed.',
     subject: 'Your payout of ${{totalAmount}} is being processed',
-    headline: "We've received your payout request and it's currently being processed.",
+    headline:
+      "We've received your payout request and it's currently being processed.",
     body:
       'Hi {{firstName}},\n\n' +
       "We've received your payout request and it's currently being processed. You'll receive a confirmation once the payment is on its way.\n\n" +
@@ -872,7 +1135,12 @@ async function main() {
       'In the meantime, you can track the status of all your payouts in your partner dashboard.',
     button_label: 'View My Payouts',
     button_url: '{{payoutsUrl}}',
-    placeholders: ['{{firstName}}', '{{totalAmount}}', '{{processedDate}}', '{{payoutsUrl}}'],
+    placeholders: [
+      '{{firstName}}',
+      '{{totalAmount}}',
+      '{{processedDate}}',
+      '{{payoutsUrl}}',
+    ],
   });
 
   // 40. alliance-payout-paid
@@ -880,8 +1148,9 @@ async function main() {
   await fix({
     key: 'alliance-payout-paid',
     name: 'Med Alliance — Payout Sent',
-    description: "Sent to the affiliate when their payout has been sent.",
-    subject: 'Your payout of ${{totalAmount}} has been sent — money is on its way!',
+    description: 'Sent to the affiliate when their payout has been sent.',
+    subject:
+      'Your payout of ${{totalAmount}} has been sent — money is on its way!',
     headline: 'Your payout has been sent!',
     body:
       'Hi {{firstName}},\n\n' +
@@ -891,7 +1160,12 @@ async function main() {
       'You can view this payment and your full payout history in your partner dashboard.',
     button_label: 'View My Payouts',
     button_url: '{{payoutsUrl}}',
-    placeholders: ['{{firstName}}', '{{totalAmount}}', '{{paidDate}}', '{{payoutsUrl}}'],
+    placeholders: [
+      '{{firstName}}',
+      '{{totalAmount}}',
+      '{{paidDate}}',
+      '{{payoutsUrl}}',
+    ],
   });
 
   // 41. alliance-referral-stage-changed
@@ -899,7 +1173,8 @@ async function main() {
   await fix({
     key: 'alliance-referral-stage-changed',
     name: 'Med Alliance — Referral Stage Changed',
-    description: 'Sent to the affiliate when a referred company moves to a new pipeline stage.',
+    description:
+      'Sent to the affiliate when a referred company moves to a new pipeline stage.',
     subject: 'Pipeline update: {{organizationName}} is now at "{{newStage}}"',
     headline: '{{organizationName}} has moved to a new stage',
     body:
@@ -910,10 +1185,64 @@ async function main() {
       'Log in to your partner dashboard to see the full status of all your referred companies and track their progress toward deployment.',
     button_label: 'View My Referrals',
     button_url: '{{referralsUrl}}',
-    placeholders: ['{{firstName}}', '{{organizationName}}', '{{previousStage}}', '{{newStage}}', '{{referralsUrl}}'],
+    placeholders: [
+      '{{firstName}}',
+      '{{organizationName}}',
+      '{{previousStage}}',
+      '{{newStage}}',
+      '{{referralsUrl}}',
+    ],
   });
 
   // ── MED ALLIANCE — Admin (internal) templates ──────────────────────────────
+
+  // 41b. med-alliance-multiple-hubspot-matches
+  // Source: handleMultipleMatches in med-alliance/sync/hubspot-matching.service.ts
+  await fix({
+    key: 'med-alliance-multiple-hubspot-matches',
+    name: 'Med Alliance — Multiple HubSpot Matches',
+    description:
+      'Sent to admins when a referral has multiple HubSpot company matches and needs manual review.',
+    subject: '[Med Alliance] Multiple HubSpot Matches — Review Required',
+    headline: 'Med Alliance — Admin Review Required',
+    body:
+      'A referral requires manual review because multiple HubSpot company records were found.\n\n' +
+      'Company: {{orgName}}\n' +
+      'Organization ID: {{organizationId}}\n' +
+      'Referred by: {{affiliateName}}',
+    button_label: 'Review this referral',
+    button_url: '{{reviewLink}}',
+    placeholders: [
+      '{{orgName}}',
+      '{{organizationId}}',
+      '{{affiliateName}}',
+      '{{reviewLink}}',
+    ],
+  });
+
+  // 41c. med-alliance-expired-eligibility
+  // Source: expireStaleEligibility in cron.service.ts
+  await fix({
+    key: 'med-alliance-expired-eligibility',
+    name: 'Med Alliance — Expired Eligibility Report',
+    description:
+      'Sent to admins summarizing referred companies whose commission eligibility window expired.',
+    subject: 'Med Alliance — Expired Eligibility Report ({{reportDate}})',
+    headline: 'Expired Eligibility Report',
+    body:
+      'Report date: {{reportDate}}\n' +
+      'Expired: {{expiredCount}}\n' +
+      'Errors: {{errorCount}}\n\n' +
+      '{{reportContent}}',
+    button_label: null,
+    button_url: null,
+    placeholders: [
+      '{{reportDate}}',
+      '{{expiredCount}}',
+      '{{errorCount}}',
+      '{{reportContent}}',
+    ],
+  });
 
   // 42. alliance-admin-payout-requested
   // Source: /src/med-alliance/notifications/templates/admin-payout-requested.ts
@@ -922,7 +1251,8 @@ async function main() {
     name: 'Med Alliance — Admin: New Payout Request',
     description: 'Sent to admins when an affiliate submits a payout request.',
     subject: 'Payout request from {{affiliateName}} — ${{totalAmount}}',
-    headline: 'A partner has submitted a new payout request that requires your review.',
+    headline:
+      'A partner has submitted a new payout request that requires your review.',
     body:
       'Partner: {{affiliateName}}\n' +
       'Total Amount: ${{totalAmount}}\n' +
@@ -930,7 +1260,13 @@ async function main() {
       'Request ID: {{payoutRequestId}}',
     button_label: 'Review Payout Requests',
     button_url: '{{payoutRequestsUrl}}',
-    placeholders: ['{{affiliateName}}', '{{totalAmount}}', '{{commissionCount}}', '{{payoutRequestId}}', '{{payoutRequestsUrl}}'],
+    placeholders: [
+      '{{affiliateName}}',
+      '{{totalAmount}}',
+      '{{commissionCount}}',
+      '{{payoutRequestId}}',
+      '{{payoutRequestsUrl}}',
+    ],
   });
 
   // 43. alliance-admin-commission-pending
@@ -938,9 +1274,10 @@ async function main() {
   await fix({
     key: 'alliance-admin-commission-pending',
     name: 'Med Alliance — Admin: Commission Pending Review',
-    description: "Sent to admins when a commission is ready for review.",
+    description: 'Sent to admins when a commission is ready for review.',
     subject: 'Commission ready for review — {{organizationName}}',
-    headline: "A new commission is ready for your review. Please approve or reject it to keep the partner's earnings up to date.",
+    headline:
+      "A new commission is ready for your review. Please approve or reject it to keep the partner's earnings up to date.",
     body:
       'Organization: {{organizationName}}\n' +
       'Affiliate: {{affiliateName}}\n' +
@@ -948,7 +1285,13 @@ async function main() {
       'Commission ID: {{commissionId}}',
     button_label: 'Review Commissions',
     button_url: '{{commissionsUrl}}',
-    placeholders: ['{{organizationName}}', '{{affiliateName}}', '{{commissionAmount}}', '{{commissionId}}', '{{commissionsUrl}}'],
+    placeholders: [
+      '{{organizationName}}',
+      '{{affiliateName}}',
+      '{{commissionAmount}}',
+      '{{commissionId}}',
+      '{{commissionsUrl}}',
+    ],
   });
 
   // 44. alliance-admin-commission-reverted
@@ -956,9 +1299,11 @@ async function main() {
   await fix({
     key: 'alliance-admin-commission-reverted',
     name: 'Med Alliance — Admin: Commission Reverted to Pending',
-    description: 'Sent to admins when a commission is reverted back to pending status.',
+    description:
+      'Sent to admins when a commission is reverted back to pending status.',
     subject: 'Commission reverted to Pending — {{organizationName}}',
-    headline: 'An admin has reverted a commission back to pending review. Please check the details below and take action.',
+    headline:
+      'An admin has reverted a commission back to pending review. Please check the details below and take action.',
     body:
       'Organization: {{organizationName}}\n' +
       'Affiliate: {{affiliateName}}\n' +
@@ -967,7 +1312,14 @@ async function main() {
       'Reverted by: {{revertedByName}}',
     button_label: 'Review Commissions',
     button_url: '{{commissionsUrl}}',
-    placeholders: ['{{organizationName}}', '{{affiliateName}}', '{{commissionAmount}}', '{{commissionId}}', '{{revertedByName}}', '{{commissionsUrl}}'],
+    placeholders: [
+      '{{organizationName}}',
+      '{{affiliateName}}',
+      '{{commissionAmount}}',
+      '{{commissionId}}',
+      '{{revertedByName}}',
+      '{{commissionsUrl}}',
+    ],
   });
 
   // 45. alliance-admin-referral-new
@@ -975,16 +1327,23 @@ async function main() {
   await fix({
     key: 'alliance-admin-referral-new',
     name: 'Med Alliance — Admin: New Referral',
-    description: 'Sent to admins when a new company is referred through the Med Alliance program.',
+    description:
+      'Sent to admins when a new company is referred through the Med Alliance program.',
     subject: 'New referral: {{organizationName}}',
-    headline: 'A new company has been referred through the Med Alliance program.',
+    headline:
+      'A new company has been referred through the Med Alliance program.',
     body:
       'Company: {{organizationName}}\n' +
       'Referred by / Performed by: {{affiliateName}}\n' +
       'Company ID: {{referredCompanyId}}',
     button_label: 'View Pipeline',
     button_url: '{{pipelineUrl}}',
-    placeholders: ['{{organizationName}}', '{{affiliateName}}', '{{referredCompanyId}}', '{{pipelineUrl}}'],
+    placeholders: [
+      '{{organizationName}}',
+      '{{affiliateName}}',
+      '{{referredCompanyId}}',
+      '{{pipelineUrl}}',
+    ],
   });
 
   // 46. alliance-admin-partner-registered
@@ -992,7 +1351,8 @@ async function main() {
   await fix({
     key: 'alliance-admin-partner-registered',
     name: 'Med Alliance — Admin: New Partner Registered',
-    description: 'Sent to admins when a new Growth Partner joins the Med Alliance program.',
+    description:
+      'Sent to admins when a new Growth Partner joins the Med Alliance program.',
     subject: 'New Alliance partner registered: {{partnerName}}',
     headline: 'A new Growth Partner has joined the Med Alliance program.',
     body:
@@ -1001,7 +1361,12 @@ async function main() {
       'Profile ID: {{affiliateProfileId}}',
     button_label: 'View Partners',
     button_url: '{{partnersUrl}}',
-    placeholders: ['{{partnerName}}', '{{partnerEmail}}', '{{affiliateProfileId}}', '{{partnersUrl}}'],
+    placeholders: [
+      '{{partnerName}}',
+      '{{partnerEmail}}',
+      '{{affiliateProfileId}}',
+      '{{partnersUrl}}',
+    ],
   });
 
   // 47. alliance-admin-commission-summary
@@ -1010,14 +1375,22 @@ async function main() {
     key: 'alliance-admin-commission-summary',
     name: 'Med Alliance — Admin: Daily Commission Review Summary',
     description: 'Daily summary sent to admins with all pending commissions.',
-    subject: 'Daily commission review — {{commissionCount}} pending (${{totalAmount}})',
-    headline: '{{commissionCount}} commission(s) are pending your review as of {{reportDate}}.',
+    subject:
+      'Daily commission review — {{commissionCount}} pending (${{totalAmount}})',
+    headline:
+      '{{commissionCount}} commission(s) are pending your review as of {{reportDate}}.',
     body:
       'Total pending: ${{totalAmount}}\n\n' +
       'Commissions pending review:\n{{commissionsTable}}',
     button_label: 'Review Commissions',
     button_url: '{{commissionsUrl}}',
-    placeholders: ['{{commissionCount}}', '{{totalAmount}}', '{{reportDate}}', '{{commissionsTable}}', '{{commissionsUrl}}'],
+    placeholders: [
+      '{{commissionCount}}',
+      '{{totalAmount}}',
+      '{{reportDate}}',
+      '{{commissionsTable}}',
+      '{{commissionsUrl}}',
+    ],
   });
 
   // 48. alliance-admin-mark-paid-error
@@ -1025,8 +1398,10 @@ async function main() {
   await fix({
     key: 'alliance-admin-mark-paid-error',
     name: 'Med Alliance — Admin: markPaid() Error',
-    description: 'Sent to admins when markPaid() fails during payout processing.',
-    subject: 'markPaid() error at "{{errorPhase}}" — payout {{payoutRequestId}}',
+    description:
+      'Sent to admins when markPaid() fails during payout processing.',
+    subject:
+      'markPaid() error at "{{errorPhase}}" — payout {{payoutRequestId}}',
     headline: 'Action required: markPaid() failed at phase "{{errorPhase}}"',
     body:
       'An error occurred while processing a payout via markPaid(). The payout was not completed.\n\n' +
@@ -1038,7 +1413,15 @@ async function main() {
       'Error: {{errorMessage}}',
     button_label: 'View Payout Request',
     button_url: '{{payoutRequestUrl}}',
-    placeholders: ['{{errorPhase}}', '{{payoutRequestId}}', '{{adminName}}', '{{affiliateName}}', '{{amount}}', '{{errorMessage}}', '{{payoutRequestUrl}}'],
+    placeholders: [
+      '{{errorPhase}}',
+      '{{payoutRequestId}}',
+      '{{adminName}}',
+      '{{affiliateName}}',
+      '{{amount}}',
+      '{{errorMessage}}',
+      '{{payoutRequestUrl}}',
+    ],
   });
 
   // 49. alliance-admin-payment-failed
@@ -1058,7 +1441,14 @@ async function main() {
       'Error: {{errorMsg}}',
     button_label: 'Review Payout Requests',
     button_url: '{{payoutRequestsUrl}}',
-    placeholders: ['{{partnerName}}', '{{amount}}', '{{billIds}}', '{{payoutRequestId}}', '{{errorMsg}}', '{{payoutRequestsUrl}}'],
+    placeholders: [
+      '{{partnerName}}',
+      '{{amount}}',
+      '{{billIds}}',
+      '{{payoutRequestId}}',
+      '{{errorMsg}}',
+      '{{payoutRequestsUrl}}',
+    ],
   });
 
   // 50. alliance-admin-remember-me-expired
@@ -1066,7 +1456,8 @@ async function main() {
   await fix({
     key: 'alliance-admin-remember-me-expired',
     name: 'Med Alliance — Admin: Bill.com Session Expired',
-    description: 'Sent to admins when the Bill.com rememberMeId expires and needs renewal.',
+    description:
+      'Sent to admins when the Bill.com rememberMeId expires and needs renewal.',
     subject: 'Bill.com rememberMeId expired',
     headline: 'Alert: Bill.com rememberMeId has expired (BDC_1109)',
     body:
