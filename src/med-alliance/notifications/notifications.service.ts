@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
-import {
-  EmailTheme,
-  getEmailThemeByBusinessUnit,
-} from '../../common/utils/email-templates/theme';
+import { EmailTheme } from '../../common/utils/email-templates/theme';
+import { getBusinessUnitEmailTheme } from '../../common/utils/email-templates/theme-helper';
 import { EmailTemplatesService } from '../../email-templates/email-templates.service';
 import {
   commissionEligibleTemplate,
@@ -81,8 +79,11 @@ export class AllianceNotificationsService {
     }
   }
 
-  private defaultTheme(): EmailTheme {
-    return getEmailThemeByBusinessUnit('MedVirtual');
+  // Resolves the MedVirtual theme from EmailBranding (DB) so custom design —
+  // including buttonColor / buttonTextColor / layoutPreset — is applied.
+  // Falls back to the hardcoded theme inside getBusinessUnitEmailTheme.
+  private async defaultTheme(): Promise<EmailTheme> {
+    return getBusinessUnitEmailTheme(this.prisma, 'MedVirtual');
   }
 
   private buildFrom(theme?: EmailTheme): string {
@@ -111,7 +112,7 @@ export class AllianceNotificationsService {
     payload: Omit<CommissionEligiblePayload, 'firstName'>,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const fallbackHtml = commissionEligibleTemplate(
         { firstName: affiliate.first_name, ...payload },
@@ -148,7 +149,7 @@ export class AllianceNotificationsService {
     payload: Omit<PayoutCancelledPayload, 'firstName'>,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const fallbackHtml = payoutCancelledTemplate(
         { firstName: affiliate.first_name, ...payload },
@@ -189,7 +190,7 @@ export class AllianceNotificationsService {
     >,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const fallbackHtml = payoutProcessingTemplate(
         { firstName: affiliate.first_name, ...payload },
@@ -227,7 +228,7 @@ export class AllianceNotificationsService {
     payload: Omit<PayoutPaidPayload, 'firstName'>,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const fallbackHtml = payoutPaidTemplate(
         { firstName: affiliate.first_name, ...payload },
@@ -263,7 +264,7 @@ export class AllianceNotificationsService {
     payload: Omit<ReferralStageChangedPayload, 'firstName'>,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const fallbackHtml = referralStageChangedTemplate(
         { firstName: affiliate.first_name, ...payload },
@@ -299,7 +300,7 @@ export class AllianceNotificationsService {
     payload: AdminPayoutRequestedPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const adminEmails = this.getAdminEmails();
       const fallbackSubject = `Payout request from ${payload.affiliateName} — $${payload.totalAmount.toFixed(2)}`;
@@ -342,7 +343,7 @@ export class AllianceNotificationsService {
     payload: AdminCommissionPendingPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const adminEmails = this.getAdminEmails();
       const fallbackSubject = `Commission ready for review — ${payload.organizationName}`;
@@ -388,7 +389,7 @@ export class AllianceNotificationsService {
     payload: AdminCommissionRevertedPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const adminEmails = this.getAdminEmails();
       const fallbackSubject = `Commission reverted to Pending — ${payload.organizationName}`;
@@ -435,7 +436,7 @@ export class AllianceNotificationsService {
     payload: AdminReferralNewPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const adminEmails = this.getAdminEmails();
       const fallbackSubject = payload.adminName
@@ -476,7 +477,7 @@ export class AllianceNotificationsService {
     payload: AdminPartnerRegisteredPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const adminEmails = this.getAdminEmails();
       const fallbackSubject = `New Alliance partner registered: ${payload.partnerName}`;
@@ -521,7 +522,7 @@ export class AllianceNotificationsService {
     payload: AdminCommissionPendingSummaryPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const adminEmails = this.getAdminEmails();
       const fallbackSubject = `Daily commission review — ${payload.commissions.length} pending ($${payload.totalAmount.toFixed(2)})`;
@@ -576,7 +577,7 @@ export class AllianceNotificationsService {
     payload: AdminMarkPaidErrorPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     const amountLabel =
       payload.amount !== undefined ? ` — $${payload.amount.toFixed(2)}` : '';
     const fallbackSubject = `markPaid() error at "${payload.errorPhase}" — payout ${payload.payoutRequestId}${amountLabel}`;
@@ -616,7 +617,7 @@ export class AllianceNotificationsService {
     payload: AdminPaymentFailedPayload,
     theme?: EmailTheme,
   ): Promise<void> {
-    const resolvedTheme = theme ?? this.defaultTheme();
+    const resolvedTheme = theme ?? (await this.defaultTheme());
     try {
       const adminEmails = this.getAdminEmails();
       const fallbackSubject = `Bill.com payment failed — ${payload.partnerName} ($${payload.amount.toFixed(2)})`;

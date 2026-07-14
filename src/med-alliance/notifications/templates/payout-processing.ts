@@ -14,6 +14,8 @@ export function payoutProcessingTemplate(
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
   const ctaLink = `${process.env.FRONTEND_URL}/modules/alliance/partner/payouts`;
   const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
   const processedDate = payload.processedAt.toLocaleDateString('en-US', {
@@ -41,7 +43,7 @@ export function payoutProcessingTemplate(
     .highlight-box { background-color: #f0f9f0; border-left: 4px solid ${primaryColor}; padding: 16px 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }
     .highlight-box .amount { font-size: 28px; font-weight: 700; color: ${primaryColor}; }
     .highlight-box .detail { font-size: 14px; color: #666666; margin-top: 4px; }
-    .cta-button { display: inline-block; background-color: ${primaryColor}; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
+    .cta-button { display: inline-block; background-color: ${buttonColor}; color: ${buttonTextColor} !important; padding: 14px 28px; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px; margin: 20px 0; }
     .cta-button:hover { background-color: ${primaryColorHover}; }
     .closing { color: #333333; font-size: 16px; margin: 30px 0 10px 0; }
     .sender { color: #333333; font-size: 16px; }
