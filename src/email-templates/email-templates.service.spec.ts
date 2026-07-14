@@ -763,7 +763,7 @@ describe('EmailTemplatesService.preview', () => {
       business_unit: 'medvirtual',
     });
     expect(result.data.html).toContain(
-      `background-color:${BRANDING.primary_color};color:#ffffff;`,
+      `background-color: ${BRANDING.primary_color};\n      color: #ffffff !important;`,
     );
   });
 
@@ -781,8 +781,17 @@ describe('EmailTemplatesService.preview', () => {
       business_unit: 'medvirtual',
     });
     expect(result.data.html).toContain(
-      'background-color:#112233;color:#F0F0F0;',
+      'background-color: #112233;\n      color: #F0F0F0 !important;',
     );
+  });
+
+  it('renders the CTA button with only a class, no inline style, so hover CSS actually applies in Gmail', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      business_unit: 'medvirtual',
+    });
+    expect(result.data.html).toMatch(/<a href="[^"]*" class="cta-button">/);
+    expect(result.data.html).not.toContain('lang="x-cta-btn"');
   });
 
   it('renders a .cta-button:hover rule using the branding secondary_color', async () => {
@@ -793,17 +802,6 @@ describe('EmailTemplatesService.preview', () => {
     expect(result.data.html).toContain('class="cta-button"');
     expect(result.data.html).toContain(
       `.cta-button:hover {\n      background-color: ${BRANDING.secondary_color};`,
-    );
-  });
-
-  it('adds a lang="x-cta-btn" attribute-selector hover rule that survives Gmail/Outlook class-name mangling', async () => {
-    const { service } = await buildService();
-    const result = await service.preview('invite-signup', {
-      business_unit: 'medvirtual',
-    });
-    expect(result.data.html).toContain('lang="x-cta-btn"');
-    expect(result.data.html).toContain(
-      `*[lang~="x-cta-btn"]:hover {\n      background-color: ${BRANDING.secondary_color} !important;`,
     );
   });
 });

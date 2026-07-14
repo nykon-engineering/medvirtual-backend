@@ -644,7 +644,7 @@ export class EmailTemplatesService {
     const buttonHtml =
       filledButtonLabel && filledButtonUrl
         ? `<div style="text-align:left;margin:30px 0;">
-        <a href="${filledButtonUrl}" class="cta-button" lang="x-cta-btn" style="display:inline-block;background-color:${buttonBackgroundColor};color:${buttonTextColor};padding:14px 28px;text-decoration:none;border-radius:30px;font-weight:600;font-size:16px;">
+        <a href="${filledButtonUrl}" class="cta-button">
           ${filledButtonLabel}
         </a>
        </div>`
@@ -697,15 +697,6 @@ export class EmailTemplatesService {
     }
     .cta-button:visited { color: ${buttonTextColor} !important; }
     .cta-button:link { color: ${buttonTextColor} !important; }
-    /* Gmail/Outlook rewrite the "class" attribute on inbound HTML email (e.g. to
-       "m_<hash>cta-button" or "x_cta-button") without updating class selectors in
-       this <style> block, breaking the rule above. The "lang" attribute survives
-       that rewriting untouched, so this attribute selector keeps hover working in
-       those clients. See: https://freshinbox.com/blog/interactive-emails-in-gmail-using-css-attribute-selectors/ */
-    *[lang~="x-cta-btn"]:hover {
-      background-color: ${branding.primaryColorHover} !important;
-      color: ${buttonTextColor} !important;
-    }
   </style>
 </head>
 <body>
