@@ -1065,6 +1065,72 @@ describe('NotificationsService', () => {
 
       delete (mockPrismaService as any).emailBranding;
     });
+
+    // The DB template body uses {{pairingLinkLine}} (a pre-built line) instead of
+    // hardcoding "Pairing Link: {{interviewLink}}", so the whole line disappears
+    // when there is no link. The button (button_url = {{interviewLink}}) must also
+    // drop out — which requires {{interviewLink}} to resolve to ''.
+    it('should pass an empty pairing line and empty interview link when there is no link', async () => {
+      const hrWithoutLink = {
+        ...mockHireRequest,
+        panels: [
+          {
+            id: 'panel1',
+            interviews: [{ id: 'int1', scheduled_date: new Date('2024-03-15'), link: null }],
+            panelCandidates: [],
+          },
+        ],
+      };
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(hrWithoutLink);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+      // Force the buildEmail fallback so we can inspect the rendered html too.
+      mockEmailTemplatesService.getTemplateContent.mockResolvedValue(null);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockEmailTemplatesService.getTemplateContent).toHaveBeenCalledWith(
+        'hr-interview-scheduled',
+        expect.objectContaining({
+          '{{pairingLinkLine}}': '',
+          '{{interviewLink}}': '',
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+      // Fallback html must not show the Pairing Link line nor a '#' meeting link.
+      const sentHtml = mockMailService.sendMail.mock.calls[0][0].html;
+      expect(sentHtml).not.toContain('Pairing Link:');
+      expect(sentHtml).not.toContain('href="#"');
+    });
+
+    it('should pass the assembled pairing line and interview link when a link exists', async () => {
+      mockPrismaService.hireRequest.findUnique.mockResolvedValue(mockHireRequest);
+      mockPrismaService.uSER.findMany
+        .mockResolvedValueOnce([{ id: 'user1', email: 'assignee@example.com', first_name: 'John', last_name: 'Doe' }])
+        .mockResolvedValueOnce([{ email: 'orguser@example.com' }]);
+      mockMailService.sendMail.mockResolvedValue(true);
+      mockEmailTemplatesService.getTemplateContent.mockResolvedValue(null);
+
+      const result = await service.notifyInterviewScheduled('hr1');
+
+      expect(result).toBe(true);
+      expect(mockEmailTemplatesService.getTemplateContent).toHaveBeenCalledWith(
+        'hr-interview-scheduled',
+        expect.objectContaining({
+          '{{pairingLinkLine}}': 'Pairing Link: https://meet.example.com/abc',
+          '{{interviewLink}}': 'https://meet.example.com/abc',
+        }),
+        expect.anything(),
+        expect.anything(),
+      );
+      const sentHtml = mockMailService.sendMail.mock.calls[0][0].html;
+      expect(sentHtml).toContain('Pairing Link:');
+      expect(sentHtml).toContain('Join meeting');
+    });
   });
 
   describe('notifyHireRequestSourcingAssignee', () => {

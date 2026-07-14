@@ -152,10 +152,10 @@ async function main() {
       description: 'Sent to all active organization users when an interview is scheduled.',
       subject: 'Interview Invite: {{roleType}} - {{availability}}',
       headline: 'You have been invited to an Interview.',
-      body: 'Title: {{hrTitle}}\nCompany: {{orgName}}\nExpected Start Date: {{startDate}}\nPairing Date: {{interviewDate}}\nPairing Link: {{interviewLink}}',
+      body: 'Title: {{hrTitle}}\nCompany: {{orgName}}\nExpected Start Date: {{startDate}}\nPairing Date: {{interviewDate}}\n{{pairingLinkLine}}',
       button_label: 'Join meeting',
       button_url: '{{interviewLink}}',
-      placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{startDate}}', '{{interviewDate}}', '{{interviewLink}}'],
+      placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{startDate}}', '{{interviewDate}}', '{{interviewLink}}', '{{pairingLinkLine}}'],
     },
     {
       key: 'hr-client-change',

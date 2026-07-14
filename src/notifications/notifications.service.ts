@@ -457,6 +457,10 @@ export class NotificationsService {
       interviewLink !== '#'
         ? `<p><strong>Pairing Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>`
         : '';
+    // Plain-text line for the DB template body (rendered through renderHtml's
+    // \n→<br>). Empty when there is no link, so the line disappears entirely.
+    const pairingLinkLine =
+      interviewLink !== '#' ? `Pairing Link: ${interviewLink}` : '';
     const bodyLink =
       interviewLink !== '#'
         ? `<div style="text-align: left; margin: 30px 0;">
@@ -506,7 +510,10 @@ export class NotificationsService {
         '{{orgName}}': hr.organization.name,
         '{{startDate}}': startDate,
         '{{interviewDate}}': interviewDateFormatted,
-        '{{interviewLink}}': interviewLink,
+        // Empty when there is no link so the Join-meeting button (button_url
+        // = {{interviewLink}}) is dropped by renderHtml's label/url guard.
+        '{{interviewLink}}': interviewLink !== '#' ? interviewLink : '',
+        '{{pairingLinkLine}}': pairingLinkLine,
       },
       emailTheme,
       hr.organization.business_unit,
