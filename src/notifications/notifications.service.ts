@@ -465,7 +465,9 @@ export class NotificationsService {
     // link → send the user to the platform login so they still have a next step.
     const hasLink = interviewLink !== '#';
     const ctaLabel = hasLink ? 'Join meeting' : 'Go to platform';
-    const ctaUrl = hasLink ? interviewLink : `${process.env.FRONTEND_URL}/login`;
+    const ctaUrl = hasLink
+      ? interviewLink
+      : `${process.env.FRONTEND_URL}/login`;
     const bodyLink = `<div style="text-align: left; margin: 30px 0;">
           <a href="${ctaUrl}" class="cta-button">
             ${ctaLabel}
@@ -2036,12 +2038,12 @@ export class NotificationsService {
           candidateInfo = `<p><strong>Candidate:</strong> ${candidateName}</p>`;
         }
 
-        const html = this.buildEmail(
+        const fallbackHtml = this.buildEmail(
           `<h2>${emailTitle}</h2>
            <div style="margin-bottom: 20px;">
              ${typeBadge}
            </div>
-           
+
            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
              <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
              <p><strong>Title:</strong> ${ticket.title}</p>
@@ -2051,7 +2053,7 @@ export class NotificationsService {
              ${candidateInfo}
            </div>
            ${isReferralTicket ? descriptionContent : ''}
-           
+
            <div style="text-align: left; margin: 30px 0;">
              <a href="${detailUrl}" class="cta-button">
                View Ticket Details
@@ -2064,11 +2066,36 @@ export class NotificationsService {
           emailTheme,
         );
 
+        // Pre-assemble the optional/conditional fragments so the DB template can
+        // stay a plain-substitution string (the engine has no {{#if}} support).
+        const staffLine = staffName ? `Staff Member: ${staffName}\n` : '';
+        const candidateLine = candidateName
+          ? `Candidate: ${candidateName}\n`
+          : '';
+        const descriptionBlock = isReferralTicket
+          ? ''
+          : `${descriptionLabel}: ${this.formatDescription(ticket.description)}`;
+
+        const tplCreatedAdmin = await this.getTplContent(
+          'ticket-created-admin',
+          {
+            '{{emailTitle}}': emailTitle,
+            '{{ticketType}}': ticketTypeDisplay,
+            '{{ticketTitle}}': ticket.title,
+            '{{orgName}}': ticket.organization?.name || 'N/A',
+            '{{staffLine}}': staffLine,
+            '{{candidateLine}}': candidateLine,
+            '{{descriptionBlock}}': descriptionBlock,
+            '{{ticketLink}}': detailUrl,
+          },
+          emailTheme,
+        );
+
         return this.mail.sendMail({
           from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
-          subject: emailSubject,
-          html,
+          subject: tplCreatedAdmin?.subject ?? emailSubject,
+          html: tplCreatedAdmin?.html ?? fallbackHtml,
         });
       } else {
         // Standard format for non-system admins or other events
@@ -2109,14 +2136,33 @@ export class NotificationsService {
           emailTheme,
         );
 
+        // 'assigned' (the Reassign action) has its own dedicated template so it
+        // can be edited independently of updated/resolved/closed; every other
+        // event stays on the shared 'ticket-event' key.
+        const tplKey =
+          event === 'assigned' ? 'ticket-assigned' : 'ticket-event';
+
+        // Pre-assembled fragments consumed only by 'ticket-assigned'; harmless
+        // for 'ticket-event' (unknown placeholders are left untouched).
+        const staffLine = staffName ? `Staff Member: ${staffName}\n` : '';
+        const candidateLine = candidateName
+          ? `Candidate: ${candidateName}\n`
+          : '';
+        const descriptionBlock = isReferralTicket
+          ? ''
+          : `${descriptionLabel}: ${this.formatDescription(this.decodeHtmlEntities(ticket.description))}`;
+
         const tplEvent = await this.getTplContent(
-          'ticket-event',
+          tplKey,
           {
             '{{event}}': event,
             '{{ticketTitle}}': ticket.title,
             '{{orgName}}': ticket.organization?.name || 'N/A',
             '{{ticketType}}': ticketTypeDisplay,
             '{{ticketDescription}}': ticket.description || '',
+            '{{staffLine}}': staffLine,
+            '{{candidateLine}}': candidateLine,
+            '{{descriptionBlock}}': descriptionBlock,
             '{{ticketLink}}': detailUrl,
           },
           emailTheme,

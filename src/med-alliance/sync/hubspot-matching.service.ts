@@ -4,6 +4,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
+import { getEmailThemeByBusinessUnit } from '../../common/utils/email-templates/theme';
 
 export type MatchOutcome =
   | 'already_matched' // hubspot_id was already set — Phase A skipped
@@ -28,6 +30,7 @@ export class HubspotMatchingService {
     private readonly mailService: MailService,
     private readonly eligibilityCheck: EligibilityCheckService,
     private readonly reviewCases: ReviewCasesService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
 
   /**
@@ -234,11 +237,10 @@ export class HubspotMatchingService {
       ? `${org.referredByAffiliate.first_name} ${org.referredByAffiliate.last_name} (${org.referredByAffiliate.email})`
       : 'Unknown affiliate';
 
-    await this.mailService.sendMail({
-      from: 'med-alliance@medvirtual.com',
-      to: 'paulo@regenta.ai',
-      subject: `[Med Alliance] Multiple HubSpot Matches — Review Required`,
-      html: `
+    const reviewLink = `${process.env.FRONTEND_URL ?? ''}/admin/med-alliance/referred-companies/${organizationId}`;
+
+    const fallbackSubject = `[Med Alliance] Multiple HubSpot Matches — Review Required`;
+    const fallbackHtml = `
         <h2>Med Alliance — Admin Review Required</h2>
         <p>A referral requires manual review because multiple HubSpot company records were found.</p>
         <table>
@@ -247,11 +249,33 @@ export class HubspotMatchingService {
           <tr><td><strong>Referred by:</strong></td><td>${affiliateName}</td></tr>
         </table>
         <p>
-          <a href="${process.env.FRONTEND_URL ?? ''}/admin/med-alliance/referred-companies/${organizationId}">
+          <a href="${reviewLink}">
             Review this referral
           </a>
         </p>
-      `,
+      `;
+
+    let tpl: { subject: string; html: string } | null = null;
+    try {
+      tpl = await this.emailTemplates.getTemplateContent(
+        'med-alliance-multiple-hubspot-matches',
+        {
+          '{{orgName}}': org.name ?? '',
+          '{{organizationId}}': organizationId,
+          '{{affiliateName}}': affiliateName,
+          '{{reviewLink}}': reviewLink,
+        },
+        getEmailThemeByBusinessUnit('MedVirtual'),
+      );
+    } catch {
+      tpl = null;
+    }
+
+    await this.mailService.sendMail({
+      from: 'med-alliance@medvirtual.com',
+      to: 'paulo@regenta.ai',
+      subject: tpl?.subject ?? fallbackSubject,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 

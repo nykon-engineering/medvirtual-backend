@@ -8,6 +8,7 @@ import { ReferralSyncService } from './referral-sync.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
 import { ReviewCasesModule } from '../review-cases/review-cases.module';
 import { AllianceNotificationsModule } from '../notifications/notifications.module';
+import { EmailTemplatesModule } from '../../email-templates/email-templates.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AllianceNotificationsModule } from '../notifications/notifications.modu
     MailModule,
     ReviewCasesModule,
     AllianceNotificationsModule,
+    EmailTemplatesModule,
   ],
   providers: [
     HubspotMatchingService,

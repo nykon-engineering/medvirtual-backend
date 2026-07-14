@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -22,6 +23,9 @@ const mockPrisma = {
 const mockMailService = { sendMail: jest.fn() };
 const mockEligibilityCheck = { runAndPersist: jest.fn() };
 const mockReviewCases = { openOrSkip: jest.fn() };
+const mockEmailTemplates = {
+  getTemplateContent: jest.fn().mockResolvedValue(null),
+};
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -33,7 +37,11 @@ const makeOrg = (overrides: Partial<any> = {}) => ({
   website_url: 'https://acme.com',
   hubspot_id: null,
   referred_by_affiliate_id: 'user-1',
-  referredByAffiliate: { first_name: 'Jane', last_name: 'Doe', email: 'jane@example.com' },
+  referredByAffiliate: {
+    first_name: 'Jane',
+    last_name: 'Doe',
+    email: 'jane@example.com',
+  },
   ...overrides,
 });
 
@@ -52,6 +60,7 @@ describe('HubspotMatchingService', () => {
         { provide: MailService, useValue: mockMailService },
         { provide: EligibilityCheckService, useValue: mockEligibilityCheck },
         { provide: ReviewCasesService, useValue: mockReviewCases },
+        { provide: EmailTemplatesService, useValue: mockEmailTemplates },
       ],
     }).compile();
 
@@ -65,7 +74,9 @@ describe('HubspotMatchingService', () => {
   // -------------------------------------------------------------------------
   describe('already matched', () => {
     it('should return already_matched and skip HubSpot call when hubspot_id is set', async () => {
-      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg({ hubspot_id: 'hs-existing' }));
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ hubspot_id: 'hs-existing' }),
+      );
 
       const result = await service.run('org-1');
 
@@ -128,7 +139,9 @@ describe('HubspotMatchingService', () => {
   describe('synced — single match', () => {
     it('should store hubspot_id and re-run MA-004 when exactly 1 match is found', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
-      mockedAxios.post.mockResolvedValue(hubspotSearchResponse([{ id: 'hs-company-1' }]));
+      mockedAxios.post.mockResolvedValue(
+        hubspotSearchResponse([{ id: 'hs-company-1' }]),
+      );
       mockPrisma.organization.update.mockResolvedValue({});
       mockEligibilityCheck.runAndPersist.mockResolvedValue({});
 
@@ -148,14 +161,20 @@ describe('HubspotMatchingService', () => {
       );
 
       // MA-004 must be re-run after hubspot_id is set
-      expect(mockEligibilityCheck.runAndPersist).toHaveBeenCalledWith('org-1', 'system', 'sync');
+      expect(mockEligibilityCheck.runAndPersist).toHaveBeenCalledWith(
+        'org-1',
+        'system',
+        'sync',
+      );
     });
 
     it('should include domain from website_url in HubSpot search filters', async () => {
       mockPrisma.organization.findUnique.mockResolvedValue(
         makeOrg({ website_url: 'https://www.acme.com' }),
       );
-      mockedAxios.post.mockResolvedValue(hubspotSearchResponse([{ id: 'hs-1' }]));
+      mockedAxios.post.mockResolvedValue(
+        hubspotSearchResponse([{ id: 'hs-1' }]),
+      );
       mockPrisma.organization.update.mockResolvedValue({});
       mockEligibilityCheck.runAndPersist.mockResolvedValue({});
 
@@ -174,7 +193,9 @@ describe('HubspotMatchingService', () => {
       mockPrisma.organization.findUnique.mockResolvedValue(
         makeOrg({ website_url: null, email: 'info@globalcorp.com' }),
       );
-      mockedAxios.post.mockResolvedValue(hubspotSearchResponse([{ id: 'hs-2' }]));
+      mockedAxios.post.mockResolvedValue(
+        hubspotSearchResponse([{ id: 'hs-2' }]),
+      );
       mockPrisma.organization.update.mockResolvedValue({});
       mockEligibilityCheck.runAndPersist.mockResolvedValue({});
 
@@ -183,7 +204,8 @@ describe('HubspotMatchingService', () => {
       const payload = mockedAxios.post.mock.calls[0][1] as any;
       const emailDomainFilter = payload.filterGroups.find((g: any) =>
         g.filters.some(
-          (f: any) => f.propertyName === 'domain' && f.value === 'globalcorp.com',
+          (f: any) =>
+            f.propertyName === 'domain' && f.value === 'globalcorp.com',
         ),
       );
       expect(emailDomainFilter).toBeDefined();
@@ -240,6 +262,50 @@ describe('HubspotMatchingService', () => {
       expect(emailCall.html).toContain('Acme Corp');
       expect(emailCall.html).toContain('org-1');
       expect(emailCall.html).toContain('Jane Doe');
+    });
+
+    it('should resolve the med-alliance-multiple-hubspot-matches template', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockedAxios.post.mockResolvedValue(
+        hubspotSearchResponse([{ id: 'hs-1' }, { id: 'hs-2' }]),
+      );
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockMailService.sendMail.mockResolvedValue(true);
+
+      await service.run('org-1');
+
+      expect(mockEmailTemplates.getTemplateContent).toHaveBeenCalledWith(
+        'med-alliance-multiple-hubspot-matches',
+        expect.objectContaining({
+          '{{orgName}}': 'Acme Corp',
+          '{{organizationId}}': 'org-1',
+          '{{affiliateName}}': expect.stringContaining('Jane Doe'),
+          '{{reviewLink}}': expect.stringContaining('org-1'),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('should use the template subject/html when the template exists', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockedAxios.post.mockResolvedValue(
+        hubspotSearchResponse([{ id: 'hs-1' }, { id: 'hs-2' }]),
+      );
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockMailService.sendMail.mockResolvedValue(true);
+      mockEmailTemplates.getTemplateContent.mockResolvedValueOnce({
+        subject: 'Templated subject',
+        html: '<p>Templated body</p>',
+      });
+
+      await service.run('org-1');
+
+      expect(mockMailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: 'Templated subject',
+          html: '<p>Templated body</p>',
+        }),
+      );
     });
   });
 
