@@ -153,9 +153,9 @@ async function main() {
       subject: 'Interview Invite: {{roleType}} - {{availability}}',
       headline: 'You have been invited to an Interview.',
       body: 'Title: {{hrTitle}}\nCompany: {{orgName}}\nExpected Start Date: {{startDate}}\nPairing Date: {{interviewDate}}\n{{pairingLinkLine}}',
-      button_label: 'Join meeting',
-      button_url: '{{interviewLink}}',
-      placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{startDate}}', '{{interviewDate}}', '{{interviewLink}}', '{{pairingLinkLine}}'],
+      button_label: '{{ctaLabel}}',
+      button_url: '{{ctaUrl}}',
+      placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{startDate}}', '{{interviewDate}}', '{{pairingLinkLine}}', '{{ctaLabel}}', '{{ctaUrl}}'],
     },
     {
       key: 'hr-client-change',

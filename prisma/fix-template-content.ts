@@ -425,9 +425,9 @@ async function main() {
       'Expected Start Date: {{startDate}}\n' +
       'Pairing Date: {{interviewDate}}\n' +
       '{{pairingLinkLine}}',
-    button_label: 'Join meeting',
-    button_url: '{{interviewLink}}',
-    placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{startDate}}', '{{interviewDate}}', '{{interviewLink}}', '{{pairingLinkLine}}'],
+    button_label: '{{ctaLabel}}',
+    button_url: '{{ctaUrl}}',
+    placeholders: ['{{roleType}}', '{{availability}}', '{{hrTitle}}', '{{orgName}}', '{{startDate}}', '{{interviewDate}}', '{{pairingLinkLine}}', '{{ctaLabel}}', '{{ctaUrl}}'],
   });
 
   // 19. hr-client-change

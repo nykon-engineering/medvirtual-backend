@@ -572,6 +572,7 @@ export class TicketService {
             : { disconnect: true },
         },
       });
+      
       if (!ticketUpdated)
         throw new BadRequestException('Failed to reassign ticket');
 

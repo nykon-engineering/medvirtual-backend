@@ -461,14 +461,16 @@ export class NotificationsService {
     // \n→<br>). Empty when there is no link, so the line disappears entirely.
     const pairingLinkLine =
       interviewLink !== '#' ? `Pairing Link: ${interviewLink}` : '';
-    const bodyLink =
-      interviewLink !== '#'
-        ? `<div style="text-align: left; margin: 30px 0;">
-          <a href="${interviewLink}" class="cta-button">
-            Join meeting
+    // CTA fallback: with a link → "Join meeting" to the pairing URL; without a
+    // link → send the user to the platform login so they still have a next step.
+    const hasLink = interviewLink !== '#';
+    const ctaLabel = hasLink ? 'Join meeting' : 'Go to platform';
+    const ctaUrl = hasLink ? interviewLink : `${process.env.FRONTEND_URL}/login`;
+    const bodyLink = `<div style="text-align: left; margin: 30px 0;">
+          <a href="${ctaUrl}" class="cta-button">
+            ${ctaLabel}
           </a>
-        </div>`
-        : '';
+        </div>`;
 
     //get all users from organization for send emails to them
     const emailsUsers = await this.prisma.uSER.findMany({
@@ -510,10 +512,11 @@ export class NotificationsService {
         '{{orgName}}': hr.organization.name,
         '{{startDate}}': startDate,
         '{{interviewDate}}': interviewDateFormatted,
-        // Empty when there is no link so the Join-meeting button (button_url
-        // = {{interviewLink}}) is dropped by renderHtml's label/url guard.
-        '{{interviewLink}}': interviewLink !== '#' ? interviewLink : '',
         '{{pairingLinkLine}}': pairingLinkLine,
+        // The button always renders now: pairing link when present, else the
+        // platform login as a fallback so the email is never a dead end.
+        '{{ctaLabel}}': ctaLabel,
+        '{{ctaUrl}}': ctaUrl,
       },
       emailTheme,
       hr.organization.business_unit,
