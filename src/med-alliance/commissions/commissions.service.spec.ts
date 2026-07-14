@@ -238,6 +238,21 @@ describe('CommissionsService', () => {
       expect(result.status).toBe('eligible');
       expect(result.adminDecisionBy!.id).toBe('admin-1');
     });
+
+    it('should select paid_amount and transaction_reference on the linked payout request', async () => {
+      mockPrisma.affiliateCommission.findUnique.mockResolvedValue(
+        makeCommission(),
+      );
+
+      await service.findOneForAdmin('commission-1');
+
+      const call = mockPrisma.affiliateCommission.findUnique.mock.calls[0][0];
+      const payoutRequestSelect =
+        call.select.payoutRequestCommissions.select.payoutRequest.select;
+
+      expect(payoutRequestSelect.paid_amount).toBe(true);
+      expect(payoutRequestSelect.transaction_reference).toBe(true);
+    });
   });
 
   // -------------------------------------------------------------------------
