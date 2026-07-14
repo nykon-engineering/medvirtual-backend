@@ -803,7 +803,7 @@ describe('EmailTemplatesService.preview', () => {
     });
     expect(result.data.html).toContain('lang="x-cta-btn"');
     expect(result.data.html).toContain(
-      `* [lang~="x-cta-btn"]:hover {\n      background-color: ${BRANDING.secondary_color} !important;`,
+      `*[lang~="x-cta-btn"]:hover {\n      background-color: ${BRANDING.secondary_color} !important;`,
     );
   });
 });

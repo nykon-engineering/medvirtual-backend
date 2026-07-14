@@ -702,7 +702,7 @@ export class EmailTemplatesService {
        this <style> block, breaking the rule above. The "lang" attribute survives
        that rewriting untouched, so this attribute selector keeps hover working in
        those clients. See: https://freshinbox.com/blog/interactive-emails-in-gmail-using-css-attribute-selectors/ */
-    * [lang~="x-cta-btn"]:hover {
+    *[lang~="x-cta-btn"]:hover {
       background-color: ${branding.primaryColorHover} !important;
       color: ${buttonTextColor} !important;
     }
