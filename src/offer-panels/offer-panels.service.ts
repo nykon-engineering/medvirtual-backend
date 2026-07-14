@@ -995,6 +995,7 @@ export class OfferPanelsService {
           offer_panel_id: panel.id,
           org_id: panel.recipient_company_id ?? null,
           created_by: panel.created_by_user_id,
+          user_id: panel.created_by_user_id,
         },
       });
 
