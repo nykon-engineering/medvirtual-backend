@@ -547,12 +547,9 @@ describe('OrganizationService', () => {
         mockPrismaService.organization.findMany.mock.calls[0][0].where;
 
       expect(whereArg.admin_id).not.toBe(CONCIERGE_ID);
-      expect(whereArg.OR).toEqual(
-        expect.arrayContaining([
-          { admin_id: 'user-1' },
-          { owner_id: 'user-1' },
-        ]),
-      );
+      expect(whereArg.AND).toEqual([
+        { OR: [{ admin_id: 'user-1' }, { owner_id: 'user-1' }] },
+      ]);
     });
 
     it('should NOT let organization_super_admin override scope via admin param', async () => {
@@ -572,12 +569,9 @@ describe('OrganizationService', () => {
         mockPrismaService.organization.findMany.mock.calls[0][0].where;
 
       expect(whereArg.admin_id).not.toBe(CONCIERGE_ID);
-      expect(whereArg.OR).toEqual(
-        expect.arrayContaining([
-          { admin_id: 'user-2' },
-          { owner_id: 'user-2' },
-        ]),
-      );
+      expect(whereArg.AND).toEqual([
+        { OR: [{ admin_id: 'user-2' }, { owner_id: 'user-2' }] },
+      ]);
     });
 
     it('should not scope system_admin when no admin param is provided', async () => {
@@ -625,6 +619,132 @@ describe('OrganizationService', () => {
         mockPrismaService.organization.count.mock.calls[0][0].where;
 
       expect(countWhere).toEqual(findManyWhere);
+    });
+
+    const searchBranch = (token: string) => ({
+      OR: [
+        { name: { contains: token, mode: 'insensitive' } },
+        { email: { contains: token, mode: 'insensitive' } },
+        { description: { contains: token, mode: 'insensitive' } },
+        {
+          users: {
+            some: {
+              OR: [
+                { first_name: { contains: token, mode: 'insensitive' } },
+                { last_name: { contains: token, mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    it('should match organization fields and member user names for a single token', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'acme',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.AND).toEqual([searchBranch('acme')]);
+    });
+
+    it('should AND each token so a full name spanning first_name and last_name matches', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'Paulo Isaque',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.AND).toEqual([
+        searchBranch('Paulo'),
+        searchBranch('Isaque'),
+      ]);
+    });
+
+    it('should intersect scope with search instead of widening it for organization_admin', async () => {
+      const user = { ...userfake, role: 'organization_admin', id: 'user-1' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'acme',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      // Scope and search must be separate AND branches. If they ever collapse
+      // back into a shared OR, an org_admin would see orgs they have no
+      // relationship to simply by searching for them.
+      expect(whereArg.OR).toBeUndefined();
+      expect(whereArg.AND).toEqual([
+        { OR: [{ admin_id: 'user-1' }, { owner_id: 'user-1' }] },
+        searchBranch('acme'),
+      ]);
+    });
+
+    it('should not emit a search branch for a whitespace-only search term', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: '   ',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.AND).toBeUndefined();
+    });
+
+    it('should call count with the same where shape used for findMany when searching as organization_admin', async () => {
+      const user = { ...userfake, role: 'organization_admin', id: 'user-1' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'acme',
+      } as any);
+
+      const findManyWhere =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+      const countWhere =
+        mockPrismaService.organization.count.mock.calls[0][0].where;
+
+      expect(countWhere).toEqual(findManyWhere);
+    });
+
+    it('should report every member in userCount even when search matches only one user', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      mockPrismaService.organization.findMany.mockResolvedValue([
+        buildRow({
+          users: [
+            { id: 'u1', status: 'active' },
+            { id: 'u2', status: 'active' },
+          ],
+        }),
+      ]);
+
+      const result = await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'Paulo',
+      } as any);
+
+      expect(result.data[0].userCount).toBe(2);
     });
   });
 

@@ -9,6 +9,7 @@ import axios from 'axios';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  Prisma,
   Organization,
   USER,
   OrganizationRole,
@@ -347,6 +348,11 @@ export class OrganizationService {
     // Build where clause
     const whereClause: any = {};
 
+    // Scope and search each contribute their own AND branch. They must never
+    // share the `OR` key: OR-ing them together would make an org visible to a
+    // non-system user simply because they searched for it.
+    const andConditions: Prisma.OrganizationWhereInput[] = [];
+
     // Add user-specific filtering based on role
     if (user.role === 'system_super_admin' || user.role === 'system_admin') {
       // No additional filtering needed - return all organizations
@@ -357,40 +363,57 @@ export class OrganizationService {
       }
       */
     } else {
-      // For organization users: return organizations they are associated with
-      whereClause.OR = [
-        { admin_id: user.id },
-        { owner_id: user.id },
-        { admin_id: user.id },
-        {
-          admin_id: user.role.includes('organization') ? user.id : undefined,
-        },
-      ].filter(Boolean);
+      // Visibility scope for organization users: only orgs they own or administer
+      andConditions.push({
+        OR: [{ admin_id: user.id }, { owner_id: user.id }],
+      });
     }
 
     // Add search filter
-    if (search) {
-      whereClause.OR = [
-        ...(whereClause.OR || []),
-        {
-          name: {
-            contains: search,
-            mode: 'insensitive',
+    // Match each whitespace-separated token independently and AND them
+    // together, so "First Last" matches a member user whose name spans two
+    // columns. Mirrors the same handling in UserService; a single OR per
+    // column could never match a full name, since no one column contains
+    // "First Last" as a substring.
+    const tokens = search ? search.trim().split(/\s+/).filter(Boolean) : [];
+
+    andConditions.push(
+      ...tokens.map((token) => ({
+        OR: [
+          { name: { contains: token, mode: Prisma.QueryMode.insensitive } },
+          { email: { contains: token, mode: Prisma.QueryMode.insensitive } },
+          {
+            description: {
+              contains: token,
+              mode: Prisma.QueryMode.insensitive,
+            },
           },
-        },
-        {
-          email: {
-            contains: search,
-            mode: 'insensitive',
+          {
+            users: {
+              some: {
+                OR: [
+                  {
+                    first_name: {
+                      contains: token,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                  {
+                    last_name: {
+                      contains: token,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                ],
+              },
+            },
           },
-        },
-        {
-          description: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      ];
+        ],
+      })),
+    );
+
+    if (andConditions.length) {
+      whereClause.AND = andConditions;
     }
 
     // Add role filter
