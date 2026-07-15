@@ -789,6 +789,15 @@ export class HireRequestService {
           },
           tickets: true,
           staff_to_be_replaced: true,
+          offerPanel: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              createdAt: true,
+              decided_at: true,
+            },
+          },
         },
         skip,
         take,
@@ -1063,6 +1072,15 @@ export class HireRequestService {
         },
         tickets: true,
         staff_to_be_replaced: true,
+        offerPanel: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            createdAt: true,
+            decided_at: true,
+          },
+        },
       },
     });
     if (!hireRequest) throw new NotFoundException(`Hire request not found`);
