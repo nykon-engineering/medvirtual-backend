@@ -624,8 +624,6 @@ describe('OrganizationService', () => {
     const searchBranch = (token: string) => ({
       OR: [
         { name: { contains: token, mode: 'insensitive' } },
-        { email: { contains: token, mode: 'insensitive' } },
-        { description: { contains: token, mode: 'insensitive' } },
         {
           users: {
             some: {
@@ -639,7 +637,7 @@ describe('OrganizationService', () => {
       ],
     });
 
-    it('should match organization fields and member user names for a single token', async () => {
+    it('should match organization name and member user names for a single token', async () => {
       const user = { ...userfake, role: 'system_admin' };
 
       await service.getAllPaginated(user as any, {
