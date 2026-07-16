@@ -636,7 +636,7 @@ export class TicketService {
         !ticket.user?.id)
     )
       throw new BadRequestException(
-        `Status ${data.status.replace('_', ' ').toUpperCase()} requires an assigned user`,
+        `Please assign a user to the ticket before changing status to ${data.status.replace('_', ' ').toUpperCase()}`,
       );
     if (
       data.status === 'resolved' &&

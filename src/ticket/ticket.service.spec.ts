@@ -520,14 +520,14 @@ describe('TicketService', () => {
       mockPrisma.ticket.findUnique.mockResolvedValue({ status: 'new', user: null });
   
       await expect(service.updateStatus(ticketId, { status: 'in_progress' }))
-        .rejects.toThrow('Status IN PROGRESS requires an assigned user');
+        .rejects.toThrow('Please assign a user to the ticket before changing status to IN PROGRESS');
     });
   
     it('should throw if going new→resolved without assigned user', async () => {
       mockPrisma.ticket.findUnique.mockResolvedValue({ status: 'new', user: null });
   
       await expect(service.updateStatus(ticketId, { status: 'resolved' }))
-        .rejects.toThrow('Status RESOLVED requires an assigned user');
+        .rejects.toThrow('Please assign a user to the ticket before changing status to RESOLVED');
     });
   
     it('should terminate staff when resolving termination ticket', async () => {
