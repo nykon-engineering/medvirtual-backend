@@ -381,6 +381,8 @@ export class OrganizationService {
       ...tokens.map((token) => ({
         OR: [
           { name: { contains: token, mode: Prisma.QueryMode.insensitive } },
+          /*
+          Email and description was removed when we added the users
           { email: { contains: token, mode: Prisma.QueryMode.insensitive } },
           {
             description: {
@@ -388,6 +390,7 @@ export class OrganizationService {
               mode: Prisma.QueryMode.insensitive,
             },
           },
+          */
           {
             users: {
               some: {
