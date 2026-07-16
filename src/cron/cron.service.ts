@@ -1026,6 +1026,7 @@ export class CronService {
         med_alliance_referral_status: {
           in: ['pending_confirmation', 'eligible', 'not_eligible'] as any,
         },
+        status: { not: 'deleted' },
       },
       select: {
         id: true,
@@ -1211,6 +1212,7 @@ export class CronService {
     const orgs = await this.prisma.organization.findMany({
       where: {
         referred_by_affiliate_id: profile.user_id,
+        status: { not: 'deleted' },
         hubspotInvoiceSnapshots: {
           some: { invoice_status: 'paid', invoice_amount: { gt: 0 } },
         },

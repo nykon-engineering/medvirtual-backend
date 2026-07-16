@@ -51,6 +51,7 @@ export class CommissionDetectionService {
       select: {
         id: true,
         name: true,
+        status: true,
         referred_by_affiliate_id: true,
         med_alliance_referral_status: true,
         med_alliance_block_reason: true,
@@ -61,6 +62,15 @@ export class CommissionDetectionService {
         createdAt: true,
       },
     });
+
+    // Deleted organizations never generate commissions — the deletion hook already
+    // voided the outstanding ones; re-detecting would resurrect them.
+    if (org?.status === 'deleted') {
+      this.logger.log(
+        `Org ${organizationId} is deleted — skipping commission detection`,
+      );
+      return { created: 0, skipped: 0 };
+    }
 
     if (!org?.first_paid_invoice_at) {
       await this.trackFirstPaidInvoice(organizationId);

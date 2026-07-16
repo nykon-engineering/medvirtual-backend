@@ -145,6 +145,10 @@ export class HandlerOrganizationPropertyChange {
     if (fieldUpdated === 'deployment_date') {
       if (!referredByAffiliateId) return true;
 
+      // A deleted org must never re-enter the referral pipeline via a stray
+      // deployment_date webhook — reactivation is the only way back.
+      if (organization.status === OrganizationStatus.deleted) return true;
+
       // No-op guard: HubSpot can re-deliver a webhook for a value that hasn't actually changed.
       // Never let that spurious re-delivery overwrite a manual admin decision (eligible/not_eligible).
       const unchanged =

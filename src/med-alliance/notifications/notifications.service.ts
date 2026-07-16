@@ -46,6 +46,10 @@ import {
   adminCommissionPendingSummaryTemplate,
   AdminCommissionPendingSummaryPayload,
 } from './templates/admin-commission-pending-summary';
+import {
+  adminReferredOrgDeletedTemplate,
+  AdminReferredOrgDeletedPayload,
+} from './templates/admin-referred-org-deleted';
 import { payoutProcessingTemplate } from './templates/payout-processing';
 import {
   adminMarkPaidErrorTemplate,
@@ -427,6 +431,54 @@ export class AllianceNotificationsService {
     } catch (err) {
       this.logger.error(
         'Failed to send admin commission reverted notifications',
+        err,
+      );
+    }
+  }
+
+  async notifyAdminReferredOrgDeleted(
+    payload: AdminReferredOrgDeletedPayload,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? (await this.defaultTheme());
+    try {
+      const adminEmails = this.getAdminEmails();
+      const fallbackSubject = `Referred company deleted in HubSpot — ${payload.organizationName}`;
+      const fallbackHtml = adminReferredOrgDeletedTemplate(
+        payload,
+        resolvedTheme,
+      );
+      const tpl = await this.getTplContent(
+        'alliance-admin-referred-org-deleted',
+        {
+          '{{organizationName}}': payload.organizationName,
+          '{{affiliateName}}': payload.affiliateName,
+          '{{commissionsVoided}}': String(payload.commissionsVoided),
+          '{{commissionsInPendingPayout}}': String(
+            payload.commissionsInPendingPayout,
+          ),
+          '{{pipelineUrl}}': `${process.env.FRONTEND_URL}/med-alliance/admin/companies-pipeline`,
+        },
+        resolvedTheme,
+      );
+      for (const email of adminEmails) {
+        try {
+          await this.mail.sendMail({
+            from: this.buildFrom(resolvedTheme),
+            to: email,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
+          });
+        } catch (err) {
+          this.logger.error(
+            `Failed to send admin referred org deleted email to ${email}`,
+            err,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send admin referred org deleted notifications',
         err,
       );
     }

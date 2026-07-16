@@ -804,6 +804,17 @@ export class ReferredCompaniesService {
    *   not_eligible     | yes     | no
    *   expired          | no      | no
    */
+  // Deleted organizations are frozen for eligibility decisions — the HubSpot
+  // deletion hook already voided/parked their commissions, so approving or
+  // blocking one would create state no sync path can ever reconcile.
+  private assertNotDeleted(org: { status?: string | null }): void {
+    if (org.status === 'deleted') {
+      throw new BadRequestException(
+        'Cannot change eligibility of a deleted organization',
+      );
+    }
+  }
+
   private assertDeployedDecisionAllowed(
     org: {
       referred_by_affiliate_id: string | null;
@@ -870,6 +881,7 @@ export class ReferredCompaniesService {
       where: { id },
       select: {
         id: true,
+        status: true,
         referred_by_affiliate_id: true,
         med_alliance_referral_status: true,
         eligibility_start_at: true,
@@ -878,6 +890,7 @@ export class ReferredCompaniesService {
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
+    this.assertNotDeleted(org);
     this.assertDeployedDecisionAllowed(org, 'confirm');
 
     if (!org.deployment_date) {
@@ -950,12 +963,14 @@ export class ReferredCompaniesService {
       where: { id },
       select: {
         id: true,
+        status: true,
         referred_by_affiliate_id: true,
         med_alliance_referral_status: true,
       },
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
+    this.assertNotDeleted(org);
     this.assertDeployedDecisionAllowed(org, 'block');
 
     const oldStatus = org.med_alliance_referral_status;

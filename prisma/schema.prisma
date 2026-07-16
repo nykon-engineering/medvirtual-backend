@@ -4,7 +4,7 @@ generator client {
 }
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("LOCAL_DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -1224,6 +1224,7 @@ enum AdminReviewReasonCode {
   multiple_hubspot_matches        // HubSpot returned 2+ company matches — admin must pick the correct one
   reconciliation_invoice_changed  // A paid invoice was updated in HubSpot after commission was already detected
   soft_duplicate_referral         // A referred org appears to match an existing referred org (name/email similarity)
+  org_deleted_with_pending_payout // Org was deleted in HubSpot while commissions sit in a pending payout request — admin must decide pay vs void
 }
 
 // MA-006 — Lifecycle status of an admin review case

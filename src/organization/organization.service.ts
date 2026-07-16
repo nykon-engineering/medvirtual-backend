@@ -2364,9 +2364,13 @@ export class OrganizationService {
       },
     );
 
+    // Referred orgs are excluded: hard-deleting them would either crash on the
+    // FK Restrict of AffiliateCommission/HubspotInvoiceSnapshot rows or silently
+    // destroy Med Alliance referral history.
     await this.prisma.organization.deleteMany({
       where: {
         hubspot_id: { not: null },
+        referred_by_affiliate_id: null,
       },
     });
 
@@ -2511,9 +2515,11 @@ export class OrganizationService {
       return mapped;
     });
 
-    //remover do banco organizations com hubspot_id nulo
+    // Referred orgs are excluded: hard-deleting them would either crash on the
+    // FK Restrict of AffiliateCommission/HubspotInvoiceSnapshot rows or silently
+    // destroy Med Alliance referral history.
     await this.prisma.organization.deleteMany({
-      where: { hubspot_id: { not: null } },
+      where: { hubspot_id: { not: null }, referred_by_affiliate_id: null },
     });
 
     // 4. Inserir tudo de uma vez (bulk insert)

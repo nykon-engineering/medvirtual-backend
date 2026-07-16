@@ -144,6 +144,7 @@ export class PayoutRequestsService {
         affiliate_id: true,
         status: true,
         commission_amount: true,
+        organization: { select: { status: true } },
       },
     });
 
@@ -159,6 +160,17 @@ export class PayoutRequestsService {
     if (foreignCommission) {
       throw new BadRequestException(
         'One or more commissions do not belong to your account',
+      );
+    }
+
+    // A deleted organization no longer generates payable work — its remaining
+    // eligible commissions must go through admin review, never a self-service payout.
+    const deletedOrgCommission = commissions.find(
+      (c) => c.organization?.status === 'deleted',
+    );
+    if (deletedOrgCommission) {
+      throw new BadRequestException(
+        `Commission ${deletedOrgCommission.id} belongs to a deleted organization and cannot be paid out`,
       );
     }
 

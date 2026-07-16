@@ -1531,6 +1531,45 @@ describe('ReferredCompaniesService', () => {
       });
     });
 
+    // --- deleted organization guard ---
+    it('confirm: rejected when the organization is deleted', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        ...makeOrgForConfirm('pending_confirmation'),
+        status: 'deleted',
+      });
+      await expect(
+        service.approveEligibility(
+          'org-1',
+          { reason: 'ok', backfill: true },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Cannot change eligibility of a deleted organization',
+        ),
+      );
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
+    it('block: rejected when the organization is deleted', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        ...makeOrgForBlock('pending_confirmation'),
+        status: 'deleted',
+      });
+      await expect(
+        service.blockEligibility(
+          'org-1',
+          { reason: 'block it', commissions_action: CommissionsAction.keep },
+          mockAdminUser,
+        ),
+      ).rejects.toThrow(
+        new BadRequestException(
+          'Cannot change eligibility of a deleted organization',
+        ),
+      );
+      expect(mockPrisma.organization.update).not.toHaveBeenCalled();
+    });
+
     // --- confirm ---
     it('confirm: allowed when status=pending_confirmation', async () => {
       mockPrisma.organization.findUnique.mockResolvedValueOnce(

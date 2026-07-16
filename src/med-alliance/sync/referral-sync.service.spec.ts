@@ -48,6 +48,25 @@ describe('ReferralSyncService', () => {
   afterEach(() => jest.clearAllMocks());
 
   // -------------------------------------------------------------------------
+  // Deleted organization — sync must be skipped entirely
+  // -------------------------------------------------------------------------
+  describe('deleted organization guard', () => {
+    it('should skip the whole pipeline when the organization is deleted', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValueOnce({
+        status: 'deleted',
+      });
+
+      const result = await service.run('org-1');
+
+      expect(result.phaseA.outcome).toBe('skipped_deleted');
+      expect(result.phaseB).toBeUndefined();
+      expect(mockHubspotMatching.run).not.toHaveBeenCalled();
+      expect(mockInvoiceIngestion.run).not.toHaveBeenCalled();
+      expect(mockCommissionDetection.run).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Phase A halt conditions
   // -------------------------------------------------------------------------
   describe('Phase A — halt conditions', () => {
@@ -208,6 +227,7 @@ describe('ReferralSyncService', () => {
     const result = await service.run('org-1');
 
     expect(result.phaseB).toBeUndefined();
-    expect(mockPrisma.organization.findUnique).not.toHaveBeenCalled();
+    // findUnique is called once for the deleted-status pre-check, but never for the Phase B reload
+    expect(mockPrisma.organization.findUnique).toHaveBeenCalledTimes(1);
   });
 });
