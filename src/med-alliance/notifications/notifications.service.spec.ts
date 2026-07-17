@@ -283,6 +283,38 @@ describe('AllianceNotificationsService', () => {
     });
   });
 
+  describe('notifyAdminInvoiceReassociated', () => {
+    it('sends email with the re-association subject and both company names', async () => {
+      await service.notifyAdminInvoiceReassociated({
+        invoiceHubspotId: '200',
+        invoiceNumber: 'INV-9',
+        oldOrganizationName: 'Old Org',
+        newOrganizationName: 'New Org',
+        oldAffiliateName: 'Xavier X',
+        newAffiliateName: 'Yara Y',
+      });
+
+      const call = mockMail.sendMail.mock.calls[0][0];
+      expect(call.to).toBe('paulo@regenta.ai');
+      expect(call.subject).toBe(
+        'Invoice re-associated to a different company — needs review',
+      );
+      expect(call.html).toContain('Old Org');
+      expect(call.html).toContain('New Org');
+    });
+
+    it('does not throw when mail fails', async () => {
+      mockMail.sendMail.mockRejectedValueOnce(new Error('SMTP down'));
+      await expect(
+        service.notifyAdminInvoiceReassociated({
+          invoiceHubspotId: '200',
+          oldOrganizationName: 'Old Org',
+          newOrganizationName: 'New Org',
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+
   describe('notifyAdminPartnerRegistered', () => {
     it('sends email with correct subject', async () => {
       await service.notifyAdminPartnerRegistered({

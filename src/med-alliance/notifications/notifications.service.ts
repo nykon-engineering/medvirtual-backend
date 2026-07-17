@@ -50,6 +50,10 @@ import {
   adminReferredOrgDeletedTemplate,
   AdminReferredOrgDeletedPayload,
 } from './templates/admin-referred-org-deleted';
+import {
+  adminInvoiceReassociatedTemplate,
+  AdminInvoiceReassociatedPayload,
+} from './templates/admin-invoice-reassociated';
 import { payoutProcessingTemplate } from './templates/payout-processing';
 import {
   adminMarkPaidErrorTemplate,
@@ -479,6 +483,56 @@ export class AllianceNotificationsService {
     } catch (err) {
       this.logger.error(
         'Failed to send admin referred org deleted notifications',
+        err,
+      );
+    }
+  }
+
+  async notifyAdminInvoiceReassociated(
+    payload: AdminInvoiceReassociatedPayload,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? (await this.defaultTheme());
+    try {
+      // This alert intentionally goes to a single dedicated recipient rather
+      // than the general Med Alliance admin list.
+      const adminEmails = ['paulo@regenta.ai'];
+      const fallbackSubject = `Invoice re-associated to a different company — needs review`;
+      const fallbackHtml = adminInvoiceReassociatedTemplate(
+        payload,
+        resolvedTheme,
+      );
+      const tpl = await this.getTplContent(
+        'alliance-admin-invoice-reassociated',
+        {
+          '{{invoiceHubspotId}}': payload.invoiceHubspotId,
+          '{{invoiceNumber}}': payload.invoiceNumber ?? '',
+          '{{oldOrganizationName}}': payload.oldOrganizationName,
+          '{{newOrganizationName}}': payload.newOrganizationName,
+          '{{oldAffiliateName}}': payload.oldAffiliateName ?? '',
+          '{{newAffiliateName}}': payload.newAffiliateName ?? '',
+          '{{pipelineUrl}}': `${process.env.FRONTEND_URL}/med-alliance/admin/companies-pipeline`,
+        },
+        resolvedTheme,
+      );
+      for (const email of adminEmails) {
+        try {
+          await this.mail.sendMail({
+            from: this.buildFrom(resolvedTheme),
+            to: email,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
+          });
+        } catch (err) {
+          this.logger.error(
+            `Failed to send admin invoice re-associated email to ${email}`,
+            err,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send admin invoice re-associated notifications',
         err,
       );
     }

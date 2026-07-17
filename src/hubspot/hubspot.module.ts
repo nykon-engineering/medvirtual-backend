@@ -63,6 +63,7 @@ import { HandlerContactMerge } from './handlers/contactMerge';
 import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
 import { OrgDeletionModule } from '../med-alliance/org-deletion/org-deletion.module';
+import { AllianceNotificationsModule } from '../med-alliance/notifications/notifications.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { HubspotAuditService } from './hubspot-audit.service';
 
@@ -122,6 +123,7 @@ import { HubspotAuditService } from './hubspot-audit.service';
     GoogledriveModule,
     MailModule,
     OrgDeletionModule,
+    AllianceNotificationsModule,
     forwardRef(() => CandidatesModule),
     forwardRef(() => OrganizationModule),
     forwardRef(() => HireRequestModule),
