@@ -682,7 +682,7 @@ export class CronService {
     );
     await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+      to: ['paulo@regenta.ai'],
       subject:
         tplQuarterly?.subject ?? `Quarterly Payout Report — ${quarterlyDate}`,
       html: quarterlyPayoutReport(successes, failures, runAt),
@@ -1111,7 +1111,7 @@ export class CronService {
         );
         await this.mailService.sendMail({
           from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+          to: ['paulo@regenta.ai'],
           subject:
             tplExpired?.subject ??
             `Med Alliance — Expired Eligibility Report (${runDate})`,

@@ -851,7 +851,7 @@ export class OrganizationService {
               where: {
                 email:
                   process.env.ENVIRONMENT === 'DEV'
-                    ? 'pauli@regenta.ai'
+                    ? 'paulo@regenta.ai'
                     : 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
                 role: 'system_super_admin',
                 status: 'active',

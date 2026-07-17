@@ -192,7 +192,7 @@ export class TalentPoolLeadsService {
       const assigneeEmail =
         process.env.NODE_ENV !== 'development'
           ? 'hanieh@medvirtual.ai'
-          : 'pauli@regenta.ai';
+          : 'paulo@regenta.ai';
 
       const assignee = await this.prisma.uSER.findUnique({
         where: { email: assigneeEmail },
@@ -326,7 +326,7 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
 
           let ownerEmail = '';
           if (process.env.ENVIRONMENT !== 'PROD') {
-            ownerEmail = 'pauli@regenta.ai';
+            ownerEmail = 'paulo@regenta.ai';
             //ownerEmail = 'elizabeth.veloso@legalsoft.com';
           } else {
             const isBerry = businessUnit === 'Berry Virtual';

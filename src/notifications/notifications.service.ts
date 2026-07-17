@@ -1943,11 +1943,11 @@ export class NotificationsService {
     // Always notify fixed email for Support tickets
     if (
       isSupportTicket &&
-      !filteredRecipients.some((r) => r.email === 'pauli@regenta.ai')
+      !filteredRecipients.some((r) => r.email === 'paulo@regenta.ai')
     ) {
       filteredRecipients = [
         ...filteredRecipients,
-        { email: 'pauli@regenta.ai', isSystemAdmin: true },
+        { email: 'paulo@regenta.ai', isSystemAdmin: true },
       ];
     }
 

@@ -2857,7 +2857,7 @@ describe('NotificationsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should add pauli@regenta.ai as fixed recipient for support tickets', async () => {
+    it('should add paulo@regenta.ai as fixed recipient for support tickets', async () => {
       mockPrismaService.uSER.findUnique
         .mockResolvedValueOnce({
           id: 'creator1',
@@ -2873,7 +2873,7 @@ describe('NotificationsService', () => {
       const calls = mockMailService.sendMail.mock.calls
         .map((c: any[]) => c[0].to)
         .flat();
-      expect(calls).toContain('pauli@regenta.ai');
+      expect(calls).toContain('paulo@regenta.ai');
     });
 
     it('should send notification for resolved event on support ticket to clients', async () => {
