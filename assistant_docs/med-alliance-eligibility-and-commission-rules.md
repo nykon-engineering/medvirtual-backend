@@ -398,9 +398,20 @@ Additionally the hook:
 | Per-affiliate detection | `cron/cron.service.ts` (`detectCommissionsByAffiliate()`) | Query adds `status: { not: 'deleted' }` |
 | Populate hard-delete | `organization/organization.service.ts` (`populateDbFromHubspot*`) | `deleteMany` excludes orgs with `referred_by_affiliate_id != null` (FK Restrict on commissions/snapshots/review cases would crash anyway; this also preserves referral history) |
 
-### Reactivation semantics
+### Reactivation / restore semantics
 
-`hubspot/handlers/organizationReactivation.ts` restores a deleted org to `inactive` when its business_unit changes back to a valid brand. Commissions voided by the deletion **stay voided** — there is no automatic un-void. They are identifiable by `reason: 'org_deleted'` in their audit trail, and an admin can restore them individually via the existing manual `unvoid` flow (`med-alliance/commissions/commissions.service.ts`, `unvoid()`).
+Two webhook paths bring a soft-deleted organization back, both **updating the existing row in place** (never recreating it — that would orphan the Med Alliance referral history attached to the current `id`):
+
+| Trigger | Handler | Result |
+|---------|---------|--------|
+| `business_unit` changed back to MedVirtual / Berry Virtual | `hubspot/handlers/organizationReactivation.ts` | `status = inactive`, `deletedAt = null`, `business_unit` updated |
+| `company.restore` webhook (company un-archived in HubSpot) | `hubspot/handlers/organizationRestore.ts` | `status = inactive`, `deletedAt = null`. Falls back to `HandlerOrganizationCreation` only when the company was never synced |
+
+> Before July 2026, `company.restore` was routed to `HandlerOrganizationCreation`, which threw `'Organization already exists on the database'` and left the org soft-deleted forever. `hubspot.service.ts` now routes it to the dedicated restore handler.
+
+Both paths land on `inactive`, not `active` — same rule as organization creation: a human (or a deal/staff event) must activate.
+
+Commissions voided by the deletion **stay voided** on either path — there is no automatic un-void. They are identifiable by `reason: 'org_deleted'` in their audit trail, and an admin can restore them individually via the existing manual `unvoid` flow (`med-alliance/commissions/commissions.service.ts`, `unvoid()`).
 
 ---
 

@@ -39,6 +39,7 @@ import { HandlerObjectMerge } from './handlers/objectMerge';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationRestore } from './handlers/organizationRestore';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
 import { HandlerOwnerDeletion } from './handlers/ownerDeletion';
@@ -88,6 +89,7 @@ export class HubspotService {
     private readonly organizationCreation: HandlerOrganizationCreation,
     private readonly organizationPropertyChange: HandlerOrganizationPropertyChange,
     private readonly organizationDeletion: HandlerOrganizationDeletion,
+    private readonly organizationRestore: HandlerOrganizationRestore,
     private readonly organizationMerge: HandlerOrganizationMerge,
     private readonly organizationAssociationChange: HandlerOrganizationAssociationChange,
     private readonly organizationUpdateService: OrganizationUpdateService,
@@ -356,8 +358,11 @@ export class HubspotService {
             break;
 
           case 'company.creation':
-          case 'company.restore':
             await this.organizationCreation.execute(event);
+            break;
+
+          case 'company.restore':
+            await this.organizationRestore.execute(event);
             break;
 
           case 'company.propertyChange':
