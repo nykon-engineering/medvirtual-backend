@@ -1278,6 +1278,7 @@ describe('ReferredCompaniesService', () => {
           med_alliance_referral_status: 'pending_confirmation',
           eligibility_start_at: existingStart,
           deployment_date: new Date('2026-01-15T00:00:00.000Z'),
+          referral_stage: 'deployed',
         })
         .mockResolvedValueOnce(makeAdminOrg({ med_alliance_referral_status: 'eligible' }));
       mockPrisma.organization.update.mockResolvedValue({});
@@ -1336,6 +1337,7 @@ describe('ReferredCompaniesService', () => {
           med_alliance_referral_status: 'pending_confirmation',
           eligibility_start_at: new Date('2026-02-01T00:00:00.000Z'),
           deployment_date: new Date('2026-01-15T00:00:00.000Z'),
+          referral_stage: 'deployed',
         })
         .mockResolvedValueOnce(makeAdminOrg({ med_alliance_referral_status: 'eligible' }));
       mockPrisma.organization.update.mockResolvedValue({});
@@ -1364,13 +1366,14 @@ describe('ReferredCompaniesService', () => {
       );
     });
 
-    it('should throw BadRequestException when confirming a company with no deployment_date', async () => {
+    it('should throw BadRequestException when confirming a company not in the deployed stage', async () => {
       mockPrisma.organization.findUnique.mockResolvedValueOnce({
         id: 'org-1',
         referred_by_affiliate_id: 'user-1',
         med_alliance_referral_status: 'pending_confirmation',
         eligibility_start_at: null,
         deployment_date: null,
+        referral_stage: 'in_negotiation',
       });
 
       await expect(
@@ -1385,6 +1388,41 @@ describe('ReferredCompaniesService', () => {
       expect(mockPrisma.organization.update).not.toHaveBeenCalled();
     });
 
+    it('should confirm eligibility for a deployed company with no deployment_date', async () => {
+      const existingStart = new Date('2026-02-01T00:00:00.000Z');
+      mockPrisma.organization.findUnique
+        .mockResolvedValueOnce({
+          id: 'org-1',
+          referred_by_affiliate_id: 'user-1',
+          med_alliance_referral_status: 'pending_confirmation',
+          eligibility_start_at: existingStart,
+          deployment_date: null,
+          referral_stage: 'deployed',
+        })
+        .mockResolvedValueOnce(
+          makeAdminOrg({ med_alliance_referral_status: 'eligible' }),
+        );
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([]);
+      mockPrisma.medAllianceAuditLog.create.mockResolvedValue({});
+
+      await service.approveEligibility(
+        'org-1',
+        { reason: 'Deployed via first paid invoice', backfill: true },
+        mockAdminUser,
+      );
+
+      expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'org-1' },
+          data: expect.objectContaining({
+            med_alliance_referral_status: 'eligible',
+            eligibility_start_at: existingStart,
+          }),
+        }),
+      );
+    });
+
     it('should throw BadRequestException when confirming a company with a future deployment_date', async () => {
       const futureDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
       mockPrisma.organization.findUnique.mockResolvedValueOnce({
@@ -1393,6 +1431,7 @@ describe('ReferredCompaniesService', () => {
         med_alliance_referral_status: 'pending_confirmation',
         eligibility_start_at: null,
         deployment_date: futureDate,
+        referral_stage: 'deployed',
       });
 
       await expect(
@@ -1513,6 +1552,7 @@ describe('ReferredCompaniesService', () => {
       med_alliance_referral_status: status,
       eligibility_start_at: null,
       deployment_date: pastDeploymentDate,
+      referral_stage: 'deployed',
     });
 
     const makeOrgForBlock = (status: string) => ({
