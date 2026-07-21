@@ -4,6 +4,7 @@ import { OrganizationStatus } from '@prisma/client';
 import { HandlerOrganizationRestore } from './organizationRestore';
 import { HandlerOrganizationCreation } from './organizationCreation';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrgDeletionService } from '../../med-alliance/org-deletion/org-deletion.service';
 
 const prismaMock = {
   organization: {
@@ -14,6 +15,10 @@ const prismaMock = {
 
 const organizationCreationMock = {
   execute: jest.fn(),
+};
+
+const orgDeletionMock = {
+  onOrganizationRestored: jest.fn(),
 };
 
 describe('HandlerOrganizationRestore', () => {
@@ -27,6 +32,10 @@ describe('HandlerOrganizationRestore', () => {
         {
           provide: HandlerOrganizationCreation,
           useValue: organizationCreationMock,
+        },
+        {
+          provide: OrgDeletionService,
+          useValue: orgDeletionMock,
         },
       ],
     }).compile();
@@ -56,6 +65,7 @@ describe('HandlerOrganizationRestore', () => {
       },
     });
     expect(organizationCreationMock.execute).not.toHaveBeenCalled();
+    expect(orgDeletionMock.onOrganizationRestored).toHaveBeenCalledWith('org-1');
   });
 
   it('should delegate to the creation handler when the organization was never synced', async () => {
@@ -80,6 +90,7 @@ describe('HandlerOrganizationRestore', () => {
 
     expect(prismaMock.organization.update).not.toHaveBeenCalled();
     expect(organizationCreationMock.execute).not.toHaveBeenCalled();
+    expect(orgDeletionMock.onOrganizationRestored).not.toHaveBeenCalled();
   });
 
   it('should be a no-op when the organization is inactive', async () => {
@@ -91,6 +102,7 @@ describe('HandlerOrganizationRestore', () => {
     await handler.execute({ objectId: 1 });
 
     expect(prismaMock.organization.update).not.toHaveBeenCalled();
+    expect(orgDeletionMock.onOrganizationRestored).not.toHaveBeenCalled();
   });
 
   it('should wrap update failures as BadRequestException', async () => {

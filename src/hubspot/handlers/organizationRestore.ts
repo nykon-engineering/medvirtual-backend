@@ -2,12 +2,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrganizationStatus } from '@prisma/client';
 import { HandlerOrganizationCreation } from './organizationCreation';
+import { OrgDeletionService } from '../../med-alliance/org-deletion/org-deletion.service';
 
 @Injectable()
 export class HandlerOrganizationRestore {
   constructor(
     private readonly prisma: PrismaService,
     private readonly organizationCreation: HandlerOrganizationCreation,
+    private readonly orgDeletion: OrgDeletionService,
   ) {}
 
   /**
@@ -46,6 +48,10 @@ export class HandlerOrganizationRestore {
           deletedAt: null,
         },
       });
+
+      // Med Alliance side effects: write audit trail and notify admins so the
+      // commissions voided on deletion can be reviewed. No-op for non-referred orgs.
+      await this.orgDeletion.onOrganizationRestored(organization.id);
     } catch (error) {
       throw new BadRequestException('Error restoring organization', error);
     }

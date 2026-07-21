@@ -94,6 +94,63 @@ export class OrgDeletionService {
     );
   }
 
+  /**
+   * Med Alliance side effects when a previously deleted Organization is restored
+   * (HubSpot company.restore webhook).
+   *
+   * - Writes an org-level audit log entry and notifies admins so they can review
+   *   the restored org — including commissions that were voided on deletion,
+   *   which are unvoided manually through the admin flow, not automatically here.
+   *
+   * No-op for organizations that were never referred by an affiliate.
+   */
+  async onOrganizationRestored(organizationId: string): Promise<void> {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        id: true,
+        name: true,
+        referred_by_affiliate_id: true,
+        referredByAffiliate: {
+          select: { email: true, first_name: true, last_name: true },
+        },
+      },
+    });
+
+    if (!org?.referred_by_affiliate_id) return;
+
+    await this.prisma.medAllianceAuditLog.create({
+      data: {
+        entity_type: 'referred_company',
+        entity_id: org.id,
+        event: 'organization_restored',
+        old_status: null,
+        new_status: null,
+        reason: 'organization restored in HubSpot',
+        source: 'sync',
+        actor_user_id: null,
+      },
+    });
+
+    const affiliateName = org.referredByAffiliate
+      ? `${org.referredByAffiliate.first_name} ${org.referredByAffiliate.last_name}`.trim()
+      : 'Unknown affiliate';
+
+    try {
+      await this.allianceNotifications.notifyAdminReferredOrgRestored({
+        organizationName: org.name,
+        affiliateName,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to notify admins about restored referred org ${org.id}`,
+        err,
+      );
+    }
+
+    this.logger.log(`Med Alliance restore hook completed for org ${org.id}`);
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------

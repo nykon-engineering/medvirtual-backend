@@ -20,6 +20,7 @@ const mockReviewCases = {
 
 const mockAllianceNotifications = {
   notifyAdminReferredOrgDeleted: jest.fn(),
+  notifyAdminReferredOrgRestored: jest.fn(),
 };
 
 // ---------------------------------------------------------------------------
@@ -70,6 +71,9 @@ describe('OrgDeletionService', () => {
     mockPrisma.medAllianceAuditLog.createMany.mockResolvedValue({ count: 0 });
     mockReviewCases.openOrSkip.mockResolvedValue({ opened: true });
     mockAllianceNotifications.notifyAdminReferredOrgDeleted.mockResolvedValue(
+      undefined,
+    );
+    mockAllianceNotifications.notifyAdminReferredOrgRestored.mockResolvedValue(
       undefined,
     );
   });
@@ -244,5 +248,80 @@ describe('OrgDeletionService', () => {
     );
 
     await expect(service.onOrganizationDeleted('org-1')).resolves.not.toThrow();
+  });
+
+  describe('onOrganizationRestored', () => {
+    it('should be a no-op for an organization that was not referred by an affiliate', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ referred_by_affiliate_id: null, referredByAffiliate: null }),
+      );
+
+      await service.onOrganizationRestored('org-1');
+
+      expect(mockPrisma.medAllianceAuditLog.create).not.toHaveBeenCalled();
+      expect(
+        mockAllianceNotifications.notifyAdminReferredOrgRestored,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should be a no-op when the organization does not exist', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(null);
+
+      await service.onOrganizationRestored('org-x');
+
+      expect(
+        mockAllianceNotifications.notifyAdminReferredOrgRestored,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should write an audit log entry and notify admins for a referred org', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+
+      await service.onOrganizationRestored('org-1');
+
+      expect(mockPrisma.medAllianceAuditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            entity_type: 'referred_company',
+            entity_id: 'org-1',
+            event: 'organization_restored',
+            source: 'sync',
+          }),
+        }),
+      );
+      expect(
+        mockAllianceNotifications.notifyAdminReferredOrgRestored,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationName: 'Acme Corp',
+          affiliateName: 'Jane Partner',
+        }),
+      );
+    });
+
+    it('should fall back to "Unknown affiliate" when the referring user record is missing', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(
+        makeOrg({ referredByAffiliate: null }),
+      );
+
+      await service.onOrganizationRestored('org-1');
+
+      expect(
+        mockAllianceNotifications.notifyAdminReferredOrgRestored,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({ affiliateName: 'Unknown affiliate' }),
+      );
+    });
+
+    it('should never throw when notification sending fails', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockAllianceNotifications.notifyAdminReferredOrgRestored.mockRejectedValue(
+        new Error('smtp down'),
+      );
+
+      await expect(
+        service.onOrganizationRestored('org-1'),
+      ).resolves.not.toThrow();
+    });
   });
 });

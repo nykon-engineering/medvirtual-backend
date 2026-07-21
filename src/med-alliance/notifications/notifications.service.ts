@@ -51,6 +51,10 @@ import {
   AdminReferredOrgDeletedPayload,
 } from './templates/admin-referred-org-deleted';
 import {
+  adminReferredOrgRestoredTemplate,
+  AdminReferredOrgRestoredPayload,
+} from './templates/admin-referred-org-restored';
+import {
   adminInvoiceReassociatedTemplate,
   AdminInvoiceReassociatedPayload,
 } from './templates/admin-invoice-reassociated';
@@ -483,6 +487,50 @@ export class AllianceNotificationsService {
     } catch (err) {
       this.logger.error(
         'Failed to send admin referred org deleted notifications',
+        err,
+      );
+    }
+  }
+
+  async notifyAdminReferredOrgRestored(
+    payload: AdminReferredOrgRestoredPayload,
+    theme?: EmailTheme,
+  ): Promise<void> {
+    const resolvedTheme = theme ?? (await this.defaultTheme());
+    try {
+      const adminEmails = this.getAdminEmails();
+      const fallbackSubject = `Referred company restored in HubSpot — ${payload.organizationName}`;
+      const fallbackHtml = adminReferredOrgRestoredTemplate(
+        payload,
+        resolvedTheme,
+      );
+      const tpl = await this.getTplContent(
+        'alliance-admin-referred-org-restored',
+        {
+          '{{organizationName}}': payload.organizationName,
+          '{{affiliateName}}': payload.affiliateName,
+          '{{pipelineUrl}}': `${process.env.FRONTEND_URL}/med-alliance/admin/companies-pipeline`,
+        },
+        resolvedTheme,
+      );
+      for (const email of adminEmails) {
+        try {
+          await this.mail.sendMail({
+            from: this.buildFrom(resolvedTheme),
+            to: email,
+            subject: tpl?.subject ?? fallbackSubject,
+            html: tpl?.html ?? fallbackHtml,
+          });
+        } catch (err) {
+          this.logger.error(
+            `Failed to send admin referred org restored email to ${email}`,
+            err,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to send admin referred org restored notifications',
         err,
       );
     }
