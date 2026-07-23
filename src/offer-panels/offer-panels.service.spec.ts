@@ -10,6 +10,7 @@ import { CandidatesService } from '../candidate/candidates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,6 +135,16 @@ const mockHireRequestService = {
   ]),
 };
 
+const businessUnitContextMock = {
+  getVisibleHubspotValues: jest.fn(),
+  isAllowedHubspotValue: jest.fn(),
+  resolveByHubspotValue: jest.fn(),
+  poolFor: jest.fn(),
+  displayToSlug: jest.fn(),
+  normalizeBusinessUnit: jest.fn(),
+  bustCache: jest.fn(),
+};
+
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
@@ -152,10 +163,18 @@ describe('OfferPanelsService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: HireRequestService, useValue: mockHireRequestService },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
       ],
     }).compile();
 
     service = module.get<OfferPanelsService>(OfferPanelsService);
+
+    businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(true);
+    businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+      'MedVirtual',
+      'Berry Virtual',
+      'MMVA',
+    ]);
   });
 
   // -------------------------------------------------------------------------
@@ -363,6 +382,37 @@ describe('OfferPanelsService', () => {
 
       expect(result).toHaveLength(1);
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('accepts a visible business_unit (validated against BusinessUnitContext)', async () => {
+      businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(true);
+
+      await service.create(validDto, adminUser);
+
+      expect(businessUnitContextMock.isAllowedHubspotValue).toHaveBeenCalledWith(
+        'MedVirtual',
+      );
+    });
+
+    it('rejects a non-visible/unknown business_unit with BadRequestException', async () => {
+      businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(false);
+      const dto = { ...validDto, business_unit: 'SomeDormantBU' };
+
+      await expect(service.create(dto, adminUser)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('accepts a newly-visible BU like MMVA once it is in the visible set', async () => {
+      businessUnitContextMock.isAllowedHubspotValue.mockImplementation(
+        async (v: string) => v === 'MMVA',
+      );
+      const dto = { ...validDto, business_unit: 'MMVA' };
+
+      const result = await service.create(dto, adminUser);
+
+      expect(result).toHaveLength(1);
     });
 
     it('throws BadRequestException when a candidateId does not exist', async () => {
@@ -1260,6 +1310,39 @@ describe('OfferPanelsService', () => {
       const [payload] =
         mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
       expect(payload.hubspot_role_type).toBeNull();
+    });
+
+    it('uses the resolved org business_unit (not a hardcoded literal) in the HubSpot payload', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        name: 'MMVA Clinic',
+        hubspot_id: 'hs-org-2',
+        business_unit: 'MMVA',
+        website_url: 'https://mmva.example.com',
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const lastCallIndex =
+        mockHubspotService.createHireRequestInHubspot.mock.calls.length - 1;
+      const [payload] =
+        mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
+      expect(payload.organization.business_unit).toBe('MMVA');
+    });
+
+    it('does not hardcode "MedVirtual" when the organization lookup returns null', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(null);
+
+      await service.acceptByClientUser('panel-1', client);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const lastCallIndex =
+        mockHubspotService.createHireRequestInHubspot.mock.calls.length - 1;
+      const [payload] =
+        mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
+      expect(payload.organization.business_unit).toBeNull();
     });
   });
 

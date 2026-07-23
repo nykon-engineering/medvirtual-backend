@@ -18,6 +18,9 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
   },
+  emailBranding: {
+    findUnique: jest.fn().mockResolvedValue(null),
+  },
 };
 
 const mockMailService = { sendMail: jest.fn() };
@@ -284,6 +287,51 @@ describe('HubspotMatchingService', () => {
         }),
         expect.anything(),
       );
+    });
+
+    it('resolves the admin-review email theme from the DB EmailBranding row (medvirtual) instead of the hardcoded switch', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockedAxios.post.mockResolvedValue(
+        hubspotSearchResponse([{ id: 'hs-1' }, { id: 'hs-2' }]),
+      );
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockMailService.sendMail.mockResolvedValue(true);
+      mockPrisma.emailBranding.findUnique.mockResolvedValue({
+        business_unit: 'medvirtual',
+        primary_color: '#123456',
+        secondary_color: '#654321',
+        company_name: 'MedVirtual DB Branding',
+        logo_url: 'https://db.example.com/logo.png',
+        button_color: '#111111',
+        button_text_color: '#ffffff',
+        layout_preset: 'custom',
+      });
+
+      await service.run('org-1');
+
+      expect(mockPrisma.emailBranding.findUnique).toHaveBeenCalledWith({
+        where: { business_unit: 'medvirtual' },
+      });
+      const [, , theme] = mockEmailTemplates.getTemplateContent.mock.calls[0];
+      expect(theme.companyName).toBe('MedVirtual DB Branding');
+      expect(theme.primaryColor).toBe('#123456');
+      expect(theme.logoUrl).toBe('https://db.example.com/logo.png');
+    });
+
+    it('falls back to the hardcoded MedVirtual theme when no EmailBranding row exists', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(makeOrg());
+      mockedAxios.post.mockResolvedValue(
+        hubspotSearchResponse([{ id: 'hs-1' }, { id: 'hs-2' }]),
+      );
+      mockPrisma.organization.update.mockResolvedValue({});
+      mockMailService.sendMail.mockResolvedValue(true);
+      mockPrisma.emailBranding.findUnique.mockResolvedValue(null);
+
+      await service.run('org-1');
+
+      const [, , theme] = mockEmailTemplates.getTemplateContent.mock.calls[0];
+      expect(theme.companyName).toBe('MedVirtual');
+      expect(theme.primaryColor).toBe('#01546B');
     });
 
     it('should use the template subject/html when the template exists', async () => {

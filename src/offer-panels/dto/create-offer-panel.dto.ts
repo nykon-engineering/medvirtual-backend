@@ -3,7 +3,6 @@ import {
   IsArray,
   IsEmail,
   IsEnum,
-  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -48,14 +47,21 @@ export class CreateOfferPanelDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ enum: ['MedVirtual', 'Berry Virtual'] })
+  @ApiProperty({
+    example: 'MedVirtual',
+    description:
+      'Business unit hubspot_value. Must match one of the currently visible ' +
+      'business units (validated against BusinessUnitContext at the service ' +
+      'layer, since the visible set is data-driven and can grow without a ' +
+      'code change).',
+  })
   @Transform(({ value }) => {
     if (typeof value !== 'string') return value;
     const normalized = value.trim();
     if (normalized === 'BerryVirtual') return 'Berry Virtual';
     return normalized;
   })
-  @IsIn(['MedVirtual', 'Berry Virtual'])
+  @IsString()
   business_unit: string;
 
   @ApiProperty({ type: [RecipientDto], minItems: 1 })

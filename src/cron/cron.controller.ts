@@ -336,4 +336,50 @@ export class CronController {
       data: result,
     };
   }
+
+  @Get('sync-business-units')
+  @ApiOperation({
+    summary: 'Daily HubSpot Business Unit intake (upsert new + reconcile removed)',
+    description:
+      'Triggered daily by the external scheduler (same mechanism as the other ' +
+      '`/cron/*` endpoints — this backend runs on Lambda, so no in-process cron). ' +
+      'Reads HubSpot `GET /crm/v3/properties/companies/business_unit` for the ' +
+      'current list of option labels, then:\n\n' +
+      '1. **Upsert (additions):** every option label is upserted into ' +
+      '`BusinessUnit` by derived slug — new labels always land as dormant ' +
+      '(`is_visible=false`, `candidate_pool="medical"`); an existing row only ' +
+      'has its `hubspot_value` refreshed to the current label spelling, ' +
+      '`is_visible` is never touched by the upsert step.\n' +
+      '2. **Reconcile (removals) — with safeguard:** any BusinessUnit whose ' +
+      '`hubspot_value` is no longer present in the HubSpot options is set ' +
+      '`is_visible=false` and every related Organization/USER/Candidate/' +
+      'AffiliateProfile is cascade soft-deleted, tagged `deactivated_by_bu=<slug>` ' +
+      'so a later re-activation (`PUT /business-units/:slug` with ' +
+      '`is_visible:true`) restores exactly that set. This step ONLY runs when ' +
+      'the HubSpot read returned HTTP 200 with a non-empty `options` array — ' +
+      'any error, timeout, non-200, or empty/malformed response aborts the ' +
+      'reconcile (upserts from step 1 still apply) and logs the abort reason, ' +
+      'so a transient HubSpot outage can never cascade-delete data.\n\n' +
+      'Idempotent — re-running with an unchanged HubSpot options list creates ' +
+      'no duplicates and changes nothing. Never hard-deletes a BusinessUnit row.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Sync completed. `data.upserted` — slugs upserted this run (new + refreshed). ' +
+      '`data.removed` — slugs decommissioned this run (empty if the reconcile step ' +
+      'was aborted). `data.aborted` — true if the reconcile step was skipped due to ' +
+      'a bad/empty HubSpot read (upserts still applied in that case). ' +
+      '`data.reason` — present only when aborted, explains why.',
+  })
+  async syncBusinessUnits() {
+    const result = await this.cron.syncBusinessUnits();
+    return {
+      status: 200,
+      message: result.aborted
+        ? 'Business unit sync completed — reconcile step aborted (bad/empty HubSpot read), upserts only'
+        : 'Business unit sync completed',
+      data: result,
+    };
+  }
 }

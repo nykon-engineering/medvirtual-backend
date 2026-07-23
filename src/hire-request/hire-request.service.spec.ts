@@ -161,6 +161,7 @@ describe('HireRequestService', () => {
       billcom_pending_session_id: null,
       billcom_remember_me_id: null,
       billcom_device: null,
+      deactivated_by_bu: null,
     } ;
   });
 

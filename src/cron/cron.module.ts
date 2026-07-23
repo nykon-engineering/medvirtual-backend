@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { CronController } from './cron.controller';
 import { CronService } from './cron.service';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -11,6 +11,7 @@ import { PayoutRequestsModule } from '../med-alliance/payout-requests/payout-req
 import { SyncModule } from '../med-alliance/sync/sync.module';
 import { AllianceNotificationsModule } from '../med-alliance/notifications/notifications.module';
 import { EmailTemplatesModule } from '../email-templates/email-templates.module';
+import { BusinessUnitsModule } from '../business-units/business-units.module';
 
 @Module({
   controllers: [CronController],
@@ -26,6 +27,7 @@ import { EmailTemplatesModule } from '../email-templates/email-templates.module'
     SyncModule,
     AllianceNotificationsModule,
     EmailTemplatesModule,
+    forwardRef(() => BusinessUnitsModule),
   ],
 })
 export class CronModule {}

@@ -47,6 +47,9 @@ import { RemoveCandidateAndCancelDto } from './dto/remove-candidate-and-cancel.d
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+
+const NON_MEDICAL_POOL = 'non_medical';
 
 const VA_SCORECARD_FIELDS = new Set([
   'active_listening_and_comprehension_demonstrated',
@@ -105,7 +108,38 @@ export class CandidatesService {
     private readonly hireRequest: HireRequestService,
     private readonly notifications: NotificationsService,
     private readonly positionRateConfigService: PositionRateConfigService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
+
+  /**
+   * Resolves the candidate-visibility restriction for a given business unit
+   * (identified by its hubspot_value, e.g. "MedVirtual", "Berry Virtual", "MMVA").
+   *
+   * Preserves today's behavior exactly:
+   * - `non_medical` pool (Berry today) → restrict to the hubspot_values of every
+   *   visible BU that shares the non_medical pool.
+   * - any other pool (or unknown BU) → no restriction (see all candidates).
+   *   This is what keeps MedVirtual AND MMVA seeing everything.
+   */
+  private async getBusinessUnitFilterValues(
+    businessUnitHubspotValue?: string | null,
+  ): Promise<string[] | undefined> {
+    if (!businessUnitHubspotValue) return undefined;
+
+    const pool = await this.businessUnitContext.poolFor(
+      businessUnitHubspotValue,
+    );
+    if (pool !== NON_MEDICAL_POOL) return undefined;
+
+    const visibleValues =
+      await this.businessUnitContext.getVisibleHubspotValues();
+    const nonMedicalValues: string[] = [];
+    for (const value of visibleValues) {
+      const valuePool = await this.businessUnitContext.poolFor(value);
+      if (valuePool === NON_MEDICAL_POOL) nonMedicalValues.push(value);
+    }
+    return nonMedicalValues.length > 0 ? nonMedicalValues : undefined;
+  }
 
   async findAll(
     user: USER,
@@ -154,6 +188,14 @@ export class CandidatesService {
         },
       });
     }
+
+    // Pool-based candidate visibility (preserves today's behavior exactly):
+    // non_medical BUs (Berry today) are restricted to non_medical BUs' hubspot
+    // values; every other BU (MedVirtual, MMVA, future medical BUs) sees all
+    // candidates — i.e. no business_unit filter is applied.
+    const businessUnitFilterValues = await this.getBusinessUnitFilterValues(
+      loggedCompany?.business_unit,
+    );
 
     const { organization_id } = user;
 
@@ -331,10 +373,9 @@ export class CandidatesService {
             : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
-          business_unit:
-            loggedCompany?.business_unit == 'Berry Virtual'
-              ? 'Berry Virtual'
-              : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -365,10 +406,9 @@ export class CandidatesService {
             : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
-          business_unit:
-            loggedCompany?.business_unit == 'Berry Virtual'
-              ? 'Berry Virtual'
-              : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -399,10 +439,9 @@ export class CandidatesService {
             : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
-          business_unit:
-            loggedCompany?.business_unit == 'Berry Virtual'
-              ? 'Berry Virtual'
-              : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -433,10 +472,9 @@ export class CandidatesService {
             : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
-          business_unit:
-            loggedCompany?.business_unit == 'Berry Virtual'
-              ? 'Berry Virtual'
-              : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -2556,6 +2594,13 @@ export class CandidatesService {
   }
 
   async getRandomTalentPoolCandidates(business_unit: string): Promise<any> {
+    // Pool-based candidate visibility (preserves today's behavior exactly):
+    // non_medical BUs (Berry today) are restricted to non_medical BUs'
+    // hubspot values; every other BU (MedVirtual, MMVA, future medical BUs)
+    // sees all candidates — i.e. no business_unit filter is applied.
+    const businessUnitFilterValues =
+      await this.getBusinessUnitFilterValues(business_unit);
+
     // Base filter for "available" candidates in talent pool
     const pipelineStatusFilter = {
       pipeline_status: {
@@ -2580,8 +2625,9 @@ export class CandidatesService {
           },
         },
         {
-          business_unit:
-            business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
         },
         {
           // Solo candidatos disponibles
@@ -2595,8 +2641,9 @@ export class CandidatesService {
       AND: [
         { ...pipelineStatusFilter },
         {
-          business_unit:
-            business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
         },
       ],
     };

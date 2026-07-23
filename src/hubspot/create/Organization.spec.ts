@@ -3,6 +3,7 @@ import axios from 'axios';
 import { OrganizationCreationService } from './Organization';
 import { PrismaService } from '../../prisma/prisma.service';
 import { HubspotAuditService } from '../hubspot-audit.service';
+import { BusinessUnitContext } from '../../business-units/business-unit-context.service';
 import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from '@prisma/client';
 
 jest.mock('axios');
@@ -14,6 +15,35 @@ const prismaMock = {
   organization: { update: jest.fn() },
 };
 const auditMock = { log: jest.fn() };
+
+/**
+ * Minimal visible-BU table for `resolveByHubspotValue` — mirrors the real
+ * `BusinessUnitContext` normalization (trim/lowercase/strip-spaces) without
+ * touching Prisma. Covers Med, Berry, and a 3rd BU (MMVA) so the outbound
+ * normalization is proven data-driven, not a 2-BU special case.
+ */
+const BU_ROWS = [
+  { hubspot_value: 'MedVirtual', name: 'Med Virtual', slug: 'medvirtual' },
+  { hubspot_value: 'Berry Virtual', name: 'Berry Virtual', slug: 'berryvirtual' },
+  { hubspot_value: 'MMVA', name: 'My Medical VA', slug: 'mmva' },
+];
+const normalize = (v?: string | null) =>
+  (v ?? '').trim().toLowerCase().replace(/\s+/g, '');
+
+const businessUnitContextMock = {
+  resolveByHubspotValue: jest.fn(async (v: string) => {
+    const target = normalize(v);
+    if (!target) return null;
+    return (
+      BU_ROWS.find(
+        (row) =>
+          normalize(row.hubspot_value) === target ||
+          normalize(row.name) === target ||
+          normalize(row.slug) === target,
+      ) ?? null
+    );
+  }),
+};
 
 const baseData = {
   id: 'org-uuid-001',
@@ -42,6 +72,7 @@ describe('OrganizationCreationService', () => {
         OrganizationCreationService,
         { provide: PrismaService, useValue: prismaMock },
         { provide: HubspotAuditService, useValue: auditMock },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
       ],
     }).compile();
 
@@ -169,6 +200,94 @@ describe('OrganizationCreationService', () => {
       expect(auditMock.log).toHaveBeenCalledWith(
         expect.objectContaining({ source: HubspotAuditSource.cron }),
       );
+    });
+  });
+
+  // ── Outbound business_unit normalization (data-driven, any BU) ──────────────
+  //
+  // Regression: the old hardcoded rule was `data.business_unit === 'Med Virtual'
+  // ? 'MedVirtual' : data.business_unit || ''`. These cases prove the new
+  // BusinessUnitContext-backed resolver reproduces that exact behavior for
+  // Med/Berry while ALSO correctly normalizing a 3rd BU (MMVA) with no new
+  // hardcoded branch.
+
+  describe('outbound business_unit normalization', () => {
+    beforeEach(() => {
+      mockedAxios.post.mockResolvedValueOnce({ data: { id: 'hs-company-999' } });
+      prismaMock.organization.update.mockResolvedValueOnce({});
+    });
+
+    it('normalizes "Med Virtual" to "MedVirtual" (regression — old hardcoded rule)', async () => {
+      await service.execute({ ...baseData, business_unit: 'Med Virtual' });
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('MedVirtual');
+    });
+
+    it('passes "MedVirtual" through unchanged (regression)', async () => {
+      await service.execute({ ...baseData, business_unit: 'MedVirtual' });
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('MedVirtual');
+    });
+
+    it('passes "Berry Virtual" through unchanged (regression)', async () => {
+      await service.execute({ ...baseData, business_unit: 'Berry Virtual' });
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('Berry Virtual');
+    });
+
+    it('normalizes "BerryVirtual" (no space) to the canonical "Berry Virtual" hubspot_value', async () => {
+      await service.execute({ ...baseData, business_unit: 'BerryVirtual' });
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('Berry Virtual');
+    });
+
+    it('resolves a 3rd BU (MMVA) to its own hubspot_value — no code change needed', async () => {
+      await service.execute({ ...baseData, business_unit: 'MMVA' });
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('MMVA');
+    });
+
+    it('resolves "My Medical VA" (display name) to the MMVA hubspot_value', async () => {
+      await service.execute({ ...baseData, business_unit: 'My Medical VA' });
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('MMVA');
+    });
+
+    it('falls back to the raw input for an unrecognized business_unit (non-destructive)', async () => {
+      await service.execute({ ...baseData, business_unit: 'SomeFutureBU' });
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('SomeFutureBU');
+    });
+
+    it('sends an empty string when business_unit is missing (regression)', async () => {
+      const { business_unit: _omit, ...withoutBu } = baseData;
+      await service.execute(withoutBu);
+
+      const payload = mockedAxios.post.mock.calls[0][1] as {
+        properties: { business_unit: string };
+      };
+      expect(payload.properties.business_unit).toBe('');
     });
   });
 });

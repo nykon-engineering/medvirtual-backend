@@ -49,6 +49,7 @@ import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { SqsService } from '../sqs/sqs.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { ContactService } from '../contacts/contacts.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 @Injectable()
 export class OrganizationService {
@@ -65,7 +66,32 @@ export class OrganizationService {
 
     private readonly sqs: SqsService,
     private readonly contactService: ContactService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
+
+  /**
+   * Builds one HubSpot filterGroup per currently-visible business unit,
+   * each carrying a `business_unit EQ <value>` filter plus any shared
+   * `extraFilters` (e.g. num_associated_deals/hs_object_id). Replaces the
+   * old two-literal (MedVirtual/Berry Virtual) filterGroups so a newly
+   * visible BU (e.g. MMVA) is included automatically and nothing
+   * unrecognized is silently swept up.
+   */
+  private async buildBusinessUnitFilterGroups(
+    extraFilters: Array<{ propertyName: string; operator: string; value: string }> = [],
+  ): Promise<
+    Array<{
+      filters: Array<{ propertyName: string; operator: string; value: string }>;
+    }>
+  > {
+    const visibleValues = await this.businessUnitContext.getVisibleHubspotValues();
+    return visibleValues.map((value) => ({
+      filters: [
+        { propertyName: 'business_unit', operator: 'EQ', value },
+        ...extraFilters,
+      ],
+    }));
+  }
 
   async delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -191,49 +217,15 @@ export class OrganizationService {
     let objectOrganization;
 
     try {
+      const filterGroups = await this.buildBusinessUnitFilterGroups([
+        { propertyName: 'num_associated_deals', operator: 'GT', value: '0' },
+        { propertyName: 'hs_object_id', operator: 'EQ', value: '8304831771' },
+      ]);
+
       const result = await axios.post(
         'https://api.hubapi.com/crm/v3/objects/companies/search',
         {
-          filterGroups: [
-            {
-              filters: [
-                {
-                  propertyName: 'business_unit',
-                  operator: 'EQ',
-                  value: 'MedVirtual',
-                },
-                {
-                  propertyName: 'num_associated_deals',
-                  operator: 'GT',
-                  value: '0',
-                },
-                {
-                  propertyName: 'hs_object_id',
-                  operator: 'EQ',
-                  value: '8304831771',
-                },
-              ],
-            },
-            {
-              filters: [
-                {
-                  propertyName: 'business_unit',
-                  operator: 'EQ',
-                  value: 'Berry Virtual',
-                },
-                {
-                  propertyName: 'num_associated_deals',
-                  operator: 'GT',
-                  value: '0',
-                },
-                {
-                  propertyName: 'hs_object_id',
-                  operator: 'EQ',
-                  value: '8304831771',
-                },
-              ],
-            },
-          ],
+          filterGroups,
           properties: [
             'agent_status',
             //'business_unit',
@@ -2316,29 +2308,12 @@ export class OrganizationService {
   }
 
   async populateDbFromHubspotX(): Promise<any> {
+    const filterGroups = await this.buildBusinessUnitFilterGroups();
+
     const result = await axios.post(
       'https://api.hubapi.com/crm/v3/objects/companies/search',
       {
-        filterGroups: [
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'MedVirtual',
-              },
-            ],
-          },
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'Berry Virtual',
-              },
-            ],
-          },
-        ],
+        filterGroups,
         properties: [
           'agent_status',
           'business_unit',
@@ -2394,29 +2369,14 @@ export class OrganizationService {
     let after: string | undefined = undefined;
     const allOrganizations: any[] = [];
 
+    // filterGroups are derived once from the currently-visible BUs and reused
+    // across every page — visibility isn't expected to flip mid-pagination.
+    const filterGroups = await this.buildBusinessUnitFilterGroups();
+
     // 1. Buscar todos os registros com paginação
     while (hasMore) {
       const body: any = {
-        filterGroups: [
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'MedVirtual',
-              },
-            ],
-          },
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'Berry Virtual',
-              },
-            ],
-          },
-        ],
+        filterGroups,
         properties: [
           'agent_status',
           'business_unit',

@@ -7,6 +7,7 @@ import { CandidatesModule } from '../candidate/candidates.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { HubspotModule } from '../hubspot/hubspot.module';
 import { HireRequestModule } from '../hire-request/hire-request.module';
+import { BusinessUnitsModule } from '../business-units/business-units.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
     NotificationsModule,
     forwardRef(() => HubspotModule),
     forwardRef(() => HireRequestModule),
+    BusinessUnitsModule,
   ],
   controllers: [OfferPanelsController, PublicOfferPanelsController],
   providers: [OfferPanelsService],

@@ -77,8 +77,10 @@ export class OfferPanelsController {
   @ApiQuery({
     name: 'business_unit',
     required: true,
-    enum: ['MedVirtual', 'Berry Virtual'],
-    description: 'Business unit to filter results',
+    type: String,
+    description:
+      'Business unit hubspot_value to filter results (data-driven — any ' +
+      'currently visible business unit, e.g. "MedVirtual", "Berry Virtual", "MMVA")',
   })
   @ApiResponse({
     status: 200,

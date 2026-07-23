@@ -7,6 +7,7 @@ import { HubspotModule } from '../hubspot/hubspot.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SqsModule } from '../sqs/sqs.module';
 import { ContactModule } from '../contacts/contacts.module';
+import { BusinessUnitsModule } from '../business-units/business-units.module';
 
 @Module({
   controllers: [OrganizationController],
@@ -18,6 +19,7 @@ import { ContactModule } from '../contacts/contacts.module';
     NotificationsModule,
     SqsModule,
     ContactModule,
+    BusinessUnitsModule,
   ],
   exports: [OrganizationService],
 })

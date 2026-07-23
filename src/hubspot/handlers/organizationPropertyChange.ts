@@ -6,6 +6,7 @@ import { HandlerOrganizationDeletion } from './organizationDeletion';
 import { HandlerOrganizationReactivation } from './organizationReactivation';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 import { organizationIndustryToDbDictionary } from '../../common/dictionaries/organizationIndustry-dictionary';
+import { BusinessUnitContext } from '../../business-units/business-unit-context.service';
 
 @Injectable()
 export class HandlerOrganizationPropertyChange {
@@ -14,6 +15,7 @@ export class HandlerOrganizationPropertyChange {
     private readonly organizationCreation: HandlerOrganizationCreation,
     private readonly organizationDeletion: HandlerOrganizationDeletion,
     private readonly organizationReactivation: HandlerOrganizationReactivation,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
 
   async execute(event) {
@@ -31,8 +33,9 @@ export class HandlerOrganizationPropertyChange {
     // changes back to a valid value we must reactivate a previously deleted org.
     if (event.propertyName === 'business_unit') {
       const isValidBusinessUnit =
-        event.propertyValue === 'MedVirtual' ||
-        event.propertyValue === 'Berry Virtual';
+        await this.businessUnitContext.isAllowedHubspotValue(
+          event.propertyValue,
+        );
 
       if (!isValidBusinessUnit) {
         return await this.organizationDeletion.execute(event);

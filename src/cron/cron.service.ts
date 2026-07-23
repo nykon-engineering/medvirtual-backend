@@ -30,6 +30,7 @@ import { CommissionDetectionService } from '../med-alliance/sync/commission-dete
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 type Event = {
   objectId?: string;
@@ -50,6 +51,7 @@ export class CronService {
     private readonly allianceNotifications: AllianceNotificationsService,
     private readonly emailTemplates: EmailTemplatesService,
     private readonly contactDeletion: HandlerContactDeletion,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
 
   // ── EmailTemplatesService fallback helper ─────────────────────────────────
@@ -1526,5 +1528,168 @@ export class CronService {
     }
 
     return { updated, skipped, errors, preview };
+  }
+
+  /**
+   * Daily cron (Task 05 — Multi Business Unit): reads the HubSpot `business_unit`
+   * company property options and reconciles our `BusinessUnit` table against them.
+   *
+   * - Upsert (additions): every option becomes/stays a row in `BusinessUnit`. New
+   *   options are created dormant (`is_visible=false`, `candidate_pool='medical'`).
+   *   Existing rows are NEVER flipped visible/invisible here — only a super-admin
+   *   (or the reconcile-removal branch below) changes `is_visible`.
+   * - Reconcile (removals) WITH SAFEGUARD: a BU whose `hubspot_value` is no longer
+   *   present among the HubSpot options is decommissioned — `is_visible=false` and
+   *   every related Organization/USER/Candidate/AffiliateProfile row is tagged
+   *   `deactivated_by_bu=<slug>` (and soft-deleted using each model's existing
+   *   convention: Organization.status=deleted, USER.status=inactive,
+   *   AffiliateProfile.status=inactive; Candidate has no status enum so it is only
+   *   tagged). This step ONLY runs when the HubSpot GET returned HTTP 200 with a
+   *   valid, non-empty `options` array — any other outcome aborts the reconcile
+   *   (upserts still run) so a transient HubSpot outage can never wipe data.
+   *
+   * Idempotent (safe to re-run) and never hard-deletes a `BusinessUnit` row.
+   */
+  async syncBusinessUnits(): Promise<{
+    upserted: string[];
+    removed: string[];
+    aborted: boolean;
+    reason?: string;
+  }> {
+    const upserted: string[] = [];
+    let removed: string[] = [];
+    let aborted = false;
+    let abortReason: string | undefined;
+
+    let options: { label: string }[] | null = null;
+
+    try {
+      const response = await axios.get(
+        'https://api.hubapi.com/crm/v3/properties/companies/business_unit',
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      const isValidRead =
+        response?.status === 200 &&
+        Array.isArray(response?.data?.options) &&
+        response.data.options.length > 0;
+
+      if (isValidRead) {
+        options = response.data.options as { label: string }[];
+      } else {
+        aborted = true;
+        abortReason = `HubSpot business_unit property read was invalid (status=${response?.status}, options=${JSON.stringify(response?.data?.options)})`;
+      }
+    } catch (error) {
+      aborted = true;
+      abortReason = `HubSpot business_unit property read failed: ${(error as Error).message}`;
+    }
+
+    if (aborted || !options) {
+      console.error(
+        `syncBusinessUnits: ABORTING reconcile-removal step — ${abortReason}. No BusinessUnit visibility/cascade changes were made.`,
+      );
+      return { upserted, removed, aborted: true, reason: abortReason };
+    }
+
+    // ── Upsert (additions) — never flips visibility of an existing row ───────
+    const existingRows = await this.prisma.businessUnit.findMany();
+
+    for (const option of options) {
+      const label = option.label;
+      const slug = this.businessUnitContext.displayToSlug(label);
+      if (!slug) continue;
+
+      await this.prisma.businessUnit.upsert({
+        where: { slug },
+        create: {
+          slug,
+          name: label,
+          hubspot_value: label,
+          candidate_pool: 'medical',
+          is_visible: false,
+        },
+        update: {
+          // Keep hubspot_value in sync with HubSpot's current label spelling,
+          // but never touch is_visible here.
+          hubspot_value: label,
+        },
+      });
+
+      upserted.push(slug);
+    }
+
+    // ── Reconcile (removals) — only reached when options is valid+non-empty ──
+    // Compared by normalized hubspot_value (not slug) since a BU's slug can be
+    // hyphenated/spelled differently than a straight lowercase of the label.
+    const hubspotValuesNormalized = new Set(
+      options.map((o) => this.businessUnitContext.normalizeBusinessUnit(o.label)),
+    );
+
+    const decommissioned = existingRows.filter(
+      (row) =>
+        row.hubspot_value &&
+        !hubspotValuesNormalized.has(
+          this.businessUnitContext.normalizeBusinessUnit(row.hubspot_value),
+        ),
+    );
+
+    for (const bu of decommissioned) {
+      const buValue = bu.hubspot_value ?? bu.name;
+
+      await this.prisma.businessUnit.update({
+        where: { slug: bu.slug },
+        data: { is_visible: false },
+      });
+
+      // Organizations tagged with this BU — soft-delete + tag.
+      const affectedOrgs = await this.prisma.organization.findMany({
+        where: { business_unit: buValue },
+        select: { id: true },
+      });
+      const affectedOrgIds = affectedOrgs.map((o) => o.id);
+
+      await this.prisma.organization.updateMany({
+        where: { business_unit: buValue },
+        data: { status: 'deleted' as any, deactivated_by_bu: bu.slug },
+      });
+
+      // Users belong to organizations (no direct business_unit field on USER) —
+      // deactivate every user of every affected organization.
+      if (affectedOrgIds.length > 0) {
+        await this.prisma.uSER.updateMany({
+          where: { organization_id: { in: affectedOrgIds } },
+          data: { status: 'inactive', deactivated_by_bu: bu.slug },
+        });
+      }
+
+      await this.prisma.candidate.updateMany({
+        where: { business_unit: buValue },
+        data: { deactivated_by_bu: bu.slug },
+      });
+
+      await this.prisma.affiliateProfile.updateMany({
+        where: { business_unit: buValue },
+        data: { status: 'inactive' as any, deactivated_by_bu: bu.slug },
+      });
+
+      removed.push(bu.slug);
+      console.log(
+        `syncBusinessUnits: decommissioned BU "${bu.slug}" — is_visible=false, cascaded soft-delete tagged deactivated_by_bu="${bu.slug}"`,
+      );
+    }
+
+    this.businessUnitContext.bustCache();
+
+    console.log(
+      `syncBusinessUnits: done. upserted=${upserted.length}, removed=${removed.length}`,
+    );
+
+    return { upserted, removed, aborted: false };
   }
 }

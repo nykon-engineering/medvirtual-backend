@@ -14,6 +14,8 @@ import { ReferralSyncService } from '../med-alliance/sync/referral-sync.service'
 import { CommissionDetectionService } from '../med-alliance/sync/commission-detection.service';
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import axios from 'axios';
 
 jest.mock('axios');
 
@@ -30,18 +32,43 @@ describe('CronService', () => {
   let referralSyncServiceMock: { run: jest.Mock };
   let commissionDetectionServiceMock: { run: jest.Mock };
   let allianceNotificationsMock: Record<string, jest.Mock>;
+  let businessUnitContextMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
+    businessUnitContextMock = {
+      displayToSlug: jest.fn((v: string) =>
+        v ? v.toLowerCase().replace(/\s+/g, '-') : null,
+      ),
+      normalizeBusinessUnit: jest.fn((v?: string | null) =>
+        v ? v.trim().toLowerCase().replace(/\s+/g, '') : '',
+      ),
+      bustCache: jest.fn(),
+    };
+
     prismaServiceMock = {
       candidate: {
         findMany: jest.fn(),
+        updateMany: jest.fn(),
       },
       positionRateConfig: {
         create: jest.fn(),
       },
-      organization: {
-        findMany: jest.fn(),
+      businessUnit: {
+        findMany: jest.fn().mockResolvedValue([]),
+        upsert: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      organization: {
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      uSER: {
+        updateMany: jest.fn(),
+      },
+      affiliateProfile: {
+        updateMany: jest.fn(),
       },
       affiliateCommission: {
         findMany: jest.fn(),
@@ -111,6 +138,7 @@ describe('CronService', () => {
         { provide: CommissionDetectionService, useValue: commissionDetectionServiceMock },
         { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
         { provide: EmailTemplatesService, useValue: { getTemplateContent: jest.fn().mockResolvedValue(null) } },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
       ],
     }).compile();
 
@@ -1101,6 +1129,223 @@ describe('CronService', () => {
       const result = await service.syncOrganizationsWithHubspot('org-1');
 
       expect(Object.keys(result).sort()).toEqual(['processed', 'syncFailed', 'syncResults']);
+    });
+  });
+
+  // ── syncBusinessUnits (Task 05) ────────────────────────────────────────────
+
+  describe('syncBusinessUnits', () => {
+    const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+    const hubspotPropertyResponse = (options: { label: string }[]) => ({
+      status: 200,
+      data: {
+        name: 'business_unit',
+        options,
+      },
+    });
+
+    beforeEach(() => {
+      mockedAxios.get.mockReset();
+    });
+
+    it('upserts a new HubSpot option as a dormant BU (is_visible=false)', async () => {
+      mockedAxios.get.mockResolvedValue(
+        hubspotPropertyResponse([
+          { label: 'MedVirtual' },
+          { label: 'Berry Virtual' },
+          { label: 'MMVA' },
+        ]),
+      );
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        { id: '2', slug: 'berry-virtual', hubspot_value: 'Berry Virtual', is_visible: true },
+      ]);
+      prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
+
+      const result = await service.syncBusinessUnits();
+
+      expect(prismaServiceMock.businessUnit.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'mmva' },
+          create: expect.objectContaining({
+            slug: 'mmva',
+            hubspot_value: 'MMVA',
+            candidate_pool: 'medical',
+            is_visible: false,
+          }),
+        }),
+      );
+      expect(result.aborted).toBe(false);
+      expect(businessUnitContextMock.bustCache).toHaveBeenCalled();
+    });
+
+    it('never flips visibility of an existing BU during upsert', async () => {
+      mockedAxios.get.mockResolvedValue(
+        hubspotPropertyResponse([{ label: 'MedVirtual' }]),
+      );
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+      ]);
+      prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
+
+      await service.syncBusinessUnits();
+
+      const upsertCall = prismaServiceMock.businessUnit.upsert.mock.calls.find(
+        (c: any[]) => c[0].where.slug === 'medvirtual',
+      );
+      expect(upsertCall[0].update).not.toHaveProperty('is_visible');
+    });
+
+    it('reconciles removed options: sets is_visible=false and cascade soft-deletes tagged rows', async () => {
+      mockedAxios.get.mockResolvedValue(
+        hubspotPropertyResponse([{ label: 'MedVirtual' }]),
+      );
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: true },
+      ]);
+      prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
+      prismaServiceMock.businessUnit.update.mockResolvedValue({});
+      prismaServiceMock.organization.findMany.mockResolvedValue([
+        { id: 'org-1' },
+        { id: 'org-2' },
+      ]);
+
+      const result = await service.syncBusinessUnits();
+
+      expect(prismaServiceMock.businessUnit.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'mmva' },
+          data: expect.objectContaining({ is_visible: false }),
+        }),
+      );
+      expect(prismaServiceMock.organization.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ business_unit: expect.anything() }),
+          data: expect.objectContaining({
+            status: 'deleted',
+            deactivated_by_bu: 'mmva',
+          }),
+        }),
+      );
+      expect(prismaServiceMock.uSER.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'inactive',
+            deactivated_by_bu: 'mmva',
+          }),
+        }),
+      );
+      expect(prismaServiceMock.candidate.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ deactivated_by_bu: 'mmva' }),
+        }),
+      );
+      expect(prismaServiceMock.affiliateProfile.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'inactive',
+            deactivated_by_bu: 'mmva',
+          }),
+        }),
+      );
+      expect(result.aborted).toBe(false);
+      expect(result.removed).toEqual(['mmva']);
+    });
+
+    it('never touches BusinessUnit rows outside the reconcile diff (idempotent re-run creates no dupes)', async () => {
+      mockedAxios.get.mockResolvedValue(
+        hubspotPropertyResponse([{ label: 'MedVirtual' }, { label: 'Berry Virtual' }]),
+      );
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        { id: '2', slug: 'berry-virtual', hubspot_value: 'Berry Virtual', is_visible: true },
+      ]);
+      prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
+
+      const result = await service.syncBusinessUnits();
+
+      expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
+      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(result.removed).toEqual([]);
+    });
+
+    it('aborts the reconcile step (no cascade delete) when HubSpot GET returns non-200', async () => {
+      mockedAxios.get.mockResolvedValue({ status: 500, data: null });
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: true },
+      ]);
+
+      const result = await service.syncBusinessUnits();
+
+      expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
+      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(prismaServiceMock.uSER.updateMany).not.toHaveBeenCalled();
+      expect(prismaServiceMock.candidate.updateMany).not.toHaveBeenCalled();
+      expect(prismaServiceMock.affiliateProfile.updateMany).not.toHaveBeenCalled();
+      expect(result.aborted).toBe(true);
+    });
+
+    it('aborts the reconcile step when options array is empty', async () => {
+      mockedAxios.get.mockResolvedValue(hubspotPropertyResponse([]));
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+      ]);
+
+      const result = await service.syncBusinessUnits();
+
+      expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
+      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(result.aborted).toBe(true);
+    });
+
+    it('aborts the reconcile step when options is malformed (not an array)', async () => {
+      mockedAxios.get.mockResolvedValue({
+        status: 200,
+        data: { name: 'business_unit', options: null },
+      });
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+      ]);
+
+      const result = await service.syncBusinessUnits();
+
+      expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
+      expect(result.aborted).toBe(true);
+    });
+
+    it('aborts the reconcile step when the GET throws/times out', async () => {
+      mockedAxios.get.mockRejectedValue(new Error('timeout'));
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+      ]);
+
+      const result = await service.syncBusinessUnits();
+
+      expect(result.aborted).toBe(true);
+      expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
+      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent — re-running with the same options creates no duplicate BU rows', async () => {
+      mockedAxios.get.mockResolvedValue(
+        hubspotPropertyResponse([{ label: 'MedVirtual' }, { label: 'MMVA' }]),
+      );
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: false },
+      ]);
+      prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
+
+      await service.syncBusinessUnits();
+      await service.syncBusinessUnits();
+
+      // upsert (not create) is used both times — no duplicate rows possible
+      expect(prismaServiceMock.businessUnit.upsert).toHaveBeenCalled();
+      const createCalls = (prismaServiceMock.businessUnit as any).create;
+      expect(createCalls).toBeUndefined();
     });
   });
 });

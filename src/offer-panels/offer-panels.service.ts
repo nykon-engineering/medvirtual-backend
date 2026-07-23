@@ -14,6 +14,7 @@ import { CandidatesService } from '../candidate/candidates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { USER } from '@prisma/client';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
 import {
@@ -135,6 +136,7 @@ export class OfferPanelsService {
     private readonly hubspot: HubspotService,
     @Inject(forwardRef(() => HireRequestService))
     private readonly hireRequestService: HireRequestService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
 
   // Maps the flat recipient_* columns onto the nested `recipient` shape the
@@ -323,6 +325,18 @@ export class OfferPanelsService {
   async create(dto: CreateOfferPanelDto, adminUser: USER): Promise<any[]> {
     // --- Validation phase (no DB writes yet) ---
     const errors: string[] = [];
+
+    // Validate business_unit against the currently visible BU set. Kept out
+    // of the DTO (class-validator decorators can't do async DB lookups)
+    // so new BUs (e.g. MMVA) become valid the moment they're made visible,
+    // with no code change.
+    const isBusinessUnitAllowed =
+      await this.businessUnitContext.isAllowedHubspotValue(dto.business_unit);
+    if (!isBusinessUnitAllowed) {
+      errors.push(
+        `business_unit '${dto.business_unit}' is not a visible business unit`,
+      );
+    }
 
     // Validate candidates exist
     const candidates = await this.prisma.candidate.findMany({
@@ -931,10 +945,14 @@ export class OfferPanelsService {
           hubspot_role_type: hubspot_va_type,
           hubspot_numberVA,
           hubspot_pairing_request_type: pairingRequestType,
+          // No hardcoded BU default: if the caller's organization couldn't be
+          // resolved we don't know its business unit, so we send `null`
+          // rather than silently assuming MedVirtual (which would misfile
+          // Berry/MMVA/future-BU hire requests in HubSpot).
           organization: org ?? {
             name: '',
             hubspot_id: null,
-            business_unit: 'MedVirtual',
+            business_unit: null,
             website_url: '',
           },
           assign_user_id: [{ id: panel.created_by_user_id }],

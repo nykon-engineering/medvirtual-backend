@@ -12,6 +12,7 @@ import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SqsService } from '../sqs/sqs.service';
 import { ContactService } from '../contacts/contacts.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 
 const userfake = { 
@@ -44,6 +45,7 @@ const userfake = {
   billcom_pending_session_id: null,
   billcom_remember_me_id: null,
   billcom_device: null,
+  deactivated_by_bu: null,
 }
 
 describe('OrganizationService', () => {
@@ -104,6 +106,16 @@ describe('OrganizationService', () => {
     createForOrganization: jest.fn(),
   }
 
+  const mockBusinessUnitContext = {
+    getVisibleHubspotValues: jest.fn().mockResolvedValue([]),
+    isAllowedHubspotValue: jest.fn().mockResolvedValue(true),
+    resolveByHubspotValue: jest.fn().mockResolvedValue(null),
+    poolFor: jest.fn().mockResolvedValue(null),
+    displayToSlug: jest.fn(),
+    normalizeBusinessUnit: jest.fn(),
+    bustCache: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -119,6 +131,7 @@ describe('OrganizationService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: SqsService, useValue: mockSqsService },
         { provide: ContactService, useValue: mockContactService },
+        { provide: BusinessUnitContext, useValue: mockBusinessUnitContext },
       ],
     }).compile();
 

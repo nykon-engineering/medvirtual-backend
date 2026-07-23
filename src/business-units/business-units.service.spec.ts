@@ -1,5 +1,9 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import axios from 'axios';
 import { BusinessUnitsService } from './business-units.service';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -54,14 +58,42 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
       create: jest.fn().mockResolvedValue(BRANDING_HISTORY),
       findMany: jest.fn().mockResolvedValue([BRANDING_HISTORY]),
     },
+    organization: {
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn(),
+      upsert: jest.fn(),
+    },
+    uSER: {
+      updateMany: jest.fn(),
+    },
+    candidate: {
+      updateMany: jest.fn(),
+      upsert: jest.fn(),
+    },
+    affiliateProfile: {
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn(),
+      upsert: jest.fn(),
+    },
+    contact: {
+      upsert: jest.fn(),
+    },
     ...overrides,
   };
 }
 
-function makeService(prismaOverrides: Record<string, unknown> = {}) {
+function makeAudit() {
+  return { log: jest.fn().mockResolvedValue(undefined) };
+}
+
+function makeService(
+  prismaOverrides: Record<string, unknown> = {},
+  auditOverride?: Record<string, unknown>,
+) {
   const prisma = makePrisma(prismaOverrides);
-  const service = new (BusinessUnitsService as any)(prisma);
-  return { service: service as BusinessUnitsService, prisma };
+  const audit = auditOverride ?? makeAudit();
+  const service = new (BusinessUnitsService as any)(prisma, audit);
+  return { service: service as BusinessUnitsService, prisma, audit };
 }
 
 // ── findAll ────────────────────────────────────────────────────────────────────
@@ -89,7 +121,7 @@ describe('BusinessUnitsService.create', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
 
     await service.create(dto, 'user-1');
 
@@ -107,7 +139,7 @@ describe('BusinessUnitsService.create', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
 
     await service.create(dto, 'user-1');
 
@@ -148,6 +180,40 @@ describe('BusinessUnitsService.update', () => {
       },
     });
     await expect(service.update('ghost', { name: 'X' })).rejects.toThrow(NotFoundException);
+  });
+
+  it('persists app-branding fields (colors, logo, favicon, candidate_pool) when provided', async () => {
+    const { service, prisma } = makeService();
+    await service.update('medvirtual', {
+      primary_color: '#077999',
+      primary_hover: '#066685',
+      logo_url: 'https://staging.medvirtual.ai/logo.png',
+      favicon_url: 'https://staging.medvirtual.ai/favicon.ico',
+      candidate_pool: 'non_medical',
+    });
+    expect(prisma.businessUnit.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { slug: 'medvirtual' },
+        data: expect.objectContaining({
+          primary_color: '#077999',
+          primary_hover: '#066685',
+          logo_url: 'https://staging.medvirtual.ai/logo.png',
+          favicon_url: 'https://staging.medvirtual.ai/favicon.ico',
+          candidate_pool: 'non_medical',
+        }),
+      }),
+    );
+  });
+
+  it('does not touch app-branding fields when they are absent from the dto', async () => {
+    const { service, prisma } = makeService();
+    await service.update('medvirtual', { name: 'MedVirtual Renamed' });
+    const data = (prisma.businessUnit.update as jest.Mock).mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('primary_color');
+    expect(data).not.toHaveProperty('primary_hover');
+    expect(data).not.toHaveProperty('logo_url');
+    expect(data).not.toHaveProperty('favicon_url');
+    expect(data).not.toHaveProperty('candidate_pool');
   });
 });
 
@@ -283,7 +349,7 @@ describe('BusinessUnitsService — sync bidirecional', () => {
         update: jest.fn().mockResolvedValue(updatedBranding),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
 
     await service.updateBranding('medvirtual', { primary_color: '#FF0000' }, 'user-1');
     await new Promise((r) => setTimeout(r, 10));
@@ -387,5 +453,302 @@ describe('BusinessUnitsService.getBrandingHistory', () => {
       },
     });
     await expect(service.getBrandingHistory('ghost')).rejects.toThrow(NotFoundException);
+  });
+});
+
+// ── backfillFromHubspot (Task 06) ───────────────────────────────────────────
+
+const MMVA_BU = {
+  id: 'bu-mmva',
+  slug: 'mmva',
+  name: 'MMVA',
+  is_active: true,
+  is_visible: true,
+  hubspot_value: 'MMVA',
+  candidate_pool: 'medical',
+};
+
+function emptySearch() {
+  return { data: { results: [], paging: undefined } };
+}
+
+describe('BusinessUnitsService.backfillFromHubspot', () => {
+  beforeEach(() => {
+    mockedAxios.post.mockReset();
+    mockedAxios.get.mockReset();
+  });
+
+  it('throws NotFoundException for an unknown slug', async () => {
+    const { service } = makeService({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+      },
+    });
+    await expect(service.backfillFromHubspot('ghost')).rejects.toThrow(NotFoundException);
+  });
+
+  it('upserts companies, contacts, candidates and affiliates by hubspot_id', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+
+    mockedAxios.post
+      .mockResolvedValueOnce({
+        data: {
+          results: [
+            { id: 'company-1', properties: { hs_object_id: 'company-1', name: 'Acme Co', business_unit: 'MMVA' } },
+          ],
+        },
+      }) // companies
+      .mockResolvedValueOnce({
+        data: {
+          results: [
+            { id: 'contact-1', properties: { hs_object_id: 'contact-1', email: 'a@b.com', business_unit: 'MMVA' } },
+          ],
+        },
+      }) // contacts
+      .mockResolvedValueOnce({
+        data: {
+          results: [
+            { id: 'va-1', properties: { hs_object_id: 'va-1', email: 'va@b.com', business_unit: 'MMVA' } },
+          ],
+        },
+      }) // candidates (VA custom object)
+      .mockResolvedValueOnce({
+        data: {
+          results: [
+            { id: 'gp-1', properties: { hs_object_id: 'gp-1', growth_partner_name: 'Jane', business_unit: 'MMVA' } },
+          ],
+        },
+      }); // affiliates (Growth Partner)
+
+    const result = await service.backfillFromHubspot('mmva');
+
+    expect(prisma.organization.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { hubspot_id: 'company-1' },
+      }),
+    );
+    expect(prisma.contact.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { hubspot_id: 'contact-1' } }),
+    );
+    expect(prisma.candidate.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { hubspot_id: 'va-1' } }),
+    );
+    expect(prisma.affiliateProfile.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { hubspot_id: 'gp-1' } }),
+    );
+    expect(result.organizations).toBe(1);
+    expect(result.contacts).toBe(1);
+    expect(result.candidates).toBe(1);
+    expect(result.affiliates).toBe(1);
+  });
+
+  it('is non-destructive — never calls deleteMany/delete for any of the 4 object types', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    mockedAxios.post.mockResolvedValue(emptySearch());
+
+    await service.backfillFromHubspot('mmva');
+
+    const p = prisma as any;
+    expect(p.organization.deleteMany).toBeUndefined();
+    expect(p.contact.deleteMany).toBeUndefined();
+    expect(p.candidate.deleteMany).toBeUndefined();
+    expect(p.affiliateProfile.deleteMany).toBeUndefined();
+  });
+
+  it('is idempotent — running twice upserts (never creates duplicates)', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    mockedAxios.post.mockResolvedValue({
+      data: {
+        results: [
+          { id: 'company-1', properties: { hs_object_id: 'company-1', name: 'Acme Co', business_unit: 'MMVA' } },
+        ],
+      },
+    });
+
+    await service.backfillFromHubspot('mmva');
+    await service.backfillFromHubspot('mmva');
+
+    // upsert (not create) called both runs — no duplicate rows possible
+    expect(prisma.organization.upsert).toHaveBeenCalledTimes(2);
+    expect((prisma.organization as any).create).toBeUndefined();
+  });
+
+  it('guards against concurrent runs for the same slug', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+
+    let resolvePost: (value: unknown) => void;
+    const pending = new Promise((resolve) => {
+      resolvePost = resolve;
+    });
+    mockedAxios.post.mockReturnValue(pending as any);
+
+    const firstRun = service.backfillFromHubspot('mmva');
+    // second call while the first is still in-flight must be rejected/skip immediately
+    await expect(service.backfillFromHubspot('mmva')).rejects.toThrow(BadRequestException);
+
+    resolvePost!(emptySearch());
+    mockedAxios.post.mockResolvedValue(emptySearch());
+    await firstRun;
+  });
+
+  it('allows a new run for the same slug after the previous run finished', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    mockedAxios.post.mockResolvedValue(emptySearch());
+
+    await service.backfillFromHubspot('mmva');
+    await expect(service.backfillFromHubspot('mmva')).resolves.toBeDefined();
+  });
+});
+
+// ── update() — is_visible false→true reactivation + backfill trigger ───────
+
+describe('BusinessUnitsService.update — activation flow', () => {
+  beforeEach(() => {
+    mockedAxios.post.mockReset();
+    mockedAxios.post.mockResolvedValue(emptySearch());
+  });
+
+  it('reactivates deactivated_by_bu-tagged rows and fires backfill when is_visible flips false→true', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(dormantBu),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
+      },
+    });
+    prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+    const audit = makeAudit();
+    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(prisma.organization.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deactivated_by_bu: 'mmva' },
+        data: expect.objectContaining({ deactivated_by_bu: null }),
+      }),
+    );
+    expect(prisma.uSER.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deactivated_by_bu: 'mmva' },
+        data: expect.objectContaining({ deactivated_by_bu: null }),
+      }),
+    );
+    expect(prisma.candidate.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deactivated_by_bu: 'mmva' },
+        data: expect.objectContaining({ deactivated_by_bu: null }),
+      }),
+    );
+    expect(prisma.affiliateProfile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deactivated_by_bu: 'mmva' },
+        data: expect.objectContaining({ deactivated_by_bu: null }),
+      }),
+    );
+    expect(audit.log).toHaveBeenCalled();
+  });
+
+  it('does NOT reactivate or backfill when is_visible stays true→true', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU), // already visible
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue(MMVA_BU),
+      },
+    });
+    const audit = makeAudit();
+    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(prisma.organization.updateMany).not.toHaveBeenCalled();
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
+  it('does NOT reactivate or backfill on false→false or true→false transitions', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU), // currently visible
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...MMVA_BU, is_visible: false }),
+      },
+    });
+    const audit = makeAudit();
+    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: false });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(prisma.organization.updateMany).not.toHaveBeenCalled();
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
+  it('does not block the update() response on the backfill (fire-and-forget)', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(dormantBu),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+
+    // backfill's axios call never resolves during this test
+    mockedAxios.post.mockReturnValue(new Promise(() => {}) as any);
+
+    const result = await service.update('mmva', { is_visible: true });
+    expect(result.status).toBe(200);
   });
 });
