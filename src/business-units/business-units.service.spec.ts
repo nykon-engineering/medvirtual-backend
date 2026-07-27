@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { OrganizationStatus } from '@prisma/client';
 import axios from 'axios';
 import { BusinessUnitsService } from './business-units.service';
 
@@ -641,6 +642,78 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
     await service.backfillFromHubspot('mmva');
     await expect(service.backfillFromHubspot('mmva')).resolves.toBeDefined();
   });
+
+  // ── specialties (String[] list column) normalization ────────────────────────
+  // Regression: HubSpot returning no `specialty` made mapOrganizationToDb yield
+  // `specialties: null`, which Prisma rejects for a `String[]` column and crashed
+  // the whole backfill. The backfill must never send `null` for a list field.
+
+  function backfillWithCompanyProps(properties: Record<string, unknown>) {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    mockedAxios.post
+      .mockResolvedValueOnce({
+        data: { results: [{ id: 'company-1', properties }] },
+      })
+      .mockResolvedValue(emptySearch()); // contacts, candidates, affiliates
+    return { prisma, run: () => service.backfillFromHubspot('mmva') };
+  }
+
+  it('never sends null specialties to Prisma when HubSpot returns none (create + update are [])', async () => {
+    const { prisma, run } = backfillWithCompanyProps({
+      hs_object_id: 'company-1',
+      name: 'Acme Co',
+      business_unit: 'MMVA',
+      specialty: null,
+    });
+
+    await run();
+
+    const call = (prisma.organization.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.create.specialties).toEqual([]);
+    expect(call.update.specialties).toEqual([]);
+    expect(call.create.specialties).not.toBeNull();
+    expect(call.update.specialties).not.toBeNull();
+    expect(Array.isArray(call.create.specialties)).toBe(true);
+    expect(Array.isArray(call.update.specialties)).toBe(true);
+  });
+
+  it('splits a comma-separated specialties string into an array', async () => {
+    const { prisma, run } = backfillWithCompanyProps({
+      hs_object_id: 'company-1',
+      name: 'Acme Co',
+      business_unit: 'MMVA',
+      specialty: 'Cardiology, Neurology , Oncology',
+    });
+
+    await run();
+
+    const call = (prisma.organization.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.create.specialties).toEqual(['Cardiology', 'Neurology', 'Oncology']);
+    expect(call.update.specialties).toEqual(['Cardiology', 'Neurology', 'Oncology']);
+  });
+
+  it('preserves specialties that are already an array', async () => {
+    const { prisma, run } = backfillWithCompanyProps({
+      hs_object_id: 'company-1',
+      name: 'Acme Co',
+      business_unit: 'MMVA',
+      specialty: ['Cardiology', 'Neurology'],
+    });
+
+    await run();
+
+    const call = (prisma.organization.upsert as jest.Mock).mock.calls[0][0];
+    expect(call.create.specialties).toEqual(['Cardiology', 'Neurology']);
+    expect(call.update.specialties).toEqual(['Cardiology', 'Neurology']);
+  });
 });
 
 // ── update() — is_visible false→true reactivation + backfill trigger ───────
@@ -670,8 +743,10 @@ describe('BusinessUnitsService.update — activation flow', () => {
 
     expect(prisma.organization.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { deactivated_by_bu: 'mmva' },
-        data: expect.objectContaining({ deactivated_by_bu: null }),
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([{ deactivated_by_bu: 'mmva' }]),
+        }),
+        data: expect.objectContaining({ deactivated_by_bu: null, deletedAt: null }),
       }),
     );
     expect(prisma.uSER.updateMany).toHaveBeenCalledWith(
@@ -692,6 +767,123 @@ describe('BusinessUnitsService.update — activation flow', () => {
         data: expect.objectContaining({ deactivated_by_bu: null }),
       }),
     );
+    expect(audit.log).toHaveBeenCalled();
+  });
+
+  it('PRIMARY REGRESSION: restores a webhook-deleted org (status=deleted, deactivated_by_bu=null, matching business_unit) to inactive with deletedAt cleared', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(dormantBu),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
+      },
+    });
+    // The webhook-deleted org: no marker, but belongs to the BU's hubspot_value.
+    prisma.organization.findMany.mockResolvedValue([{ id: 'org-webhook-1' }]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Organizations must be restored via a broadened match that includes
+    // webhook-deleted rows (status=deleted + matching business_unit), not just
+    // the marker. It must set status=inactive, clear the marker AND deletedAt.
+    const orgCalls = (prisma.organization.updateMany as jest.Mock).mock.calls;
+    const broadenedCall = orgCalls.find((call) => {
+      const where = call[0]?.where ?? {};
+      return Array.isArray(where.OR);
+    });
+    expect(broadenedCall).toBeDefined();
+    expect(broadenedCall[0].where.OR).toEqual(
+      expect.arrayContaining([
+        { deactivated_by_bu: 'mmva' },
+        {
+          status: OrganizationStatus.deleted,
+          business_unit: MMVA_BU.hubspot_value,
+        },
+      ]),
+    );
+    expect(broadenedCall[0].data).toEqual(
+      expect.objectContaining({
+        status: OrganizationStatus.inactive,
+        deactivated_by_bu: null,
+        deletedAt: null,
+      }),
+    );
+  });
+
+  it('still restores a cron-decommissioned org (deactivated_by_bu=slug) — no regression', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(dormantBu),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
+      },
+    });
+    prisma.organization.findMany.mockResolvedValue([]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const orgCalls = (prisma.organization.updateMany as jest.Mock).mock.calls;
+    const broadenedCall = orgCalls.find((call) => Array.isArray(call[0]?.where?.OR));
+    expect(broadenedCall).toBeDefined();
+    // The marker branch is present in the OR.
+    expect(broadenedCall[0].where.OR).toEqual(
+      expect.arrayContaining([{ deactivated_by_bu: 'mmva' }]),
+    );
+  });
+
+  it('does NOT touch an org deleted for an UNRELATED business_unit', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(dormantBu),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
+      },
+    });
+    prisma.organization.findMany.mockResolvedValue([]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    const orgCalls = (prisma.organization.updateMany as jest.Mock).mock.calls;
+    const broadenedCall = orgCalls.find((call) => Array.isArray(call[0]?.where?.OR));
+    expect(broadenedCall).toBeDefined();
+    // The broadened branch is scoped to THIS BU's hubspot_value only — an
+    // unrelated BU's value ("OTHER_BU") is never part of the match.
+    const serialized = JSON.stringify(broadenedCall[0].where.OR);
+    expect(serialized).toContain(MMVA_BU.hubspot_value);
+    expect(serialized).not.toContain('OTHER_BU');
+  });
+
+  it('still fires the backfill after reactivation (existing behavior preserved)', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(dormantBu),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
+      },
+    });
+    prisma.organization.findMany.mockResolvedValue([]);
+    const audit = makeAudit();
+    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // backfill issues HubSpot search calls (axios.post) for the 4 object types.
+    expect(mockedAxios.post).toHaveBeenCalled();
     expect(audit.log).toHaveBeenCalled();
   });
 

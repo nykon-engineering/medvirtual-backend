@@ -203,6 +203,30 @@ describe('HandlerOrganizationPropertyChange', () => {
     expect(organizationDeletionMock.execute).not.toHaveBeenCalled();
   });
 
+  it('forwards the new business_unit value to organizationDeletion so it can be persisted on soft-delete', async () => {
+    businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(false);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      id: 'org-1',
+      status: OrganizationStatus.active,
+    });
+    organizationDeletionMock.execute.mockResolvedValue('deleted');
+
+    await handler.execute({
+      objectId: 1,
+      propertyName: 'business_unit',
+      propertyValue: 'MMVA',
+    });
+
+    // The full event (including propertyName/propertyValue) must reach the
+    // deletion handler so it can record the new business_unit.
+    expect(organizationDeletionMock.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        propertyName: 'business_unit',
+        propertyValue: 'MMVA',
+      }),
+    );
+  });
+
   it('soft-deletes when business_unit moves to a dormant BU (known but not visible)', async () => {
     businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(false);
     prismaMock.organization.findUnique.mockResolvedValue({

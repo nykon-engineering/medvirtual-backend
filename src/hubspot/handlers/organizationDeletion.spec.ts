@@ -72,6 +72,63 @@ describe('HandlerOrganizationDeletion', () => {
     );
   });
 
+  it('should also persist the new business_unit when the deletion is triggered by a business_unit change', async () => {
+    prismaMock.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+    prismaMock.uSER.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.organization.update.mockResolvedValue({});
+    orgDeletionServiceMock.onOrganizationDeleted.mockResolvedValue(undefined);
+
+    await handler.execute({
+      objectId: 1,
+      propertyName: 'business_unit',
+      propertyValue: 'MMVA',
+    });
+
+    expect(prismaMock.organization.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'org-1' },
+        data: expect.objectContaining({
+          status: OrganizationStatus.deleted,
+          business_unit: 'MMVA',
+          deletedAt: expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it('should NOT set business_unit when the deletion is a real company deletion (propertyName not business_unit)', async () => {
+    prismaMock.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+    prismaMock.uSER.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.organization.update.mockResolvedValue({});
+    orgDeletionServiceMock.onOrganizationDeleted.mockResolvedValue(undefined);
+
+    // A real company deletion carries no business_unit propertyName; propertyValue,
+    // if present, is NOT a business unit and must never be written as one.
+    await handler.execute({
+      objectId: 1,
+      propertyName: 'lifecyclestage',
+      propertyValue: 'customer',
+    });
+
+    const updateData = prismaMock.organization.update.mock.calls[0][0].data;
+    expect(updateData).not.toHaveProperty('business_unit');
+    expect(updateData).toEqual(
+      expect.objectContaining({ status: OrganizationStatus.deleted }),
+    );
+  });
+
+  it('should NOT set business_unit when the event has no propertyName at all', async () => {
+    prismaMock.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+    prismaMock.uSER.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.organization.update.mockResolvedValue({});
+    orgDeletionServiceMock.onOrganizationDeleted.mockResolvedValue(undefined);
+
+    await handler.execute({ objectId: 1 });
+
+    const updateData = prismaMock.organization.update.mock.calls[0][0].data;
+    expect(updateData).not.toHaveProperty('business_unit');
+  });
+
   it('should run the Med Alliance deletion hook after soft-deleting the org', async () => {
     prismaMock.organization.findUnique.mockResolvedValue({ id: 'org-1' });
     prismaMock.uSER.updateMany.mockResolvedValue({ count: 0 });

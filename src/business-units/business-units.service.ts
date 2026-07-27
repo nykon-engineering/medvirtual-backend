@@ -23,6 +23,26 @@ import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictio
 import { affiliateToDbDictionary } from '../common/dictionaries/affiliate-dictionary';
 import { OrganizationStatus, AffiliateStatus } from '@prisma/client';
 
+/**
+ * Normalizes an arbitrary value into a `string[]` suitable for a Prisma
+ * scalar-list (`String[]`) column, which rejects `null`.
+ * - string  → split on comma + trim, dropping empty entries
+ * - array   → returned as-is
+ * - else    → `[]` (covers null/undefined and unexpected types)
+ */
+function toStringArray(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }
+  if (Array.isArray(value)) {
+    return value as string[];
+  }
+  return [];
+}
+
 @Injectable()
 export class BusinessUnitsService {
   private readonly logger = new Logger(BusinessUnitsService.name);
@@ -115,7 +135,7 @@ export class BusinessUnitsService {
     // (true→true, true→false, false→false) is a no-op here.
     const wasActivated = before.is_visible === false && updated.is_visible === true;
     if (wasActivated) {
-      await this.reactivateDeactivatedByBu(slug);
+      await this.reactivateDeactivatedByBu(slug, updated.hubspot_value ?? updated.name);
 
       this.backfillFromHubspot(slug)
         .then((result) => {
@@ -476,16 +496,32 @@ export class BusinessUnitsService {
       const hubspotId = String(company.id);
       const organizationData = mapOrganizationToDb(company.properties);
 
+      // Prisma scalar-list (`String[]`) columns reject `null`. `mapOrganizationToDb`
+      // maps generically and can yield `null` for list-typed fields (e.g. `specialties`)
+      // when HubSpot returns no value, which crashes the upsert. Normalize any
+      // list-typed field to a real array before sending it to Prisma — mirroring the
+      // proven normalization in organization.service.ts create().
+      const listFieldOverrides = {
+        specialties: toStringArray((organizationData as any).specialties),
+        // `services` is not currently produced by mapOrganizationToDb, but is also a
+        // `String[]` column — normalize defensively if it ever appears.
+        ...((organizationData as any).services !== undefined
+          ? { services: toStringArray((organizationData as any).services) }
+          : {}),
+      };
+
       await this.prisma.organization.upsert({
         where: { hubspot_id: hubspotId },
         create: {
           ...(organizationData as any),
+          ...listFieldOverrides,
           hubspot_id: hubspotId,
           name: organizationData.name ?? company.properties.name ?? 'Unknown',
           status: OrganizationStatus.inactive,
         },
         update: {
           ...(organizationData as any),
+          ...listFieldOverrides,
         },
       });
       count++;
@@ -612,16 +648,63 @@ export class BusinessUnitsService {
   }
 
   /**
-   * Reactivation half of the activation flow — restores exactly the set of
-   * rows tagged `deactivated_by_bu = slug` across all 4 object types, and
-   * clears the tag. Always runs BEFORE the backfill kicks off.
+   * Reactivation half of the activation flow — restores the set of rows that
+   * were soft-deleted for BU reasons across all 4 object types, and clears
+   * their tags. Always runs BEFORE the backfill kicks off.
+   *
+   * There are TWO soft-delete paths that must both be undone here:
+   *  1. Cron decommission (cron.service.ts) — tags rows `deactivated_by_bu=slug`.
+   *  2. Webhook deletion (organizationDeletion.ts) — when a company's HubSpot
+   *     `business_unit` is changed to a BU that is not visible on our side, the
+   *     org is set `status=deleted` + `deletedAt`, but WITHOUT any
+   *     `deactivated_by_bu` marker. A marker-only match would leave these orgs
+   *     invisible forever after the BU is activated (the reported bug).
+   *
+   * For Organizations we therefore broaden the match to the union of both
+   * paths, scoped to THIS BU only:
+   *   deactivated_by_bu = slug
+   *     OR (status = deleted AND business_unit = <this BU's hubspot_value>)
+   * and restore to `inactive` (NOT active — same rule as organizationReactivation
+   * and organizationCreation: a human/deal must activate), clearing `deletedAt`.
    */
-  private async reactivateDeactivatedByBu(slug: string): Promise<void> {
+  private async reactivateDeactivatedByBu(
+    slug: string,
+    businessUnitValue: string,
+  ): Promise<void> {
+    // Organizations: union of cron-marked and webhook-deleted rows, scoped to
+    // this BU. Restore to `inactive` and clear both the marker and `deletedAt`
+    // (mirrors organizationReactivation.ts for the webhook-deleted set).
     await this.prisma.organization.updateMany({
-      where: { deactivated_by_bu: slug },
-      data: { status: OrganizationStatus.inactive, deactivated_by_bu: null },
+      where: {
+        OR: [
+          { deactivated_by_bu: slug },
+          {
+            status: OrganizationStatus.deleted,
+            business_unit: businessUnitValue,
+          },
+        ],
+      },
+      data: {
+        status: OrganizationStatus.inactive,
+        deactivated_by_bu: null,
+        deletedAt: null,
+      },
     });
 
+    // Users belong to organizations (no business_unit field on USER). The cron
+    // cascade tagged them `deactivated_by_bu=slug`, so those we can safely
+    // reactivate by marker.
+    //
+    // SAFETY NOTE (webhook path): organizationDeletion.ts cascaded users of the
+    // deleted org to `status=inactive` WITHOUT any marker. Those users are now
+    // indistinguishable from users made inactive for unrelated reasons, so we
+    // deliberately do NOT blanket-reactivate them here — flipping them to
+    // `active` could wrongly re-enable accounts. This is acceptable because the
+    // org itself is restored to `inactive` above and the org listing shows both
+    // `active` and `inactive` orgs, so the company reappears regardless. Those
+    // users remain `inactive` (their correct post-restore state) and are
+    // re-activated by the normal login/deal flow, exactly like a freshly
+    // reactivated org from organizationReactivation.ts.
     await this.prisma.uSER.updateMany({
       where: { deactivated_by_bu: slug },
       data: { status: 'inactive', deactivated_by_bu: null },
@@ -632,13 +715,17 @@ export class BusinessUnitsService {
       data: { deactivated_by_bu: null },
     });
 
+    // Affiliates: marker-based only. The cron decommission set these to
+    // `inactive` and tagged them; restoring to `active` returns them to their
+    // pre-decommission state. There is no webhook path that mass-deletes
+    // affiliates by BU, so no broadening is needed here.
     await this.prisma.affiliateProfile.updateMany({
       where: { deactivated_by_bu: slug },
       data: { status: AffiliateStatus.active, deactivated_by_bu: null },
     });
 
     this.logger.log(
-      `reactivateDeactivatedByBu("${slug}"): restored all rows tagged deactivated_by_bu="${slug}"`,
+      `reactivateDeactivatedByBu("${slug}"): restored marker-tagged rows and webhook-deleted orgs for business_unit="${businessUnitValue}"`,
     );
   }
 

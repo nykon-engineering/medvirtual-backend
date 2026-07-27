@@ -32,6 +32,17 @@ export class HandlerOrganizationDeletion {
         },
       });
 
+      // When the deletion is triggered by a business_unit change (org moved to a
+      // BU that is not visible on our side), persist the NEW business_unit too so
+      // the DB keeps reflecting HubSpot and BU-activation reactivation — which
+      // matches deleted orgs by business_unit — can bring the org back.
+      // For a real company deletion, propertyName is NOT 'business_unit' and
+      // propertyValue is not a BU, so we must leave business_unit untouched.
+      const isBusinessUnitTrigger =
+        event?.propertyName === 'business_unit' &&
+        typeof event.propertyValue === 'string' &&
+        event.propertyValue.length > 0;
+
       await this.prisma.organization.update({
         where: {
           id: organizationExists.id,
@@ -39,6 +50,9 @@ export class HandlerOrganizationDeletion {
         data: {
           status: OrganizationStatus.deleted,
           deletedAt: getNowInTimezone('UTC'),
+          ...(isBusinessUnitTrigger
+            ? { business_unit: event.propertyValue }
+            : {}),
         },
       });
 
