@@ -31,7 +31,7 @@ import { Roles } from '../auth/roles.decorator';
 @ApiBearerAuth()
 @Controller('business-units')
 @UseGuards(AuthGuard, RolesGuard)
-@Roles('system_super_admin')
+@Roles('system_super_admin', 'system_admin')
 export class BusinessUnitsController {
   constructor(private readonly service: BusinessUnitsService) {}
 
