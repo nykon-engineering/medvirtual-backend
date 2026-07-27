@@ -31,6 +31,7 @@ import { AllianceNotificationsService } from '../med-alliance/notifications/noti
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { BusinessUnitsService } from '../business-units/business-units.service';
 
 type Event = {
   objectId?: string;
@@ -52,6 +53,7 @@ export class CronService {
     private readonly emailTemplates: EmailTemplatesService,
     private readonly contactDeletion: HandlerContactDeletion,
     private readonly businessUnitContext: BusinessUnitContext,
+    private readonly businessUnitsService: BusinessUnitsService,
   ) {}
 
   // ── EmailTemplatesService fallback helper ─────────────────────────────────
@@ -1642,41 +1644,10 @@ export class CronService {
     for (const bu of decommissioned) {
       const buValue = bu.hubspot_value ?? bu.name;
 
-      await this.prisma.businessUnit.update({
-        where: { slug: bu.slug },
-        data: { is_visible: false },
-      });
-
-      // Organizations tagged with this BU — soft-delete + tag.
-      const affectedOrgs = await this.prisma.organization.findMany({
-        where: { business_unit: buValue },
-        select: { id: true },
-      });
-      const affectedOrgIds = affectedOrgs.map((o) => o.id);
-
-      await this.prisma.organization.updateMany({
-        where: { business_unit: buValue },
-        data: { status: 'deleted' as any, deactivated_by_bu: bu.slug },
-      });
-
-      // Users belong to organizations (no direct business_unit field on USER) —
-      // deactivate every user of every affected organization.
-      if (affectedOrgIds.length > 0) {
-        await this.prisma.uSER.updateMany({
-          where: { organization_id: { in: affectedOrgIds } },
-          data: { status: 'inactive', deactivated_by_bu: bu.slug },
-        });
-      }
-
-      await this.prisma.candidate.updateMany({
-        where: { business_unit: buValue },
-        data: { deactivated_by_bu: bu.slug },
-      });
-
-      await this.prisma.affiliateProfile.updateMany({
-        where: { business_unit: buValue },
-        data: { status: 'inactive' as any, deactivated_by_bu: bu.slug },
-      });
+      // Shared cascade: flips is_visible=false, soft-deletes orgs, deactivates
+      // their users, tags candidates, sets affiliates inactive — all tagged
+      // deactivated_by_bu=slug — and busts the BU context cache.
+      await this.businessUnitsService.deactivateByBu(bu.slug, buValue);
 
       removed.push(bu.slug);
       console.log(
@@ -1684,6 +1655,8 @@ export class CronService {
       );
     }
 
+    // Bust the BU context cache once at the end so upsert-only runs (which
+    // never enter deactivateByBu) still invalidate the cache.
     this.businessUnitContext.bustCache();
 
     console.log(

@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { OrganizationStatus } from '@prisma/client';
+import { AffiliateStatus, OrganizationStatus } from '@prisma/client';
 import axios from 'axios';
 import { BusinessUnitsService } from './business-units.service';
 
@@ -87,14 +87,19 @@ function makeAudit() {
   return { log: jest.fn().mockResolvedValue(undefined) };
 }
 
+function makeBuContext() {
+  return { bustCache: jest.fn() };
+}
+
 function makeService(
   prismaOverrides: Record<string, unknown> = {},
   auditOverride?: Record<string, unknown>,
 ) {
   const prisma = makePrisma(prismaOverrides);
   const audit = auditOverride ?? makeAudit();
-  const service = new (BusinessUnitsService as any)(prisma, audit);
-  return { service: service as BusinessUnitsService, prisma, audit };
+  const buContext = makeBuContext();
+  const service = new (BusinessUnitsService as any)(prisma, audit, buContext);
+  return { service: service as BusinessUnitsService, prisma, audit, buContext };
 }
 
 // ── findAll ────────────────────────────────────────────────────────────────────
@@ -122,7 +127,7 @@ describe('BusinessUnitsService.create', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     await service.create(dto, 'user-1');
 
@@ -140,7 +145,7 @@ describe('BusinessUnitsService.create', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     await service.create(dto, 'user-1');
 
@@ -350,7 +355,7 @@ describe('BusinessUnitsService — sync bidirecional', () => {
         update: jest.fn().mockResolvedValue(updatedBranding),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     await service.updateBranding('medvirtual', { primary_color: '#FF0000' }, 'user-1');
     await new Promise((r) => setTimeout(r, 10));
@@ -500,7 +505,7 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     mockedAxios.post
       .mockResolvedValueOnce({
@@ -563,7 +568,7 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
     mockedAxios.post.mockResolvedValue(emptySearch());
 
     await service.backfillFromHubspot('mmva');
@@ -584,7 +589,7 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
     mockedAxios.post.mockResolvedValue({
       data: {
         results: [
@@ -610,7 +615,7 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     let resolvePost: (value: unknown) => void;
     const pending = new Promise((resolve) => {
@@ -636,7 +641,7 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
     mockedAxios.post.mockResolvedValue(emptySearch());
 
     await service.backfillFromHubspot('mmva');
@@ -657,7 +662,7 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
         update: jest.fn(),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
     mockedAxios.post
       .mockResolvedValueOnce({
         data: { results: [{ id: 'company-1', properties }] },
@@ -736,7 +741,7 @@ describe('BusinessUnitsService.update — activation flow', () => {
     });
     prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
     const audit = makeAudit();
-    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, audit, makeBuContext()) as BusinessUnitsService;
 
     await service.update('mmva', { is_visible: true });
     await new Promise((r) => setTimeout(r, 10));
@@ -782,7 +787,7 @@ describe('BusinessUnitsService.update — activation flow', () => {
     });
     // The webhook-deleted org: no marker, but belongs to the BU's hubspot_value.
     prisma.organization.findMany.mockResolvedValue([{ id: 'org-webhook-1' }]);
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     await service.update('mmva', { is_visible: true });
     await new Promise((r) => setTimeout(r, 10));
@@ -825,7 +830,7 @@ describe('BusinessUnitsService.update — activation flow', () => {
       },
     });
     prisma.organization.findMany.mockResolvedValue([]);
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     await service.update('mmva', { is_visible: true });
     await new Promise((r) => setTimeout(r, 10));
@@ -850,7 +855,7 @@ describe('BusinessUnitsService.update — activation flow', () => {
       },
     });
     prisma.organization.findMany.mockResolvedValue([]);
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     await service.update('mmva', { is_visible: true });
     await new Promise((r) => setTimeout(r, 10));
@@ -877,7 +882,7 @@ describe('BusinessUnitsService.update — activation flow', () => {
     });
     prisma.organization.findMany.mockResolvedValue([]);
     const audit = makeAudit();
-    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, audit, makeBuContext()) as BusinessUnitsService;
 
     await service.update('mmva', { is_visible: true });
     await new Promise((r) => setTimeout(r, 10));
@@ -897,7 +902,7 @@ describe('BusinessUnitsService.update — activation flow', () => {
       },
     });
     const audit = makeAudit();
-    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, audit, makeBuContext()) as BusinessUnitsService;
 
     await service.update('mmva', { is_visible: true });
     await new Promise((r) => setTimeout(r, 10));
@@ -906,23 +911,55 @@ describe('BusinessUnitsService.update — activation flow', () => {
     expect(mockedAxios.post).not.toHaveBeenCalled();
   });
 
-  it('does NOT reactivate or backfill on false→false or true→false transitions', async () => {
+  it('does NOT reactivate, deactivate or backfill on a false→false no-op transition', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
     const prisma = makePrisma({
       businessUnit: {
-        findUnique: jest.fn().mockResolvedValue(MMVA_BU), // currently visible
+        findUnique: jest.fn().mockResolvedValue(dormantBu), // already hidden
         findMany: jest.fn(),
         create: jest.fn(),
-        update: jest.fn().mockResolvedValue({ ...MMVA_BU, is_visible: false }),
+        update: jest.fn().mockResolvedValue(dormantBu),
       },
     });
     const audit = makeAudit();
-    const service = new (BusinessUnitsService as any)(prisma, audit) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, audit, makeBuContext()) as BusinessUnitsService;
 
     await service.update('mmva', { is_visible: false });
     await new Promise((r) => setTimeout(r, 10));
 
     expect(prisma.organization.updateMany).not.toHaveBeenCalled();
+    expect(prisma.uSER.updateMany).not.toHaveBeenCalled();
+    expect(prisma.candidate.updateMany).not.toHaveBeenCalled();
+    expect(prisma.affiliateProfile.updateMany).not.toHaveBeenCalled();
     expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
+  it('does NOT run the deactivation cascade on an activation (false→true) transition', async () => {
+    const dormantBu = { ...MMVA_BU, is_visible: false };
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(dormantBu),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
+      },
+    });
+    prisma.organization.findMany.mockResolvedValue([]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Activation restores (clears) tags — it must NEVER set status=deleted or
+    // re-tag rows with deactivated_by_bu.
+    const orgDeactivations = (prisma.organization.updateMany as jest.Mock).mock.calls.filter(
+      (c) => c[0]?.data?.deactivated_by_bu === 'mmva',
+    );
+    expect(orgDeactivations).toHaveLength(0);
+    const affiliateDeactivations = (
+      prisma.affiliateProfile.updateMany as jest.Mock
+    ).mock.calls.filter((c) => c[0]?.data?.deactivated_by_bu === 'mmva');
+    expect(affiliateDeactivations).toHaveLength(0);
   });
 
   it('does not block the update() response on the backfill (fire-and-forget)', async () => {
@@ -935,12 +972,213 @@ describe('BusinessUnitsService.update — activation flow', () => {
         update: jest.fn().mockResolvedValue({ ...dormantBu, is_visible: true }),
       },
     });
-    const service = new (BusinessUnitsService as any)(prisma, makeAudit()) as BusinessUnitsService;
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
 
     // backfill's axios call never resolves during this test
     mockedAxios.post.mockReturnValue(new Promise(() => {}) as any);
 
     const result = await service.update('mmva', { is_visible: true });
     expect(result.status).toBe(200);
+  });
+});
+
+// ── update() — is_visible true→false deactivation cascade ──────────────────
+// The reported bug: deactivating a BU (true→false) left its Organizations,
+// USERs, Candidates and Affiliates untouched. It must now cascade the exact
+// same soft-delete the cron decommission path performs.
+
+describe('BusinessUnitsService.update — deactivation flow', () => {
+  beforeEach(() => {
+    mockedAxios.post.mockReset();
+    mockedAxios.post.mockResolvedValue(emptySearch());
+  });
+
+  function makeVisibleBuPrisma() {
+    return makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU), // currently visible
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({ ...MMVA_BU, is_visible: false }),
+      },
+    });
+  }
+
+  it('soft-deletes Organizations for the BU (status=deleted + deactivated_by_bu=slug)', async () => {
+    const prisma = makeVisibleBuPrisma();
+    prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: false });
+
+    expect(prisma.organization.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { business_unit: MMVA_BU.hubspot_value },
+        data: expect.objectContaining({
+          status: OrganizationStatus.deleted,
+          deactivated_by_bu: 'mmva',
+        }),
+      }),
+    );
+  });
+
+  it('deactivates the USERs of the affected organizations (inactive + tagged)', async () => {
+    const prisma = makeVisibleBuPrisma();
+    prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: false });
+
+    expect(prisma.uSER.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organization_id: { in: ['org-1', 'org-2'] } },
+        data: expect.objectContaining({
+          status: 'inactive',
+          deactivated_by_bu: 'mmva',
+        }),
+      }),
+    );
+  });
+
+  it('tags Candidates for the BU with deactivated_by_bu=slug', async () => {
+    const prisma = makeVisibleBuPrisma();
+    prisma.organization.findMany.mockResolvedValue([]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: false });
+
+    expect(prisma.candidate.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { business_unit: MMVA_BU.hubspot_value },
+        data: expect.objectContaining({ deactivated_by_bu: 'mmva' }),
+      }),
+    );
+  });
+
+  it('sets AffiliateProfiles for the BU to inactive + tagged', async () => {
+    const prisma = makeVisibleBuPrisma();
+    prisma.organization.findMany.mockResolvedValue([]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: false });
+
+    expect(prisma.affiliateProfile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { business_unit: MMVA_BU.hubspot_value },
+        data: expect.objectContaining({
+          status: AffiliateStatus.inactive,
+          deactivated_by_bu: 'mmva',
+        }),
+      }),
+    );
+  });
+
+  it('does NOT run the reactivation backfill (no HubSpot search) on deactivation', async () => {
+    const prisma = makeVisibleBuPrisma();
+    prisma.organization.findMany.mockResolvedValue([]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: false });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockedAxios.post).not.toHaveBeenCalled();
+  });
+
+  it('busts the BusinessUnitContext cache and audit-logs the deactivation', async () => {
+    const prisma = makeVisibleBuPrisma();
+    prisma.organization.findMany.mockResolvedValue([]);
+    const audit = makeAudit();
+    const buContext = makeBuContext();
+    const service = new (BusinessUnitsService as any)(prisma, audit, buContext) as BusinessUnitsService;
+
+    await service.update('mmva', { is_visible: false });
+
+    expect(buContext.bustCache).toHaveBeenCalled();
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        payload: expect.objectContaining({ trigger: 'deactivation' }),
+      }),
+    );
+  });
+});
+
+// ── Round-trip symmetry: deactivateByBu ⇄ reactivateDeactivatedByBu ─────────
+// Everything deactivateByBu tags with deactivated_by_bu=slug must be exactly
+// the set reactivateDeactivatedByBu restores (marker-based), proving the two
+// halves are symmetric.
+
+describe('BusinessUnitsService — deactivate/reactivate round-trip symmetry', () => {
+  it('deactivate tags every object type with deactivated_by_bu=slug; reactivate restores exactly that tagged set', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue(MMVA_BU),
+      },
+    });
+    prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    // ── Deactivate: tag everything deactivated_by_bu='mmva' ──
+    await service.deactivateByBu('mmva', MMVA_BU.hubspot_value);
+
+    for (const model of ['organization', 'uSER', 'candidate', 'affiliateProfile'] as const) {
+      const calls = (prisma[model].updateMany as jest.Mock).mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      // Every deactivation write tags with the slug.
+      expect(
+        calls.some((c) => c[0]?.data?.deactivated_by_bu === 'mmva'),
+      ).toBe(true);
+    }
+
+    // Reset call history, then reactivate.
+    (prisma.organization.updateMany as jest.Mock).mockClear();
+    (prisma.uSER.updateMany as jest.Mock).mockClear();
+    (prisma.candidate.updateMany as jest.Mock).mockClear();
+    (prisma.affiliateProfile.updateMany as jest.Mock).mockClear();
+
+    // ── Reactivate: restore exactly the marker-tagged set ──
+    await (service as any).reactivateDeactivatedByBu('mmva', MMVA_BU.hubspot_value);
+
+    // Organizations: broadened match includes the marker; restored to inactive,
+    // marker + deletedAt cleared.
+    const orgCall = (prisma.organization.updateMany as jest.Mock).mock.calls[0][0];
+    expect(orgCall.where.OR).toEqual(
+      expect.arrayContaining([{ deactivated_by_bu: 'mmva' }]),
+    );
+    expect(orgCall.data).toEqual(
+      expect.objectContaining({
+        status: OrganizationStatus.inactive,
+        deactivated_by_bu: null,
+        deletedAt: null,
+      }),
+    );
+
+    // USERs: marker-scoped, tag cleared.
+    expect(prisma.uSER.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deactivated_by_bu: 'mmva' },
+        data: expect.objectContaining({ deactivated_by_bu: null }),
+      }),
+    );
+    // Candidates: marker-scoped, tag cleared.
+    expect(prisma.candidate.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deactivated_by_bu: 'mmva' },
+        data: expect.objectContaining({ deactivated_by_bu: null }),
+      }),
+    );
+    // Affiliates: marker-scoped, restored to active, tag cleared.
+    expect(prisma.affiliateProfile.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { deactivated_by_bu: 'mmva' },
+        data: expect.objectContaining({
+          status: AffiliateStatus.active,
+          deactivated_by_bu: null,
+        }),
+      }),
+    );
   });
 });

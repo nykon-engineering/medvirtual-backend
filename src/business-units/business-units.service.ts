@@ -16,6 +16,7 @@ import { CreateBusinessUnitDto } from './dto/create-business-unit.dto';
 import { UpdateBusinessUnitDto } from './dto/update-business-unit.dto';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
 import { HubspotAuditService } from '../hubspot/hubspot-audit.service';
+import { BusinessUnitContext } from './business-unit-context.service';
 import { mapOrganizationToDb, mapContactToDb } from '../common/utils/hubspot.util';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { contactToDbDictionary } from '../common/dictionaries/contact-dictionary';
@@ -56,6 +57,7 @@ export class BusinessUnitsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly hubspotAudit: HubspotAuditService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
 
   // ── List ──────────────────────────────────────────────────────────────────
@@ -129,10 +131,50 @@ export class BusinessUnitsService {
       include: { branding: true },
     });
 
+    // Deactivation transition (true→false): cascade the same soft-delete the
+    // cron decommission path performs — soft-delete Organizations for this BU,
+    // deactivate their USERs, tag Candidates, and set Affiliates inactive, all
+    // tagged `deactivated_by_bu=slug` so a later reactivation can restore exactly
+    // this set. Runs synchronously (awaited) before returning.
+    const wasDeactivated =
+      before.is_visible === true && updated.is_visible === false;
+    if (wasDeactivated) {
+      try {
+        await this.deactivateByBu(slug, updated.hubspot_value ?? updated.name);
+        void this.hubspotAudit.log({
+          entityType: HubspotEntityType.organization,
+          entityId: slug,
+          hubspotObjectType: 'business_unit_deactivate',
+          action: HubspotAuditAction.SYNC,
+          source: HubspotAuditSource.user_action,
+          success: true,
+          payload: { slug, trigger: 'deactivation' },
+        });
+      } catch (err) {
+        const error = err as Error;
+        this.logger.error(
+          `deactivateByBu failed for "${slug}" after deactivation: ${error.message}`,
+        );
+        void this.hubspotAudit.log({
+          entityType: HubspotEntityType.organization,
+          entityId: slug,
+          hubspotObjectType: 'business_unit_deactivate',
+          action: HubspotAuditAction.SYNC,
+          source: HubspotAuditSource.user_action,
+          success: false,
+          payload: { slug, trigger: 'deactivation' },
+          errorMessage: error.message,
+        });
+        throw err;
+      }
+
+      return { status: 200, data: updated };
+    }
+
     // Activation transition (false→true): reactivate whatever was tagged
     // deactivated_by_bu for this slug, THEN fire the multi-object backfill
     // fire-and-forget (does not block this response). Any other transition
-    // (true→true, true→false, false→false) is a no-op here.
+    // (true→true, false→false) is a no-op here.
     const wasActivated = before.is_visible === false && updated.is_visible === true;
     if (wasActivated) {
       await this.reactivateDeactivatedByBu(slug, updated.hubspot_value ?? updated.name);
@@ -645,6 +687,68 @@ export class BusinessUnitsService {
       count++;
     }
     return count;
+  }
+
+  /**
+   * Deactivation cascade — the exact soft-delete the cron decommission path
+   * performs, extracted so BOTH the cron (`syncBusinessUnits`) and the manual
+   * `PUT /business-units/:slug` deactivation (`update` true→false) share one
+   * implementation.
+   *
+   * Per BU (matched by its `business_unit` value = hubspot_value ?? name):
+   *  - flip the BU row `is_visible=false` (done here so it happens exactly once
+   *    across both callers),
+   *  - soft-delete Organizations (status=deleted) + tag `deactivated_by_bu=slug`,
+   *  - deactivate those orgs' USERs (status=inactive) + tag,
+   *  - tag Candidates `deactivated_by_bu=slug`,
+   *  - set AffiliateProfiles inactive + tag.
+   *
+   * Everything is tagged `deactivated_by_bu=slug` so `reactivateDeactivatedByBu`
+   * can later restore exactly this set (round-trip symmetry). Busts the
+   * BusinessUnitContext cache at the end so visibility checks re-read the DB.
+   */
+  async deactivateByBu(slug: string, businessUnitValue: string): Promise<void> {
+    await this.prisma.businessUnit.update({
+      where: { slug },
+      data: { is_visible: false },
+    });
+
+    // Organizations tagged with this BU — soft-delete + tag.
+    const affectedOrgs = await this.prisma.organization.findMany({
+      where: { business_unit: businessUnitValue },
+      select: { id: true },
+    });
+    const affectedOrgIds = affectedOrgs.map((o) => o.id);
+
+    await this.prisma.organization.updateMany({
+      where: { business_unit: businessUnitValue },
+      data: { status: OrganizationStatus.deleted, deactivated_by_bu: slug },
+    });
+
+    // Users belong to organizations (no direct business_unit field on USER) —
+    // deactivate every user of every affected organization.
+    if (affectedOrgIds.length > 0) {
+      await this.prisma.uSER.updateMany({
+        where: { organization_id: { in: affectedOrgIds } },
+        data: { status: 'inactive', deactivated_by_bu: slug },
+      });
+    }
+
+    await this.prisma.candidate.updateMany({
+      where: { business_unit: businessUnitValue },
+      data: { deactivated_by_bu: slug },
+    });
+
+    await this.prisma.affiliateProfile.updateMany({
+      where: { business_unit: businessUnitValue },
+      data: { status: AffiliateStatus.inactive, deactivated_by_bu: slug },
+    });
+
+    this.businessUnitContext.bustCache();
+
+    this.logger.log(
+      `deactivateByBu("${slug}"): is_visible=false, cascaded soft-delete tagged deactivated_by_bu="${slug}" for business_unit="${businessUnitValue}"`,
+    );
   }
 
   /**

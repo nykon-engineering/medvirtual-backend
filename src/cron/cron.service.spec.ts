@@ -15,6 +15,7 @@ import { CommissionDetectionService } from '../med-alliance/sync/commission-dete
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { BusinessUnitsService } from '../business-units/business-units.service';
 import axios from 'axios';
 
 jest.mock('axios');
@@ -33,6 +34,7 @@ describe('CronService', () => {
   let commissionDetectionServiceMock: { run: jest.Mock };
   let allianceNotificationsMock: Record<string, jest.Mock>;
   let businessUnitContextMock: Record<string, jest.Mock>;
+  let businessUnitsServiceMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     businessUnitContextMock = {
@@ -43,6 +45,10 @@ describe('CronService', () => {
         v ? v.trim().toLowerCase().replace(/\s+/g, '') : '',
       ),
       bustCache: jest.fn(),
+    };
+
+    businessUnitsServiceMock = {
+      deactivateByBu: jest.fn().mockResolvedValue(undefined),
     };
 
     prismaServiceMock = {
@@ -139,6 +145,7 @@ describe('CronService', () => {
         { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
         { provide: EmailTemplatesService, useValue: { getTemplateContent: jest.fn().mockResolvedValue(null) } },
         { provide: BusinessUnitContext, useValue: businessUnitContextMock },
+        { provide: BusinessUnitsService, useValue: businessUnitsServiceMock },
       ],
     }).compile();
 
@@ -1197,7 +1204,7 @@ describe('CronService', () => {
       expect(upsertCall[0].update).not.toHaveProperty('is_visible');
     });
 
-    it('reconciles removed options: sets is_visible=false and cascade soft-deletes tagged rows', async () => {
+    it('reconciles removed options by delegating the cascade to businessUnitsService.deactivateByBu (once per decommissioned BU, right slug/value)', async () => {
       mockedAxios.get.mockResolvedValue(
         hubspotPropertyResponse([{ label: 'MedVirtual' }]),
       );
@@ -1206,52 +1213,40 @@ describe('CronService', () => {
         { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: true },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
-      prismaServiceMock.businessUnit.update.mockResolvedValue({});
-      prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1' },
-        { id: 'org-2' },
-      ]);
 
       const result = await service.syncBusinessUnits();
 
-      expect(prismaServiceMock.businessUnit.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { slug: 'mmva' },
-          data: expect.objectContaining({ is_visible: false }),
-        }),
-      );
-      expect(prismaServiceMock.organization.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({ business_unit: expect.anything() }),
-          data: expect.objectContaining({
-            status: 'deleted',
-            deactivated_by_bu: 'mmva',
-          }),
-        }),
-      );
-      expect(prismaServiceMock.uSER.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            status: 'inactive',
-            deactivated_by_bu: 'mmva',
-          }),
-        }),
-      );
-      expect(prismaServiceMock.candidate.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ deactivated_by_bu: 'mmva' }),
-        }),
-      );
-      expect(prismaServiceMock.affiliateProfile.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            status: 'inactive',
-            deactivated_by_bu: 'mmva',
-          }),
-        }),
+      // The cron no longer performs the cascade inline — it delegates to the
+      // shared method exactly once, with the decommissioned BU's slug + value.
+      expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledTimes(1);
+      expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledWith(
+        'mmva',
+        'MMVA',
       );
       expect(result.aborted).toBe(false);
       expect(result.removed).toEqual(['mmva']);
+    });
+
+    it('delegates once per decommissioned BU when several are removed', async () => {
+      mockedAxios.get.mockResolvedValue(
+        hubspotPropertyResponse([{ label: 'MedVirtual' }]),
+      );
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: true },
+        { id: '3', slug: 'berry-virtual', hubspot_value: 'Berry Virtual', is_visible: true },
+      ]);
+      prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
+
+      const result = await service.syncBusinessUnits();
+
+      expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledTimes(2);
+      expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledWith('mmva', 'MMVA');
+      expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledWith(
+        'berry-virtual',
+        'Berry Virtual',
+      );
+      expect(result.removed).toEqual(['mmva', 'berry-virtual']);
     });
 
     it('never touches BusinessUnit rows outside the reconcile diff (idempotent re-run creates no dupes)', async () => {
@@ -1267,7 +1262,7 @@ describe('CronService', () => {
       const result = await service.syncBusinessUnits();
 
       expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
-      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(businessUnitsServiceMock.deactivateByBu).not.toHaveBeenCalled();
       expect(result.removed).toEqual([]);
     });
 
@@ -1281,10 +1276,7 @@ describe('CronService', () => {
       const result = await service.syncBusinessUnits();
 
       expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
-      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
-      expect(prismaServiceMock.uSER.updateMany).not.toHaveBeenCalled();
-      expect(prismaServiceMock.candidate.updateMany).not.toHaveBeenCalled();
-      expect(prismaServiceMock.affiliateProfile.updateMany).not.toHaveBeenCalled();
+      expect(businessUnitsServiceMock.deactivateByBu).not.toHaveBeenCalled();
       expect(result.aborted).toBe(true);
     });
 
@@ -1297,7 +1289,7 @@ describe('CronService', () => {
       const result = await service.syncBusinessUnits();
 
       expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
-      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(businessUnitsServiceMock.deactivateByBu).not.toHaveBeenCalled();
       expect(result.aborted).toBe(true);
     });
 
@@ -1313,6 +1305,7 @@ describe('CronService', () => {
       const result = await service.syncBusinessUnits();
 
       expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
+      expect(businessUnitsServiceMock.deactivateByBu).not.toHaveBeenCalled();
       expect(result.aborted).toBe(true);
     });
 
@@ -1326,7 +1319,7 @@ describe('CronService', () => {
 
       expect(result.aborted).toBe(true);
       expect(prismaServiceMock.businessUnit.update).not.toHaveBeenCalled();
-      expect(prismaServiceMock.organization.updateMany).not.toHaveBeenCalled();
+      expect(businessUnitsServiceMock.deactivateByBu).not.toHaveBeenCalled();
     });
 
     it('is idempotent — re-running with the same options creates no duplicate BU rows', async () => {
