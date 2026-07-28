@@ -36,9 +36,8 @@ export class OrganizationCreationService {
     businessUnit: string | undefined,
   ): Promise<string> {
     if (!businessUnit) return '';
-    const bu = await this.businessUnitContext.resolveByHubspotValue(
-      businessUnit,
-    );
+    const bu =
+      await this.businessUnitContext.resolveByHubspotValue(businessUnit);
     return bu?.hubspot_value ?? bu?.name ?? businessUnit;
   }
 

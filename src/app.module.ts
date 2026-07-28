@@ -12,6 +12,8 @@ import { OrganizationModule } from './organization/organization.module';
 import { CandidatesModule } from './candidate/candidates.module';
 import { S3Module } from './s3/s3.module';
 import { OpenaiModule } from './openai/openai.module';
+import { OpenrouterModule } from './openrouter/openrouter.module';
+import { AiComparisonModule } from './ai-comparison/ai-comparison.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CronModule } from './cron/cron.module';
 import { HireRequestModule } from './hire-request/hire-request.module';
@@ -51,6 +53,8 @@ import { BusinessUnitsModule } from './business-units/business-units.module';
     CandidatesModule,
     S3Module,
     OpenaiModule,
+    OpenrouterModule,
+    AiComparisonModule,
     DashboardModule,
     CronModule,
     HireRequestModule,

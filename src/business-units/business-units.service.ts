@@ -17,7 +17,10 @@ import { UpdateBusinessUnitDto } from './dto/update-business-unit.dto';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
 import { HubspotAuditService } from '../hubspot/hubspot-audit.service';
 import { BusinessUnitContext } from './business-unit-context.service';
-import { mapOrganizationToDb, mapContactToDb } from '../common/utils/hubspot.util';
+import {
+  mapOrganizationToDb,
+  mapContactToDb,
+} from '../common/utils/hubspot.util';
 import { organizationToDbDictionary } from '../common/dictionaries/organization-dictionary';
 import { contactToDbDictionary } from '../common/dictionaries/contact-dictionary';
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
@@ -175,9 +178,13 @@ export class BusinessUnitsService {
     // deactivated_by_bu for this slug, THEN fire the multi-object backfill
     // fire-and-forget (does not block this response). Any other transition
     // (true→true, false→false) is a no-op here.
-    const wasActivated = before.is_visible === false && updated.is_visible === true;
+    const wasActivated =
+      before.is_visible === false && updated.is_visible === true;
     if (wasActivated) {
-      await this.reactivateDeactivatedByBu(slug, updated.hubspot_value ?? updated.name);
+      await this.reactivateDeactivatedByBu(
+        slug,
+        updated.hubspot_value ?? updated.name,
+      );
 
       this.backfillFromHubspot(slug)
         .then((result) => {
@@ -525,7 +532,9 @@ export class BusinessUnitsService {
     return results;
   }
 
-  private async backfillOrganizations(businessUnitValue: string): Promise<number> {
+  private async backfillOrganizations(
+    businessUnitValue: string,
+  ): Promise<number> {
     const properties = Object.keys(organizationToDbDictionary);
     const companies = await this.searchHubspotByBusinessUnit(
       'companies',

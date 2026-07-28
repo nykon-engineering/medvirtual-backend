@@ -1559,7 +1559,7 @@ export class CronService {
     reason?: string;
   }> {
     const upserted: string[] = [];
-    let removed: string[] = [];
+    const removed: string[] = [];
     let aborted = false;
     let abortReason: string | undefined;
 
@@ -1630,7 +1630,9 @@ export class CronService {
     // Compared by normalized hubspot_value (not slug) since a BU's slug can be
     // hyphenated/spelled differently than a straight lowercase of the label.
     const hubspotValuesNormalized = new Set(
-      options.map((o) => this.businessUnitContext.normalizeBusinessUnit(o.label)),
+      options.map((o) =>
+        this.businessUnitContext.normalizeBusinessUnit(o.label),
+      ),
     );
 
     const decommissioned = existingRows.filter(

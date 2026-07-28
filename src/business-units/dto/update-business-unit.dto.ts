@@ -44,7 +44,7 @@ export class UpdateBusinessUnitDto {
       'growth partners) into the platform, upserted by hubspot_id, non-' +
       'destructive and idempotent. The backfill does not block the response. ' +
       'Flipping true→false only hides the BU going forward — it does NOT ' +
-      'soft-delete related data (that cascade only happens via the cron\'s ' +
+      "soft-delete related data (that cascade only happens via the cron's " +
       'removal-reconcile step when a BU disappears from HubSpot entirely).',
     example: true,
   })
@@ -53,7 +53,8 @@ export class UpdateBusinessUnitDto {
   is_visible?: boolean;
 
   @ApiPropertyOptional({
-    description: 'App brand primary color (hex), used for buttons/highlights/sidebar.',
+    description:
+      'App brand primary color (hex), used for buttons/highlights/sidebar.',
     example: '#077999',
   })
   @IsOptional()

@@ -74,9 +74,7 @@ export class BusinessUnitContext {
         const candidates = [row.hubspot_value, row.name, row.slug].filter(
           (c): c is string => !!c,
         );
-        return candidates.some(
-          (c) => this.normalizeBusinessUnit(c) === target,
-        );
+        return candidates.some((c) => this.normalizeBusinessUnit(c) === target);
       }) ?? null
     );
   }

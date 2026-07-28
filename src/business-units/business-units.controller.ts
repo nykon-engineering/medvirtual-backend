@@ -98,7 +98,11 @@ export class BusinessUnitsController {
       'transition (true→true, true→false, false→false) only updates the row, ' +
       'no reactivation or backfill is triggered.',
   })
-  @ApiParam({ name: 'slug', description: 'Business unit slug', example: 'mmva' })
+  @ApiParam({
+    name: 'slug',
+    description: 'Business unit slug',
+    example: 'mmva',
+  })
   @ApiResponse({
     status: 200,
     description:
@@ -147,7 +151,11 @@ export class BusinessUnitsController {
       'PUT :slug activation transition. Rejects with 400 if a backfill for this ' +
       'slug is already running (in-memory concurrency guard, per server instance).',
   })
-  @ApiParam({ name: 'slug', description: 'Business unit slug', example: 'mmva' })
+  @ApiParam({
+    name: 'slug',
+    description: 'Business unit slug',
+    example: 'mmva',
+  })
   @ApiResponse({
     status: 200,
     description:
@@ -175,7 +183,7 @@ export class BusinessUnitsController {
     summary: 'Get email branding for a business unit',
     description:
       'Reads the EmailBranding row associated with this BU — the source used ' +
-      'by the DB-first email theme resolver (theme-helper.ts) so a brand\'s ' +
+      "by the DB-first email theme resolver (theme-helper.ts) so a brand's " +
       'transactional emails match its Customize Design settings. Distinct from ' +
       'the app-branding fields (primary_color, logo_url, favicon_url, …) on the ' +
       'BusinessUnit row itself, which drive in-app theming instead.',
@@ -191,7 +199,7 @@ export class BusinessUnitsController {
     summary: 'Update email branding for a business unit (snapshots history)',
     description:
       'Only meaningful for is_visible=true BUs — the "Customize Design" UI ' +
-      'filters its BU tabs to visible business units only, so a dormant BU\'s ' +
+      "filters its BU tabs to visible business units only, so a dormant BU's " +
       'branding is not editable from the app until it is activated (this route ' +
       'itself does not enforce that restriction server-side). Every save is ' +
       'snapshotted; see GET :slug/branding/history.',

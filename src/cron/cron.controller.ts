@@ -339,7 +339,8 @@ export class CronController {
 
   @Get('sync-business-units')
   @ApiOperation({
-    summary: 'Daily HubSpot Business Unit intake (upsert new + reconcile removed)',
+    summary:
+      'Daily HubSpot Business Unit intake (upsert new + reconcile removed)',
     description:
       'Triggered daily by the external scheduler (same mechanism as the other ' +
       '`/cron/*` endpoints — this backend runs on Lambda, so no in-process cron). ' +

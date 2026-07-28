@@ -78,13 +78,18 @@ export class OrganizationService {
    * unrecognized is silently swept up.
    */
   private async buildBusinessUnitFilterGroups(
-    extraFilters: Array<{ propertyName: string; operator: string; value: string }> = [],
+    extraFilters: Array<{
+      propertyName: string;
+      operator: string;
+      value: string;
+    }> = [],
   ): Promise<
     Array<{
       filters: Array<{ propertyName: string; operator: string; value: string }>;
     }>
   > {
-    const visibleValues = await this.businessUnitContext.getVisibleHubspotValues();
+    const visibleValues =
+      await this.businessUnitContext.getVisibleHubspotValues();
     return visibleValues.map((value) => ({
       filters: [
         { propertyName: 'business_unit', operator: 'EQ', value },
