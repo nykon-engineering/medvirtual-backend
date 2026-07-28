@@ -81,6 +81,52 @@ describe('OpenrouterService', () => {
     });
   });
 
+  describe('chatJson validate', () => {
+    it('should apply the validator to the parsed data', async () => {
+      mockChatCreate.mockResolvedValue(chatResponse('{"bio":"ok"}'));
+
+      const result = await service.chatJson('prompt', {
+        validate: (data) => ({ ...data, normalized: true }),
+      });
+
+      expect(result.data).toEqual({ bio: 'ok', normalized: true });
+    });
+
+    it('should try the next model when the validator rejects', async () => {
+      // A 200 response carrying unusable JSON must be treated like a transport
+      // failure, otherwise the first bad free model ends the cascade.
+      mockChatCreate
+        .mockResolvedValueOnce(chatResponse('{}', 'model-a'))
+        .mockResolvedValueOnce(chatResponse('{"bio":"good"}', 'model-b'));
+
+      const result = await service.chatJson('prompt', {
+        models: ['model-a', 'model-b'],
+        validate: (data) => {
+          if (!data?.bio) throw new Error('empty extraction');
+          return data;
+        },
+      });
+
+      expect(mockChatCreate).toHaveBeenCalledTimes(2);
+      expect(result.data).toEqual({ bio: 'good' });
+      expect(result.model).toBe('model-b');
+    });
+
+    it('should reject when every model fails validation', async () => {
+      mockChatCreate.mockResolvedValue(chatResponse('{}'));
+
+      await expect(
+        service.chatJson('prompt', {
+          models: ['model-a', 'model-b'],
+          validate: () => {
+            throw new Error('empty extraction');
+          },
+        }),
+      ).rejects.toThrow('empty extraction');
+      expect(mockChatCreate).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('chatJson', () => {
     it('should send the models cascade and request json_object', async () => {
       mockChatCreate.mockResolvedValue(chatResponse('{"bio":"ok"}'));

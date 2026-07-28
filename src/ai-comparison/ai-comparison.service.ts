@@ -12,6 +12,7 @@ import { GoogledriveService } from '../googledrive/googledrive.service';
 import {
   buildResumeExtractionPayload,
   buildTextSummaryPrompt,
+  normalizeResumeExtraction,
   TEXT_SUMMARY_SYSTEM_PROMPT,
 } from '../openai/openai.prompts';
 import { parseJsonLoose } from '../openrouter/openrouter.service';
@@ -170,6 +171,12 @@ export class AiComparisonService {
       const openai = this.settled(openaiResult as any, 'data');
       const openrouter = this.settled(openrouterResult as any, 'data');
 
+      // Normalized so the diff compares content, not schema drift. Unlike the
+      // production path this never rejects an empty result — seeing the bad
+      // output is the point of a diagnostic dry run.
+      openai.data = normalizeResumeExtraction(openai.data);
+      openrouter.data = normalizeResumeExtraction(openrouter.data);
+
       const a = openai.data ?? {};
       const b = openrouter.data ?? {};
 
@@ -266,7 +273,7 @@ export class AiComparisonService {
         ok: true,
         latencyMs: result.latencyMs,
         cost: result.cost,
-        data: result.data,
+        data: normalizeResumeExtraction(result.data),
       };
 
       return {

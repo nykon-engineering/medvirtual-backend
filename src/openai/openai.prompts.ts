@@ -59,6 +59,113 @@ export function buildTextSummaryPrompt(text: string): string {
         `;
 }
 
+/** Top-level keys defined by RESUME_EXTRACTION_PROMPT's schema. */
+const RESUME_KEYS = ['bio', 'experience', 'education', 'skills'] as const;
+
+const hasResumeKeys = (value: any): boolean =>
+  !!value &&
+  typeof value === 'object' &&
+  RESUME_KEYS.some((key) => key in value);
+
+/** Empty values must not win a merge, otherwise `[]` overwrites real data. */
+const isEmptyValue = (value: any): boolean =>
+  value === undefined ||
+  value === null ||
+  value === '' ||
+  (Array.isArray(value) && value.length === 0);
+
+const toArray = (value: any): any[] => {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null || value === '') return [];
+  return [value];
+};
+
+/** Picks the first non-empty value, so aliases only fill genuine gaps. */
+const firstNonEmpty = (...values: any[]): any =>
+  values.find((value) => !isEmptyValue(value));
+
+function normalizeExperienceItem(item: any): any {
+  if (!item || typeof item !== 'object') return item;
+  return {
+    ...item,
+    company: firstNonEmpty(item.company, item.employer, item.organization),
+    role: firstNonEmpty(item.role, item.position, item.title, item.job_title),
+    start_date: firstNonEmpty(item.start_date, item.startDate, item.from) ?? null,
+    end_date: firstNonEmpty(item.end_date, item.endDate, item.to) ?? null,
+    description: toArray(
+      firstNonEmpty(item.description, item.responsibilities, item.details),
+    ),
+  };
+}
+
+function normalizeEducationItem(item: any): any {
+  if (!item || typeof item !== 'object') return item;
+  return {
+    ...item,
+    institution: firstNonEmpty(item.institution, item.school, item.university),
+    degree: firstNonEmpty(item.degree, item.qualification, item.course),
+    year: firstNonEmpty(item.year, item.graduation_date, item.date) ?? null,
+  };
+}
+
+/**
+ * Coerces a model response into the schema declared by
+ * RESUME_EXTRACTION_PROMPT. Free models routinely violate that schema even with
+ * `response_format: json_object` — the observed failure was a payload wrapped in
+ * a "0" key alongside empty root-level `education`/`experience`, which read as a
+ * complete but blank resume and wiped the candidate's stored data.
+ *
+ * Only reshapes: never invents values. Unrecoverable input yields `{}` so the
+ * caller's empty-extraction guard can reject it.
+ */
+export function normalizeResumeExtraction(raw: any): any {
+  // A model asked for one object sometimes returns a list of one.
+  let root = Array.isArray(raw) ? raw[0] : raw;
+  if (!root || typeof root !== 'object') return {};
+
+  // Unwrap a container ({"0": {...}}, {"resume": {...}}) when the root itself
+  // carries no schema keys but exactly one child does.
+  if (!hasResumeKeys(root)) {
+    const candidates = Object.values(root).filter(hasResumeKeys);
+    if (candidates.length === 1) root = candidates[0];
+  } else {
+    // Root has schema keys but they may all be empty while a nested container
+    // holds the real payload — the exact shape seen in production.
+    const nested = Object.entries(root).filter(
+      ([key, value]) => !RESUME_KEYS.includes(key as any) && hasResumeKeys(value),
+    );
+
+    if (nested.length === 1) {
+      const [wrapperKey, payload] = nested[0];
+      // Root values only win when non-empty, so `education: []` cannot
+      // overwrite a populated nested `education`. The wrapper key is skipped so
+      // the payload isn't duplicated into the normalized result.
+      const merged: Record<string, any> = { ...(payload as object) };
+      for (const [key, value] of Object.entries(root)) {
+        if (key !== wrapperKey && !isEmptyValue(value)) merged[key] = value;
+      }
+      root = merged;
+    }
+  }
+
+  if (!root || typeof root !== 'object') return {};
+
+  const bio = firstNonEmpty(
+    (root as any).bio,
+    (root as any).summary,
+    (root as any).about_me,
+    (root as any).professional_summary,
+  );
+
+  return {
+    ...root,
+    bio: typeof bio === 'string' ? bio : bio ? String(bio) : undefined,
+    experience: toArray((root as any).experience).map(normalizeExperienceItem),
+    education: toArray((root as any).education).map(normalizeEducationItem),
+    skills: toArray((root as any).skills),
+  };
+}
+
 /**
  * Builds the multimodal payload for resume extraction. Shared by OpenaiService
  * and the comparison endpoint so both providers receive byte-identical input —

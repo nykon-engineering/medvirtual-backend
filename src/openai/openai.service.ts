@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import fs from 'fs';
 import OpenAI, { toFile } from 'openai';
 import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
+import openrouter_fallback_failed from '../common/utils/email-templates/openrouter-fallback-failed';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isOpenRouterEnabled } from '../openrouter/openrouter.config';
@@ -14,6 +15,7 @@ import { parseJsonLoose } from '../openrouter/openrouter.service';
 import {
   buildResumeExtractionPayload,
   buildTextSummaryPrompt,
+  normalizeResumeExtraction,
   TEXT_SUMMARY_SYSTEM_PROMPT,
 } from './openai.prompts';
 import path from 'path';
@@ -76,6 +78,49 @@ export class OpenaiService {
   }
 
   /**
+   * Alerts when OpenAI is out of credit AND the OpenRouter fallback failed too,
+   * so nothing processed the request. Deduped per day like the quota alert, to
+   * avoid a mail storm when a whole batch of candidates fails at once.
+   */
+  private async notifyFallbackFailed(
+    operation: string,
+    error: unknown,
+  ): Promise<void> {
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+
+      const existingMail = await this.prisma.mail_Settings.findFirst({
+        where: {
+          title: 'openrouter_fallback_failed',
+          created_at: { gte: start, lt: end },
+        },
+      });
+      if (existingMail) return;
+
+      const mailSent = await this.mailService.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: 'paulo@regenta.ai',
+        subject: 'OpenRouter Fallback Failed - Both AI Providers Down',
+        html: openrouter_fallback_failed(operation, error, new Date()),
+      });
+      if (!mailSent) {
+        this.logger.warn('Failed to send OpenRouter fallback failure email.');
+      }
+
+      await this.prisma.mail_Settings.create({
+        data: { title: 'openrouter_fallback_failed' },
+      });
+    } catch (notifyError: any) {
+      this.logger.error(
+        `Failed to record fallback failure notification: ${notifyError?.message}`,
+      );
+    }
+  }
+
+  /**
    * Runs `primary` against OpenAI and, only when the account is out of credit,
    * retries through OpenRouter. Rate limits and every other error keep their
    * existing behaviour — the fallback is deliberately narrow.
@@ -123,6 +168,7 @@ export class OpenaiService {
         this.logger.error(
           `[OpenRouter] fallback failed for ${label}: ${fallbackError?.message}`,
         );
+        await this.notifyFallbackFailed(label, fallbackError);
         throw new BadRequestException(
           'You dont have credits. Check your plan/billing.',
         );
@@ -463,27 +509,39 @@ export class OpenaiService {
             (usage.prompt_tokens / 1000) * 0.00015 +
             (usage.completion_tokens / 1000) * 0.0006;
         }
-        return { data: result ? parseJsonLoose(result) : {}, cost };
+        return {
+          data: result ? normalizeResumeExtraction(parseJsonLoose(result)) : {},
+          cost,
+        };
       },
       async () => {
         const result = await this.openrouter.chatJson<any>(contentPayload, {
           temperature: 0.1,
           maxTokens: 4500,
+          // Runs per model inside the cascade: free models often break the
+          // schema (e.g. wrapping the payload in a "0" key), and an empty
+          // result must be rejected rather than returned — updateFromJson
+          // deletes the candidate's education/experience before reinserting,
+          // so returning it wipes real data and still marks them `completed`.
+          // Throwing here advances to the next free model; exhausting them all
+          // leaves the candidate `failed` for the daily cron to retry.
+          validate: (raw) => {
+            const data = normalizeResumeExtraction(raw);
+            if (
+              imagePaths.length > 0 &&
+              !data?.bio &&
+              !data?.experience?.length
+            ) {
+              throw new BadRequestException(
+                `OpenRouter returned an empty resume extraction for ${imagePaths.length} page(s).`,
+              );
+            }
+            return data;
+          },
         });
         this.logger.warn(
           `[OpenRouter] resume extraction served by ${result.model}`,
         );
-        // A free model that truncates output can still return valid JSON with
-        // nothing in it, which downstream would persist as a wiped resume.
-        if (
-          imagePaths.length > 0 &&
-          !result.data?.bio &&
-          !result.data?.experience?.length
-        ) {
-          this.logger.error(
-            `[OpenRouter] ${result.model} returned an empty extraction for ${imagePaths.length} page(s)`,
-          );
-        }
         return { data: result.data, cost: result.cost };
       },
     );

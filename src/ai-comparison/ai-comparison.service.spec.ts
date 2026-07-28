@@ -217,12 +217,16 @@ describe('AiComparisonService', () => {
       expect(result.openrouter.model).toBe('google/gemma-4-26b-a4b-it:free');
       expect(result.openrouter.latencyMs).toBe(20000);
       expect(result.openrouter.cost).toBe(0);
-      expect(result.openrouter.data).toEqual({
-        bio: 'A medical assistant.',
-        experience: [{ company: 'A' }, { company: 'B' }],
-        education: [{ institution: 'Uni' }, { institution: 'College' }],
-        skills: [],
-      });
+      // Content assertions rather than a strict shape match: the result is
+      // normalized, so canonical schema fields are filled in.
+      expect(result.openrouter.data.bio).toBe('A medical assistant.');
+      expect(result.openrouter.data.experience.map((e: any) => e.company)).toEqual(
+        ['A', 'B'],
+      );
+      expect(
+        result.openrouter.data.education.map((e: any) => e.institution),
+      ).toEqual(['Uni', 'College']);
+      expect(result.openrouter.data.skills).toEqual([]);
       expect(result.openrouter.error).toBeUndefined();
       expect(result.candidateId).toBe('cand-1');
       expect(result.pageCount).toBe(2);

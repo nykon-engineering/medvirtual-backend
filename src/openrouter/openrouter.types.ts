@@ -14,6 +14,13 @@ export interface OpenRouterChatOptions {
   systemPrompt?: string;
   /** OpenRouter routing extension, e.g. `{ sort: 'throughput' }`. */
   provider?: { sort?: 'price' | 'throughput' | 'latency'; [key: string]: any };
+  /**
+   * Reshapes and/or rejects a parsed response, applied inside the model
+   * cascade. Throwing advances to the next model, so this is how a caller
+   * treats semantically unusable output as a model failure rather than a
+   * success. Only applies to `chatJson`.
+   */
+  validate?: (data: any) => any;
 }
 
 export interface OpenRouterResult<T> {

@@ -174,8 +174,14 @@ export class OpenrouterService {
         options,
         true,
       );
+      // Runs inside the cascade so a model that returns structurally valid but
+      // unusable JSON is retried against the next model, exactly like a
+      // transport failure. Validating after chatJson returns would be too late.
+      const data = options?.validate
+        ? options.validate(parseJsonLoose<T>(content))
+        : parseJsonLoose<T>(content);
       return {
-        data: parseJsonLoose<T>(content),
+        data,
         cost: this.computeCost(model, usage),
         model,
         latencyMs: Date.now() - startedAt,
