@@ -7,6 +7,7 @@ import {
 import { TalentPoolLeadsService } from './talent-pool-leads.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { TicketAuditService } from '../ticket/ticket-audit.service';
 import { CreateTalentPoolLeadDto } from './dto/create-talent-pool-lead.dto';
 import { UpdateTalentPoolLeadDto } from './dto/update-talent-pool-lead.dto';
 import { QueryTalentPoolLeadsDto } from './dto/query-talent-pool-leads.dto';
@@ -47,6 +48,14 @@ const mockNotificationsService = {
   notifyTicketEvent: jest.fn(),
 };
 
+const mockTicketAuditService = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  findAllLogs: jest.fn(),
+  findByTicket: jest.fn(),
+  findLastDeletedEvent: jest.fn(),
+};
+
 describe('TalentPoolLeadsService', () => {
   let service: TalentPoolLeadsService;
   let prisma: PrismaService;
@@ -57,6 +66,7 @@ describe('TalentPoolLeadsService', () => {
         TalentPoolLeadsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: TicketAuditService, useValue: mockTicketAuditService },
       ],
     }).compile();
 
@@ -172,6 +182,41 @@ describe('TalentPoolLeadsService', () => {
       });
       expect(mockPrisma.talentPoolLead.create).toHaveBeenCalled();
       expect(result).toEqual(mockCreatedLead);
+    });
+
+    it('should record a created audit event tagged with the talent_pool_form origin', async () => {
+      mockPrisma.talentPoolLead.count.mockResolvedValue(0);
+      mockPrisma.talentPoolLead.findFirst.mockResolvedValue(null);
+      mockPrisma.organization.findFirst.mockResolvedValue(null);
+      // No pre-existing org, so the service creates one before the ticket. Without this
+      // mock the surrounding try/catch swallows the failure and no ticket is ever created.
+      mockPrisma.organization.create.mockResolvedValue({ id: 'org-1', name: 'Healthcare Organization' });
+      mockPrisma.uSER.findUnique.mockResolvedValue(null);
+      mockPrisma.ticket.create.mockResolvedValue({
+        id: 'ticket-1',
+        status: 'new',
+        type: 'interview',
+        user: null,
+        organization: null,
+      });
+      mockPrisma.talentPoolLead.create.mockResolvedValue({ id: 'lead-1' });
+      mockNotificationsService.notifyTicketEvent.mockResolvedValue(true);
+
+      await service.create(createDto);
+
+      expect(mockTicketAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticketId: 'ticket-1',
+          event: 'created',
+          // Public form — no authenticated user, so the lead email carries the identity.
+          actorUserId: null,
+          actorLabel: expect.stringContaining('john@healthcare.com'),
+          metadata: expect.objectContaining({
+            origin: 'talent_pool_form',
+            leadSource: 'talent-pool-page',
+          }),
+        }),
+      );
     });
 
     it('should throw ConflictException if lead with same email and source exists', async () => {

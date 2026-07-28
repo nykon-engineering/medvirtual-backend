@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { HubspotModule } from '../hubspot/hubspot.module';
 import { HireRequestModule } from '../hire-request/hire-request.module';
 import { BusinessUnitsModule } from '../business-units/business-units.module';
+import { TicketAuditService } from '../ticket/ticket-audit.service';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { BusinessUnitsModule } from '../business-units/business-units.module';
     BusinessUnitsModule,
   ],
   controllers: [OfferPanelsController, PublicOfferPanelsController],
-  providers: [OfferPanelsService],
+  providers: [OfferPanelsService, TicketAuditService],
   exports: [OfferPanelsService],
 })
 export class OfferPanelsModule {}

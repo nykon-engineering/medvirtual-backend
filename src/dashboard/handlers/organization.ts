@@ -165,6 +165,7 @@ export class HandlerOrganization {
           },
         },
         bonus: {
+          where: { deleted_at: null },
           select: {
             id: true,
             amount: true,

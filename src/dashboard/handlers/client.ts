@@ -53,6 +53,8 @@ export class HandlerClient {
           { status: TicketStatus.new },
           { status: TicketStatus.in_progress },
         ],
+        // Sibling of OR, so Prisma ANDs it — soft-deleted tickets stay out of the KPI.
+        deleted_at: null,
         ...(user.role === 'system_admin' ? { user_id: user.id } : {}),
       },
     });

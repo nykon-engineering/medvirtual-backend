@@ -15,7 +15,7 @@ describe('NotificationsService', () => {
       findUnique: jest.fn(),
     },
     ticket: {
-      findUnique: jest.fn(),
+      findFirst: jest.fn(),
     },
     uSER: {
       findUnique: jest.fn(),
@@ -785,7 +785,7 @@ describe('NotificationsService', () => {
           role: 'system_admin',
         },
       };
-      mockPrismaService.ticket.findUnique.mockResolvedValue({
+      mockPrismaService.ticket.findFirst.mockResolvedValue({
         created_by: 'assignee1',
         user_id: 'assignee1',
       });
@@ -857,8 +857,8 @@ describe('NotificationsService', () => {
         created_by: null,
       };
 
-      // Mock the ticket.findUnique call that happens when created_by is null but ticket.id exists
-      mockPrismaService.ticket.findUnique.mockResolvedValue({
+      // Mock the ticket.findFirst call that happens when created_by is null but ticket.id exists
+      mockPrismaService.ticket.findFirst.mockResolvedValue({
         created_by: null,
         user_id: null,
       });
@@ -2439,7 +2439,7 @@ describe('NotificationsService', () => {
 
     it('should use ticket.id fallback to fetch created_by when created_by is missing', async () => {
       const ticketNoCreatedBy = { ...mockTicket, created_by: null };
-      mockPrismaService.ticket.findUnique.mockResolvedValue({
+      mockPrismaService.ticket.findFirst.mockResolvedValue({
         created_by: 'creator1',
       });
       mockPrismaService.uSER.findUnique
@@ -2553,7 +2553,7 @@ describe('NotificationsService', () => {
 
     it('should use ticket.id fallback when created_by is missing', async () => {
       const ticketNoCreatedBy = { ...mockTicket, created_by: null };
-      mockPrismaService.ticket.findUnique.mockResolvedValue({
+      mockPrismaService.ticket.findFirst.mockResolvedValue({
         created_by: 'creator1',
       });
       mockPrismaService.uSER.findUnique
@@ -2616,7 +2616,7 @@ describe('NotificationsService', () => {
     };
 
     it('should send note added notification to assignee', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(mockTicket);
       mockPrismaService.uSER.findUnique.mockResolvedValue({
         role: 'system_admin',
       });
@@ -2639,7 +2639,7 @@ describe('NotificationsService', () => {
     });
 
     it('should throw NotFoundException when ticket not found', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(null);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(null);
 
       await expect(
         service.notifyTicketNoteAddedToAssignee('ticket1', { content: 'note' }),
@@ -2648,7 +2648,7 @@ describe('NotificationsService', () => {
 
     it('should throw BadRequestException when ticket has no assigned user', async () => {
       const ticketNoUser = { ...mockTicket, user_id: null, user: null };
-      mockPrismaService.ticket.findUnique.mockResolvedValue(ticketNoUser);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(ticketNoUser);
 
       await expect(
         service.notifyTicketNoteAddedToAssignee('ticket1', { content: 'note' }),
@@ -2656,7 +2656,7 @@ describe('NotificationsService', () => {
     });
 
     it('should use fallback author name when author is not provided', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(mockTicket);
       mockPrismaService.uSER.findUnique.mockResolvedValue({
         role: 'system_admin',
       });
@@ -2685,7 +2685,7 @@ describe('NotificationsService', () => {
     };
 
     it('should send note added notification to creator', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(mockTicket);
       mockPrismaService.uSER.findUnique
         .mockResolvedValueOnce({
           id: 'creator1',
@@ -2715,7 +2715,7 @@ describe('NotificationsService', () => {
     });
 
     it('should throw NotFoundException when ticket not found', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(null);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(null);
 
       await expect(
         service.notifyTicketNoteAddedToCreator('ticket1', { content: 'note' }),
@@ -2724,7 +2724,7 @@ describe('NotificationsService', () => {
 
     it('should throw BadRequestException when ticket has no creator', async () => {
       const ticketNoCreator = { ...mockTicket, created_by: null };
-      mockPrismaService.ticket.findUnique.mockResolvedValue(ticketNoCreator);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(ticketNoCreator);
 
       await expect(
         service.notifyTicketNoteAddedToCreator('ticket1', { content: 'note' }),
@@ -2732,7 +2732,7 @@ describe('NotificationsService', () => {
     });
 
     it('should throw BadRequestException when creator has no email', async () => {
-      mockPrismaService.ticket.findUnique.mockResolvedValue(mockTicket);
+      mockPrismaService.ticket.findFirst.mockResolvedValue(mockTicket);
       mockPrismaService.uSER.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -3056,7 +3056,7 @@ describe('NotificationsService', () => {
         candidate: null,
       };
 
-      mockPrismaService.ticket.findUnique.mockResolvedValue({
+      mockPrismaService.ticket.findFirst.mockResolvedValue({
         created_by: 'creator1',
         user_id: 'assignee1',
       });

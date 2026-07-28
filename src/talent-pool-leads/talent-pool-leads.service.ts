@@ -9,15 +9,21 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTalentPoolLeadDto } from './dto/create-talent-pool-lead.dto';
 import { UpdateTalentPoolLeadDto } from './dto/update-talent-pool-lead.dto';
 import { QueryTalentPoolLeadsDto } from './dto/query-talent-pool-leads.dto';
-import { Priority } from '@prisma/client';
+import { Priority, TicketAuditSource } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  TicketAuditService,
+  TICKET_AUDIT_EVENTS,
+  TICKET_AUDIT_ORIGINS,
+} from '../ticket/ticket-audit.service';
 
 @Injectable()
 export class TalentPoolLeadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly ticketAudit: TicketAuditService,
   ) {}
 
   /**
@@ -243,6 +249,32 @@ ${sanitizedAdditionalDetails ? `- Additional Details: ${sanitizedAdditionalDetai
           `[talent-pool-lead] Failed to create ticket for lead ${lead.id}`,
         );
       } else {
+        // Public form: there is no authenticated user, so the actor is the lead itself.
+        void this.ticketAudit.log({
+          ticketId: ticket.id,
+          actorUserId: null,
+          actorLabel: `Talent pool form (${normalizedEmail})`,
+          event: TICKET_AUDIT_EVENTS.CREATED,
+          source: TicketAuditSource.system,
+          newStatus: ticket.status,
+          after: {
+            status: ticket.status,
+            type: ticket.type,
+            priority: ticket.priority,
+            org_id: ticket.org_id,
+            user_id: ticket.user_id,
+            candidate_id: ticket.candidate_id,
+            title: ticket.title,
+          },
+          metadata: {
+            origin: TICKET_AUDIT_ORIGINS.TALENT_POOL_FORM,
+            leadId: lead.id,
+            leadSource: createDto.source,
+            organizationName: sanitizedOrganization,
+            assignedAtCreation: ticket.user_id ?? null,
+          },
+        });
+
         try {
           await this.notifications.notifyTicketEvent(ticket, 'assigned');
         } catch (err) {

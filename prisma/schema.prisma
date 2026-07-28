@@ -80,6 +80,10 @@ model USER {
   medAllianceAuditActorLogs MedAllianceAuditLog[]        @relation("MedAllianceAuditActor")
   // Hubspot audit log entries where this user triggered the API call
   hubspotAuditLogs          HubspotAuditLog[]            @relation("HubspotAuditActor")
+  // Ticket audit log entries where this user was the acting subject
+  ticketAuditActorLogs      TicketAuditLog[]             @relation("TicketAuditActor")
+  // Tickets this user soft-deleted
+  ticketsDeleted            Ticket[]                     @relation("TicketDeletedBy")
   // MA-006 review cases resolved by this admin user
   resolvedReviewCases       MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
 
@@ -582,6 +586,11 @@ model Ticket {
   offer_panel_id String?
   updatedAt      DateTime      @updatedAt
   created_by     String?
+  // Soft delete. deleted_by/deletion_reason are denormalized here (the full history lives in
+  // TicketAuditLog) so tombstone listings render "deleted by X" without a correlated subquery.
+  deleted_at      DateTime?
+  deleted_by      String?
+  deletion_reason String?
   candidate      Candidate?    @relation(fields: [candidate_id], references: [id])
   organization   Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
   staff          Staff?        @relation(fields: [staff_id], references: [id])
@@ -589,8 +598,11 @@ model Ticket {
   offerPanel     OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
   user           USER?         @relation(fields: [user_id], references: [id])
   createdBy      USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
+  deletedBy      USER?         @relation("TicketDeletedBy", fields: [deleted_by], references: [id])
   TicketNotes    TicketNotes[]
 
+  @@index([deleted_at], map: "idx_tickets_deleted_at")
+  @@index([deleted_at, status], map: "idx_tickets_deleted_at_status")
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
   @@index([status], map: "idx_tickets_status")
@@ -651,16 +663,19 @@ model Staff {
 }
 
 model Bonus {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   staff_id    String
   amount      Decimal
   description String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
   created_by  String?
-  staff       Staff    @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+  // Soft-deleted alongside the bonus Ticket that created it, so deletion stays reversible.
+  deleted_at  DateTime?
+  staff       Staff     @relation(fields: [staff_id], references: [id], onDelete: Cascade)
 
   @@index([staff_id], map: "idx_bonus_staff_id")
+  @@index([deleted_at], map: "idx_bonus_deleted_at")
 }
 
 model Mail_Settings {
@@ -1310,6 +1325,50 @@ model HubspotAuditLog {
   @@index([source], map: "idx_hs_audit_source")
   @@index([success], map: "idx_hs_audit_success")
   @@index([createdAt], map: "idx_hs_audit_created_at")
+}
+
+// Append-only audit trail for the Ticket lifecycle. Never soft-delete or mutate records.
+//
+// ticket_id is deliberately NOT a foreign key: the log must survive a future hard purge of the
+// ticket row (data retention / erasure requests), matching MedAllianceAuditLog.entity_id and
+// HubspotAuditLog.entity_id.
+//
+// `event` is a plain String rather than an enum because ticket lifecycle events are an open,
+// business-defined set that grows over time; each new enum value would cost a migration.
+// Compile-time safety comes from the TICKET_AUDIT_EVENTS union in ticket-audit.service.ts.
+// `source` stays an enum — that set genuinely is closed.
+//
+// PII: `before`/`after` hold ticket-column state only and never carry ticket `description`,
+// note content, or recipient emails. `title` is stored only for system-generated ticket types.
+model TicketAuditLog {
+  id            String            @id @default(uuid())
+  ticket_id     String
+  actor_user_id String?
+  // Denormalized actor display name, so the log stays readable after a user is hard-deleted.
+  actor_label   String?
+  event         String
+  old_status    String?
+  new_status    String?
+  reason        String?
+  source        TicketAuditSource @default(user)
+  before        Json?
+  after         Json?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+
+  actorUser USER? @relation("TicketAuditActor", fields: [actor_user_id], references: [id])
+
+  @@index([ticket_id, createdAt], map: "idx_ticket_audit_timeline")
+  @@index([actor_user_id], map: "idx_ticket_audit_actor")
+  @@index([event], map: "idx_ticket_audit_event")
+  @@index([createdAt], map: "idx_ticket_audit_created_at")
+}
+
+enum TicketAuditSource {
+  user
+  system
+  cron
+  webhook
 }
 
 // @deprecated Superseded by per-user billcom_* fields on USER. Safe to drop

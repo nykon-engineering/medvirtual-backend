@@ -15,7 +15,12 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
-import { USER } from '@prisma/client';
+import { USER, TicketAuditSource } from '@prisma/client';
+import {
+  TicketAuditService,
+  TICKET_AUDIT_EVENTS,
+  TICKET_AUDIT_ORIGINS,
+} from '../ticket/ticket-audit.service';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
 import {
   CreateOfferPanelDto,
@@ -137,6 +142,7 @@ export class OfferPanelsService {
     @Inject(forwardRef(() => HireRequestService))
     private readonly hireRequestService: HireRequestService,
     private readonly businessUnitContext: BusinessUnitContext,
+    private readonly ticketAudit: TicketAuditService,
   ) {}
 
   // Maps the flat recipient_* columns onto the nested `recipient` shape the
@@ -997,7 +1003,7 @@ export class OfferPanelsService {
     // Idempotency (E8)
     if (panel.status === 'accepted') {
       const existing = await this.prisma.ticket.findFirst({
-        where: { offer_panel_id: panel.id },
+        where: { offer_panel_id: panel.id, deleted_at: null },
         orderBy: { createdAt: 'desc' },
       });
       return { ticket: existing };
@@ -1023,6 +1029,34 @@ export class OfferPanelsService {
       });
 
       return t;
+    });
+
+    // Accepted through a public token, so there is no authenticated user — the recipient
+    // named on the panel is the actor.
+    void this.ticketAudit.log({
+      ticketId: ticket.id,
+      actorUserId: null,
+      actorLabel: panel.recipient_name
+        ? `${panel.recipient_name} (offer panel recipient)`
+        : 'Offer panel recipient',
+      event: TICKET_AUDIT_EVENTS.CREATED,
+      source: TicketAuditSource.system,
+      newStatus: ticket.status,
+      after: {
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        org_id: ticket.org_id,
+        user_id: ticket.user_id,
+        offer_panel_id: ticket.offer_panel_id,
+        title: ticket.title,
+      },
+      metadata: {
+        origin: TICKET_AUDIT_ORIGINS.OFFER_PANEL_ACCEPTED,
+        offerPanelId: panel.id,
+        recipientEmail: panel.recipient_email ?? null,
+        panelCreatedBy: panel.created_by_user_id ?? null,
+      },
     });
 
     setImmediate(() => {

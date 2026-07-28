@@ -16,6 +16,12 @@ import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import {
+  TicketAuditService,
+  TICKET_AUDIT_EVENTS,
+  TICKET_AUDIT_ORIGINS,
+  buildActorLabel,
+} from '../ticket/ticket-audit.service';
 
 @Injectable()
 export class StaffService {
@@ -23,6 +29,7 @@ export class StaffService {
     private readonly prisma: PrismaService,
     private readonly objectCreation: HandlerObjectCreation,
     private readonly organizationCreation: HandlerOrganizationCreation,
+    private readonly ticketAudit: TicketAuditService,
   ) {}
 
   private async findOne(id: string) {
@@ -86,6 +93,7 @@ export class StaffService {
           },
         },
         bonus: {
+          where: { deleted_at: null },
           select: {
             id: true,
             amount: true,
@@ -217,6 +225,32 @@ export class StaffService {
         },
       }),
     ]);
+
+    void this.ticketAudit.log({
+      ticketId: ticket.id,
+      actorUserId: user.id,
+      actorLabel: buildActorLabel(user),
+      event: TICKET_AUDIT_EVENTS.CREATED,
+      newStatus: ticket.status,
+      after: {
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        org_id: ticket.org_id,
+        user_id: ticket.user_id,
+        staff_id: ticket.staff_id,
+        title: ticket.title,
+      },
+      metadata: {
+        origin: TICKET_AUDIT_ORIGINS.STAFF_BONUS,
+        actorRole: user.role ?? null,
+        actorOrganizationId: user.organization_id ?? null,
+        bonusId: bonus.id,
+        bonusAmount: data.bonus,
+        assignedAtCreation: ticket.user_id ?? null,
+      },
+    });
+
     return await this.findOne(data.staff_id);
   }
 
@@ -298,6 +332,30 @@ export class StaffService {
         },
       }),
     ]);
+
+    void this.ticketAudit.log({
+      ticketId: ticket.id,
+      actorUserId: user.id,
+      actorLabel: buildActorLabel(user),
+      event: TICKET_AUDIT_EVENTS.CREATED,
+      newStatus: ticket.status,
+      after: {
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        org_id: ticket.org_id,
+        user_id: ticket.user_id,
+        staff_id: ticket.staff_id,
+        title: ticket.title,
+      },
+      metadata: {
+        origin: TICKET_AUDIT_ORIGINS.STAFF_TERMINATION,
+        actorRole: user.role ?? null,
+        actorOrganizationId: user.organization_id ?? null,
+        staffStatusAfter: staffStatus.status,
+        assignedAtCreation: ticket.user_id ?? null,
+      },
+    });
 
     return await this.findOne(data.staff_id);
   }
@@ -424,6 +482,7 @@ export class StaffService {
           },
         },
         bonus: {
+          where: { deleted_at: null },
           select: {
             id: true,
             amount: true,
@@ -621,6 +680,7 @@ export class StaffService {
         },
       },
       bonus: {
+        where: { deleted_at: null },
         select: {
           id: true,
           amount: true,
@@ -790,6 +850,7 @@ export class StaffService {
         },
       },
       bonus: {
+        where: { deleted_at: null },
         select: {
           id: true,
           amount: true,
@@ -930,6 +991,7 @@ export class StaffService {
               },
             },
             bonus: {
+              where: { deleted_at: null },
               select: {
                 id: true,
                 amount: true,

@@ -1601,8 +1601,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1727,8 +1727,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1844,8 +1844,8 @@ export class NotificationsService {
     if (ticket.created_by) {
       createdById = ticket.created_by;
     } else if (ticket.id) {
-      const ticketData = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const ticketData = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true, user_id: true },
       });
       createdById = ticketData?.created_by || null;
@@ -1886,8 +1886,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -2196,8 +2196,8 @@ export class NotificationsService {
       };
     },
   ): Promise<boolean> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         title: true,
@@ -2288,8 +2288,8 @@ export class NotificationsService {
       };
     },
   ): Promise<boolean> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         title: true,

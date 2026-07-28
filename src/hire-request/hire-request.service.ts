@@ -150,7 +150,7 @@ export class HireRequestService {
     },
     hireRequest: {
       include: {
-        tickets: true,
+        tickets: { where: { deleted_at: null } },
       },
     },
   };
@@ -787,7 +787,7 @@ export class HireRequestService {
               },
             },
           },
-          tickets: true,
+          tickets: { where: { deleted_at: null } },
           staff_to_be_replaced: true,
           offerPanel: {
             select: {
@@ -1070,7 +1070,7 @@ export class HireRequestService {
             },
           },
         },
-        tickets: true,
+        tickets: { where: { deleted_at: null } },
         staff_to_be_replaced: true,
         offerPanel: {
           select: {
@@ -1176,10 +1176,14 @@ export class HireRequestService {
         baseWhere = {
           organization: { id: user.organization_id },
           //this condition is to avoid showing hire requests that have a cancellation ticket that is not resolved yet
+          // deleted_at belongs INSIDE the `none` predicate: it narrows what counts as a
+          // blocking ticket. Outside it, a soft-deleted cancellation ticket would keep the
+          // hire request hidden forever with no way to diagnose it.
           tickets: {
             none: {
               type: 'hire_request_cancellation',
               status: { not: 'resolved' },
+              deleted_at: null,
             },
           },
           OR: [
@@ -1218,10 +1222,12 @@ export class HireRequestService {
         baseWhere = {
           status: { in: ['sourcing', 'for_review'] },
           //this condition is to avoid showing hire requests that have a cancellation ticket that is not resolved yet
+          // deleted_at belongs INSIDE the `none` predicate — see the org-admin branch above.
           tickets: {
             none: {
               type: 'hire_request_cancellation',
               status: { not: 'resolved' },
+              deleted_at: null,
             },
           },
         };
@@ -1788,6 +1794,7 @@ export class HireRequestService {
           hireRequest_id: id,
           status: { not: 'resolved' },
           type: 'hire_request_cancellation',
+          deleted_at: null,
         },
         data: {
           status: 'resolved',
@@ -3163,6 +3170,7 @@ export class HireRequestService {
         status: {
           in: ['new', 'in_progress'],
         },
+        deleted_at: null,
       },
       data: {
         status: 'resolved',

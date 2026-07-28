@@ -1361,6 +1361,7 @@ export class OrganizationService {
           },
         },
         bonus: {
+          where: { deleted_at: null },
           select: {
             id: true,
             amount: true,
@@ -1516,6 +1517,7 @@ export class OrganizationService {
             },
           },
           bonus: {
+            where: { deleted_at: null },
             select: {
               id: true,
               amount: true,
@@ -2284,6 +2286,7 @@ export class OrganizationService {
             },
           },
           bonus: {
+            where: { deleted_at: null },
             select: {
               id: true,
               amount: true,

@@ -3,6 +3,7 @@ import { StaffService } from './staff.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
+import { TicketAuditService } from '../ticket/ticket-audit.service';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 jest.mock('axios');
@@ -42,6 +43,14 @@ const HandlerOrganizationCreationMock = {
   execute: jest.fn(),
 };
 
+const mockTicketAuditService = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  findAllLogs: jest.fn(),
+  findByTicket: jest.fn(),
+  findLastDeletedEvent: jest.fn(),
+};
+
 describe('StaffService', () => {
   let service: StaffService;
 
@@ -55,6 +64,7 @@ describe('StaffService', () => {
           provide: HandlerOrganizationCreation,
           useValue: HandlerOrganizationCreationMock,
         },
+        { provide: TicketAuditService, useValue: mockTicketAuditService },
       ],
     }).compile();
 
@@ -237,6 +247,33 @@ describe('StaffService', () => {
       expect(result).toEqual(mockFindOneResult);
     });
 
+    it('should record a created audit event tagged with the staff_bonus origin', async () => {
+      mockPrisma.staff.findUnique
+        .mockResolvedValueOnce(mockStaff)
+        .mockResolvedValueOnce(mockFindOneResult);
+      mockPrisma.uSER.findUnique.mockResolvedValue({ id: 'user-1' });
+      mockPrisma.bonus.create.mockResolvedValue({ id: 'bonus-1' });
+      mockPrisma.ticket.create.mockResolvedValue({ id: 'ticket-1', status: 'new', type: 'bonus' });
+      mockPrisma.$transaction.mockImplementation((arr: any[]) =>
+        Promise.all(arr),
+      );
+
+      await service.addBonus(mockData, mockSystemUser);
+
+      expect(mockTicketAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticketId: 'ticket-1',
+          event: 'created',
+          actorUserId: 'user-1',
+          metadata: expect.objectContaining({
+            origin: 'staff_bonus',
+            bonusId: 'bonus-1',
+            bonusAmount: mockData.bonus,
+          }),
+        }),
+      );
+    });
+
     it('should resolve org admin and add bonus for org user', async () => {
       mockPrisma.staff.findUnique
         .mockResolvedValueOnce(mockStaff)
@@ -372,6 +409,35 @@ describe('StaffService', () => {
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(result).toEqual(mockFindOneResult);
+    });
+
+    it('should record a created audit event tagged with the staff_termination origin', async () => {
+      mockPrisma.staff.findUnique
+        .mockResolvedValueOnce(mockStaff)
+        .mockResolvedValueOnce(mockFindOneResult);
+      mockPrisma.uSER.findUnique.mockResolvedValue({ id: 'user-1' });
+      mockPrisma.staff.update.mockResolvedValue({
+        id: 'staff-1',
+        status: 'termination-requested',
+      });
+      mockPrisma.ticket.create.mockResolvedValue({ id: 'ticket-1', status: 'new', type: 'termination' });
+      mockPrisma.$transaction.mockImplementation((arr: any[]) =>
+        Promise.all(arr),
+      );
+
+      await service.requestTermination(mockData, mockSystemUser);
+
+      expect(mockTicketAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticketId: 'ticket-1',
+          event: 'created',
+          actorUserId: 'user-1',
+          metadata: expect.objectContaining({
+            origin: 'staff_termination',
+            staffStatusAfter: 'termination-requested',
+          }),
+        }),
+      );
     });
 
     it('should resolve org admin and create termination for org user', async () => {

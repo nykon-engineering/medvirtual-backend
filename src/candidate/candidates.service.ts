@@ -646,6 +646,7 @@ export class CandidatesService {
           candidate_id: {
             in: candidateIds,
           },
+          deleted_at: null,
         },
         select: {
           candidate_id: true,
@@ -1199,6 +1200,7 @@ export class CandidatesService {
           candidate_id: {
             in: candidateIds,
           },
+          deleted_at: null,
         },
         select: {
           candidate_id: true,

@@ -90,7 +90,8 @@ function normalizeExperienceItem(item: any): any {
     ...item,
     company: firstNonEmpty(item.company, item.employer, item.organization),
     role: firstNonEmpty(item.role, item.position, item.title, item.job_title),
-    start_date: firstNonEmpty(item.start_date, item.startDate, item.from) ?? null,
+    start_date:
+      firstNonEmpty(item.start_date, item.startDate, item.from) ?? null,
     end_date: firstNonEmpty(item.end_date, item.endDate, item.to) ?? null,
     description: toArray(
       firstNonEmpty(item.description, item.responsibilities, item.details),
@@ -132,7 +133,8 @@ export function normalizeResumeExtraction(raw: any): any {
     // Root has schema keys but they may all be empty while a nested container
     // holds the real payload — the exact shape seen in production.
     const nested = Object.entries(root).filter(
-      ([key, value]) => !RESUME_KEYS.includes(key as any) && hasResumeKeys(value),
+      ([key, value]) =>
+        !RESUME_KEYS.includes(key as any) && hasResumeKeys(value),
     );
 
     if (nested.length === 1) {
@@ -151,18 +153,18 @@ export function normalizeResumeExtraction(raw: any): any {
   if (!root || typeof root !== 'object') return {};
 
   const bio = firstNonEmpty(
-    (root as any).bio,
-    (root as any).summary,
-    (root as any).about_me,
-    (root as any).professional_summary,
+    root.bio,
+    root.summary,
+    root.about_me,
+    root.professional_summary,
   );
 
   return {
     ...root,
     bio: typeof bio === 'string' ? bio : bio ? String(bio) : undefined,
-    experience: toArray((root as any).experience).map(normalizeExperienceItem),
-    education: toArray((root as any).education).map(normalizeEducationItem),
-    skills: toArray((root as any).skills),
+    experience: toArray(root.experience).map(normalizeExperienceItem),
+    education: toArray(root.education).map(normalizeEducationItem),
+    skills: toArray(root.skills),
   };
 }
 

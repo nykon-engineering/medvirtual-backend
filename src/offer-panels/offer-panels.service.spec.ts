@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { TicketAuditService } from '../ticket/ticket-audit.service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -149,6 +150,14 @@ const businessUnitContextMock = {
 // Suite
 // ---------------------------------------------------------------------------
 
+const mockTicketAuditService = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  findAllLogs: jest.fn(),
+  findByTicket: jest.fn(),
+  findLastDeletedEvent: jest.fn(),
+};
+
 describe('OfferPanelsService', () => {
   let service: OfferPanelsService;
 
@@ -164,6 +173,7 @@ describe('OfferPanelsService', () => {
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: HireRequestService, useValue: mockHireRequestService },
         { provide: BusinessUnitContext, useValue: businessUnitContextMock },
+        { provide: TicketAuditService, useValue: mockTicketAuditService },
       ],
     }).compile();
 
@@ -1379,6 +1389,35 @@ describe('OfferPanelsService', () => {
 
       expect(result.ticket).toBeDefined();
       expect(result.ticket.id).toBe('ticket-1');
+    });
+
+    it('records a created audit event tagged with the offer_panel_accepted origin', async () => {
+      await service.acceptByToken('tok-1');
+
+      expect(mockTicketAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticketId: 'ticket-1',
+          event: 'created',
+          // Accepted through a public token, so there is no authenticated user.
+          actorUserId: null,
+          actorLabel: expect.stringContaining('Prospect Lead'),
+          metadata: expect.objectContaining({
+            origin: 'offer_panel_accepted',
+            offerPanelId: 'panel-1',
+            recipientEmail: 'lead@prospect.com',
+            panelCreatedBy: 'user-admin-1',
+          }),
+        }),
+      );
+    });
+
+    it('does not re-log a created event on an idempotent repeat accept', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({ ...panelData, status: 'accepted' });
+      mockPrisma.ticket.findFirst.mockResolvedValue(ticketData);
+
+      await service.acceptByToken('tok-1');
+
+      expect(mockTicketAuditService.log).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when panel is declined', async () => {

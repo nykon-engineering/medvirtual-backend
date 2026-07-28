@@ -616,6 +616,8 @@ export class UserService {
         });
 
         // 4. Delete ticket notes created by this user (has RESTRICT constraint)
+        // Intentionally NOT filtered by deleted_at: the RESTRICT constraint requires every
+        // note to go, soft-deleted ones included, or the user delete fails.
         await tx.ticketNotes.deleteMany({
           where: { author_id: id },
         });
@@ -640,6 +642,8 @@ export class UserService {
         });
 
         // 7. Update tickets where this user is the user (has SET NULL constraint)
+        // Intentionally NOT filtered by deleted_at: soft-deleted tickets still hold an FK to
+        // this user, so skipping them would leave a dangling reference and block the delete.
         await tx.ticket.updateMany({
           where: { user_id: id },
           data: { user_id: null },
