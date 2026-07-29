@@ -15,6 +15,10 @@ import {
   getEmailThemeByBusinessUnit,
   EmailTheme,
 } from '../common/utils/email-templates/theme';
+import {
+  getEmailLogoCss,
+  getEmailLogoImg,
+} from '../common/utils/email-templates/components';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
@@ -125,14 +129,7 @@ export class NotificationsService {
     .content {
       padding: 40px 30px;
     }
-    .logo {
-      text-align: left;
-      margin-bottom: 30px;
-    }
-    .logo img {
-      max-width: 200px;
-      height: auto;
-    }
+${getEmailLogoCss()}
     .greeting {
       color: #333333;
       font-size: 16px;
@@ -209,7 +206,7 @@ export class NotificationsService {
     <div class="container">
       <div class="content">
         <div class="logo">
-              <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+              ${getEmailLogoImg(theme)}
         </div>
       
       <div class="greeting">${greeting ?? 'Hi,'}</div>

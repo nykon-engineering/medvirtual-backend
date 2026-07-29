@@ -56,7 +56,8 @@ export class ListTicketAuditLogsDto {
   actor_user_id?: string;
 
   @ApiPropertyOptional({
-    description: 'Where the ticket came from. Only meaningful for created events.',
+    description:
+      'Where the ticket came from. Only meaningful for created events.',
     enum: Object.values(TICKET_AUDIT_ORIGINS),
     example: 'staff_bonus',
   })

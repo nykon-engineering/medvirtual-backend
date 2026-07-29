@@ -1015,3 +1015,88 @@ describe('EmailTemplatesService.getTemplateContent', () => {
     );
   });
 });
+
+// ── header logo normalization ──────────────────────────────────────────────────
+
+describe('EmailTemplatesService header logo normalization', () => {
+  // Business unit logos have arbitrary aspect ratios, so the header must pin
+  // HEIGHT (not width) or a tall logo renders far larger than a wide one.
+  const BASE_THEME = {
+    primaryColor: BRANDING.primary_color,
+    primaryColorHover: BRANDING.secondary_color,
+    secondaryColor: '#F8F9FA',
+    accentColor: BRANDING.primary_color,
+    companyName: BRANDING.company_name,
+    logoUrl: BRANDING.logo_url,
+  };
+
+  const PRESETS = ['default', 'minimal', 'hero', 'unknown-legacy'];
+
+  it.each(PRESETS)(
+    'pins the logo height and lets width vary (preset: %s)',
+    async (layoutPreset) => {
+      const { service } = await buildService();
+      const result = await service.getTemplateContent('invite-signup', {}, {
+        ...BASE_THEME,
+        layoutPreset,
+      } as EmailTheme);
+
+      const imgs = result.html
+        .split('\n')
+        .filter((line) => line.includes('<img'));
+
+      expect(imgs.length).toBeGreaterThan(0);
+      imgs.forEach((img) => {
+        expect(img).toContain('height:40px');
+        expect(img).toContain('width:auto');
+        // Outlook ignores max-width on images, so the attribute must be present.
+        expect(img).toContain('height="40"');
+        expect(img).not.toContain('height:auto');
+      });
+    },
+  );
+
+  it('no longer renders the width-only rule that caused inconsistent heights', async () => {
+    const { service } = await buildService();
+    const result = await service.getTemplateContent('invite-signup', {}, {
+      ...BASE_THEME,
+    } as EmailTheme);
+
+    expect(result.html).not.toContain('max-width: 200px; height: auto;');
+    expect(result.html).toContain('height: 40px; width: auto; max-width: 200px');
+  });
+
+  it('sizes the hero preset logo identically to the others', async () => {
+    const { service } = await buildService();
+    const result = await service.getTemplateContent('invite-signup', {}, {
+      ...BASE_THEME,
+      layoutPreset: 'hero',
+    } as EmailTheme);
+
+    // The hero preset used to render its logo at 220px.
+    expect(result.html).not.toContain('max-width:220px');
+  });
+
+  it('renders the logo configured on the business unit', async () => {
+    const { service } = await buildService();
+    const result = await service.getTemplateContent('invite-signup', {}, {
+      ...BASE_THEME,
+      logoUrl: 'https://cdn.example.com/custom-bu-logo.png',
+    } as EmailTheme);
+
+    expect(result.html).toContain('https://cdn.example.com/custom-bu-logo.png');
+  });
+
+  it('normalizes the logo on the preview path too', async () => {
+    const { service } = await buildService();
+    const result = await service.preview('invite-signup', {
+      logo_url: 'https://cdn.example.com/preview-logo.png',
+    });
+
+    expect(result.data.html).toContain(
+      'https://cdn.example.com/preview-logo.png',
+    );
+    expect(result.data.html).toContain('height="40"');
+    expect(result.data.html).not.toContain('max-width: 200px; height: auto;');
+  });
+});
