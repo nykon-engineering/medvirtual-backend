@@ -1623,6 +1623,27 @@ export class CronService {
         },
       });
 
+      // Guarantee the 1:1 BU↔EmailBranding invariant at intake. `create()` and
+      // `seed.ts` create a companion branding row per BU; the cron is the ONLY
+      // real intake path, so without this a HubSpot-discovered BU has no
+      // branding row and editing its "Customize Design" would 404. Empty
+      // `update: {}` makes this create-once and never clobbers later edits.
+      await this.prisma.emailBranding.upsert({
+        where: { business_unit: slug },
+        create: {
+          business_unit: slug,
+          primary_color: '#01546B',
+          secondary_color: '#013A4F',
+          logo_url: 'https://staging.medvirtual.ai/logo.png',
+          company_name: label,
+          layout_preset: 'default',
+          button_color: null,
+          button_text_color: null,
+          updated_by: 'system',
+        },
+        update: {},
+      });
+
       upserted.push(slug);
     }
 

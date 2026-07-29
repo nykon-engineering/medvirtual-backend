@@ -65,6 +65,9 @@ describe('CronService', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
       },
+      emailBranding: {
+        upsert: jest.fn(),
+      },
       organization: {
         findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn(),
@@ -1185,6 +1188,30 @@ describe('CronService', () => {
       );
       expect(result.aborted).toBe(false);
       expect(businessUnitContextMock.bustCache).toHaveBeenCalled();
+    });
+
+    it('creates a companion EmailBranding row per BU (create-once, empty update — idempotent, never clobbers edits)', async () => {
+      mockedAxios.get.mockResolvedValue(
+        hubspotPropertyResponse([{ label: 'MMVA' }]),
+      );
+      prismaServiceMock.businessUnit.findMany.mockResolvedValue([
+        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+      ]);
+      prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
+
+      await service.syncBusinessUnits();
+
+      expect(prismaServiceMock.emailBranding.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { business_unit: 'mmva' },
+          create: expect.objectContaining({
+            business_unit: 'mmva',
+            company_name: 'MMVA',
+            layout_preset: 'default',
+          }),
+          update: {},
+        }),
+      );
     });
 
     it('never flips visibility of an existing BU during upsert', async () => {

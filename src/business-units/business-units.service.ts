@@ -235,25 +235,21 @@ export class BusinessUnitsService {
   // ── Branding ──────────────────────────────────────────────────────────────
 
   async getBranding(slug: string) {
-    await this.findOneOrThrow(slug);
+    const bu = await this.findOneOrThrow(slug);
 
-    const branding = await this.prisma.emailBranding.findUnique({
-      where: { business_unit: slug },
-    });
-    if (!branding)
-      throw new NotFoundException(`Branding for "${slug}" not found`);
+    const branding = await this.ensureBranding(slug, bu.name);
 
     return { status: 200, data: branding };
   }
 
   async updateBranding(slug: string, dto: UpdateBrandingDto, userId: string) {
-    await this.findOneOrThrow(slug);
+    const bu = await this.findOneOrThrow(slug);
 
-    const current = await this.prisma.emailBranding.findUnique({
-      where: { business_unit: slug },
-    });
-    if (!current)
-      throw new NotFoundException(`Branding for "${slug}" not found`);
+    // Self-heal: BUs discovered from HubSpot (cron intake) may not yet have a
+    // companion EmailBranding row. Create a default one on demand so editing a
+    // just-activated BU's design never 404s. Only ever creates for a BU that
+    // actually exists (findOneOrThrow above guarantees a real slug).
+    const current = await this.ensureBranding(slug, bu.name);
 
     // Snapshot to history before overwriting
     await this.prisma.emailBrandingHistory.create({
@@ -309,14 +305,9 @@ export class BusinessUnitsService {
   }
 
   async getBrandingHistory(slug: string) {
-    await this.findOneOrThrow(slug);
+    const bu = await this.findOneOrThrow(slug);
 
-    const branding = await this.prisma.emailBranding.findUnique({
-      where: { business_unit: slug },
-      select: { id: true },
-    });
-    if (!branding)
-      throw new NotFoundException(`Branding for "${slug}" not found`);
+    const branding = await this.ensureBranding(slug, bu.name);
 
     const history = await this.prisma.emailBrandingHistory.findMany({
       where: { branding_id: branding.id },
@@ -848,5 +839,38 @@ export class BusinessUnitsService {
     const bu = await this.prisma.businessUnit.findUnique({ where: { slug } });
     if (!bu) throw new NotFoundException(`Business unit "${slug}" not found`);
     return bu;
+  }
+
+  /**
+   * Returns the EmailBranding row for `slug`, creating a default one if it does
+   * not exist yet.
+   *
+   * Every BU is supposed to have exactly one companion EmailBranding row (see
+   * `create()` and `seed.ts`), but BUs that enter the table via the HubSpot
+   * intake cron (`syncBusinessUnits`) historically did not get one — so opening
+   * or saving their "Customize Design" branding threw `NotFoundException`. This
+   * lazily backfills the missing row using the same default shape as `create()`,
+   * repairing pre-existing rows (e.g. MMVA) with no data migration. Callers must
+   * have already validated the BU exists (`findOneOrThrow`).
+   */
+  private async ensureBranding(slug: string, name: string) {
+    const existing = await this.prisma.emailBranding.findUnique({
+      where: { business_unit: slug },
+    });
+    if (existing) return existing;
+
+    return this.prisma.emailBranding.create({
+      data: {
+        business_unit: slug,
+        primary_color: '#01546B',
+        secondary_color: '#013A4F',
+        logo_url: 'https://staging.medvirtual.ai/logo.png',
+        company_name: name,
+        layout_preset: 'default',
+        button_color: null,
+        button_text_color: null,
+        updated_by: 'system',
+      },
+    });
   }
 }

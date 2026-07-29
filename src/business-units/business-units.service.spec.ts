@@ -318,17 +318,29 @@ describe('BusinessUnitsService.updateBranding', () => {
     await expect(service.updateBranding('ghost', dto, 'user-1')).rejects.toThrow(NotFoundException);
   });
 
-  it('throws NotFoundException when branding record does not exist', async () => {
-    const { service } = makeService({
+  it('self-heals: creates a default branding row then applies the update when none exists', async () => {
+    const { service, prisma } = makeService({
       emailBranding: {
+        // No branding row yet (BU came from HubSpot cron intake).
         findUnique: jest.fn().mockResolvedValue(null),
-        create: jest.fn(),
-        update: jest.fn(),
+        create: jest.fn().mockResolvedValue(BRANDING),
+        update: jest.fn().mockResolvedValue(BRANDING),
       },
     });
-    await expect(service.updateBranding('medvirtual', dto, 'user-1')).rejects.toThrow(
-      NotFoundException,
+    await expect(
+      service.updateBranding('medvirtual', dto, 'user-1'),
+    ).resolves.toBeDefined();
+    // A default branding row was created for the BU...
+    expect(prisma.emailBranding.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          business_unit: 'medvirtual',
+          layout_preset: 'default',
+        }),
+      }),
     );
+    // ...and the requested update was still applied afterwards.
+    expect(prisma.emailBranding.update).toHaveBeenCalled();
   });
 });
 
@@ -436,6 +448,48 @@ describe('BusinessUnitsService.receiveBrandingSyncFromPeer', () => {
     await expect(
       service.receiveBrandingSyncFromPeer('ghost', payload, 'PROD'),
     ).resolves.not.toThrow();
+  });
+});
+
+// ── getBranding ──────────────────────────────────────────────────────────────
+
+describe('BusinessUnitsService.getBranding', () => {
+  it('returns the existing branding row', async () => {
+    const { service, prisma } = makeService();
+    const result = await service.getBranding('medvirtual');
+    expect(result.status).toBe(200);
+    expect(result.data).toEqual(BRANDING);
+    expect(prisma.emailBranding.create).not.toHaveBeenCalled();
+  });
+
+  it('self-heals: creates and returns a default branding row when none exists', async () => {
+    const { service, prisma } = makeService({
+      emailBranding: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(BRANDING),
+        update: jest.fn(),
+      },
+    });
+    const result = await service.getBranding('medvirtual');
+    expect(result.status).toBe(200);
+    expect(prisma.emailBranding.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ business_unit: 'medvirtual' }),
+      }),
+    );
+  });
+
+  it('throws NotFoundException for an unknown BU slug (does not auto-create)', async () => {
+    const { service, prisma } = makeService({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+      },
+    });
+    await expect(service.getBranding('ghost')).rejects.toThrow(NotFoundException);
+    expect(prisma.emailBranding.create).not.toHaveBeenCalled();
   });
 });
 
