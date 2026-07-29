@@ -59,6 +59,33 @@ export class BusinessUnitsController {
     return this.service.findAll();
   }
 
+  @Get('branding')
+  // Method-level empty @Roles() OVERRIDES the class-level
+  // @Roles('system_super_admin','system_admin') (Reflector.getAllAndOverride
+  // takes the handler's metadata first), so RolesGuard admits ANY authenticated
+  // user while AuthGuard still enforces a valid token. This is the app-wide
+  // brand source consumed by every logged-in user (org users included) so the
+  // color/logo/favicon resolver works for them — the admin `GET /` above stays
+  // system-admin-only. Returns ONLY visual fields for is_visible=true BUs.
+  @Roles()
+  @ApiOperation({
+    summary: 'Public (any authenticated user) visual branding for visible BUs',
+    description:
+      'Auth-only (no admin role required). Returns the app-branding fields ' +
+      '(slug, name, hubspot_value, primary_color, primary_hover, logo_url, ' +
+      'favicon_url) for is_visible=true business units — the data-driven source ' +
+      'the frontend brand resolver uses to theme the app for the logged-in ' +
+      "user's business unit. Deliberately omits candidate_pool / is_active / " +
+      'email branding so no admin/config data leaks to organization users.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Array of visible BUs with visual branding fields only.',
+  })
+  findAllBranding() {
+    return this.service.findAllBranding();
+  }
+
   @Post()
   @ApiOperation({
     summary: 'Create a new business unit (auto-creates default branding)',

@@ -73,6 +73,31 @@ export class BusinessUnitsService {
     return { status: 200, data };
   }
 
+  /**
+   * Visual-branding-only list for ANY authenticated user (org users included),
+   * exposed via the auth-only `GET /business-units/branding` route so the app
+   * brand resolver (color/logo/favicon) works for non-admins. Returns ONLY the
+   * `is_visible=true` BUs and ONLY the app-branding fields — deliberately no
+   * `candidate_pool`, `is_active`, `created_by`, or email `branding` — so this
+   * endpoint never leaks admin/config data to organization users.
+   */
+  async findAllBranding() {
+    const data = await this.prisma.businessUnit.findMany({
+      where: { is_visible: true },
+      orderBy: { name: 'asc' },
+      select: {
+        slug: true,
+        name: true,
+        hubspot_value: true,
+        primary_color: true,
+        primary_hover: true,
+        logo_url: true,
+        favicon_url: true,
+      },
+    });
+    return { status: 200, data };
+  }
+
   // ── Create ────────────────────────────────────────────────────────────────
 
   async create(dto: CreateBusinessUnitDto, userId: string) {

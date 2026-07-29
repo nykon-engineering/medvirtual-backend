@@ -115,6 +115,88 @@ describe('BusinessUnitsService.findAll', () => {
 
 // ── create ─────────────────────────────────────────────────────────────────────
 
+describe('BusinessUnitsService.findAllBranding', () => {
+  it('queries only is_visible=true BUs and selects only visual fields', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(BU),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(
+      prisma,
+      makeAudit(),
+      makeBuContext(),
+    ) as BusinessUnitsService;
+
+    await service.findAllBranding();
+
+    expect(prisma.businessUnit.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { is_visible: true },
+        select: {
+          slug: true,
+          name: true,
+          hubspot_value: true,
+          primary_color: true,
+          primary_hover: true,
+          logo_url: true,
+          favicon_url: true,
+        },
+      }),
+    );
+  });
+
+  it('does NOT select candidate_pool / is_active / email branding (no admin data leak)', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(BU),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(
+      prisma,
+      makeAudit(),
+      makeBuContext(),
+    ) as BusinessUnitsService;
+
+    await service.findAllBranding();
+
+    const call = (prisma.businessUnit.findMany as jest.Mock).mock.calls[0][0];
+    expect(call.select).not.toHaveProperty('candidate_pool');
+    expect(call.select).not.toHaveProperty('is_active');
+    expect(call.select).not.toHaveProperty('is_visible');
+    // The email branding relation must never be included on this public route.
+    expect(call).not.toHaveProperty('include');
+  });
+
+  it('returns { status: 200, data } with the visible rows', async () => {
+    const rows = [
+      { slug: 'mmva', name: 'My Medical VA', primary_color: '#7C3AED' },
+    ];
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(BU),
+        findMany: jest.fn().mockResolvedValue(rows),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(
+      prisma,
+      makeAudit(),
+      makeBuContext(),
+    ) as BusinessUnitsService;
+
+    const result = await service.findAllBranding();
+    expect(result).toEqual({ status: 200, data: rows });
+  });
+});
+
 describe('BusinessUnitsService.create', () => {
   const dto = { slug: 'mmva', name: 'MMVA' };
 
