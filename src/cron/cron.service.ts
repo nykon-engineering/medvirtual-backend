@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { CandidatesService } from '../candidate/candidates.service';
@@ -16,6 +16,17 @@ import quarterlyPayoutReport, {
 import medAllianceExpiredEligibilityReport, {
   ExpiredCompanyEntry,
 } from '../common/utils/email-templates/med-alliance-expired-eligibility-report';
+import offerPanelWeeklyReport, {
+  OfferPanelReportRow,
+  OfferPanelReportSection,
+} from '../common/utils/email-templates/offer-panel-weekly-report';
+import {
+  formatDuration,
+  getEtWeekWindow,
+  getZonedDateParts,
+  zonedWallClockToUtc,
+} from '../common/utils/formatDate';
+import { getBusinessUnitEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
@@ -36,6 +47,17 @@ import { BusinessUnitsService } from '../business-units/business-units.service';
 type Event = {
   objectId?: string;
 };
+
+const REPORT_TIMEZONE = 'America/New_York';
+
+// Narrowed outside PROD so staging deploys cannot mail stakeholders every week.
+// MailService's [DEV] subject prefix alone would not prevent that. Read at call
+// time rather than module load so the environment is never captured too early.
+function getOfferPanelReportRecipients(): string[] {
+  return process.env.ENVIRONMENT === 'PROD'
+    ? ['hanieh@berryvirtual.com', 'paulo@regenta.ai', 'shayan@regenta.ai']
+    : ['paulo@regenta.ai'];
+}
 
 @Injectable()
 export class CronService {
@@ -1290,6 +1312,189 @@ export class CronService {
     });
 
     return { sent: true, count: commissions.length };
+  }
+
+  private formatEtTimestamp(date: Date): string {
+    return date.toLocaleString('en-US', {
+      timeZone: REPORT_TIMEZONE,
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+  }
+
+  async weeklyOfferPanelReport(weekOf?: string): Promise<{
+    sent: boolean;
+    totalPanels: number;
+    totalCreators: number;
+    weekStart: string;
+    weekEnd: string;
+    ranOnFridayEt: boolean;
+    error?: string;
+  }> {
+    // Anchor a backfill date at noon ET so it lands unambiguously inside its own
+    // civil day regardless of the UTC offset.
+    let now = new Date();
+    if (weekOf) {
+      const [year, month, day] = weekOf.split('-').map(Number);
+      if (!year || !month || !day) {
+        throw new BadRequestException(
+          `Invalid week_of value "${weekOf}". Expected format YYYY-MM-DD.`,
+        );
+      }
+      now = zonedWallClockToUtc(year, month, day, 12, 0, 0, 0, REPORT_TIMEZONE);
+    }
+
+    const { start, end, mondayLabel, fridayLabel } = getEtWeekWindow(
+      now,
+      REPORT_TIMEZONE,
+    );
+    const ranOnFridayEt = getZonedDateParts(now, REPORT_TIMEZONE).weekday === 5;
+
+    const panels = await this.prisma.offerPanel.findMany({
+      where: { createdAt: { gte: start, lte: end } },
+      select: {
+        id: true,
+        title: true,
+        business_unit: true,
+        status: true,
+        is_public: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        viewed_at: true,
+        view_count: true,
+        decided_at: true,
+        createdAt: true,
+        created_by_user_id: true,
+        createdBy: {
+          select: { id: true, first_name: true, last_name: true, email: true },
+        },
+        recipientCompany: { select: { name: true } },
+        _count: { select: { candidates: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const statusTotals = { sent: 0, viewed: 0, accepted: 0, declined: 0 };
+    const sectionsByCreator = new Map<string, OfferPanelReportSection>();
+
+    for (const panel of panels) {
+      if (panel.status in statusTotals) {
+        statusTotals[panel.status as keyof typeof statusTotals] += 1;
+      }
+
+      const creator = panel.createdBy;
+      const creatorId = panel.created_by_user_id;
+
+      let section = sectionsByCreator.get(creatorId);
+      if (!section) {
+        section = {
+          creatorId,
+          creatorName:
+            [creator?.first_name, creator?.last_name]
+              .filter(Boolean)
+              .join(' ')
+              .trim() ||
+            creator?.email ||
+            'Unknown user',
+          creatorEmail: creator?.email ?? '',
+          panels: [],
+        };
+        sectionsByCreator.set(creatorId, section);
+      }
+
+      const createdMs = panel.createdAt.getTime();
+      const row: OfferPanelReportRow = {
+        panelId: panel.id,
+        title: panel.title,
+        // recipient_org_name is null for recipient_type 'email' and often for
+        // client_user panels, so fall through to the contact then the address.
+        recipientLabel:
+          panel.recipient_org_name ||
+          panel.recipientCompany?.name ||
+          panel.recipient_name ||
+          panel.recipient_email ||
+          '—',
+        recipientSub: panel.recipient_email ?? '',
+        businessUnit: panel.business_unit ?? '—',
+        status: panel.status,
+        isPublic: panel.is_public,
+        candidateCount: panel._count.candidates,
+        createdAtLabel: this.formatEtTimestamp(panel.createdAt),
+        viewedAtLabel: panel.viewed_at
+          ? this.formatEtTimestamp(panel.viewed_at)
+          : null,
+        decidedAtLabel: panel.decided_at
+          ? this.formatEtTimestamp(panel.decided_at)
+          : null,
+        timeToViewLabel: panel.viewed_at
+          ? formatDuration(createdMs, panel.viewed_at.getTime())
+          : null,
+        timeToDecisionLabel: panel.decided_at
+          ? formatDuration(createdMs, panel.decided_at.getTime())
+          : null,
+        viewCount: panel.view_count,
+      };
+
+      section.panels.push(row);
+    }
+
+    const sections = [...sectionsByCreator.values()].sort(
+      (a, b) =>
+        b.panels.length - a.panels.length ||
+        a.creatorName.localeCompare(b.creatorName),
+    );
+
+    const theme = await getBusinessUnitEmailTheme(this.prisma, 'MedVirtual');
+
+    // Subject and body are intentionally hardcoded: this is an internal
+    // maintenance report, not client-facing copy, so it is not an EmailTemplate.
+    const html = offerPanelWeeklyReport(
+      {
+        weekStartLabel: mondayLabel,
+        weekEndLabel: fridayLabel,
+        generatedAtLabel: this.formatEtTimestamp(new Date()),
+        totalPanels: panels.length,
+        totalCreators: sections.length,
+        statusTotals,
+        sections,
+        offScheduleNote: ranOnFridayEt
+          ? null
+          : 'This report ran outside the usual Friday schedule, so the week it covers may still be in progress.',
+      },
+      theme,
+    );
+
+    const result = {
+      totalPanels: panels.length,
+      totalCreators: sections.length,
+      weekStart: start.toISOString(),
+      weekEnd: end.toISOString(),
+      ranOnFridayEt,
+    };
+
+    try {
+      await this.mailService.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: getOfferPanelReportRecipients(),
+        subject: `Offer Panel Report — ${mondayLabel} to ${fridayLabel}`,
+        html,
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error('weeklyOfferPanelReport: failed to send email', error);
+      return { sent: false, ...result, error };
+    }
+
+    console.log(
+      `weeklyOfferPanelReport: window=${mondayLabel}..${fridayLabel} panels=${panels.length} creators=${sections.length}`,
+    );
+
+    return { sent: true, ...result };
   }
 
   async reconcileAffiliateContacts(): Promise<{

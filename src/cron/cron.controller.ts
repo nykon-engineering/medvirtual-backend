@@ -232,6 +232,54 @@ export class CronController {
     };
   }
 
+  @Get('weekly-offer-panel-report')
+  @ApiOperation({
+    summary:
+      'Send the weekly Offer Panel Report — panels created Mon 00:00 through Fri 23:59:59 (America/New_York), grouped by creating user',
+    description:
+      'Triggered every Friday by the external scheduler (same mechanism as the ' +
+      'other `/cron/*` endpoints — this backend runs on Lambda, so there is no ' +
+      'in-process cron). Filters on `OfferPanel.createdAt` only; the viewed and ' +
+      'decided columns show their real timestamps even when those occurred after ' +
+      'the window closed. All business units are included in a single email with ' +
+      'a business unit column, and sections are ordered by panel count descending. ' +
+      'The email is sent even when zero panels were created, so a quiet week stays ' +
+      'distinguishable from a broken cron. Note that `OfferPanel` has no ' +
+      'soft-delete column, so a panel created and then deleted within the week ' +
+      'never appears in the report.',
+  })
+  @ApiQuery({
+    name: 'week_of',
+    required: false,
+    type: String,
+    description:
+      'Optional YYYY-MM-DD date used to backfill a prior week. The Mon–Fri window ' +
+      'containing this date (in America/New_York) is reported. Defaults to today.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Report processed. `data.sent` — whether the email was dispatched. ' +
+      '`data.totalPanels` / `data.totalCreators` — report size. ' +
+      '`data.weekStart` / `data.weekEnd` — the ISO boundaries of the ET window covered. ' +
+      '`data.ranOnFridayEt` — false when triggered off-schedule. ' +
+      '`data.error` — present only when the email failed to send.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid week_of value — expected format YYYY-MM-DD',
+  })
+  async weeklyOfferPanelReport(@Query('week_of') weekOf?: string) {
+    const result = await this.cron.weeklyOfferPanelReport(weekOf);
+    return {
+      status: 200,
+      message: result.sent
+        ? `Offer panel report sent (${result.totalPanels} panel(s) from ${result.totalCreators} creator(s))`
+        : `Offer panel report not sent${result.error ? ` — ${result.error}` : ''}`,
+      data: result,
+    };
+  }
+
   @Get('detect-commissions-by-affiliate')
   @ApiOperation({
     summary:

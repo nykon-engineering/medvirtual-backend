@@ -35,8 +35,13 @@ describe('CronService', () => {
   let allianceNotificationsMock: Record<string, jest.Mock>;
   let businessUnitContextMock: Record<string, jest.Mock>;
   let businessUnitsServiceMock: Record<string, jest.Mock>;
+  let emailTemplatesServiceMock: { getTemplateContent: jest.Mock };
 
   beforeEach(async () => {
+    emailTemplatesServiceMock = {
+      getTemplateContent: jest.fn().mockResolvedValue(null),
+    };
+
     businessUnitContextMock = {
       displayToSlug: jest.fn((v: string) =>
         v ? v.toLowerCase().replace(/\s+/g, '-') : null,
@@ -67,6 +72,13 @@ describe('CronService', () => {
       },
       emailBranding: {
         upsert: jest.fn(),
+        // getBusinessUnitEmailTheme reads branding through findUnique and
+        // swallows its own errors, so without this mock the theme lookup would
+        // silently fall back and the assertions would pass for the wrong reason.
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      offerPanel: {
+        findMany: jest.fn().mockResolvedValue([]),
       },
       organization: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -110,7 +122,13 @@ describe('CronService', () => {
     };
 
     positionRateConfigServiceMock = {
-      findAll: jest.fn().mockResolvedValue({ status: 200, data: [], meta: { total: 0, page: 1, perPage: 10, totalPages: 0 } }),
+      findAll: jest
+        .fn()
+        .mockResolvedValue({
+          status: 200,
+          data: [],
+          meta: { total: 0, page: 1, perPage: 10, totalPages: 0 },
+        }),
       findAllUnpaginated: jest.fn().mockResolvedValue([]),
     };
 
@@ -141,12 +159,21 @@ describe('CronService', () => {
         { provide: HandlerContactDeletion, useValue: contactDeletionMock },
         { provide: MailService, useValue: mailServiceMock },
         { provide: HireRequestService, useValue: hireRequestServiceMock },
-        { provide: PositionRateConfigService, useValue: positionRateConfigServiceMock },
+        {
+          provide: PositionRateConfigService,
+          useValue: positionRateConfigServiceMock,
+        },
         { provide: PayoutRequestsService, useValue: payoutRequestsServiceMock },
         { provide: ReferralSyncService, useValue: referralSyncServiceMock },
-        { provide: CommissionDetectionService, useValue: commissionDetectionServiceMock },
-        { provide: AllianceNotificationsService, useValue: allianceNotificationsMock },
-        { provide: EmailTemplatesService, useValue: { getTemplateContent: jest.fn().mockResolvedValue(null) } },
+        {
+          provide: CommissionDetectionService,
+          useValue: commissionDetectionServiceMock,
+        },
+        {
+          provide: AllianceNotificationsService,
+          useValue: allianceNotificationsMock,
+        },
+        { provide: EmailTemplatesService, useValue: emailTemplatesServiceMock },
         { provide: BusinessUnitContext, useValue: businessUnitContextMock },
         { provide: BusinessUnitsService, useValue: businessUnitsServiceMock },
       ],
@@ -173,7 +200,9 @@ describe('CronService', () => {
       const result = await service.syncPositionsFromHubspot();
 
       expect(result).toBe(true);
-      expect(prismaServiceMock.positionRateConfig.create).not.toHaveBeenCalled();
+      expect(
+        prismaServiceMock.positionRateConfig.create,
+      ).not.toHaveBeenCalled();
       expect(mailServiceMock.sendMail).not.toHaveBeenCalled();
     });
 
@@ -194,10 +223,11 @@ describe('CronService', () => {
 
       expect(result).toBe(true);
       expect(prismaServiceMock.positionRateConfig.create).toHaveBeenCalledWith({
-        data: { position: 'New Position',
-                medVirtual_margin_per_hour: 9,
-                berryVirtual_margin_per_hour: 9,
-         },
+        data: {
+          position: 'New Position',
+          medVirtual_margin_per_hour: 9,
+          berryVirtual_margin_per_hour: 9,
+        },
       });
       expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -207,7 +237,9 @@ describe('CronService', () => {
     });
 
     it('returns false when an error occurs', async () => {
-      hireRequestServiceMock.getVATypes.mockRejectedValue(new Error('HubSpot API error'));
+      hireRequestServiceMock.getVATypes.mockRejectedValue(
+        new Error('HubSpot API error'),
+      );
 
       const result = await service.syncPositionsFromHubspot();
 
@@ -232,9 +264,24 @@ describe('CronService', () => {
     it('should expire multiple orgs starting from different statuses', async () => {
       const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', name: 'Clinic A', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
-        { id: 'org-2', name: 'Clinic B', deployment_date: deployedAt, med_alliance_referral_status: 'eligible' },
-        { id: 'org-3', name: 'Clinic C', deployment_date: deployedAt, med_alliance_referral_status: 'not_eligible' },
+        {
+          id: 'org-1',
+          name: 'Clinic A',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'pending_confirmation',
+        },
+        {
+          id: 'org-2',
+          name: 'Clinic B',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'eligible',
+        },
+        {
+          id: 'org-3',
+          name: 'Clinic C',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'not_eligible',
+        },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
@@ -250,7 +297,12 @@ describe('CronService', () => {
     it('should set org status to expired and clear block reason', async () => {
       const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'not_eligible' },
+        {
+          id: 'org-1',
+          name: 'Clinic',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'not_eligible',
+        },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
@@ -272,7 +324,12 @@ describe('CronService', () => {
     it('should write an eligibility_expired audit log with source=cron for each expired org', async () => {
       const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'eligible' },
+        {
+          id: 'org-1',
+          name: 'Clinic',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'eligible',
+        },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
@@ -298,8 +355,18 @@ describe('CronService', () => {
     it('should catch per-org errors and continue processing remaining orgs', async () => {
       const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-fail', name: 'Fail Co', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
-        { id: 'org-ok', name: 'Ok Co', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
+        {
+          id: 'org-fail',
+          name: 'Fail Co',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'pending_confirmation',
+        },
+        {
+          id: 'org-ok',
+          name: 'Ok Co',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'pending_confirmation',
+        },
       ]);
       prismaServiceMock.organization.update
         .mockRejectedValueOnce(new Error('DB timeout')) // org-fail throws
@@ -339,7 +406,12 @@ describe('CronService', () => {
     it('should send the expired-eligibility report email when companies are expired', async () => {
       const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'eligible' },
+        {
+          id: 'org-1',
+          name: 'Clinic',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'eligible',
+        },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
@@ -370,7 +442,12 @@ describe('CronService', () => {
     it('should swallow mail error when sendMail throws after companies are expired', async () => {
       const deployedAt = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', name: 'Clinic', deployment_date: deployedAt, med_alliance_referral_status: 'pending_confirmation' },
+        {
+          id: 'org-1',
+          name: 'Clinic',
+          deployment_date: deployedAt,
+          med_alliance_referral_status: 'pending_confirmation',
+        },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
       prismaServiceMock.medAllianceAuditLog.create.mockResolvedValue({});
@@ -538,11 +615,28 @@ describe('CronService', () => {
     it('should return true and send system report email on success', async () => {
       prismaServiceMock.candidate.count
         .mockResolvedValueOnce(10) // availableCandidates
-        .mockResolvedValueOnce(5)  // endorsedCandidates
+        .mockResolvedValueOnce(5) // endorsedCandidates
         .mockResolvedValueOnce(3); // withoutResume
       prismaServiceMock.candidate.findMany
-        .mockResolvedValueOnce([{ id: 'c-1', first_name: 'A', last_name: 'B', name: 'AB', hubspot_id: 'hs-1', processing_error: null }]) // failedResumeParsing
-        .mockResolvedValueOnce([{ id: 'c-2', first_name: 'C', last_name: 'D', name: 'CD', hubspot_id: 'hs-2' }]); // withoutHeadshot
+        .mockResolvedValueOnce([
+          {
+            id: 'c-1',
+            first_name: 'A',
+            last_name: 'B',
+            name: 'AB',
+            hubspot_id: 'hs-1',
+            processing_error: null,
+          },
+        ]) // failedResumeParsing
+        .mockResolvedValueOnce([
+          {
+            id: 'c-2',
+            first_name: 'C',
+            last_name: 'D',
+            name: 'CD',
+            hubspot_id: 'hs-2',
+          },
+        ]); // withoutHeadshot
       mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.systemReport();
@@ -564,7 +658,9 @@ describe('CronService', () => {
     });
 
     it('should return false when an error is thrown', async () => {
-      prismaServiceMock.candidate.count.mockRejectedValue(new Error('DB error'));
+      prismaServiceMock.candidate.count.mockRejectedValue(
+        new Error('DB error'),
+      );
 
       const result = await service.systemReport();
 
@@ -578,7 +674,18 @@ describe('CronService', () => {
   describe('syncClientsWithActiveStaffs', () => {
     it('should update inactive clients that have active staffs to active', async () => {
       prismaServiceMock.organization.findMany.mockResolvedValue([
-        { id: 'org-1', name: 'Clinic A', staff: [{ id: 's-1', hubspot_id: 'hs-1', hub_deal_name: 'deal', hubspot_dealstage: '16981840' }] },
+        {
+          id: 'org-1',
+          name: 'Clinic A',
+          staff: [
+            {
+              id: 's-1',
+              hubspot_id: 'hs-1',
+              hub_deal_name: 'deal',
+              hubspot_dealstage: '16981840',
+            },
+          ],
+        },
       ]);
       prismaServiceMock.organization.update.mockResolvedValue({});
 
@@ -603,7 +710,9 @@ describe('CronService', () => {
     });
 
     it('should return false when an error is thrown', async () => {
-      prismaServiceMock.organization.findMany.mockRejectedValue(new Error('DB failure'));
+      prismaServiceMock.organization.findMany.mockRejectedValue(
+        new Error('DB failure'),
+      );
 
       const result = await service.syncClientsWithActiveStaffs();
 
@@ -638,10 +747,22 @@ describe('CronService', () => {
       ]);
       prismaServiceMock.uSER.findMany
         .mockResolvedValueOnce([
-          { id: 'u-active', email: 'active@test.com', first_name: 'Active', last_name: 'User', organization_id: 'org-1' },
+          {
+            id: 'u-active',
+            email: 'active@test.com',
+            first_name: 'Active',
+            last_name: 'User',
+            organization_id: 'org-1',
+          },
         ])
         .mockResolvedValueOnce([
-          { id: 'u-invited', email: 'invited@test.com', first_name: 'Invited', last_name: 'User', organization_id: 'org-1' },
+          {
+            id: 'u-invited',
+            email: 'invited@test.com',
+            first_name: 'Invited',
+            last_name: 'User',
+            organization_id: 'org-1',
+          },
         ]);
       prismaServiceMock.uSER.updateMany = jest.fn().mockResolvedValue({});
 
@@ -650,7 +771,9 @@ describe('CronService', () => {
         emailInvitation: { deleteMany: jest.fn().mockResolvedValue({}) },
         uSER: { delete: jest.fn().mockResolvedValue({}) },
       };
-      prismaServiceMock.$transaction.mockImplementation(async (fn: any) => fn(txMock));
+      prismaServiceMock.$transaction.mockImplementation(async (fn: any) =>
+        fn(txMock),
+      );
       mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.deactivateClientUsersWithNoStaff();
@@ -661,9 +784,13 @@ describe('CronService', () => {
           data: { status: 'inactive', status_before_deactivation: 'active' },
         }),
       );
-      expect(txMock.uSER.delete).toHaveBeenCalledWith({ where: { id: 'u-invited' } });
+      expect(txMock.uSER.delete).toHaveBeenCalledWith({
+        where: { id: 'u-invited' },
+      });
       expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ subject: 'Client Users Deactivation Report' }),
+        expect.objectContaining({
+          subject: 'Client Users Deactivation Report',
+        }),
       );
     });
 
@@ -684,19 +811,25 @@ describe('CronService', () => {
     });
 
     it('should return false and send error email when an error is thrown', async () => {
-      prismaServiceMock.organization.findMany.mockRejectedValue(new Error('DB down'));
+      prismaServiceMock.organization.findMany.mockRejectedValue(
+        new Error('DB down'),
+      );
       mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.deactivateClientUsersWithNoStaff();
 
       expect(result).toBe(false);
       expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ subject: '[ERROR] Client Users Deactivation Cron Job Failed' }),
+        expect.objectContaining({
+          subject: '[ERROR] Client Users Deactivation Cron Job Failed',
+        }),
       );
     });
 
     it('should return false and swallow mail error when both main and mail throw', async () => {
-      prismaServiceMock.organization.findMany.mockRejectedValue(new Error('DB down'));
+      prismaServiceMock.organization.findMany.mockRejectedValue(
+        new Error('DB down'),
+      );
       mailServiceMock.sendMail.mockRejectedValue(new Error('mail error'));
 
       const result = await service.deactivateClientUsersWithNoStaff();
@@ -759,7 +892,9 @@ describe('CronService', () => {
       prismaServiceMock.staff.update.mockResolvedValue({});
       axiosMock.get
         .mockRejectedValueOnce(new Error('network error'))
-        .mockResolvedValueOnce({ data: { properties: { dealstage: '148234581' } } }); // inactive stage
+        .mockResolvedValueOnce({
+          data: { properties: { dealstage: '148234581' } },
+        }); // inactive stage
 
       const result = await service.syncStaffHubspotDealStages();
 
@@ -845,9 +980,7 @@ describe('CronService', () => {
 
       expect(contactDeletionMock.execute).not.toHaveBeenCalled();
       expect(result.cleared).toBe(0);
-      expect(result.errors).toEqual([
-        'hubspot_id=hs-broken: network error',
-      ]);
+      expect(result.errors).toEqual(['hubspot_id=hs-broken: network error']);
     });
 
     it('should dedupe a HubSpot id shared by both a Contact and a USER row into a single check', async () => {
@@ -901,7 +1034,9 @@ describe('CronService', () => {
 
       expect(result).toBe(true);
       expect(prismaServiceMock.sync.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ role: 'get-candidate-id' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ role: 'get-candidate-id' }),
+        }),
       );
     });
 
@@ -910,7 +1045,9 @@ describe('CronService', () => {
         { id: 's-1', hubspot_id: 'deal-123' },
       ]);
       prismaServiceMock.staff.update.mockResolvedValue({});
-      prismaServiceMock.candidate.findUnique.mockResolvedValue({ id: 'cand-99' });
+      prismaServiceMock.candidate.findUnique.mockResolvedValue({
+        id: 'cand-99',
+      });
       axiosMock.get.mockResolvedValue({
         data: { results: [{ id: 'hs-obj-1' }] },
       });
@@ -986,7 +1123,9 @@ describe('CronService', () => {
 
       expect(result).toEqual({ created: 0, failed: 0, total_amount: '0.00' });
       expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
-        expect.objectContaining({ subject: expect.stringContaining('Quarterly Payout Report') }),
+        expect.objectContaining({
+          subject: expect.stringContaining('Quarterly Payout Report'),
+        }),
       );
     });
 
@@ -1013,7 +1152,10 @@ describe('CronService', () => {
       expect(result.created).toBe(1);
       expect(result.failed).toBe(0);
       expect(result.total_amount).toBe('300.00');
-      expect(payoutRequestsServiceMock.createFromCron).toHaveBeenCalledWith('aff-1', ['comm-1', 'comm-2']);
+      expect(payoutRequestsServiceMock.createFromCron).toHaveBeenCalledWith(
+        'aff-1',
+        ['comm-1', 'comm-2'],
+      );
     });
 
     it('should record failures when createFromCron throws and still send report', async () => {
@@ -1021,11 +1163,17 @@ describe('CronService', () => {
         {
           id: 'aff-2',
           full_name: null,
-          user: { email: 'aff2@test.com', first_name: 'Fail', last_name: 'Aff' },
+          user: {
+            email: 'aff2@test.com',
+            first_name: 'Fail',
+            last_name: 'Aff',
+          },
           commissions: [{ id: 'comm-3', commission_amount: 50 }],
         },
       ]);
-      payoutRequestsServiceMock.createFromCron.mockRejectedValue(new Error('payout error'));
+      payoutRequestsServiceMock.createFromCron.mockRejectedValue(
+        new Error('payout error'),
+      );
       mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.createQuarterlyPayoutRequests();
@@ -1041,11 +1189,18 @@ describe('CronService', () => {
         {
           id: 'aff-3',
           full_name: null,
-          user: { email: 'aff3@test.com', first_name: 'Jane', last_name: 'Smith' },
+          user: {
+            email: 'aff3@test.com',
+            first_name: 'Jane',
+            last_name: 'Smith',
+          },
           commissions: [{ id: 'comm-4', commission_amount: 75 }],
         },
       ]);
-      payoutRequestsServiceMock.createFromCron.mockResolvedValue({ id: 'pr-2', requested_amount: 75 });
+      payoutRequestsServiceMock.createFromCron.mockResolvedValue({
+        id: 'pr-2',
+        requested_amount: 75,
+      });
       mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.createQuarterlyPayoutRequests();
@@ -1063,7 +1218,10 @@ describe('CronService', () => {
           commissions: [{ id: 'comm-5', commission_amount: 25 }],
         },
       ]);
-      payoutRequestsServiceMock.createFromCron.mockResolvedValue({ id: 'pr-3', requested_amount: 25 });
+      payoutRequestsServiceMock.createFromCron.mockResolvedValue({
+        id: 'pr-3',
+        requested_amount: 25,
+      });
       mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.createQuarterlyPayoutRequests();
@@ -1088,7 +1246,10 @@ describe('CronService', () => {
     });
 
     it('should process a single org when organization_id is provided, without querying findMany', async () => {
-      const syncResult = { organizationId: 'org-1', phaseA: { outcome: 'already_matched' } };
+      const syncResult = {
+        organizationId: 'org-1',
+        phaseA: { outcome: 'already_matched' },
+      };
       referralSyncServiceMock.run.mockResolvedValue(syncResult);
 
       const result = await service.syncOrganizationsWithHubspot('org-1');
@@ -1108,7 +1269,10 @@ describe('CronService', () => {
         { id: 'org-a' },
         { id: 'org-b' },
       ]);
-      referralSyncServiceMock.run.mockResolvedValue({ organizationId: 'x', phaseA: { outcome: 'already_matched' } });
+      referralSyncServiceMock.run.mockResolvedValue({
+        organizationId: 'x',
+        phaseA: { outcome: 'already_matched' },
+      });
 
       const result = await service.syncOrganizationsWithHubspot();
 
@@ -1124,7 +1288,10 @@ describe('CronService', () => {
       ]);
       referralSyncServiceMock.run
         .mockRejectedValueOnce(new Error('hubspot down'))
-        .mockResolvedValueOnce({ organizationId: 'org-ok', phaseA: { outcome: 'synced' } });
+        .mockResolvedValueOnce({
+          organizationId: 'org-ok',
+          phaseA: { outcome: 'synced' },
+        });
 
       const result = await service.syncOrganizationsWithHubspot();
 
@@ -1134,11 +1301,18 @@ describe('CronService', () => {
     });
 
     it('should return only processed/syncFailed/syncResults (no promotion fields)', async () => {
-      referralSyncServiceMock.run.mockResolvedValue({ organizationId: 'org-1', phaseA: { outcome: 'already_matched' } });
+      referralSyncServiceMock.run.mockResolvedValue({
+        organizationId: 'org-1',
+        phaseA: { outcome: 'already_matched' },
+      });
 
       const result = await service.syncOrganizationsWithHubspot('org-1');
 
-      expect(Object.keys(result).sort()).toEqual(['processed', 'syncFailed', 'syncResults']);
+      expect(Object.keys(result).sort()).toEqual([
+        'processed',
+        'syncFailed',
+        'syncResults',
+      ]);
     });
   });
 
@@ -1168,8 +1342,18 @@ describe('CronService', () => {
         ]),
       );
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
-        { id: '2', slug: 'berry-virtual', hubspot_value: 'Berry Virtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
+        {
+          id: '2',
+          slug: 'berry-virtual',
+          hubspot_value: 'Berry Virtual',
+          is_visible: true,
+        },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
 
@@ -1195,7 +1379,12 @@ describe('CronService', () => {
         hubspotPropertyResponse([{ label: 'MMVA' }]),
       );
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
 
@@ -1219,7 +1408,12 @@ describe('CronService', () => {
         hubspotPropertyResponse([{ label: 'MedVirtual' }]),
       );
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
 
@@ -1236,7 +1430,12 @@ describe('CronService', () => {
         hubspotPropertyResponse([{ label: 'MedVirtual' }]),
       );
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
         { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: true },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
@@ -1259,16 +1458,29 @@ describe('CronService', () => {
         hubspotPropertyResponse([{ label: 'MedVirtual' }]),
       );
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
         { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: true },
-        { id: '3', slug: 'berry-virtual', hubspot_value: 'Berry Virtual', is_visible: true },
+        {
+          id: '3',
+          slug: 'berry-virtual',
+          hubspot_value: 'Berry Virtual',
+          is_visible: true,
+        },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
 
       const result = await service.syncBusinessUnits();
 
       expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledTimes(2);
-      expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledWith('mmva', 'MMVA');
+      expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledWith(
+        'mmva',
+        'MMVA',
+      );
       expect(businessUnitsServiceMock.deactivateByBu).toHaveBeenCalledWith(
         'berry-virtual',
         'Berry Virtual',
@@ -1278,11 +1490,24 @@ describe('CronService', () => {
 
     it('never touches BusinessUnit rows outside the reconcile diff (idempotent re-run creates no dupes)', async () => {
       mockedAxios.get.mockResolvedValue(
-        hubspotPropertyResponse([{ label: 'MedVirtual' }, { label: 'Berry Virtual' }]),
+        hubspotPropertyResponse([
+          { label: 'MedVirtual' },
+          { label: 'Berry Virtual' },
+        ]),
       );
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
-        { id: '2', slug: 'berry-virtual', hubspot_value: 'Berry Virtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
+        {
+          id: '2',
+          slug: 'berry-virtual',
+          hubspot_value: 'Berry Virtual',
+          is_visible: true,
+        },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
 
@@ -1296,7 +1521,12 @@ describe('CronService', () => {
     it('aborts the reconcile step (no cascade delete) when HubSpot GET returns non-200', async () => {
       mockedAxios.get.mockResolvedValue({ status: 500, data: null });
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
         { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: true },
       ]);
 
@@ -1310,7 +1540,12 @@ describe('CronService', () => {
     it('aborts the reconcile step when options array is empty', async () => {
       mockedAxios.get.mockResolvedValue(hubspotPropertyResponse([]));
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
       ]);
 
       const result = await service.syncBusinessUnits();
@@ -1326,7 +1561,12 @@ describe('CronService', () => {
         data: { name: 'business_unit', options: null },
       });
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
       ]);
 
       const result = await service.syncBusinessUnits();
@@ -1339,7 +1579,12 @@ describe('CronService', () => {
     it('aborts the reconcile step when the GET throws/times out', async () => {
       mockedAxios.get.mockRejectedValue(new Error('timeout'));
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
       ]);
 
       const result = await service.syncBusinessUnits();
@@ -1354,7 +1599,12 @@ describe('CronService', () => {
         hubspotPropertyResponse([{ label: 'MedVirtual' }, { label: 'MMVA' }]),
       );
       prismaServiceMock.businessUnit.findMany.mockResolvedValue([
-        { id: '1', slug: 'medvirtual', hubspot_value: 'MedVirtual', is_visible: true },
+        {
+          id: '1',
+          slug: 'medvirtual',
+          hubspot_value: 'MedVirtual',
+          is_visible: true,
+        },
         { id: '2', slug: 'mmva', hubspot_value: 'MMVA', is_visible: false },
       ]);
       prismaServiceMock.businessUnit.upsert.mockResolvedValue({});
@@ -1366,6 +1616,258 @@ describe('CronService', () => {
       expect(prismaServiceMock.businessUnit.upsert).toHaveBeenCalled();
       const createCalls = (prismaServiceMock.businessUnit as any).create;
       expect(createCalls).toBeUndefined();
+    });
+  });
+
+  describe('weeklyOfferPanelReport', () => {
+    // Fri 2026-07-31 13:00Z = 09:00 EDT. Window: Mon Jul 27 → Fri Jul 31 ET.
+    const FRIDAY = new Date('2026-07-31T13:00:00Z');
+    const EXPECTED_START = '2026-07-27T04:00:00.000Z';
+    const EXPECTED_END = '2026-08-01T03:59:59.999Z';
+    const originalEnvironment = process.env.ENVIRONMENT;
+
+    const buildPanel = (overrides: Record<string, any> = {}) => ({
+      id: 'panel-1',
+      title: 'Front Desk VA Panel',
+      business_unit: 'MedVirtual',
+      status: 'viewed',
+      is_public: false,
+      recipient_name: 'Dr. Smith',
+      recipient_email: 'dr.smith@sunrise.example',
+      recipient_org_name: 'Sunrise Clinic',
+      viewed_at: new Date('2026-07-27T15:00:00Z'),
+      view_count: 1,
+      decided_at: null,
+      createdAt: new Date('2026-07-27T13:00:00Z'),
+      created_by_user_id: 'user-1',
+      createdBy: {
+        id: 'user-1',
+        first_name: 'Ana',
+        last_name: 'Souza',
+        email: 'ana@medvirtual.ai',
+      },
+      recipientCompany: { name: 'Sunrise Clinic' },
+      _count: { candidates: 3 },
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      jest.useFakeTimers().setSystemTime(FRIDAY);
+      mailServiceMock.sendMail.mockResolvedValue(true);
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      process.env.ENVIRONMENT = originalEnvironment;
+    });
+
+    it('sends the email even when no panels were created that week', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      const result = await service.weeklyOfferPanelReport();
+
+      expect(mailServiceMock.sendMail).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        sent: true,
+        totalPanels: 0,
+        totalCreators: 0,
+      });
+    });
+
+    it('queries the exact Monday–Friday ET window', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      await service.weeklyOfferPanelReport();
+
+      const where =
+        prismaServiceMock.offerPanel.findMany.mock.calls[0][0].where;
+      expect(where.createdAt.gte.toISOString()).toBe(EXPECTED_START);
+      expect(where.createdAt.lte.toISOString()).toBe(EXPECTED_END);
+    });
+
+    it('orders creator sections by panel count descending', async () => {
+      const panelFor = (userId: string, name: string, index: number) =>
+        buildPanel({
+          id: `${userId}-${index}`,
+          created_by_user_id: userId,
+          createdBy: {
+            id: userId,
+            first_name: name,
+            last_name: 'X',
+            email: `${userId}@medvirtual.ai`,
+          },
+        });
+
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([
+        panelFor('user-a', 'Aaa', 1),
+        panelFor('user-b', 'Bbb', 1),
+        panelFor('user-b', 'Bbb', 2),
+        panelFor('user-b', 'Bbb', 3),
+        panelFor('user-c', 'Ccc', 1),
+        panelFor('user-c', 'Ccc', 2),
+      ]);
+
+      await service.weeklyOfferPanelReport();
+
+      const html = mailServiceMock.sendMail.mock.calls[0][0].html;
+      expect(html.indexOf('Bbb X')).toBeLessThan(html.indexOf('Ccc X'));
+      expect(html.indexOf('Ccc X')).toBeLessThan(html.indexOf('Aaa X'));
+    });
+
+    it('breaks ties alphabetically by creator name', async () => {
+      const panelFor = (userId: string, name: string, index: number) =>
+        buildPanel({
+          id: `${userId}-${index}`,
+          created_by_user_id: userId,
+          createdBy: {
+            id: userId,
+            first_name: name,
+            last_name: 'Zed',
+            email: `${userId}@medvirtual.ai`,
+          },
+        });
+
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([
+        panelFor('user-z', 'Zoe', 1),
+        panelFor('user-z', 'Zoe', 2),
+        panelFor('user-m', 'Marco', 1),
+        panelFor('user-m', 'Marco', 2),
+      ]);
+
+      await service.weeklyOfferPanelReport();
+
+      const html = mailServiceMock.sendMail.mock.calls[0][0].html;
+      expect(html.indexOf('Marco Zed')).toBeLessThan(html.indexOf('Zoe Zed'));
+    });
+
+    it('falls back to the creator email when the name parts are empty', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([
+        buildPanel({
+          createdBy: {
+            id: 'user-1',
+            first_name: '',
+            last_name: '',
+            email: 'nameless@medvirtual.ai',
+          },
+        }),
+      ]);
+
+      await service.weeklyOfferPanelReport();
+
+      const html = mailServiceMock.sendMail.mock.calls[0][0].html;
+      expect(html).toContain('nameless@medvirtual.ai');
+    });
+
+    it('renders panels with no view or decision without leaking bad values', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([
+        buildPanel({
+          status: 'sent',
+          viewed_at: null,
+          decided_at: null,
+          view_count: 0,
+          recipient_org_name: null,
+          recipientCompany: null,
+        }),
+      ]);
+
+      await service.weeklyOfferPanelReport();
+
+      const html = mailServiceMock.sendMail.mock.calls[0][0].html;
+      expect(html).not.toContain('NaN');
+      expect(html).not.toContain('Invalid Date');
+      expect(html).not.toContain('undefined');
+      // recipient_org_name is null, so the contact name is used instead.
+      expect(html).toContain('Dr. Smith');
+    });
+
+    it('sends to all three stakeholders in PROD', async () => {
+      process.env.ENVIRONMENT = 'PROD';
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      await service.weeklyOfferPanelReport();
+
+      expect(mailServiceMock.sendMail.mock.calls[0][0].to).toEqual([
+        'hanieh@berryvirtual.com',
+        'paulo@regenta.ai',
+        'shayan@regenta.ai',
+      ]);
+    });
+
+    it('sends only to the engineering address outside PROD', async () => {
+      process.env.ENVIRONMENT = 'STAGE';
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      await service.weeklyOfferPanelReport();
+
+      expect(mailServiceMock.sendMail.mock.calls[0][0].to).toEqual([
+        'paulo@regenta.ai',
+      ]);
+    });
+
+    it('returns sent:false instead of throwing when the email fails', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+      mailServiceMock.sendMail.mockRejectedValue(new Error('resend down'));
+
+      const result = await service.weeklyOfferPanelReport();
+
+      expect(result.sent).toBe(false);
+      expect(result.error).toContain('resend down');
+    });
+
+    it('builds the subject in code without consulting EmailTemplatesService', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      await service.weeklyOfferPanelReport();
+
+      expect(mailServiceMock.sendMail.mock.calls[0][0].subject).toBe(
+        'Offer Panel Report — Jul 27, 2026 to Jul 31, 2026',
+      );
+      expect(
+        emailTemplatesServiceMock.getTemplateContent,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('emits no placeholder tokens that MailService would strip', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([buildPanel()]);
+
+      await service.weeklyOfferPanelReport();
+
+      const html = mailServiceMock.sendMail.mock.calls[0][0].html;
+      expect(html).not.toMatch(/\{\{|\[\[/);
+    });
+
+    it('flags an off-schedule run and still reports the current week', async () => {
+      jest.setSystemTime(new Date('2026-07-29T14:00:00Z')); // Wednesday
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      const result = await service.weeklyOfferPanelReport();
+
+      expect(result.ranOnFridayEt).toBe(false);
+      expect(mailServiceMock.sendMail.mock.calls[0][0].html).toContain(
+        'outside the usual Friday schedule',
+      );
+    });
+
+    it('reports the requested week when week_of is supplied', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      const result = await service.weeklyOfferPanelReport('2026-01-28');
+
+      const where =
+        prismaServiceMock.offerPanel.findMany.mock.calls[0][0].where;
+      expect(where.createdAt.gte.toISOString()).toBe(
+        '2026-01-26T05:00:00.000Z',
+      );
+      expect(where.createdAt.lte.toISOString()).toBe(
+        '2026-01-31T04:59:59.999Z',
+      );
+      expect(result.ranOnFridayEt).toBe(false);
+    });
+
+    it('rejects a malformed week_of value', async () => {
+      await expect(
+        service.weeklyOfferPanelReport('not-a-date'),
+      ).rejects.toThrow(/Expected format YYYY-MM-DD/);
     });
   });
 });
