@@ -468,15 +468,39 @@ export class OfferPanelsService {
       return panels;
     });
 
-    // Fire notifications non-blocking after transaction
-    Promise.allSettled(
-      createdPanels.map((panel) => {
-        const isPublic = panel.is_public;
-        return isPublic
+    // Awaited on purpose: Lambda freezes the container once the handler's
+    // response resolves, so a floating promise here never reaches Resend.
+    // Creation must still succeed if a send fails, hence allSettled + logging.
+    const notificationResults = await Promise.allSettled(
+      (createdPanels as { id: string; is_public: boolean }[]).map((panel) =>
+        panel.is_public
           ? this.notificationsService.notifyOfferPanelCreatedPublic(panel.id)
-          : this.notificationsService.notifyOfferPanelCreatedClient(panel.id);
-      }),
+          : this.notificationsService.notifyOfferPanelCreatedClient(panel.id),
+      ),
     );
+
+    notificationResults.forEach((result, i) => {
+      const { id, recipient_email } = createdPanels[i] as {
+        id: string;
+        recipient_email: string;
+      };
+      if (result.status === 'rejected') {
+        const reason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+        this.logger.error(
+          `[offer-panel] notification failed for panel ${id} ` +
+            `(${recipient_email}): ${reason}`,
+        );
+      } else if (result.value === false) {
+        // notify* returns false when the panel or its public_token can't be
+        // resolved — silent by design, so surface it here.
+        this.logger.warn(
+          `[offer-panel] notification skipped for panel ${id} (${recipient_email})`,
+        );
+      }
+    });
 
     const enrichedCandidates = await this.enrichCandidates(dto.candidateIds);
 

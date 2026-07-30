@@ -533,10 +533,36 @@ describe('OfferPanelsService', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('fires client notification for client_user recipient after creation', async () => {
+    it('awaits client notification before returning', async () => {
+      // Deferred on a macrotask: a floating promise would leave `settled`
+      // false, while a real `await` cannot resolve until setTimeout fires.
+      // Guards the Lambda freeze bug, where the container is suspended as
+      // soon as the handler resolves and the pending send never runs.
+      let settled = false;
+      mockNotificationsService.notifyOfferPanelCreatedClient.mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => {
+              settled = true;
+              resolve(true);
+            }, 0),
+          ),
+      );
+
       await service.create(validDto, adminUser);
-      // Promise.allSettled fires synchronously — notification is kicked off immediately
+
       expect(mockNotificationsService.notifyOfferPanelCreatedClient).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(true);
+    });
+
+    it('does not fail creation when notification rejects', async () => {
+      mockNotificationsService.notifyOfferPanelCreatedClient.mockRejectedValueOnce(
+        new Error('Resend down'),
+      );
+
+      const result = await service.create(validDto, adminUser);
+
+      expect(result).toHaveLength(1);
     });
   });
 
