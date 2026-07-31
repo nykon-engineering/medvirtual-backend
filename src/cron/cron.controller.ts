@@ -232,6 +232,7 @@ export class CronController {
     };
   }
 
+  
   @Get('weekly-offer-panel-report')
   @ApiOperation({
     summary:
