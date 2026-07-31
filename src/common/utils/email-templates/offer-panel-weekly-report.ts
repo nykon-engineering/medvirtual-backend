@@ -141,7 +141,11 @@ export default function offerPanelWeeklyReport(
   const companyName = theme?.companyName || 'MedVirtual';
   const buttonColor = theme?.buttonColor || primaryColor;
   const buttonTextColor = theme?.buttonTextColor || '#ffffff';
-  const ctaLink = `${process.env.FRONTEND_URL}/offer-panels`;
+  // Fall back to the production URL when FRONTEND_URL is unset (e.g. CI) so the
+  // CTA never renders a literal "undefined/offer-panels" link — matching the
+  // defensive `FRONTEND_URL || ...` pattern used elsewhere (email-test.service).
+  const frontendUrl = (process.env.FRONTEND_URL || 'https://app.medvirtual.ai').replace(/\/+$/, '');
+  const ctaLink = `${frontendUrl}/offer-panels`;
 
   const { sent, viewed, accepted, declined } = payload.statusTotals;
 

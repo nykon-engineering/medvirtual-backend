@@ -1625,6 +1625,7 @@ describe('CronService', () => {
     const EXPECTED_START = '2026-07-27T04:00:00.000Z';
     const EXPECTED_END = '2026-08-01T03:59:59.999Z';
     const originalEnvironment = process.env.ENVIRONMENT;
+    const originalFrontendUrl = process.env.FRONTEND_URL;
 
     const buildPanel = (overrides: Record<string, any> = {}) => ({
       id: 'panel-1',
@@ -1654,11 +1655,21 @@ describe('CronService', () => {
     beforeEach(() => {
       jest.useFakeTimers().setSystemTime(FRIDAY);
       mailServiceMock.sendMail.mockResolvedValue(true);
+      // Pin FRONTEND_URL so the report's CTA link is deterministic regardless of
+      // the ambient env — otherwise a CI runner without FRONTEND_URL rendered
+      // "undefined/offer-panels" and the no-undefined assertion below failed
+      // (passed locally only because .env set FRONTEND_URL).
+      process.env.FRONTEND_URL = 'https://app.medvirtual.ai';
     });
 
     afterEach(() => {
       jest.useRealTimers();
       process.env.ENVIRONMENT = originalEnvironment;
+      if (originalFrontendUrl === undefined) {
+        delete process.env.FRONTEND_URL;
+      } else {
+        process.env.FRONTEND_URL = originalFrontendUrl;
+      }
     });
 
     it('sends the email even when no panels were created that week', async () => {
