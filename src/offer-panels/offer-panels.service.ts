@@ -533,7 +533,20 @@ export class OfferPanelsService {
       }),
     );
 
-    return this.withRecipient({ ...panel, candidates: enrichedCandidates });
+    // The public recipient is unauthenticated and can't call the auth-only
+    // /business-units/branding endpoint, so resolve this panel's BU branding
+    // server-side and ship it with the payload — the public page themes off it
+    // (color/logo/favicon) for ANY BU (incl. MMVA), not just Berry/Med. `null`
+    // for an unknown/legacy BU; the frontend falls back to MedVirtual.
+    const branding = await this.businessUnitContext.brandingFor(
+      panel.business_unit,
+    );
+
+    return this.withRecipient({
+      ...panel,
+      candidates: enrichedCandidates,
+      branding,
+    });
   }
 
   async findOne(id: string, user: USER): Promise<any> {

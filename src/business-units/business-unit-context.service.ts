@@ -19,6 +19,22 @@ export interface BusinessUnitRow {
   hubspot_value?: string | null;
   is_visible?: boolean | null;
   candidate_pool?: string | null;
+  // App-branding fields — already returned by `getRows()` (unselected findMany),
+  // just typed here so callers like `brandingFor` can read them safely.
+  primary_color?: string | null;
+  primary_hover?: string | null;
+  logo_url?: string | null;
+  favicon_url?: string | null;
+}
+
+/** Visual branding for a business unit — the app-theming fields. */
+export interface BusinessUnitBranding {
+  slug: string;
+  name: string;
+  primary_color: string | null;
+  primary_hover: string | null;
+  logo_url: string | null;
+  favicon_url: string | null;
 }
 
 const CACHE_TTL_MS = 60_000; // 60s — small TTL so gate checks don't hammer the DB
@@ -77,6 +93,26 @@ export class BusinessUnitContext {
         return candidates.some((c) => this.normalizeBusinessUnit(c) === target);
       }) ?? null
     );
+  }
+
+  /**
+   * Visual branding (colors/logo/favicon) for the BU matching `v`, or `null`
+   * when unknown. Used to theme UNAUTHENTICATED surfaces that carry a BU value
+   * but can't call the auth-only `/business-units/branding` endpoint — e.g. the
+   * public offer-panel page, which gets this on its token payload. Mirrors the
+   * server-side email theming precedent (getBusinessUnitEmailTheme).
+   */
+  async brandingFor(v: string): Promise<BusinessUnitBranding | null> {
+    const bu = await this.resolveByHubspotValue(v);
+    if (!bu) return null;
+    return {
+      slug: bu.slug,
+      name: bu.name,
+      primary_color: bu.primary_color ?? null,
+      primary_hover: bu.primary_hover ?? null,
+      logo_url: bu.logo_url ?? null,
+      favicon_url: bu.favicon_url ?? null,
+    };
   }
 
   /** candidate_pool of the matching BU (by hubspot_value or slug), or null. */

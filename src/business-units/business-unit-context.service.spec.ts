@@ -34,6 +34,10 @@ const MMVA_DORMANT = {
   hubspot_value: 'MMVA',
   is_visible: false,
   candidate_pool: 'medical',
+  primary_color: '#7C3AED',
+  primary_hover: '#6d28d9',
+  logo_url: 'https://cdn.example.com/mmva-logo.png',
+  favicon_url: 'https://cdn.example.com/mmva.ico',
 };
 
 const ALL_BUS = [MEDVIRTUAL, BERRY, MMVA_DORMANT];
@@ -137,6 +141,43 @@ describe('BusinessUnitContext.resolveByHubspotValue', () => {
     const { ctx } = makeContext();
     const bu = await ctx.resolveByHubspotValue('MMVA');
     expect(bu?.slug).toBe('mmva');
+  });
+});
+
+// ── brandingFor ────────────────────────────────────────────────────────────
+
+describe('BusinessUnitContext.brandingFor', () => {
+  it('returns the visual branding fields for a known BU (incl. dormant)', async () => {
+    const { ctx } = makeContext();
+    const branding = await ctx.brandingFor('MMVA');
+    expect(branding).toEqual({
+      slug: 'mmva',
+      name: 'MMVA',
+      primary_color: '#7C3AED',
+      primary_hover: '#6d28d9',
+      logo_url: 'https://cdn.example.com/mmva-logo.png',
+      favicon_url: 'https://cdn.example.com/mmva.ico',
+    });
+  });
+
+  it('returns null for an unknown BU value', async () => {
+    const { ctx } = makeContext();
+    await expect(ctx.brandingFor('Unknown Co')).resolves.toBeNull();
+  });
+
+  it('nulls out missing branding fields rather than returning undefined', async () => {
+    const { ctx } = makeContext([
+      { id: 'x', slug: 'medvirtual', name: 'MedVirtual', hubspot_value: 'MedVirtual' },
+    ]);
+    const branding = await ctx.brandingFor('MedVirtual');
+    expect(branding).toEqual({
+      slug: 'medvirtual',
+      name: 'MedVirtual',
+      primary_color: null,
+      primary_hover: null,
+      logo_url: null,
+      favicon_url: null,
+    });
   });
 });
 

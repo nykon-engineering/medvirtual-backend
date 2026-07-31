@@ -140,6 +140,7 @@ const businessUnitContextMock = {
   getVisibleHubspotValues: jest.fn(),
   isAllowedHubspotValue: jest.fn(),
   resolveByHubspotValue: jest.fn(),
+  brandingFor: jest.fn(),
   poolFor: jest.fn(),
   displayToSlug: jest.fn(),
   normalizeBusinessUnit: jest.fn(),
@@ -185,6 +186,7 @@ describe('OfferPanelsService', () => {
       'Berry Virtual',
       'MMVA',
     ]);
+    businessUnitContextMock.brandingFor.mockResolvedValue(null);
   });
 
   // -------------------------------------------------------------------------
@@ -662,6 +664,39 @@ describe('OfferPanelsService', () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
       await expect(service.findByToken('bad-token')).rejects.toThrow(NotFoundException);
+    });
+
+    it('attaches the resolved BU branding for the unauthenticated public page', async () => {
+      const panel = makePanel({
+        public_token: 'tok-mmva',
+        business_unit: 'MMVA',
+        candidates: [],
+      });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(panel);
+      const branding = {
+        slug: 'mmva',
+        name: 'My Medical VA',
+        primary_color: '#7C3AED',
+        primary_hover: '#6d28d9',
+        logo_url: 'https://cdn.example.com/mmva-logo.png',
+        favicon_url: 'https://cdn.example.com/mmva.ico',
+      };
+      businessUnitContextMock.brandingFor.mockResolvedValue(branding);
+
+      const result = await service.findByToken('tok-mmva');
+
+      expect(businessUnitContextMock.brandingFor).toHaveBeenCalledWith('MMVA');
+      expect(result.branding).toEqual(branding);
+    });
+
+    it('returns branding=null for an unknown/legacy BU (frontend falls back to Med)', async () => {
+      const panel = makePanel({ public_token: 'tok-legacy', candidates: [] });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(panel);
+      businessUnitContextMock.brandingFor.mockResolvedValue(null);
+
+      const result = await service.findByToken('tok-legacy');
+
+      expect(result.branding).toBeNull();
     });
   });
 
