@@ -149,27 +149,31 @@ export function zonedWallClockToUtc(
     : new Date(naive + secondOffset * 60000);
 }
 
-// Monday 00:00:00.000 through Friday 23:59:59.999 of the week containing `now`,
-// in `timeZone`. Weeks are Monday-anchored, so a Saturday or Sunday run reports
-// the week that just ended — which makes a weekend retry of a failed Friday cron
-// return the intended window rather than an empty one.
+// Saturday 00:00:00.000 through Friday 23:59:59.999 of the week containing
+// `now`, in `timeZone` — the leading weekend is included so panels created on a
+// Saturday or Sunday are not dropped between consecutive reports. The window is
+// still Monday-anchored, so a Saturday or Sunday run reports the week that just
+// ended — which makes a weekend retry of a failed Friday cron return the
+// intended window rather than an empty one.
 export function getEtWeekWindow(
   now: Date = new Date(),
   timeZone = 'America/New_York',
-): { start: Date; end: Date; mondayLabel: string; fridayLabel: string } {
+): { start: Date; end: Date; weekStartLabel: string; weekEndLabel: string } {
   const { year, month, day, weekday } = getZonedDateParts(now, timeZone);
   const daysSinceMonday = (weekday + 6) % 7;
 
   // Shift the civil date from a UTC-noon anchor: UTC has no DST, so whole-day
   // millisecond arithmetic can never roll the calendar date by accident.
   const anchor = Date.UTC(year, month - 1, day, 12);
-  const monday = new Date(anchor - daysSinceMonday * 86400000);
+  const saturday = new Date(anchor - (daysSinceMonday + 2) * 86400000);
   const friday = new Date(anchor + (4 - daysSinceMonday) * 86400000);
 
+  // Each boundary is resolved independently: a window spanning a DST change has
+  // a different UTC offset on its Saturday than on its Friday.
   const start = zonedWallClockToUtc(
-    monday.getUTCFullYear(),
-    monday.getUTCMonth() + 1,
-    monday.getUTCDate(),
+    saturday.getUTCFullYear(),
+    saturday.getUTCMonth() + 1,
+    saturday.getUTCDate(),
     0,
     0,
     0,
@@ -195,7 +199,12 @@ export function getEtWeekWindow(
       year: 'numeric',
     });
 
-  return { start, end, mondayLabel: label(start), fridayLabel: label(end) };
+  return {
+    start,
+    end,
+    weekStartLabel: label(start),
+    weekEndLabel: label(end),
+  };
 }
 
 // Elapsed time as '45m' / '3h 20m' / '2d 4h'. Clamped at zero because stored

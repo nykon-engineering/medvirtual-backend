@@ -1348,7 +1348,7 @@ export class CronService {
       now = zonedWallClockToUtc(year, month, day, 12, 0, 0, 0, REPORT_TIMEZONE);
     }
 
-    const { start, end, mondayLabel, fridayLabel } = getEtWeekWindow(
+    const { start, end, weekStartLabel, weekEndLabel } = getEtWeekWindow(
       now,
       REPORT_TIMEZONE,
     );
@@ -1455,8 +1455,8 @@ export class CronService {
     // maintenance report, not client-facing copy, so it is not an EmailTemplate.
     const html = offerPanelWeeklyReport(
       {
-        weekStartLabel: mondayLabel,
-        weekEndLabel: fridayLabel,
+        weekStartLabel,
+        weekEndLabel,
         generatedAtLabel: this.formatEtTimestamp(new Date()),
         totalPanels: panels.length,
         totalCreators: sections.length,
@@ -1481,7 +1481,7 @@ export class CronService {
       await this.mailService.sendMail({
         from: 'MedVirtual <noreply@medvirtual.ai>',
         to: getOfferPanelReportRecipients(),
-        subject: `Offer Panel Report — ${mondayLabel} to ${fridayLabel}`,
+        subject: `Offer Panel Report — ${weekStartLabel} to ${weekEndLabel}`,
         html,
       });
     } catch (err) {
@@ -1491,7 +1491,7 @@ export class CronService {
     }
 
     console.log(
-      `weeklyOfferPanelReport: window=${mondayLabel}..${fridayLabel} panels=${panels.length} creators=${sections.length}`,
+      `weeklyOfferPanelReport: window=${weekStartLabel}..${weekEndLabel} panels=${panels.length} creators=${sections.length}`,
     );
 
     return { sent: true, ...result };

@@ -1620,9 +1620,9 @@ describe('CronService', () => {
   });
 
   describe('weeklyOfferPanelReport', () => {
-    // Fri 2026-07-31 13:00Z = 09:00 EDT. Window: Mon Jul 27 → Fri Jul 31 ET.
+    // Fri 2026-07-31 13:00Z = 09:00 EDT. Window: Sat Jul 25 → Fri Jul 31 ET.
     const FRIDAY = new Date('2026-07-31T13:00:00Z');
-    const EXPECTED_START = '2026-07-27T04:00:00.000Z';
+    const EXPECTED_START = '2026-07-25T04:00:00.000Z';
     const EXPECTED_END = '2026-08-01T03:59:59.999Z';
     const originalEnvironment = process.env.ENVIRONMENT;
     const originalFrontendUrl = process.env.FRONTEND_URL;
@@ -1685,7 +1685,7 @@ describe('CronService', () => {
       });
     });
 
-    it('queries the exact Monday–Friday ET window', async () => {
+    it('queries the exact Saturday–Friday ET window', async () => {
       prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
 
       await service.weeklyOfferPanelReport();
@@ -1831,7 +1831,7 @@ describe('CronService', () => {
       await service.weeklyOfferPanelReport();
 
       expect(mailServiceMock.sendMail.mock.calls[0][0].subject).toBe(
-        'Offer Panel Report — Jul 27, 2026 to Jul 31, 2026',
+        'Offer Panel Report — Jul 25, 2026 to Jul 31, 2026',
       );
       expect(
         emailTemplatesServiceMock.getTemplateContent,
@@ -1867,7 +1867,7 @@ describe('CronService', () => {
       const where =
         prismaServiceMock.offerPanel.findMany.mock.calls[0][0].where;
       expect(where.createdAt.gte.toISOString()).toBe(
-        '2026-01-26T05:00:00.000Z',
+        '2026-01-24T05:00:00.000Z',
       );
       expect(where.createdAt.lte.toISOString()).toBe(
         '2026-01-31T04:59:59.999Z',

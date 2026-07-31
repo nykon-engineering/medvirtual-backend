@@ -42,12 +42,12 @@ describe('zonedWallClockToUtc', () => {
 });
 
 describe('getEtWeekWindow', () => {
-  it('returns Mon 00:00 ET to Fri 23:59:59.999 ET for an EDT Friday', () => {
+  it('returns Sat 00:00 ET to Fri 23:59:59.999 ET for an EDT Friday', () => {
     const { start, end } = getEtWeekWindow(
       new Date('2026-07-31T13:00:00Z'),
       ET,
     );
-    expect(start.toISOString()).toBe('2026-07-27T04:00:00.000Z');
+    expect(start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
     expect(end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
   });
 
@@ -56,8 +56,22 @@ describe('getEtWeekWindow', () => {
       new Date('2026-01-30T14:00:00Z'),
       ET,
     );
-    expect(start.toISOString()).toBe('2026-01-26T05:00:00.000Z');
+    expect(start.toISOString()).toBe('2026-01-24T05:00:00.000Z');
     expect(end.toISOString()).toBe('2026-01-31T04:59:59.999Z');
+  });
+
+  it('includes panels created on the leading Saturday and Sunday', () => {
+    // The whole point of the 7-day window: a panel created over the weekend
+    // used to fall between two reports and never appear in either.
+    const { start, end } = getEtWeekWindow(
+      new Date('2026-07-31T13:00:00Z'),
+      ET,
+    );
+    const saturdayPanel = new Date('2026-07-25T18:00:00Z');
+    const sundayPanel = new Date('2026-07-26T18:00:00Z');
+
+    expect(saturdayPanel >= start && saturdayPanel <= end).toBe(true);
+    expect(sundayPanel >= start && sundayPanel <= end).toBe(true);
   });
 
   it('keeps the same week when run at 23:30 ET Friday (already Saturday in UTC)', () => {
@@ -66,61 +80,63 @@ describe('getEtWeekWindow', () => {
       new Date('2026-08-01T03:30:00Z'),
       ET,
     );
-    expect(start.toISOString()).toBe('2026-07-27T04:00:00.000Z');
+    expect(start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
     expect(end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
   });
 
   it('computes each boundary with the offset in effect during the spring-forward week', () => {
-    // DST starts Sun 2026-03-08. Mon 03-09 through Fri 03-13 are both EDT.
+    // DST starts Sun 2026-03-08, so this window straddles it: Sat 03-07 is
+    // still EST (-05:00) while Fri 03-13 is already EDT (-04:00).
     const { start, end } = getEtWeekWindow(
       new Date('2026-03-13T14:00:00Z'),
       ET,
     );
-    expect(start.toISOString()).toBe('2026-03-09T04:00:00.000Z');
+    expect(start.toISOString()).toBe('2026-03-07T05:00:00.000Z');
     expect(end.toISOString()).toBe('2026-03-14T03:59:59.999Z');
   });
 
   it('computes each boundary with the offset in effect during the fall-back week', () => {
-    // DST ends Sun 2026-11-01. Mon 11-02 through Fri 11-06 are both EST.
+    // DST ends Sun 2026-11-01, so this window straddles it: Sat 10-31 is still
+    // EDT (-04:00) while Fri 11-06 is already EST (-05:00).
     const { start, end } = getEtWeekWindow(
       new Date('2026-11-06T15:00:00Z'),
       ET,
     );
-    expect(start.toISOString()).toBe('2026-11-02T05:00:00.000Z');
+    expect(start.toISOString()).toBe('2026-10-31T04:00:00.000Z');
     expect(end.toISOString()).toBe('2026-11-07T04:59:59.999Z');
   });
 
   it('crosses the year boundary when Friday is Jan 1', () => {
-    // Fri 2027-01-01; its Monday is 2026-12-28.
+    // Fri 2027-01-01; its window opens on Sat 2026-12-26.
     const { start, end } = getEtWeekWindow(
       new Date('2027-01-01T15:00:00Z'),
       ET,
     );
-    expect(start.toISOString()).toBe('2026-12-28T05:00:00.000Z');
+    expect(start.toISOString()).toBe('2026-12-26T05:00:00.000Z');
     expect(end.toISOString()).toBe('2027-01-02T04:59:59.999Z');
   });
 
   it('reports the week that just ended when run on Saturday or Sunday', () => {
     const sat = getEtWeekWindow(new Date('2026-08-01T16:00:00Z'), ET);
     const sun = getEtWeekWindow(new Date('2026-08-02T16:00:00Z'), ET);
-    expect(sat.start.toISOString()).toBe('2026-07-27T04:00:00.000Z');
+    expect(sat.start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
     expect(sat.end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
-    expect(sun.start.toISOString()).toBe('2026-07-27T04:00:00.000Z');
+    expect(sun.start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
   });
 
   it('reports the current, incomplete week when run Monday through Thursday', () => {
     const wed = getEtWeekWindow(new Date('2026-07-29T14:00:00Z'), ET);
-    expect(wed.start.toISOString()).toBe('2026-07-27T04:00:00.000Z');
+    expect(wed.start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
     expect(wed.end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
   });
 
   it('exposes human-readable ET labels for the boundaries', () => {
-    const { mondayLabel, fridayLabel } = getEtWeekWindow(
+    const { weekStartLabel, weekEndLabel } = getEtWeekWindow(
       new Date('2026-07-31T13:00:00Z'),
       ET,
     );
-    expect(mondayLabel).toBe('Jul 27, 2026');
-    expect(fridayLabel).toBe('Jul 31, 2026');
+    expect(weekStartLabel).toBe('Jul 25, 2026');
+    expect(weekEndLabel).toBe('Jul 31, 2026');
   });
 });
 
