@@ -473,6 +473,7 @@ export class BusinessUnitsService {
     contacts: number;
     candidates: number;
     affiliates: number;
+    failures?: string[];
   }> {
     const bu = await this.findOneOrThrow(slug);
 
@@ -486,19 +487,52 @@ export class BusinessUnitsService {
     try {
       const businessUnitValue = bu.hubspot_value ?? bu.name;
 
-      const [organizations, contacts, candidates, affiliates] =
-        await Promise.all([
-          this.backfillOrganizations(businessUnitValue),
-          this.backfillContacts(businessUnitValue),
-          this.backfillCandidates(businessUnitValue),
-          this.backfillAffiliates(businessUnitValue),
-        ]);
+      // `allSettled`, not `all`: the four object types are independent imports,
+      // and a failure on one (e.g. HubSpot rejecting a search) must not discard
+      // the records the other three already upserted. Each failure degrades to a
+      // count of 0 and is surfaced in the returned `failures` list, so a partial
+      // run is visible rather than looking like a clean success. The whole
+      // backfill is idempotent, so re-running after a partial failure is safe.
+      const settled = await Promise.allSettled([
+        this.backfillOrganizations(businessUnitValue),
+        this.backfillContacts(businessUnitValue),
+        this.backfillCandidates(businessUnitValue),
+        this.backfillAffiliates(businessUnitValue),
+      ]);
+
+      const labels = [
+        'organizations',
+        'contacts',
+        'candidates',
+        'affiliates',
+      ] as const;
+
+      const counts = {
+        organizations: 0,
+        contacts: 0,
+        candidates: 0,
+        affiliates: 0,
+      };
+      const failures: string[] = [];
+
+      settled.forEach((outcome, index) => {
+        const label = labels[index];
+        if (outcome.status === 'fulfilled') {
+          counts[label] = outcome.value;
+        } else {
+          const reason = outcome.reason as Error;
+          failures.push(`${label}: ${reason.message}`);
+          this.logger.error(
+            `backfillFromHubspot("${slug}") failed for ${label}: ${reason.message}`,
+          );
+        }
+      });
 
       this.logger.log(
-        `backfillFromHubspot("${slug}"): organizations=${organizations}, contacts=${contacts}, candidates=${candidates}, affiliates=${affiliates}`,
+        `backfillFromHubspot("${slug}"): organizations=${counts.organizations}, contacts=${counts.contacts}, candidates=${counts.candidates}, affiliates=${counts.affiliates}`,
       );
 
-      return { organizations, contacts, candidates, affiliates };
+      return { ...counts, ...(failures.length > 0 && { failures }) };
     } finally {
       this.backfillsInProgress.delete(slug);
     }
@@ -508,6 +542,7 @@ export class BusinessUnitsService {
     objectType: string,
     businessUnitValue: string,
     properties: string[],
+    filterPropertyName = 'business_unit',
   ): Promise<Array<{ id: string; properties: Record<string, any> }>> {
     const results: Array<{ id: string; properties: Record<string, any> }> = [];
     let after: string | undefined;
@@ -518,7 +553,7 @@ export class BusinessUnitsService {
           {
             filters: [
               {
-                propertyName: 'business_unit',
+                propertyName: filterPropertyName,
                 operator: 'EQ',
                 value: businessUnitValue,
               },
@@ -530,22 +565,72 @@ export class BusinessUnitsService {
         ...(after && { after }),
       };
 
-      const response = await axios.post(
-        `https://api.hubapi.com/crm/v3/objects/${objectType}/search`,
-        body,
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
+      let response: { data?: any };
+      try {
+        response = await axios.post(
+          `https://api.hubapi.com/crm/v3/objects/${objectType}/search`,
+          body,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
           },
-        },
-      );
+        );
+      } catch (err) {
+        // Never let a raw AxiosError escape: its `config` carries the
+        // `Authorization: Bearer <token>` header, and anything that serializes
+        // the error (Nest's default exception handler, a console dump) would
+        // write the HubSpot private app token to CloudWatch in plaintext.
+        // Re-throw a compact error with only what's needed to debug: the
+        // status, HubSpot's own message and correlationId (what their support
+        // asks for), and which search failed.
+        throw this.toSafeHubspotError(err, objectType, filterPropertyName);
+      }
 
       results.push(...(response.data?.results ?? []));
       after = response.data?.paging?.next?.after;
     } while (after);
 
     return results;
+  }
+
+  /**
+   * Reduces a HubSpot request failure to a single-line, token-free Error.
+   */
+  private toSafeHubspotError(
+    err: unknown,
+    objectType: string,
+    filterPropertyName: string,
+  ): Error {
+    const axiosError = err as {
+      response?: {
+        status?: number;
+        data?: { message?: string; correlationId?: string };
+      };
+      message?: string;
+    };
+
+    const status = axiosError?.response?.status;
+    const hubspotMessage = axiosError?.response?.data?.message;
+    const correlationId = axiosError?.response?.data?.correlationId;
+
+    const details = [
+      `objectType=${objectType}`,
+      `filterProperty=${filterPropertyName}`,
+      status !== undefined ? `status=${status}` : undefined,
+      hubspotMessage ? `hubspotMessage="${hubspotMessage}"` : undefined,
+      correlationId ? `correlationId=${correlationId}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    return new Error(
+      `HubSpot search failed (${details})` +
+        (status === undefined && axiosError?.message
+          ? `: ${axiosError.message}`
+          : ''),
+    );
   }
 
   private async backfillOrganizations(
@@ -622,10 +707,14 @@ export class BusinessUnitsService {
   private async backfillCandidates(businessUnitValue: string): Promise<number> {
     const objectType = process.env.HUBSPOT_CUSTOM_OBJECT ?? '2-5922196';
     const properties = Object.keys(candidadeToDbDictionary);
+    // The VA custom object names this property `business_units` (plural) — the
+    // other three object types use the singular `business_unit`. Filtering on
+    // the singular name here makes HubSpot reject the whole search with a 400.
     const candidates = await this.searchHubspotByBusinessUnit(
       objectType,
       businessUnitValue,
       properties,
+      'business_units',
     );
 
     let count = 0;
