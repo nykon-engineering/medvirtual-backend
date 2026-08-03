@@ -855,6 +855,128 @@ describe('BusinessUnitsService.backfillFromHubspot', () => {
     expect(call.create.specialties).toEqual(['Cardiology', 'Neurology']);
     expect(call.update.specialties).toEqual(['Cardiology', 'Neurology']);
   });
+
+  // ── HubSpot search filter property name ───────────────────────────────────
+
+  function filterPropertyOfCall(callIndex: number): string {
+    const body = mockedAxios.post.mock.calls[callIndex][1] as any;
+    return body.filterGroups[0].filters[0].propertyName;
+  }
+
+  it('REGRESSION: filters the VA custom object on `business_units` (plural), not `business_unit`', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+    mockedAxios.post.mockResolvedValue(emptySearch());
+
+    await service.backfillFromHubspot('mmva');
+
+    // Calls are issued in order: companies, contacts, candidates, affiliates.
+    const candidatesCall = mockedAxios.post.mock.calls.findIndex((call) =>
+      String(call[0]).includes('Virtual_Assistant') || String(call[0]).includes('2-5922196'),
+    );
+    expect(candidatesCall).toBeGreaterThanOrEqual(0);
+    expect(filterPropertyOfCall(candidatesCall)).toBe('business_units');
+  });
+
+  it('filters companies, contacts and Growth Partners on the singular `business_unit`', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+    mockedAxios.post.mockResolvedValue(emptySearch());
+
+    await service.backfillFromHubspot('mmva');
+
+    mockedAxios.post.mock.calls.forEach((call, index) => {
+      const isVaObject =
+        String(call[0]).includes('Virtual_Assistant') || String(call[0]).includes('2-5922196');
+      if (!isVaObject) {
+        expect(filterPropertyOfCall(index)).toBe('business_unit');
+      }
+    });
+  });
+
+  // ── Partial-failure isolation + error sanitization ────────────────────────
+
+  function hubspot400(message = 'There was a problem with the request.') {
+    return {
+      response: {
+        status: 400,
+        data: { status: 'error', message, correlationId: 'corr-abc-123' },
+      },
+      config: {
+        headers: { Authorization: 'Bearer pat-na1-super-secret-token' },
+      },
+      message: 'Request failed with status code 400',
+    };
+  }
+
+  it('one failing object type does not discard the counts of the other three', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+
+    mockedAxios.post
+      .mockResolvedValueOnce({
+        data: { results: [{ id: 'company-1', properties: { hs_object_id: 'company-1', name: 'Acme Co' } }] },
+      }) // companies
+      .mockResolvedValueOnce({
+        data: { results: [{ id: 'contact-1', properties: { hs_object_id: 'contact-1', email: 'a@b.com' } }] },
+      }) // contacts
+      .mockRejectedValueOnce(hubspot400()) // candidates → HubSpot 400
+      .mockResolvedValueOnce({
+        data: { results: [{ id: 'gp-1', properties: { hs_object_id: 'gp-1', growth_partner_name: 'Jane' } }] },
+      }); // affiliates
+
+    const result = await service.backfillFromHubspot('mmva');
+
+    expect(result.organizations).toBe(1);
+    expect(result.contacts).toBe(1);
+    expect(result.affiliates).toBe(1);
+    expect(result.candidates).toBe(0);
+    expect(result.failures).toEqual([expect.stringContaining('candidates')]);
+  });
+
+  it('never leaks the HubSpot access token in the surfaced error', async () => {
+    const prisma = makePrisma({
+      businessUnit: {
+        findUnique: jest.fn().mockResolvedValue(MMVA_BU),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    });
+    const service = new (BusinessUnitsService as any)(prisma, makeAudit(), makeBuContext()) as BusinessUnitsService;
+    mockedAxios.post.mockRejectedValue(hubspot400());
+
+    const result = await service.backfillFromHubspot('mmva');
+
+    const serialized = JSON.stringify(result.failures);
+    expect(serialized).not.toContain('Bearer');
+    expect(serialized).not.toContain('pat-na1-super-secret-token');
+    expect(serialized).not.toContain('Authorization');
+    // ...but it still carries what's needed to debug the failure.
+    expect(serialized).toContain('status=400');
+    expect(serialized).toContain('corr-abc-123');
+  });
 });
 
 // ── update() — is_visible false→true reactivation + backfill trigger ───────
