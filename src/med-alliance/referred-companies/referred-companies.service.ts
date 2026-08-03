@@ -804,6 +804,17 @@ export class ReferredCompaniesService {
    *   not_eligible     | yes     | no
    *   expired          | no      | no
    */
+  // Deleted organizations are frozen for eligibility decisions — the HubSpot
+  // deletion hook already voided/parked their commissions, so approving or
+  // blocking one would create state no sync path can ever reconcile.
+  private assertNotDeleted(org: { status?: string | null }): void {
+    if (org.status === 'deleted') {
+      throw new BadRequestException(
+        'Cannot change eligibility of a deleted organization',
+      );
+    }
+  }
+
   private assertDeployedDecisionAllowed(
     org: {
       referred_by_affiliate_id: string | null;
@@ -870,21 +881,28 @@ export class ReferredCompaniesService {
       where: { id },
       select: {
         id: true,
+        status: true,
         referred_by_affiliate_id: true,
         med_alliance_referral_status: true,
         eligibility_start_at: true,
         deployment_date: true,
+        referral_stage: true,
       },
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
+    this.assertNotDeleted(org);
     this.assertDeployedDecisionAllowed(org, 'confirm');
 
-    if (!org.deployment_date) {
+    // "Deployed" is defined by the pipeline stage, not deployment_date —
+    // most deploy paths (first paid invoice, manual stage move) never set
+    // deployment_date, which is only synced from HubSpot's deploy_date_of_first_va.
+    if (org.referral_stage !== 'deployed') {
       throw new BadRequestException('Company has not been deployed yet');
     }
+    // deployment_date is optional; only enforce the future-date guard when it exists.
     const now = new Date();
-    if (org.deployment_date > now) {
+    if (org.deployment_date && org.deployment_date > now) {
       throw new BadRequestException('deployment date is in the future');
     }
 
@@ -950,12 +968,14 @@ export class ReferredCompaniesService {
       where: { id },
       select: {
         id: true,
+        status: true,
         referred_by_affiliate_id: true,
         med_alliance_referral_status: true,
       },
     });
 
     if (!org) throw new NotFoundException('Referred company not found');
+    this.assertNotDeleted(org);
     this.assertDeployedDecisionAllowed(org, 'block');
 
     const oldStatus = org.med_alliance_referral_status;

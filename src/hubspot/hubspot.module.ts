@@ -13,6 +13,7 @@ import { HandlerObjectDeletion } from './handlers/objectDeletion';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationRestore } from './handlers/organizationRestore';
 import { HandlerOrganizationReactivation } from './handlers/organizationReactivation';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
@@ -62,8 +63,11 @@ import { HandlerContactMerge } from './handlers/contactMerge';
 
 import { CompanyDeleteService } from './delete/company';
 import { MailModule } from '../mail/mail.module';
+import { OrgDeletionModule } from '../med-alliance/org-deletion/org-deletion.module';
+import { AllianceNotificationsModule } from '../med-alliance/notifications/notifications.module';
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { HubspotAuditService } from './hubspot-audit.service';
+import { BusinessUnitsModule } from '../business-units/business-units.module';
 
 @Module({
   controllers: [HubspotController],
@@ -76,6 +80,7 @@ import { HubspotAuditService } from './hubspot-audit.service';
     HandlerOrganizationCreation,
     HandlerOrganizationPropertyChange,
     HandlerOrganizationDeletion,
+    HandlerOrganizationRestore,
     HandlerOrganizationReactivation,
     HandlerOrganizationMerge,
     HandlerOrganizationAssociationChange,
@@ -120,6 +125,9 @@ import { HubspotAuditService } from './hubspot-audit.service';
     PrismaModule,
     GoogledriveModule,
     MailModule,
+    OrgDeletionModule,
+    AllianceNotificationsModule,
+    BusinessUnitsModule,
     forwardRef(() => CandidatesModule),
     forwardRef(() => OrganizationModule),
     forwardRef(() => HireRequestModule),

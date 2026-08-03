@@ -31,6 +31,10 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 import { CreateTicketNoteDto } from './dto/create-ticket-note.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { ListTicketAuditLogsDto } from './dto/list-ticket-audit-logs.dto';
+import { DeleteTicketDto } from './dto/delete-ticket.dto';
+import { RestoreTicketDto } from './dto/restore-ticket.dto';
+import { TicketDeletedStatus } from './ticket.service';
 
 @ApiTags('tickets')
 @ApiBearerAuth()
@@ -99,6 +103,13 @@ export class TicketController {
     required: false,
     description: 'Search by client or subject',
   })
+  @ApiQuery({
+    name: 'deleted_status',
+    required: false,
+    enum: ['active', 'deleted'],
+    description:
+      'Which side of the soft-delete boundary to list. Defaults to active. Honored only for system_super_admin; ignored for every other role.',
+  })
   @ApiResponse({
     status: 200,
     description: 'List of tickets retrieved successfully.',
@@ -111,6 +122,7 @@ export class TicketController {
     @Query('assign_user_id') assign_user_id: string,
     @Query('search') search: string,
     @CurrentUser() user: USER,
+    @Query('deleted_status') deleted_status?: string,
   ): Promise<object> {
     const result = await this.ticketService.findAll(
       user,
@@ -118,11 +130,39 @@ export class TicketController {
       priority,
       assign_user_id,
       search,
+      deleted_status === 'deleted'
+        ? 'deleted'
+        : ('active' as TicketDeletedStatus),
     );
     return {
       status: 200,
       message: 'List of tickets retrieved successfully',
       data: result,
+    };
+  }
+
+  // Must stay above @Get(':id') — otherwise 'audit-logs' is captured as an :id.
+  @Get('audit-logs')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({
+    summary: 'List ticket audit log entries',
+    description:
+      'Paginated, filterable view of the append-only ticket lifecycle audit trail.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Audit logs retrieved successfully',
+  })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  async listAuditLogs(@Query() query: ListTicketAuditLogsDto) {
+    const result = await this.ticketService.listAuditLogs(query);
+    return {
+      status: 200,
+      message: 'Audit logs retrieved successfully',
+      ...result,
     };
   }
 
@@ -188,12 +228,73 @@ export class TicketController {
     description: 'Failed to fetch reassigned ticket',
   })
   @ApiResponse({ status: 400, description: 'Error reassigning ticket.' })
-  async reassing(@Param('id') id: string, @Body() data: reassignTicketDto) {
-    const result = await this.ticketService.reassing(id, data);
+  async reassing(
+    @Param('id') id: string,
+    @Body() data: reassignTicketDto,
+    @CurrentUser() user: USER,
+  ) {
+    const result = await this.ticketService.reassing(id, data, user);
     return {
       status: 200,
       message: 'Ticket reassigned successfully',
       data: result,
+    };
+  }
+
+  @Post(':id/restore')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({
+    summary: 'Restore a soft-deleted ticket',
+    description:
+      'Reverses a soft delete, reviving only the bonuses and notes recorded by the matching delete event.',
+  })
+  @ApiParam({
+    name: 'id',
+    required: true,
+    description: 'ID of the ticket to restore',
+    type: String,
+  })
+  @ApiBody({ type: RestoreTicketDto, required: false })
+  @ApiResponse({ status: 200, description: 'Ticket restored successfully.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Ticket not found or not deleted / insufficient permissions.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  async restore(
+    @Param('id') id: string,
+    @CurrentUser() user: USER,
+    @Body() body?: RestoreTicketDto,
+  ) {
+    const result = await this.ticketService.restore(id, user, body?.reason);
+    return {
+      status: 200,
+      message: 'Ticket restored successfully',
+      data: result,
+    };
+  }
+
+  @Get(':id/audit')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @ApiOperation({
+    summary: 'Get the audit timeline for a ticket',
+    description:
+      'Returns every audit entry for the ticket, oldest first. Works for soft-deleted tickets.',
+  })
+  @ApiParam({ name: 'id', required: true, type: String })
+  @ApiResponse({ status: 200, description: 'Audit log retrieved successfully' })
+  @ApiResponse({ status: 400, description: 'Ticket not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  async getTicketAuditLog(@Param('id') id: string) {
+    const data = await this.ticketService.getTicketAuditLog(id);
+    return {
+      status: 200,
+      message: 'Audit log retrieved successfully',
+      data,
     };
   }
 
@@ -219,8 +320,9 @@ export class TicketController {
   async updateStatus(
     @Param('id') id: string,
     @Body() data: updateStatusTicketDto,
+    @CurrentUser() user: USER,
   ) {
-    const result = await this.ticketService.updateStatus(id, data);
+    const result = await this.ticketService.updateStatus(id, data, user);
     return {
       status: 200,
       message: 'Ticket reassigned successfully',
@@ -234,9 +336,10 @@ export class TicketController {
   @ApiOperation({
     summary: 'Delete a ticket',
     description:
-      'Delete a ticket by ID. Accessible only by system_super_admin and system_admin roles.',
+      'Soft-deletes a ticket by ID along with its notes and any bonuses it created. The ticket can be brought back with POST /tickets/:id/restore, and the deletion is recorded in the audit log. Accessible only by system_super_admin and system_admin roles.',
   })
   @ApiParam({ name: 'id', description: 'Ticket ID', required: true })
+  @ApiBody({ type: DeleteTicketDto, required: false })
   @ApiResponse({ status: 200, description: 'Ticket deleted successfully.' })
   @ApiResponse({ status: 400, description: 'Ticket not found.' })
   @ApiResponse({
@@ -244,8 +347,12 @@ export class TicketController {
     description: 'Insufficient permissions to delete tickets.',
   })
   @ApiResponse({ status: 400, description: 'Error deleting ticket.' })
-  async delete(@Param('id') id: string, @CurrentUser() user: USER) {
-    const result = await this.ticketService.delete(id, user);
+  async delete(
+    @Param('id') id: string,
+    @CurrentUser() user: USER,
+    @Body() body?: DeleteTicketDto,
+  ) {
+    const result = await this.ticketService.delete(id, user, body?.reason);
     return {
       status: 200,
       message: 'Ticket deleted successfully',

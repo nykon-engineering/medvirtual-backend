@@ -15,6 +15,10 @@ import {
   getEmailThemeByBusinessUnit,
   EmailTheme,
 } from '../common/utils/email-templates/theme';
+import {
+  getEmailLogoCss,
+  getEmailLogoImg,
+} from '../common/utils/email-templates/components';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
@@ -125,14 +129,7 @@ export class NotificationsService {
     .content {
       padding: 40px 30px;
     }
-    .logo {
-      text-align: left;
-      margin-bottom: 30px;
-    }
-    .logo img {
-      max-width: 200px;
-      height: auto;
-    }
+${getEmailLogoCss()}
     .greeting {
       color: #333333;
       font-size: 16px;
@@ -209,7 +206,7 @@ export class NotificationsService {
     <div class="container">
       <div class="content">
         <div class="logo">
-              <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+              ${getEmailLogoImg(theme)}
         </div>
       
       <div class="greeting">${greeting ?? 'Hi,'}</div>
@@ -1601,8 +1598,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1727,8 +1724,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1844,8 +1841,8 @@ export class NotificationsService {
     if (ticket.created_by) {
       createdById = ticket.created_by;
     } else if (ticket.id) {
-      const ticketData = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const ticketData = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true, user_id: true },
       });
       createdById = ticketData?.created_by || null;
@@ -1886,8 +1883,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1943,11 +1940,11 @@ export class NotificationsService {
     // Always notify fixed email for Support tickets
     if (
       isSupportTicket &&
-      !filteredRecipients.some((r) => r.email === 'pauli@regenta.ai')
+      !filteredRecipients.some((r) => r.email === 'paulo@regenta.ai')
     ) {
       filteredRecipients = [
         ...filteredRecipients,
-        { email: 'pauli@regenta.ai', isSystemAdmin: true },
+        { email: 'paulo@regenta.ai', isSystemAdmin: true },
       ];
     }
 
@@ -2196,8 +2193,8 @@ export class NotificationsService {
       };
     },
   ): Promise<boolean> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         title: true,
@@ -2288,8 +2285,8 @@ export class NotificationsService {
       };
     },
   ): Promise<boolean> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         title: true,

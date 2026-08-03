@@ -314,7 +314,7 @@ describe('InvoicesService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should query orgs with referral_stage=deployed and status not expired (no 30-day tier)', async () => {
+    it('should query orgs with referral_stage=deployed, status not expired and org not deleted', async () => {
       mockPrisma.affiliateProfile.findUnique.mockResolvedValue(makeProfile());
       mockPrisma.organization.findMany.mockResolvedValue([]);
 
@@ -325,6 +325,7 @@ describe('InvoicesService', () => {
           referred_by_affiliate_id: 'affiliate-1',
           referral_stage: 'deployed',
           med_alliance_referral_status: { not: 'expired' },
+          status: { not: 'deleted' },
         },
         select: { id: true },
       });

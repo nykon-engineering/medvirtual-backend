@@ -14,7 +14,13 @@ import { CandidatesService } from '../candidate/candidates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { USER } from '@prisma/client';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { USER, TicketAuditSource } from '@prisma/client';
+import {
+  TicketAuditService,
+  TICKET_AUDIT_EVENTS,
+  TICKET_AUDIT_ORIGINS,
+} from '../ticket/ticket-audit.service';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
 import {
   CreateOfferPanelDto,
@@ -135,6 +141,8 @@ export class OfferPanelsService {
     private readonly hubspot: HubspotService,
     @Inject(forwardRef(() => HireRequestService))
     private readonly hireRequestService: HireRequestService,
+    private readonly businessUnitContext: BusinessUnitContext,
+    private readonly ticketAudit: TicketAuditService,
   ) {}
 
   // Maps the flat recipient_* columns onto the nested `recipient` shape the
@@ -324,6 +332,18 @@ export class OfferPanelsService {
     // --- Validation phase (no DB writes yet) ---
     const errors: string[] = [];
 
+    // Validate business_unit against the currently visible BU set. Kept out
+    // of the DTO (class-validator decorators can't do async DB lookups)
+    // so new BUs (e.g. MMVA) become valid the moment they're made visible,
+    // with no code change.
+    const isBusinessUnitAllowed =
+      await this.businessUnitContext.isAllowedHubspotValue(dto.business_unit);
+    if (!isBusinessUnitAllowed) {
+      errors.push(
+        `business_unit '${dto.business_unit}' is not a visible business unit`,
+      );
+    }
+
     // Validate candidates exist
     const candidates = await this.prisma.candidate.findMany({
       where: { id: { in: dto.candidateIds } },
@@ -448,15 +468,39 @@ export class OfferPanelsService {
       return panels;
     });
 
-    // Fire notifications non-blocking after transaction
-    Promise.allSettled(
-      createdPanels.map((panel) => {
-        const isPublic = panel.is_public;
-        return isPublic
+    // Awaited on purpose: Lambda freezes the container once the handler's
+    // response resolves, so a floating promise here never reaches Resend.
+    // Creation must still succeed if a send fails, hence allSettled + logging.
+    const notificationResults = await Promise.allSettled(
+      (createdPanels as { id: string; is_public: boolean }[]).map((panel) =>
+        panel.is_public
           ? this.notificationsService.notifyOfferPanelCreatedPublic(panel.id)
-          : this.notificationsService.notifyOfferPanelCreatedClient(panel.id);
-      }),
+          : this.notificationsService.notifyOfferPanelCreatedClient(panel.id),
+      ),
     );
+
+    notificationResults.forEach((result, i) => {
+      const { id, recipient_email } = createdPanels[i] as {
+        id: string;
+        recipient_email: string;
+      };
+      if (result.status === 'rejected') {
+        const reason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+        this.logger.error(
+          `[offer-panel] notification failed for panel ${id} ` +
+            `(${recipient_email}): ${reason}`,
+        );
+      } else if (result.value === false) {
+        // notify* returns false when the panel or its public_token can't be
+        // resolved — silent by design, so surface it here.
+        this.logger.warn(
+          `[offer-panel] notification skipped for panel ${id} (${recipient_email})`,
+        );
+      }
+    });
 
     const enrichedCandidates = await this.enrichCandidates(dto.candidateIds);
 
@@ -489,7 +533,20 @@ export class OfferPanelsService {
       }),
     );
 
-    return this.withRecipient({ ...panel, candidates: enrichedCandidates });
+    // The public recipient is unauthenticated and can't call the auth-only
+    // /business-units/branding endpoint, so resolve this panel's BU branding
+    // server-side and ship it with the payload — the public page themes off it
+    // (color/logo/favicon) for ANY BU (incl. MMVA), not just Berry/Med. `null`
+    // for an unknown/legacy BU; the frontend falls back to MedVirtual.
+    const branding = await this.businessUnitContext.brandingFor(
+      panel.business_unit,
+    );
+
+    return this.withRecipient({
+      ...panel,
+      candidates: enrichedCandidates,
+      branding,
+    });
   }
 
   async findOne(id: string, user: USER): Promise<any> {
@@ -931,10 +988,14 @@ export class OfferPanelsService {
           hubspot_role_type: hubspot_va_type,
           hubspot_numberVA,
           hubspot_pairing_request_type: pairingRequestType,
+          // No hardcoded BU default: if the caller's organization couldn't be
+          // resolved we don't know its business unit, so we send `null`
+          // rather than silently assuming MedVirtual (which would misfile
+          // Berry/MMVA/future-BU hire requests in HubSpot).
           organization: org ?? {
             name: '',
             hubspot_id: null,
-            business_unit: 'MedVirtual',
+            business_unit: null,
             website_url: '',
           },
           assign_user_id: [{ id: panel.created_by_user_id }],
@@ -979,7 +1040,7 @@ export class OfferPanelsService {
     // Idempotency (E8)
     if (panel.status === 'accepted') {
       const existing = await this.prisma.ticket.findFirst({
-        where: { offer_panel_id: panel.id },
+        where: { offer_panel_id: panel.id, deleted_at: null },
         orderBy: { createdAt: 'desc' },
       });
       return { ticket: existing };
@@ -1005,6 +1066,34 @@ export class OfferPanelsService {
       });
 
       return t;
+    });
+
+    // Accepted through a public token, so there is no authenticated user — the recipient
+    // named on the panel is the actor.
+    void this.ticketAudit.log({
+      ticketId: ticket.id,
+      actorUserId: null,
+      actorLabel: panel.recipient_name
+        ? `${panel.recipient_name} (offer panel recipient)`
+        : 'Offer panel recipient',
+      event: TICKET_AUDIT_EVENTS.CREATED,
+      source: TicketAuditSource.system,
+      newStatus: ticket.status,
+      after: {
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        org_id: ticket.org_id,
+        user_id: ticket.user_id,
+        offer_panel_id: ticket.offer_panel_id,
+        title: ticket.title,
+      },
+      metadata: {
+        origin: TICKET_AUDIT_ORIGINS.OFFER_PANEL_ACCEPTED,
+        offerPanelId: panel.id,
+        recipientEmail: panel.recipient_email ?? null,
+        panelCreatedBy: panel.created_by_user_id ?? null,
+      },
     });
 
     setImmediate(() => {

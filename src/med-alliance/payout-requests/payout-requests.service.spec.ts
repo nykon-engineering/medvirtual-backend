@@ -255,6 +255,23 @@ describe('PayoutRequestsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should throw BadRequestException when a commission belongs to a deleted organization', async () => {
+      mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
+      mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(
+        makeProfileWithVendor(),
+      );
+      mockPrisma.affiliateCommission.findMany.mockResolvedValue([
+        makeCommission({
+          organization: { status: 'deleted' },
+        }),
+      ]);
+
+      await expect(
+        service.create(createDto, mockAffiliateUser),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('should create payout request, junction records and update commissions in a transaction', async () => {
       mockAffiliatesService.requireActiveProfile.mockResolvedValue(mockProfile);
       mockPrisma.affiliateProfile.findUniqueOrThrow.mockResolvedValue(

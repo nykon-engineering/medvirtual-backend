@@ -161,6 +161,7 @@ describe('HireRequestService', () => {
       billcom_pending_session_id: null,
       billcom_remember_me_id: null,
       billcom_device: null,
+      deactivated_by_bu: null,
     } ;
   });
 
@@ -2068,7 +2069,7 @@ describe('HireRequestService', () => {
       ] );
   
       const result = await service.showMatchHireRequests('cand1');
-  
+
       // hr1 deve ter score > hr2
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('hr1');
@@ -2076,5 +2077,45 @@ describe('HireRequestService', () => {
       expect(result[0].matchedSkills).toContain('Node.js');
     });
   });
-  
+
+  describe('getOpenedHireRequests — soft-deleted cancellation tickets', () => {
+    // The `deleted_at: null` must sit INSIDE the `none` predicate. Placed anywhere else, a
+    // soft-deleted cancellation ticket keeps the hire request hidden permanently. Asserting
+    // the exact nested shape (not objectContaining) is deliberate here.
+    const expectedNone = {
+      none: {
+        type: 'hire_request_cancellation',
+        status: { not: 'resolved' },
+        deleted_at: null,
+      },
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      prismaMock.hireRequest.findMany.mockResolvedValue([]);
+    });
+
+    it('should ignore deleted cancellation tickets for organization admins', async () => {
+      await service.getOpenedHireRequests({
+        id: 'user1',
+        organization_id: 'org1',
+        role: 'organization_admin',
+      } as USER);
+
+      const where = prismaMock.hireRequest.findMany.mock.calls[0][0].where;
+      expect(where.tickets).toEqual(expectedNone);
+    });
+
+    it('should ignore deleted cancellation tickets for system admins', async () => {
+      await service.getOpenedHireRequests({
+        id: 'admin1',
+        organization_id: null,
+        role: 'system_admin',
+      } as unknown as USER);
+
+      const where = prismaMock.hireRequest.findMany.mock.calls[0][0].where;
+      expect(where.tickets).toEqual(expectedNone);
+    });
+  });
+
 });

@@ -4,16 +4,74 @@ const prisma = new PrismaClient();
 
 async function main() {
   // ─── Business Units ──────────────────────────────────────────────────────────
+  // Multi Business Unit (MMVA): BU intake is HubSpot-only — this seed only
+  // guarantees the 3 BUs we know about today exist with correct app branding.
+  // `hubspot_value` must match the exact label of the HubSpot `business_unit`
+  // company property option. `is_visible` gates whether the BU is allowed to
+  // operate (see requirements.md — isAllowedHubspotValue).
   const businessUnits = [
-    { slug: 'medvirtual', name: 'MedVirtual' },
-    { slug: 'berry-virtual', name: 'Berry Virtual' },
+    {
+      slug: 'medvirtual',
+      name: 'MedVirtual',
+      hubspot_value: 'MedVirtual',
+      candidate_pool: 'medical',
+      is_visible: true,
+      primary_color: '#077999',
+      primary_hover: '#065f7a',
+      logo_url: 'https://staging.medvirtual.ai/logo.png',
+      favicon_url: 'https://staging.medvirtual.ai/favicon.ico',
+    },
+    {
+      slug: 'berry-virtual',
+      name: 'Berry Virtual',
+      hubspot_value: 'Berry Virtual',
+      candidate_pool: 'non_medical',
+      is_visible: true,
+      primary_color: '#FD7171',
+      primary_hover: '#e55a5a',
+      logo_url: 'https://staging.medvirtual.ai/logobv.png',
+      favicon_url: 'https://staging.medvirtual.ai/faviconbv.ico',
+    },
+    {
+      // MMVA (My Medical VA) — 3rd BU, dormant until a super-admin activates it
+      // from the Business Unit Management screen (triggers reactivation + backfill).
+      // NOTE: final color is a Phase-0 stakeholder input — #7C3AED is a placeholder violet.
+      slug: 'mmva',
+      name: 'My Medical VA',
+      hubspot_value: 'MMVA',
+      candidate_pool: 'medical',
+      is_visible: false,
+      primary_color: '#7C3AED',
+      primary_hover: '#6d28d9',
+      logo_url: 'https://staging.medvirtual.ai/logommva.png',
+      favicon_url: 'https://staging.medvirtual.ai/faviconmmva.ico',
+    },
   ];
 
   for (const bu of businessUnits) {
     await prisma.businessUnit.upsert({
       where: { slug: bu.slug },
-      update: {},
-      create: { slug: bu.slug, name: bu.name },
+      update: {
+        name: bu.name,
+        hubspot_value: bu.hubspot_value,
+        candidate_pool: bu.candidate_pool,
+        is_visible: bu.is_visible,
+        primary_color: bu.primary_color,
+        primary_hover: bu.primary_hover,
+        logo_url: bu.logo_url,
+        favicon_url: bu.favicon_url,
+      },
+      create: {
+        slug: bu.slug,
+        name: bu.name,
+        hubspot_value: bu.hubspot_value,
+        candidate_pool: bu.candidate_pool,
+        is_visible: bu.is_visible,
+        primary_color: bu.primary_color,
+        primary_hover: bu.primary_hover,
+        logo_url: bu.logo_url,
+        favicon_url: bu.favicon_url,
+      },
     });
   }
 
@@ -35,6 +93,16 @@ async function main() {
       secondary_color: '#E55A5A',
       logo_url: 'https://staging.medvirtual.ai/logobv.png',
       company_name: 'Berry Virtual',
+      layout_preset: 'default',
+    },
+    {
+      // Placeholder default branding row for MMVA — matches the app violet
+      // placeholder above; will be refined once Phase-0 stakeholder inputs land.
+      business_unit: 'mmva',
+      primary_color: '#7C3AED',
+      secondary_color: '#6D28D9',
+      logo_url: 'https://staging.medvirtual.ai/logommva.png',
+      company_name: 'My Medical VA',
       layout_preset: 'default',
     },
   ];

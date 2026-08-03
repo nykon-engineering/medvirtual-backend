@@ -6,6 +6,7 @@ import { HandlerOrganizationDeletion } from './organizationDeletion';
 import { HandlerOrganizationReactivation } from './organizationReactivation';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 import { organizationIndustryToDbDictionary } from '../../common/dictionaries/organizationIndustry-dictionary';
+import { BusinessUnitContext } from '../../business-units/business-unit-context.service';
 
 @Injectable()
 export class HandlerOrganizationPropertyChange {
@@ -14,6 +15,7 @@ export class HandlerOrganizationPropertyChange {
     private readonly organizationCreation: HandlerOrganizationCreation,
     private readonly organizationDeletion: HandlerOrganizationDeletion,
     private readonly organizationReactivation: HandlerOrganizationReactivation,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
 
   async execute(event) {
@@ -31,8 +33,9 @@ export class HandlerOrganizationPropertyChange {
     // changes back to a valid value we must reactivate a previously deleted org.
     if (event.propertyName === 'business_unit') {
       const isValidBusinessUnit =
-        event.propertyValue === 'MedVirtual' ||
-        event.propertyValue === 'Berry Virtual';
+        await this.businessUnitContext.isAllowedHubspotValue(
+          event.propertyValue,
+        );
 
       if (!isValidBusinessUnit) {
         return await this.organizationDeletion.execute(event);
@@ -144,6 +147,10 @@ export class HandlerOrganizationPropertyChange {
 
     if (fieldUpdated === 'deployment_date') {
       if (!referredByAffiliateId) return true;
+
+      // A deleted org must never re-enter the referral pipeline via a stray
+      // deployment_date webhook — reactivation is the only way back.
+      if (organization.status === OrganizationStatus.deleted) return true;
 
       // No-op guard: HubSpot can re-deliver a webhook for a value that hasn't actually changed.
       // Never let that spurious re-delivery overwrite a manual admin decision (eligible/not_eligible).

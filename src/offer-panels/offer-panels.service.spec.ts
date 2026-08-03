@@ -10,6 +10,8 @@ import { CandidatesService } from '../candidate/candidates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { TicketAuditService } from '../ticket/ticket-audit.service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,9 +136,28 @@ const mockHireRequestService = {
   ]),
 };
 
+const businessUnitContextMock = {
+  getVisibleHubspotValues: jest.fn(),
+  isAllowedHubspotValue: jest.fn(),
+  resolveByHubspotValue: jest.fn(),
+  brandingFor: jest.fn(),
+  poolFor: jest.fn(),
+  displayToSlug: jest.fn(),
+  normalizeBusinessUnit: jest.fn(),
+  bustCache: jest.fn(),
+};
+
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
+
+const mockTicketAuditService = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  findAllLogs: jest.fn(),
+  findByTicket: jest.fn(),
+  findLastDeletedEvent: jest.fn(),
+};
 
 describe('OfferPanelsService', () => {
   let service: OfferPanelsService;
@@ -152,10 +173,20 @@ describe('OfferPanelsService', () => {
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: HubspotService, useValue: mockHubspotService },
         { provide: HireRequestService, useValue: mockHireRequestService },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
+        { provide: TicketAuditService, useValue: mockTicketAuditService },
       ],
     }).compile();
 
     service = module.get<OfferPanelsService>(OfferPanelsService);
+
+    businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(true);
+    businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+      'MedVirtual',
+      'Berry Virtual',
+      'MMVA',
+    ]);
+    businessUnitContextMock.brandingFor.mockResolvedValue(null);
   });
 
   // -------------------------------------------------------------------------
@@ -365,6 +396,37 @@ describe('OfferPanelsService', () => {
       expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
 
+    it('accepts a visible business_unit (validated against BusinessUnitContext)', async () => {
+      businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(true);
+
+      await service.create(validDto, adminUser);
+
+      expect(businessUnitContextMock.isAllowedHubspotValue).toHaveBeenCalledWith(
+        'MedVirtual',
+      );
+    });
+
+    it('rejects a non-visible/unknown business_unit with BadRequestException', async () => {
+      businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(false);
+      const dto = { ...validDto, business_unit: 'SomeDormantBU' };
+
+      await expect(service.create(dto, adminUser)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('accepts a newly-visible BU like MMVA once it is in the visible set', async () => {
+      businessUnitContextMock.isAllowedHubspotValue.mockImplementation(
+        async (v: string) => v === 'MMVA',
+      );
+      const dto = { ...validDto, business_unit: 'MMVA' };
+
+      const result = await service.create(dto, adminUser);
+
+      expect(result).toHaveLength(1);
+    });
+
     it('throws BadRequestException when a candidateId does not exist', async () => {
       mockPrisma.candidate.findMany.mockResolvedValue([]); // no candidates found
 
@@ -473,10 +535,36 @@ describe('OfferPanelsService', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('fires client notification for client_user recipient after creation', async () => {
+    it('awaits client notification before returning', async () => {
+      // Deferred on a macrotask: a floating promise would leave `settled`
+      // false, while a real `await` cannot resolve until setTimeout fires.
+      // Guards the Lambda freeze bug, where the container is suspended as
+      // soon as the handler resolves and the pending send never runs.
+      let settled = false;
+      mockNotificationsService.notifyOfferPanelCreatedClient.mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => {
+              settled = true;
+              resolve(true);
+            }, 0),
+          ),
+      );
+
       await service.create(validDto, adminUser);
-      // Promise.allSettled fires synchronously — notification is kicked off immediately
+
       expect(mockNotificationsService.notifyOfferPanelCreatedClient).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(true);
+    });
+
+    it('does not fail creation when notification rejects', async () => {
+      mockNotificationsService.notifyOfferPanelCreatedClient.mockRejectedValueOnce(
+        new Error('Resend down'),
+      );
+
+      const result = await service.create(validDto, adminUser);
+
+      expect(result).toHaveLength(1);
     });
   });
 
@@ -576,6 +664,39 @@ describe('OfferPanelsService', () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
       await expect(service.findByToken('bad-token')).rejects.toThrow(NotFoundException);
+    });
+
+    it('attaches the resolved BU branding for the unauthenticated public page', async () => {
+      const panel = makePanel({
+        public_token: 'tok-mmva',
+        business_unit: 'MMVA',
+        candidates: [],
+      });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(panel);
+      const branding = {
+        slug: 'mmva',
+        name: 'My Medical VA',
+        primary_color: '#7C3AED',
+        primary_hover: '#6d28d9',
+        logo_url: 'https://cdn.example.com/mmva-logo.png',
+        favicon_url: 'https://cdn.example.com/mmva.ico',
+      };
+      businessUnitContextMock.brandingFor.mockResolvedValue(branding);
+
+      const result = await service.findByToken('tok-mmva');
+
+      expect(businessUnitContextMock.brandingFor).toHaveBeenCalledWith('MMVA');
+      expect(result.branding).toEqual(branding);
+    });
+
+    it('returns branding=null for an unknown/legacy BU (frontend falls back to Med)', async () => {
+      const panel = makePanel({ public_token: 'tok-legacy', candidates: [] });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(panel);
+      businessUnitContextMock.brandingFor.mockResolvedValue(null);
+
+      const result = await service.findByToken('tok-legacy');
+
+      expect(result.branding).toBeNull();
     });
   });
 
@@ -1261,6 +1382,39 @@ describe('OfferPanelsService', () => {
         mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
       expect(payload.hubspot_role_type).toBeNull();
     });
+
+    it('uses the resolved org business_unit (not a hardcoded literal) in the HubSpot payload', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        name: 'MMVA Clinic',
+        hubspot_id: 'hs-org-2',
+        business_unit: 'MMVA',
+        website_url: 'https://mmva.example.com',
+      });
+
+      await service.acceptByClientUser('panel-1', client);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const lastCallIndex =
+        mockHubspotService.createHireRequestInHubspot.mock.calls.length - 1;
+      const [payload] =
+        mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
+      expect(payload.organization.business_unit).toBe('MMVA');
+    });
+
+    it('does not hardcode "MedVirtual" when the organization lookup returns null', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue(null);
+
+      await service.acceptByClientUser('panel-1', client);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const lastCallIndex =
+        mockHubspotService.createHireRequestInHubspot.mock.calls.length - 1;
+      const [payload] =
+        mockHubspotService.createHireRequestInHubspot.mock.calls[lastCallIndex];
+      expect(payload.organization.business_unit).toBeNull();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1296,6 +1450,35 @@ describe('OfferPanelsService', () => {
 
       expect(result.ticket).toBeDefined();
       expect(result.ticket.id).toBe('ticket-1');
+    });
+
+    it('records a created audit event tagged with the offer_panel_accepted origin', async () => {
+      await service.acceptByToken('tok-1');
+
+      expect(mockTicketAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticketId: 'ticket-1',
+          event: 'created',
+          // Accepted through a public token, so there is no authenticated user.
+          actorUserId: null,
+          actorLabel: expect.stringContaining('Prospect Lead'),
+          metadata: expect.objectContaining({
+            origin: 'offer_panel_accepted',
+            offerPanelId: 'panel-1',
+            recipientEmail: 'lead@prospect.com',
+            panelCreatedBy: 'user-admin-1',
+          }),
+        }),
+      );
+    });
+
+    it('does not re-log a created event on an idempotent repeat accept', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({ ...panelData, status: 'accepted' });
+      mockPrisma.ticket.findFirst.mockResolvedValue(ticketData);
+
+      await service.acceptByToken('tok-1');
+
+      expect(mockTicketAuditService.log).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when panel is declined', async () => {

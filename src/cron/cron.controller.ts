@@ -232,6 +232,55 @@ export class CronController {
     };
   }
 
+  
+  @Get('weekly-offer-panel-report')
+  @ApiOperation({
+    summary:
+      'Send the weekly Offer Panel Report — panels created Mon 00:00 through Fri 23:59:59 (America/New_York), grouped by creating user',
+    description:
+      'Triggered every Friday by the external scheduler (same mechanism as the ' +
+      'other `/cron/*` endpoints — this backend runs on Lambda, so there is no ' +
+      'in-process cron). Filters on `OfferPanel.createdAt` only; the viewed and ' +
+      'decided columns show their real timestamps even when those occurred after ' +
+      'the window closed. All business units are included in a single email with ' +
+      'a business unit column, and sections are ordered by panel count descending. ' +
+      'The email is sent even when zero panels were created, so a quiet week stays ' +
+      'distinguishable from a broken cron. Note that `OfferPanel` has no ' +
+      'soft-delete column, so a panel created and then deleted within the week ' +
+      'never appears in the report.',
+  })
+  @ApiQuery({
+    name: 'week_of',
+    required: false,
+    type: String,
+    description:
+      'Optional YYYY-MM-DD date used to backfill a prior week. The Mon–Fri window ' +
+      'containing this date (in America/New_York) is reported. Defaults to today.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Report processed. `data.sent` — whether the email was dispatched. ' +
+      '`data.totalPanels` / `data.totalCreators` — report size. ' +
+      '`data.weekStart` / `data.weekEnd` — the ISO boundaries of the ET window covered. ' +
+      '`data.ranOnFridayEt` — false when triggered off-schedule. ' +
+      '`data.error` — present only when the email failed to send.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid week_of value — expected format YYYY-MM-DD',
+  })
+  async weeklyOfferPanelReport(@Query('week_of') weekOf?: string) {
+    const result = await this.cron.weeklyOfferPanelReport(weekOf);
+    return {
+      status: 200,
+      message: result.sent
+        ? `Offer panel report sent (${result.totalPanels} panel(s) from ${result.totalCreators} creator(s))`
+        : `Offer panel report not sent${result.error ? ` — ${result.error}` : ''}`,
+      data: result,
+    };
+  }
+
   @Get('detect-commissions-by-affiliate')
   @ApiOperation({
     summary:
@@ -333,6 +382,53 @@ export class CronController {
     return {
       status: 200,
       message: 'Organization sync completed',
+      data: result,
+    };
+  }
+
+  @Get('sync-business-units')
+  @ApiOperation({
+    summary:
+      'Daily HubSpot Business Unit intake (upsert new + reconcile removed)',
+    description:
+      'Triggered daily by the external scheduler (same mechanism as the other ' +
+      '`/cron/*` endpoints — this backend runs on Lambda, so no in-process cron). ' +
+      'Reads HubSpot `GET /crm/v3/properties/companies/business_unit` for the ' +
+      'current list of option labels, then:\n\n' +
+      '1. **Upsert (additions):** every option label is upserted into ' +
+      '`BusinessUnit` by derived slug — new labels always land as dormant ' +
+      '(`is_visible=false`, `candidate_pool="medical"`); an existing row only ' +
+      'has its `hubspot_value` refreshed to the current label spelling, ' +
+      '`is_visible` is never touched by the upsert step.\n' +
+      '2. **Reconcile (removals) — with safeguard:** any BusinessUnit whose ' +
+      '`hubspot_value` is no longer present in the HubSpot options is set ' +
+      '`is_visible=false` and every related Organization/USER/Candidate/' +
+      'AffiliateProfile is cascade soft-deleted, tagged `deactivated_by_bu=<slug>` ' +
+      'so a later re-activation (`PUT /business-units/:slug` with ' +
+      '`is_visible:true`) restores exactly that set. This step ONLY runs when ' +
+      'the HubSpot read returned HTTP 200 with a non-empty `options` array — ' +
+      'any error, timeout, non-200, or empty/malformed response aborts the ' +
+      'reconcile (upserts from step 1 still apply) and logs the abort reason, ' +
+      'so a transient HubSpot outage can never cascade-delete data.\n\n' +
+      'Idempotent — re-running with an unchanged HubSpot options list creates ' +
+      'no duplicates and changes nothing. Never hard-deletes a BusinessUnit row.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Sync completed. `data.upserted` — slugs upserted this run (new + refreshed). ' +
+      '`data.removed` — slugs decommissioned this run (empty if the reconcile step ' +
+      'was aborted). `data.aborted` — true if the reconcile step was skipped due to ' +
+      'a bad/empty HubSpot read (upserts still applied in that case). ' +
+      '`data.reason` — present only when aborted, explains why.',
+  })
+  async syncBusinessUnits() {
+    const result = await this.cron.syncBusinessUnits();
+    return {
+      status: 200,
+      message: result.aborted
+        ? 'Business unit sync completed — reconcile step aborted (bad/empty HubSpot read), upserts only'
+        : 'Business unit sync completed',
       data: result,
     };
   }

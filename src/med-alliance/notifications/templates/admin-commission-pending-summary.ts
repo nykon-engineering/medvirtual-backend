@@ -1,4 +1,8 @@
-import { getEmailFooter } from '../../../common/utils/email-templates/components';
+import {
+  getEmailFooter,
+  getEmailLogoCss,
+  getEmailLogoImg,
+} from '../../../common/utils/email-templates/components';
 import { EmailTheme } from '../../../common/utils/email-templates/theme';
 
 export interface CommissionSummaryItem {
@@ -24,7 +28,6 @@ export function adminCommissionPendingSummaryTemplate(
   const buttonColor = theme?.buttonColor || primaryColor;
   const buttonTextColor = theme?.buttonTextColor || '#ffffff';
   const ctaLink = `${process.env.FRONTEND_URL}/med-alliance/admin/commissions`;
-  const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
   const formattedDate = payload.reportDate.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -56,8 +59,7 @@ export function adminCommissionPendingSummaryTemplate(
     .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
     .container { max-width: 640px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
     .content { padding: 40px 30px; }
-    .logo { text-align: left; margin-bottom: 30px; }
-    .logo img { max-width: 200px; height: auto; }
+${getEmailLogoCss()}
     .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 20px; }
     .summary-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
     .summary-table th { background-color: #f4f4f4; color: #555555; font-weight: 600; padding: 10px 8px; text-align: left; border-bottom: 2px solid #e0e0e0; }
@@ -80,7 +82,7 @@ export function adminCommissionPendingSummaryTemplate(
     <div class="container">
       <div class="content">
         <div class="logo">
-          <img src="${logo}" alt="${companyName} Logo" />
+          ${getEmailLogoImg(theme)}
         </div>
         <div class="main-message">
           <p>The following <strong>${payload.commissions.length} commission${payload.commissions.length !== 1 ? 's' : ''}</strong> are pending your review as of <strong>${formattedDate}</strong>.</p>

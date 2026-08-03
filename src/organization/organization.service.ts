@@ -9,6 +9,7 @@ import axios from 'axios';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  Prisma,
   Organization,
   USER,
   OrganizationRole,
@@ -48,6 +49,7 @@ import { dealToDbDictionary } from '../common/dictionaries/deal-dictionary';
 import { SqsService } from '../sqs/sqs.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { ContactService } from '../contacts/contacts.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 @Injectable()
 export class OrganizationService {
@@ -64,7 +66,37 @@ export class OrganizationService {
 
     private readonly sqs: SqsService,
     private readonly contactService: ContactService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
+
+  /**
+   * Builds one HubSpot filterGroup per currently-visible business unit,
+   * each carrying a `business_unit EQ <value>` filter plus any shared
+   * `extraFilters` (e.g. num_associated_deals/hs_object_id). Replaces the
+   * old two-literal (MedVirtual/Berry Virtual) filterGroups so a newly
+   * visible BU (e.g. MMVA) is included automatically and nothing
+   * unrecognized is silently swept up.
+   */
+  private async buildBusinessUnitFilterGroups(
+    extraFilters: Array<{
+      propertyName: string;
+      operator: string;
+      value: string;
+    }> = [],
+  ): Promise<
+    Array<{
+      filters: Array<{ propertyName: string; operator: string; value: string }>;
+    }>
+  > {
+    const visibleValues =
+      await this.businessUnitContext.getVisibleHubspotValues();
+    return visibleValues.map((value) => ({
+      filters: [
+        { propertyName: 'business_unit', operator: 'EQ', value },
+        ...extraFilters,
+      ],
+    }));
+  }
 
   async delay(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -190,49 +222,15 @@ export class OrganizationService {
     let objectOrganization;
 
     try {
+      const filterGroups = await this.buildBusinessUnitFilterGroups([
+        { propertyName: 'num_associated_deals', operator: 'GT', value: '0' },
+        { propertyName: 'hs_object_id', operator: 'EQ', value: '8304831771' },
+      ]);
+
       const result = await axios.post(
         'https://api.hubapi.com/crm/v3/objects/companies/search',
         {
-          filterGroups: [
-            {
-              filters: [
-                {
-                  propertyName: 'business_unit',
-                  operator: 'EQ',
-                  value: 'MedVirtual',
-                },
-                {
-                  propertyName: 'num_associated_deals',
-                  operator: 'GT',
-                  value: '0',
-                },
-                {
-                  propertyName: 'hs_object_id',
-                  operator: 'EQ',
-                  value: '8304831771',
-                },
-              ],
-            },
-            {
-              filters: [
-                {
-                  propertyName: 'business_unit',
-                  operator: 'EQ',
-                  value: 'Berry Virtual',
-                },
-                {
-                  propertyName: 'num_associated_deals',
-                  operator: 'GT',
-                  value: '0',
-                },
-                {
-                  propertyName: 'hs_object_id',
-                  operator: 'EQ',
-                  value: '8304831771',
-                },
-              ],
-            },
-          ],
+          filterGroups,
           properties: [
             'agent_status',
             //'business_unit',
@@ -347,6 +345,11 @@ export class OrganizationService {
     // Build where clause
     const whereClause: any = {};
 
+    // Scope and search each contribute their own AND branch. They must never
+    // share the `OR` key: OR-ing them together would make an org visible to a
+    // non-system user simply because they searched for it.
+    const andConditions: Prisma.OrganizationWhereInput[] = [];
+
     // Add user-specific filtering based on role
     if (user.role === 'system_super_admin' || user.role === 'system_admin') {
       // No additional filtering needed - return all organizations
@@ -357,40 +360,60 @@ export class OrganizationService {
       }
       */
     } else {
-      // For organization users: return organizations they are associated with
-      whereClause.OR = [
-        { admin_id: user.id },
-        { owner_id: user.id },
-        { admin_id: user.id },
-        {
-          admin_id: user.role.includes('organization') ? user.id : undefined,
-        },
-      ].filter(Boolean);
+      // Visibility scope for organization users: only orgs they own or administer
+      andConditions.push({
+        OR: [{ admin_id: user.id }, { owner_id: user.id }],
+      });
     }
 
     // Add search filter
-    if (search) {
-      whereClause.OR = [
-        ...(whereClause.OR || []),
-        {
-          name: {
-            contains: search,
-            mode: 'insensitive',
+    // Match each whitespace-separated token independently and AND them
+    // together, so "First Last" matches a member user whose name spans two
+    // columns. Mirrors the same handling in UserService; a single OR per
+    // column could never match a full name, since no one column contains
+    // "First Last" as a substring.
+    const tokens = search ? search.trim().split(/\s+/).filter(Boolean) : [];
+
+    andConditions.push(
+      ...tokens.map((token) => ({
+        OR: [
+          { name: { contains: token, mode: Prisma.QueryMode.insensitive } },
+          /*
+          Email and description was removed when we added the users
+          { email: { contains: token, mode: Prisma.QueryMode.insensitive } },
+          {
+            description: {
+              contains: token,
+              mode: Prisma.QueryMode.insensitive,
+            },
           },
-        },
-        {
-          email: {
-            contains: search,
-            mode: 'insensitive',
+          */
+          {
+            users: {
+              some: {
+                OR: [
+                  {
+                    first_name: {
+                      contains: token,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                  {
+                    last_name: {
+                      contains: token,
+                      mode: Prisma.QueryMode.insensitive,
+                    },
+                  },
+                ],
+              },
+            },
           },
-        },
-        {
-          description: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      ];
+        ],
+      })),
+    );
+
+    if (andConditions.length) {
+      whereClause.AND = andConditions;
     }
 
     // Add role filter
@@ -825,7 +848,7 @@ export class OrganizationService {
               where: {
                 email:
                   process.env.ENVIRONMENT === 'DEV'
-                    ? 'pauli@regenta.ai'
+                    ? 'paulo@regenta.ai'
                     : 'hanieh@berryvirtual.com', // Added on 2025-09-25 for get Hanieh as default concierge for all organizations via hubspot. asked by Pauli
                 role: 'system_super_admin',
                 status: 'active',
@@ -1338,6 +1361,7 @@ export class OrganizationService {
           },
         },
         bonus: {
+          where: { deleted_at: null },
           select: {
             id: true,
             amount: true,
@@ -1493,6 +1517,7 @@ export class OrganizationService {
             },
           },
           bonus: {
+            where: { deleted_at: null },
             select: {
               id: true,
               amount: true,
@@ -2261,6 +2286,7 @@ export class OrganizationService {
             },
           },
           bonus: {
+            where: { deleted_at: null },
             select: {
               id: true,
               amount: true,
@@ -2290,29 +2316,12 @@ export class OrganizationService {
   }
 
   async populateDbFromHubspotX(): Promise<any> {
+    const filterGroups = await this.buildBusinessUnitFilterGroups();
+
     const result = await axios.post(
       'https://api.hubapi.com/crm/v3/objects/companies/search',
       {
-        filterGroups: [
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'MedVirtual',
-              },
-            ],
-          },
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'Berry Virtual',
-              },
-            ],
-          },
-        ],
+        filterGroups,
         properties: [
           'agent_status',
           'business_unit',
@@ -2338,9 +2347,13 @@ export class OrganizationService {
       },
     );
 
+    // Referred orgs are excluded: hard-deleting them would either crash on the
+    // FK Restrict of AffiliateCommission/HubspotInvoiceSnapshot rows or silently
+    // destroy Med Alliance referral history.
     await this.prisma.organization.deleteMany({
       where: {
         hubspot_id: { not: null },
+        referred_by_affiliate_id: null,
       },
     });
 
@@ -2364,29 +2377,14 @@ export class OrganizationService {
     let after: string | undefined = undefined;
     const allOrganizations: any[] = [];
 
+    // filterGroups are derived once from the currently-visible BUs and reused
+    // across every page — visibility isn't expected to flip mid-pagination.
+    const filterGroups = await this.buildBusinessUnitFilterGroups();
+
     // 1. Buscar todos os registros com paginação
     while (hasMore) {
       const body: any = {
-        filterGroups: [
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'MedVirtual',
-              },
-            ],
-          },
-          {
-            filters: [
-              {
-                propertyName: 'business_unit',
-                operator: 'EQ',
-                value: 'Berry Virtual',
-              },
-            ],
-          },
-        ],
+        filterGroups,
         properties: [
           'agent_status',
           'business_unit',
@@ -2485,9 +2483,11 @@ export class OrganizationService {
       return mapped;
     });
 
-    //remover do banco organizations com hubspot_id nulo
+    // Referred orgs are excluded: hard-deleting them would either crash on the
+    // FK Restrict of AffiliateCommission/HubspotInvoiceSnapshot rows or silently
+    // destroy Med Alliance referral history.
     await this.prisma.organization.deleteMany({
-      where: { hubspot_id: { not: null } },
+      where: { hubspot_id: { not: null }, referred_by_affiliate_id: null },
     });
 
     // 4. Inserir tudo de uma vez (bulk insert)

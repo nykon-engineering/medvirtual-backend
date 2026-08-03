@@ -104,7 +104,8 @@ export class OrganizationController {
     name: 'search',
     required: false,
     type: String,
-    description: 'Search term for name, email, or description',
+    description:
+      'Search term for name, email, description, or member user name',
   })
   @ApiQuery({
     name: 'role',

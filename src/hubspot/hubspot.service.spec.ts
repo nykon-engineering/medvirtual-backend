@@ -10,6 +10,7 @@ import { CandidatesService } from '../candidate/candidates.service';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationRestore } from './handlers/organizationRestore';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
@@ -127,6 +128,10 @@ const HandlerOrganizationAssociationChangeMock = {
 }
 
 const HandlerOrganizationDeletionMock = {
+  execute: jest.fn(),
+}
+
+const HandlerOrganizationRestoreMock = {
   execute: jest.fn(),
 }
 
@@ -316,6 +321,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
         {provide: HandlerOrganizationDeletion, useValue: HandlerOrganizationDeletionMock},
+        {provide: HandlerOrganizationRestore, useValue: HandlerOrganizationRestoreMock},
         {provide: HandlerOrganizationMerge, useValue: HandlerOrganizationMergeMock},
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
@@ -406,6 +412,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock},
         {provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock},
         {provide: HandlerOrganizationDeletion, useValue: HandlerOrganizationDeletionMock},
+        {provide: HandlerOrganizationRestore, useValue: HandlerOrganizationRestoreMock},
         {provide: HandlerOrganizationMerge, useValue: HandlerOrganizationMergeMock},
         {provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock},
         {provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock},
@@ -508,6 +515,7 @@ function buildProviders(): any[] {
     { provide: HandlerOrganizationPropertyChange, useValue: HandlerOrganizationPropertyChangeMock },
     { provide: HandlerOrganizationAssociationChange, useValue: HandlerOrganizationAssociationChangeMock },
     { provide: HandlerOrganizationDeletion, useValue: HandlerOrganizationDeletionMock },
+    { provide: HandlerOrganizationRestore, useValue: HandlerOrganizationRestoreMock },
     { provide: HandlerOrganizationMerge, useValue: HandlerOrganizationMergeMock },
     { provide: HandlerOwnerCreation, useValue: HandlerOwnerCreationMock },
     { provide: HandlerOwnerDeletion, useValue: HandlerOwnerDeletionMock },
@@ -717,11 +725,12 @@ describe('HubspotService => changeDataFromHubspot', () => {
     expect(HandlerOrganizationCreationMock.execute).toHaveBeenCalledWith(data[0]);
   });
 
-  it('should process company.restore', async () => {
-    HandlerOrganizationCreationMock.execute.mockResolvedValue(undefined);
+  it('should process company.restore with the restore handler, not the creation handler', async () => {
+    HandlerOrganizationRestoreMock.execute.mockResolvedValue(undefined);
     const data = [{ subscriptionType: 'company.restore', objectId: '70' }];
     await service.changeDataFromHubspot(data);
-    expect(HandlerOrganizationCreationMock.execute).toHaveBeenCalledWith(data[0]);
+    expect(HandlerOrganizationRestoreMock.execute).toHaveBeenCalledWith(data[0]);
+    expect(HandlerOrganizationCreationMock.execute).not.toHaveBeenCalled();
   });
 
   it('should process company.propertyChange', async () => {

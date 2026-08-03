@@ -26,6 +26,7 @@ import { HandlerObjectMerge } from './handlers/objectMerge';
 import { HandlerOrganizationCreation } from './handlers/organizationCreation';
 import { HandlerOrganizationPropertyChange } from './handlers/organizationPropertyChange';
 import { HandlerOrganizationDeletion } from './handlers/organizationDeletion';
+import { HandlerOrganizationRestore } from './handlers/organizationRestore';
 import { HandlerOrganizationMerge } from './handlers/organizationMerge';
 import { HandlerOrganizationAssociationChange } from './handlers/organizationAssociationChange';
 import { HandlerOwnerCreation } from './handlers/ownerCreation';
@@ -89,6 +90,7 @@ const handlers = {
   organizationCreation: makeMock(),
   organizationPropertyChange: makeMock(),
   organizationDeletion: makeMock(),
+  organizationRestore: makeMock(),
   organizationMerge: makeMock(),
   organizationAssociationChange: makeMock(),
   ownerCreation: makeMock(),
@@ -142,6 +144,7 @@ async function buildModule(): Promise<HubspotService> {
       { provide: HandlerOrganizationCreation, useValue: handlers.organizationCreation },
       { provide: HandlerOrganizationPropertyChange, useValue: handlers.organizationPropertyChange },
       { provide: HandlerOrganizationDeletion, useValue: handlers.organizationDeletion },
+      { provide: HandlerOrganizationRestore, useValue: handlers.organizationRestore },
       { provide: HandlerOrganizationMerge, useValue: handlers.organizationMerge },
       { provide: HandlerOrganizationAssociationChange, useValue: handlers.organizationAssociationChange },
       { provide: HandlerOwnerCreation, useValue: handlers.ownerCreation },

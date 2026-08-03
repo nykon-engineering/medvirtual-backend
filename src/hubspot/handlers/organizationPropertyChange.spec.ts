@@ -5,6 +5,7 @@ import { HandlerOrganizationCreation } from './organizationCreation';
 import { HandlerOrganizationDeletion } from './organizationDeletion';
 import { HandlerOrganizationReactivation } from './organizationReactivation';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BusinessUnitContext } from '../../business-units/business-unit-context.service';
 
 const prismaMock = {
   organization: {
@@ -22,6 +23,7 @@ const prismaMock = {
 const organizationCreationMock = { execute: jest.fn() };
 const organizationDeletionMock = { execute: jest.fn() };
 const organizationReactivationMock = { execute: jest.fn() };
+const businessUnitContextMock = { isAllowedHubspotValue: jest.fn() };
 
 describe('HandlerOrganizationPropertyChange', () => {
   let handler: HandlerOrganizationPropertyChange;
@@ -37,6 +39,7 @@ describe('HandlerOrganizationPropertyChange', () => {
           provide: HandlerOrganizationReactivation,
           useValue: organizationReactivationMock,
         },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
       ],
     }).compile();
 
@@ -52,6 +55,12 @@ describe('HandlerOrganizationPropertyChange', () => {
     organizationCreationMock.execute.mockReset();
     organizationDeletionMock.execute.mockReset();
     organizationReactivationMock.execute.mockReset();
+    businessUnitContextMock.isAllowedHubspotValue.mockReset();
+    // Default: MedVirtual/Berry Virtual allowed, anything else not — individual
+    // tests override this via mockResolvedValueOnce/mockImplementation as needed.
+    businessUnitContextMock.isAllowedHubspotValue.mockImplementation(
+      (v: string) => Promise.resolve(v === 'MedVirtual' || v === 'Berry Virtual'),
+    );
   });
 
   it('should be defined', () => {
@@ -153,6 +162,88 @@ describe('HandlerOrganizationPropertyChange', () => {
     expect(result).toBe('reactivated');
     expect(organizationDeletionMock.execute).not.toHaveBeenCalled();
     expect(prismaMock.organization.update).not.toHaveBeenCalled();
+  });
+
+  // ─── resolver-driven (no more hardcoded literals) ──────────────────────────
+
+  it('delegates the allow/deny decision to BusinessUnitContext.isAllowedHubspotValue', async () => {
+    prismaMock.organization.findUnique.mockResolvedValue({
+      id: 'org-1',
+      status: OrganizationStatus.deleted,
+    });
+    organizationReactivationMock.execute.mockResolvedValue('reactivated');
+
+    await handler.execute({
+      objectId: 1,
+      propertyName: 'business_unit',
+      propertyValue: 'MMVA',
+    });
+
+    expect(businessUnitContextMock.isAllowedHubspotValue).toHaveBeenCalledWith(
+      'MMVA',
+    );
+  });
+
+  it('reactivates a previously-deleted org when business_unit becomes a newly-visible BU (e.g. MMVA)', async () => {
+    businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(true);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      id: 'org-1',
+      status: OrganizationStatus.deleted,
+    });
+    organizationReactivationMock.execute.mockResolvedValue('reactivated');
+
+    const result = await handler.execute({
+      objectId: 1,
+      propertyName: 'business_unit',
+      propertyValue: 'MMVA',
+    });
+
+    expect(organizationReactivationMock.execute).toHaveBeenCalledTimes(1);
+    expect(result).toBe('reactivated');
+    expect(organizationDeletionMock.execute).not.toHaveBeenCalled();
+  });
+
+  it('forwards the new business_unit value to organizationDeletion so it can be persisted on soft-delete', async () => {
+    businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(false);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      id: 'org-1',
+      status: OrganizationStatus.active,
+    });
+    organizationDeletionMock.execute.mockResolvedValue('deleted');
+
+    await handler.execute({
+      objectId: 1,
+      propertyName: 'business_unit',
+      propertyValue: 'MMVA',
+    });
+
+    // The full event (including propertyName/propertyValue) must reach the
+    // deletion handler so it can record the new business_unit.
+    expect(organizationDeletionMock.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        propertyName: 'business_unit',
+        propertyValue: 'MMVA',
+      }),
+    );
+  });
+
+  it('soft-deletes when business_unit moves to a dormant BU (known but not visible)', async () => {
+    businessUnitContextMock.isAllowedHubspotValue.mockResolvedValue(false);
+    prismaMock.organization.findUnique.mockResolvedValue({
+      id: 'org-1',
+      status: OrganizationStatus.active,
+    });
+    organizationDeletionMock.execute.mockResolvedValue('deleted');
+
+    const result = await handler.execute({
+      objectId: 1,
+      propertyName: 'business_unit',
+      propertyValue: 'MMVA',
+    });
+
+    expect(organizationDeletionMock.execute).toHaveBeenCalledTimes(1);
+    expect(result).toBe('deleted');
+    expect(organizationReactivationMock.execute).not.toHaveBeenCalled();
   });
 
   // ─── business_unit valid + org NOT deleted → generic update ────────────────

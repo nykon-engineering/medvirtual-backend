@@ -12,21 +12,46 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { Priority, TicketStatus, USER } from '@prisma/client';
 import { ticketTypeDictionary } from '../common/dictionaries/ticket-type';
 import { reassignTicketDto } from './dto/reassign-ticket.dto';
+import { ListTicketAuditLogsDto } from './dto/list-ticket-audit-logs.dto';
+import {
+  TicketAuditService,
+  TICKET_AUDIT_EVENTS,
+  TICKET_AUDIT_ORIGINS,
+  buildActorLabel,
+} from './ticket-audit.service';
+
+/** Which side of the soft-delete boundary a ticket listing should read from. */
+export type TicketDeletedStatus = 'active' | 'deleted';
 
 @Injectable()
 export class TicketService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly audit: TicketAuditService,
   ) {}
 
   private isSystemAdmin(user: USER) {
     return user?.role === 'system_admin' || user?.role === 'system_super_admin';
   }
 
-  async findOne(id: string, user?: USER): Promise<any> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id },
+  /**
+   * Ticket titles are system-generated for bonus/termination/interview types but authored by
+   * the user for support tickets, where they may contain PII. Only the former are safe to
+   * persist into the audit log.
+   */
+  private auditSafeTitle(ticket: {
+    type?: string | null;
+    title?: string | null;
+  }): Record<string, any> {
+    return ticket.type === 'support'
+      ? { titleLength: ticket.title?.length ?? 0 }
+      : { title: ticket.title ?? null };
+  }
+
+  async findOne(id: string, user?: USER, includeDeleted = false): Promise<any> {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id, ...(includeDeleted ? {} : { deleted_at: null }) },
       select: {
         id: true,
         type: true,
@@ -349,6 +374,33 @@ export class TicketService {
       if (!ticketFull)
         throw new BadRequestException('Failed to retrieve full ticket');
 
+      void this.audit.log({
+        ticketId: ticket.id,
+        actorUserId: user?.id ?? null,
+        actorLabel: buildActorLabel(user),
+        event: TICKET_AUDIT_EVENTS.CREATED,
+        newStatus: ticket.status,
+        after: {
+          status: ticket.status,
+          type: ticket.type,
+          priority: ticket.priority,
+          org_id: ticket.org_id,
+          user_id: ticket.user_id,
+          staff_id: ticket.staff_id,
+          candidate_id: ticket.candidate_id,
+          hireRequest_id: ticket.hireRequest_id,
+          offer_panel_id: ticket.offer_panel_id,
+          ...this.auditSafeTitle(ticket),
+        },
+        metadata: {
+          origin: TICKET_AUDIT_ORIGINS.TICKET_ENDPOINT,
+          actorRole: user?.role ?? null,
+          actorOrganizationId: user?.organization_id ?? null,
+          requestedType: createTicketDto.type,
+          assignedAtCreation: ticket.user_id ?? null,
+        },
+      });
+
       // Notify assignee via email (non-blocking)
       try {
         await this.notifications.notifyTicketEvent(ticketFull, 'created');
@@ -371,16 +423,27 @@ export class TicketService {
     priority?: string,
     assigned_user_id?: string,
     search?: string,
+    deletedStatus?: TicketDeletedStatus,
   ): Promise<object> {
     try {
       // Calculate date 30 days ago
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+      // Only super admins may look at tombstones. Enforced here rather than in the
+      // controller so internal callers cannot bypass it by passing the flag directly.
+      const canSeeDeleted = user.role === 'system_super_admin';
+      const effectiveDeletedStatus: TicketDeletedStatus = canSeeDeleted
+        ? (deletedStatus ?? 'active')
+        : 'active';
+
       const tickets = await this.prisma.ticket.findMany({
         where: {
           type: type ? type : undefined,
           priority: priority ? (priority as Priority) : undefined,
+          ...(effectiveDeletedStatus === 'deleted'
+            ? { deleted_at: { not: null } }
+            : { deleted_at: null }),
           ...(user.role === 'system_super_admin'
             ? {}
             : user.role === 'system_admin'
@@ -432,6 +495,9 @@ export class TicketService {
           priority: true,
           createdAt: true,
           created_by: true,
+          deleted_at: true,
+          deleted_by: true,
+          deletion_reason: true,
           organization: {
             select: {
               id: true,
@@ -550,12 +616,17 @@ export class TicketService {
     }
   }
 
-  async reassing(id: string, data: reassignTicketDto): Promise<object> {
+  async reassing(
+    id: string,
+    data: reassignTicketDto,
+    user?: USER,
+  ): Promise<object> {
     try {
-      const currentTicket = await this.prisma.ticket.findUnique({
-        where: { id },
+      const currentTicket = await this.prisma.ticket.findFirst({
+        where: { id, deleted_at: null },
         select: {
           status: true,
+          user_id: true,
         },
       });
       if (!currentTicket) throw new BadRequestException('Ticket not found');
@@ -572,13 +643,27 @@ export class TicketService {
             : { disconnect: true },
         },
       });
-      
+
       if (!ticketUpdated)
         throw new BadRequestException('Failed to reassign ticket');
 
       const ticket = await this.findOne(id);
       if (!ticket)
         throw new BadRequestException('Failed to fetch reassigned ticket');
+
+      void this.audit.log({
+        ticketId: id,
+        actorUserId: user?.id ?? null,
+        actorLabel: buildActorLabel(user),
+        event: TICKET_AUDIT_EVENTS.REASSIGNED,
+        before: { user_id: currentTicket.user_id },
+        after: { user_id: data.assigned_user_id ?? null },
+        metadata: {
+          actorRole: user?.role ?? null,
+          unassigned: !data.assigned_user_id,
+          previousAssignee: currentTicket.user_id,
+        },
+      });
 
       // Notify assignee via email (non-blocking)
       try {
@@ -596,9 +681,13 @@ export class TicketService {
     }
   }
 
-  async updateStatus(id: string, data: { status: string }): Promise<object> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id },
+  async updateStatus(
+    id: string,
+    data: { status: string },
+    user?: USER,
+  ): Promise<object> {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id, deleted_at: null },
       select: {
         status: true,
         type: true,
@@ -636,17 +725,18 @@ export class TicketService {
         !ticket.user?.id)
     )
       throw new BadRequestException(
-        `Status ${data.status.replace('_', ' ').toUpperCase()} requires an assigned user`,
+        `Please assign a user to the ticket before changing status to ${data.status.replace('_', ' ').toUpperCase()}`,
       );
-    if (
+    const staffTerminatedByThisChange =
       data.status === 'resolved' &&
       ticket.type === 'termination' &&
-      ticket.staff?.id
-    ) {
+      !!ticket.staff?.id;
+
+    if (staffTerminatedByThisChange) {
       //terminate the staff => update staff status to terminated and terminated staff
       await this.prisma.staff.update({
         where: {
-          id: ticket.staff.id,
+          id: ticket.staff!.id,
         },
         data: {
           status: 'terminated',
@@ -667,6 +757,23 @@ export class TicketService {
       const ticket = await this.findOne(id);
       if (!ticket)
         throw new BadRequestException('Failed to fetch reassigned ticket');
+
+      void this.audit.log({
+        ticketId: id,
+        actorUserId: user?.id ?? null,
+        actorLabel: buildActorLabel(user),
+        event: TICKET_AUDIT_EVENTS.STATUS_CHANGED,
+        oldStatus,
+        newStatus: data.status,
+        before: { status: oldStatus },
+        after: { status: data.status },
+        metadata: {
+          actorRole: user?.role ?? null,
+          ticketType: ticket.type,
+          // updateStatus terminates the staff member when a termination ticket resolves.
+          staffTerminated: staffTerminatedByThisChange,
+        },
+      });
 
       // Notify creator on status change to in_progress, resolved, or closed (non-blocking)
       try {
@@ -699,7 +806,15 @@ export class TicketService {
     }
   }
 
-  async delete(id: string, user: USER): Promise<object> {
+  /**
+   * Soft-deletes a ticket along with its notes and any bonuses the ticket created.
+   *
+   * The audit row is written with the transaction client and propagates on failure, so a
+   * tombstone can never exist without its log entry. The exact bonus/note ids are captured
+   * into the audit metadata because restore() must revive precisely what this call buried —
+   * never rows that were already soft-deleted beforehand.
+   */
+  async delete(id: string, user: USER, reason?: string): Promise<object> {
     if (
       !user.role.includes('system_admin') &&
       !user.role.includes('system_super_admin')
@@ -710,12 +825,16 @@ export class TicketService {
     }
 
     try {
-      const ticket = await this.prisma.ticket.findUnique({
-        where: { id },
+      const ticket = await this.prisma.ticket.findFirst({
+        where: { id, deleted_at: null },
         select: {
           id: true,
           status: true,
           type: true,
+          title: true,
+          priority: true,
+          org_id: true,
+          user_id: true,
           staff_id: true,
           created_by: true,
           description: true,
@@ -726,28 +845,92 @@ export class TicketService {
         throw new BadRequestException('Ticket not found');
       }
 
-      await this.prisma.$transaction(async (prisma) => {
-        await prisma.ticket.delete({
-          where: { id },
-        });
+      const deletedAt = new Date();
 
-        const bonusWhere: {
-          staff_id: string;
-          created_by: string;
-          description?: string;
-        } = {
-          staff_id: ticket.staff_id!,
-          created_by: ticket.created_by!,
-        };
+      const { bonusIds, noteIds } = await this.prisma.$transaction(
+        async (prisma) => {
+          // Bonuses are keyed by staff_id + created_by, so a ticket missing either could
+          // never have produced one. Skipping the lookup keeps the old "match nothing"
+          // behavior; passing nulls through would make Prisma reject the query outright.
+          const bonuses =
+            ticket.staff_id && ticket.created_by
+              ? await prisma.bonus.findMany({
+                  where: {
+                    staff_id: ticket.staff_id,
+                    created_by: ticket.created_by,
+                    deleted_at: null,
+                    ...(ticket.description !== null
+                      ? { description: ticket.description }
+                      : {}),
+                  },
+                  select: { id: true },
+                })
+              : [];
+          const notes = await prisma.ticketNotes.findMany({
+            where: { ticket_id: id, deleted_at: null },
+            select: { id: true },
+          });
 
-        if (ticket.description !== null) {
-          bonusWhere.description = ticket.description;
-        }
+          const bonusIds = bonuses.map((b) => b.id);
+          const noteIds = notes.map((n) => n.id);
 
-        await prisma.bonus.deleteMany({
-          where: bonusWhere,
-        });
-      });
+          await prisma.ticket.update({
+            where: { id },
+            data: {
+              deleted_at: deletedAt,
+              deleted_by: user.id,
+              deletion_reason: reason ?? null,
+            },
+          });
+
+          if (bonusIds.length) {
+            await prisma.bonus.updateMany({
+              where: { id: { in: bonusIds } },
+              data: { deleted_at: deletedAt },
+            });
+          }
+
+          // The TicketNotes FK cascade only fires on a hard DELETE, so notes must be
+          // soft-deleted explicitly or they survive as reachable orphans.
+          if (noteIds.length) {
+            await prisma.ticketNotes.updateMany({
+              where: { id: { in: noteIds } },
+              data: { deleted_at: deletedAt },
+            });
+          }
+
+          await this.audit.logOrThrow(
+            {
+              ticketId: id,
+              actorUserId: user.id,
+              actorLabel: buildActorLabel(user),
+              event: TICKET_AUDIT_EVENTS.DELETED,
+              oldStatus: ticket.status,
+              newStatus: ticket.status,
+              reason: reason ?? null,
+              before: {
+                status: ticket.status,
+                type: ticket.type,
+                priority: ticket.priority,
+                org_id: ticket.org_id,
+                user_id: ticket.user_id,
+                staff_id: ticket.staff_id,
+                created_by: ticket.created_by,
+                ...this.auditSafeTitle(ticket),
+              },
+              after: {
+                deleted_at: deletedAt.toISOString(),
+                deleted_by: user.id,
+                deletion_reason: reason ?? null,
+              },
+              metadata: { actorRole: user.role ?? null, bonusIds, noteIds },
+            },
+            prisma,
+          );
+
+          return { bonusIds, noteIds };
+        },
+      );
 
       return {
         message: 'Ticket deleted successfully',
@@ -756,12 +939,123 @@ export class TicketService {
           type: ticket.type,
           status: ticket.status,
         },
+        bonusesDeleted: bonusIds.length,
+        notesDeleted: noteIds.length,
       };
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
       }
+      console.error('Error deleting ticket:', error);
       throw new BadRequestException('Error deleting ticket', error.message);
+    }
+  }
+
+  /**
+   * Reverses a soft delete, reviving only the bonuses and notes recorded in the most recent
+   * `deleted` audit event. Rows soft-deleted by some other path are deliberately left alone.
+   */
+  async restore(id: string, user: USER, reason?: string): Promise<object> {
+    if (
+      !user.role.includes('system_admin') &&
+      !user.role.includes('system_super_admin')
+    ) {
+      throw new BadRequestException(
+        'Insufficient permissions to restore tickets',
+      );
+    }
+
+    try {
+      const ticket = await this.prisma.ticket.findFirst({
+        where: { id, deleted_at: { not: null } },
+        select: {
+          id: true,
+          status: true,
+          type: true,
+          deleted_at: true,
+          deleted_by: true,
+          deletion_reason: true,
+        },
+      });
+
+      if (!ticket) {
+        throw new BadRequestException('Ticket not found or not deleted');
+      }
+
+      const lastDeleted = await this.audit.findLastDeletedEvent(id);
+      const metadata = (lastDeleted?.metadata ?? {}) as {
+        bonusIds?: string[];
+        noteIds?: string[];
+      };
+      const bonusIds = metadata.bonusIds ?? [];
+      const noteIds = metadata.noteIds ?? [];
+
+      await this.prisma.$transaction(async (prisma) => {
+        await prisma.ticket.update({
+          where: { id },
+          data: {
+            deleted_at: null,
+            deleted_by: null,
+            deletion_reason: null,
+          },
+        });
+
+        if (bonusIds.length) {
+          await prisma.bonus.updateMany({
+            where: { id: { in: bonusIds } },
+            data: { deleted_at: null },
+          });
+        }
+
+        if (noteIds.length) {
+          await prisma.ticketNotes.updateMany({
+            where: { id: { in: noteIds } },
+            data: { deleted_at: null },
+          });
+        }
+
+        await this.audit.logOrThrow(
+          {
+            ticketId: id,
+            actorUserId: user.id,
+            actorLabel: buildActorLabel(user),
+            event: TICKET_AUDIT_EVENTS.RESTORED,
+            oldStatus: ticket.status,
+            newStatus: ticket.status,
+            reason: reason ?? null,
+            before: {
+              deleted_at: ticket.deleted_at?.toISOString() ?? null,
+              deleted_by: ticket.deleted_by,
+              deletion_reason: ticket.deletion_reason,
+            },
+            after: { deleted_at: null },
+            metadata: {
+              actorRole: user.role ?? null,
+              bonusesRestored: bonusIds.length,
+              notesRestored: noteIds.length,
+              // Tickets deleted before this feature shipped have no id manifest to work from.
+              ...(lastDeleted ? {} : { idsUnavailable: true }),
+            },
+          },
+          prisma,
+        );
+      });
+
+      return {
+        message: 'Ticket restored successfully',
+        restoredTicket: {
+          id: ticket.id,
+          type: ticket.type,
+          status: ticket.status,
+        },
+        bonusesRestored: bonusIds.length,
+        notesRestored: noteIds.length,
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Error restoring ticket', error.message);
     }
   }
 
@@ -777,11 +1071,17 @@ export class TicketService {
     },
     user: USER,
   ): Promise<object> {
-    const currentTicket = await this.prisma.ticket.findUnique({
-      where: { id },
+    const currentTicket = await this.prisma.ticket.findFirst({
+      where: { id, deleted_at: null },
       select: {
         id: true,
         created_by: true,
+        // Captured so the audit event can show what each changed field was before.
+        type: true,
+        title: true,
+        priority: true,
+        org_id: true,
+        user_id: true,
         organization: { select: { id: true } },
       },
     });
@@ -867,6 +1167,52 @@ export class TicketService {
       const ticket = await this.findOne(id);
       if (!ticket)
         throw new BadRequestException('Failed to fetch updated ticket');
+
+      const changedFields = Object.keys(payload);
+      void this.audit.log({
+        ticketId: id,
+        actorUserId: user?.id ?? null,
+        actorLabel: buildActorLabel(user),
+        event: TICKET_AUDIT_EVENTS.UPDATED,
+        before: {
+          ...(changedFields.includes('type') && { type: currentTicket.type }),
+          ...(changedFields.includes('title') && {
+            ...this.auditSafeTitle(currentTicket),
+          }),
+          ...(changedFields.includes('priority') && {
+            priority: currentTicket.priority,
+          }),
+          ...(changedFields.includes('organization') && {
+            org_id: currentTicket.org_id,
+          }),
+          ...(changedFields.includes('user') && {
+            user_id: currentTicket.user_id,
+          }),
+        },
+        after: {
+          ...(changedFields.includes('type') && { type: data.type }),
+          ...(changedFields.includes('title') && {
+            ...this.auditSafeTitle({
+              type: data.type ?? currentTicket.type,
+              title: data.title,
+            }),
+          }),
+          ...(changedFields.includes('priority') && {
+            priority: data.priority,
+          }),
+          ...(changedFields.includes('organization') && {
+            org_id: data.client_id,
+          }),
+          ...(changedFields.includes('user') && {
+            user_id: data.assigned_user_id,
+          }),
+        },
+        metadata: {
+          actorRole: user?.role ?? null,
+          changedFields,
+        },
+      });
+
       // Notify on generic updates (non-blocking)
       try {
         await this.notifications.notifyTicketEvent(ticket, 'updated');
@@ -887,8 +1233,8 @@ export class TicketService {
     dto: { content: string; is_internal?: boolean },
     user: USER,
   ) {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         created_by: true,
@@ -965,7 +1311,7 @@ export class TicketService {
         `SELECT tn.*, u.id as user_id, u.first_name, u.last_name, u.email, u.role
          FROM "TicketNotes" tn
          JOIN "USER" u ON u.id = tn.author_id
-         WHERE tn.id = $1`,
+         WHERE tn.id = $1 AND tn.deleted_at IS NULL`,
         id,
       );
       const r = rows?.[0];
@@ -982,6 +1328,22 @@ export class TicketService {
           }
         : null;
     }
+
+    // Note content is deliberately not recorded — only its shape.
+    void this.audit.log({
+      ticketId,
+      actorUserId: user?.id ?? null,
+      actorLabel: buildActorLabel(user),
+      event: TICKET_AUDIT_EVENTS.NOTE_ADDED,
+      after: {
+        note_id: note?.id ?? null,
+        is_internal: dto.is_internal ?? false,
+      },
+      metadata: {
+        actorRole: user?.role ?? null,
+        contentLength: dto.content?.length ?? 0,
+      },
+    });
 
     // If the note is not internal, notify via email (non-blocking)
     if (!(dto.is_internal ?? false)) {
@@ -1021,8 +1383,8 @@ export class TicketService {
   }
 
   async listNotes(ticketId: string, user: USER) {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         created_by: true,
@@ -1064,6 +1426,7 @@ export class TicketService {
       notes = await prismaAnyList.ticketNotes.findMany({
         where: {
           ticket_id: ticketId,
+          deleted_at: null,
           ...(canSeeInternal ? {} : { is_internal: false }),
         },
         orderBy: { created_at: 'asc' },
@@ -1084,7 +1447,7 @@ export class TicketService {
         `SELECT tn.*, u.id as user_id, u.first_name, u.last_name, u.email, u.role
          FROM "TicketNotes" tn
          JOIN "USER" u ON u.id = tn.author_id
-         WHERE tn.ticket_id = $1 ${canSeeInternal ? '' : 'AND tn.is_internal = false'}
+         WHERE tn.ticket_id = $1 AND tn.deleted_at IS NULL ${canSeeInternal ? '' : 'AND tn.is_internal = false'}
          ORDER BY tn.created_at ASC`,
         ticketId,
       );
@@ -1106,5 +1469,21 @@ export class TicketService {
         `${n.USER?.first_name ?? ''} ${n.USER?.last_name ?? ''}`.trim(),
       author_role: n.USER?.role ?? null,
     }));
+  }
+
+  async listAuditLogs(query: ListTicketAuditLogsDto) {
+    return this.audit.findAllLogs(query);
+  }
+
+  async getTicketAuditLog(ticketId: string) {
+    // Deliberately unfiltered: the timeline of a soft-deleted ticket is exactly what this
+    // endpoint exists to expose.
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true },
+    });
+    if (!ticket) throw new BadRequestException('Ticket not found');
+
+    return this.audit.findByTicket(ticketId);
   }
 }

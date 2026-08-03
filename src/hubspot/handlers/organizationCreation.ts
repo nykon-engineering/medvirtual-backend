@@ -12,6 +12,7 @@ import { OrganizationStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrganizationService } from '../../organization/organization.service';
 import { organizationIndustryToDbDictionary } from '../../common/dictionaries/organizationIndustry-dictionary';
+import { BusinessUnitContext } from '../../business-units/business-unit-context.service';
 
 @Injectable()
 export class HandlerOrganizationCreation {
@@ -19,6 +20,7 @@ export class HandlerOrganizationCreation {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => OrganizationService))
     private readonly organizationService: OrganizationService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
 
   async execute(event) {
@@ -51,10 +53,11 @@ export class HandlerOrganizationCreation {
       );
 
       if (!getObject) throw new BadRequestException('No object data found');
-      if (
-        getObject.data.results[0].properties.business_unit !== 'MedVirtual' &&
-        getObject.data.results[0].properties.business_unit !== 'Berry Virtual'
-      )
+      const isAllowedBusinessUnit =
+        await this.businessUnitContext.isAllowedHubspotValue(
+          getObject.data.results[0].properties.business_unit,
+        );
+      if (!isAllowedBusinessUnit)
         throw new BadRequestException(
           'Organization is not a client of MedVirtual',
         );

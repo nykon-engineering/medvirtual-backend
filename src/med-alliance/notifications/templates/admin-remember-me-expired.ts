@@ -1,9 +1,12 @@
-import { getEmailFooter } from '../../../common/utils/email-templates/components';
+import {
+  getEmailFooter,
+  getEmailLogoCss,
+  getEmailLogoImg,
+} from '../../../common/utils/email-templates/components';
 import { EmailTheme } from '../../../common/utils/email-templates/theme';
 
 export function adminRememberMeExpiredTemplate(theme?: EmailTheme): string {
   const companyName = theme?.companyName || 'MedVirtual';
-  const logo = `https://staging.medvirtual.ai/${companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
 
   return `
 <!DOCTYPE html>
@@ -17,8 +20,7 @@ export function adminRememberMeExpiredTemplate(theme?: EmailTheme): string {
     .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
     .content { padding: 40px 30px; }
-    .logo { text-align: left; margin-bottom: 30px; }
-    .logo img { max-width: 200px; height: auto; }
+${getEmailLogoCss()}
     .alert-banner { background-color: #fff5f5; border-left: 4px solid #e03131; padding: 14px 18px; border-radius: 0 8px 8px 0; margin-bottom: 20px; color: #c92a2a; font-weight: 600; font-size: 15px; }
     .main-message { color: #333333; font-size: 16px; line-height: 1.5; margin-bottom: 30px; }
     .steps { background-color: #f8f9fa; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
@@ -33,7 +35,7 @@ export function adminRememberMeExpiredTemplate(theme?: EmailTheme): string {
     <div class="container">
       <div class="content">
         <div class="logo">
-          <img src="${logo}" alt="${companyName} Logo" />
+          ${getEmailLogoImg(theme)}
         </div>
         <div class="alert-banner">Action required: Bill.com rememberMeId has expired (BDC_1109)</div>
         <div class="main-message">

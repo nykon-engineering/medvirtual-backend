@@ -12,6 +12,7 @@ import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -64,7 +65,23 @@ const mockPrisma = {
   panelCandidate: {
     count: jest.fn(),
   },
+  organization: {
+    findUnique: jest.fn(),
+  },
+  ticket: {
+    findMany: jest.fn(),
+  },
   $transaction: jest.fn(),
+};
+
+const businessUnitContextMock = {
+  getVisibleHubspotValues: jest.fn(),
+  isAllowedHubspotValue: jest.fn(),
+  resolveByHubspotValue: jest.fn(),
+  poolFor: jest.fn(),
+  displayToSlug: jest.fn(),
+  normalizeBusinessUnit: jest.fn(),
+  bustCache: jest.fn(),
 };
 
 const textractMock = {
@@ -116,6 +133,7 @@ describe('CandidatesService', () => {
   const mockUser = {
     id: 'user-1',
     organization_id: 'org-1',
+    role: 'organization_admin',
   } as any; // Cast as USER
 
   beforeEach(async () => {
@@ -131,6 +149,7 @@ describe('CandidatesService', () => {
         { provide: HireRequestService, useValue: HireRequestMock },
         { provide: NotificationsService, useValue: notificationsMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigMock },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
         { provide: Logger, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn() } },
       ],
     }).compile();
@@ -139,6 +158,14 @@ describe('CandidatesService', () => {
     prisma = module.get<PrismaService>(PrismaService);
 
     jest.clearAllMocks();
+
+    // Default: no restriction (medical pool), mirrors current MedVirtual/MMVA behavior
+    businessUnitContextMock.poolFor.mockResolvedValue('medical');
+    businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+      'MedVirtual',
+      'Berry Virtual',
+      'MMVA',
+    ]);
   });
 
   describe.skip('findAll', () => {
@@ -172,6 +199,81 @@ describe('CandidatesService', () => {
       mockPrisma.$transaction.mockRejectedValue(new Error('DB error'));
 
       await expect(service.findAll(mockUser)).rejects.toThrow(BadGatewayException);
+    });
+  });
+
+  describe('findAll — business_unit pool filtering (internal talent pool)', () => {
+    beforeEach(() => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.ticket.findMany.mockResolvedValue([]);
+    });
+
+    it('applies NO business_unit filter for a MedVirtual logged company (sees all candidates)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        business_unit: 'MedVirtual',
+      });
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.findAll(mockUser);
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith(
+        'MedVirtual',
+      );
+      const findManyCall = mockPrisma.candidate.findMany.mock.calls[0][0];
+      for (const branch of findManyCall.where.OR) {
+        expect(branch.business_unit).toBeUndefined();
+      }
+    });
+
+    it('applies NO business_unit filter for an MMVA logged company (sees all candidates)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        business_unit: 'MMVA',
+      });
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.findAll(mockUser);
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith('MMVA');
+      const findManyCall = mockPrisma.candidate.findMany.mock.calls[0][0];
+      for (const branch of findManyCall.where.OR) {
+        expect(branch.business_unit).toBeUndefined();
+      }
+    });
+
+    it('restricts to non_medical BU hubspot_values for a Berry Virtual logged company', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        business_unit: 'Berry Virtual',
+      });
+      businessUnitContextMock.poolFor.mockResolvedValue('non_medical');
+      businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+        'MedVirtual',
+        'Berry Virtual',
+        'MMVA',
+      ]);
+      businessUnitContextMock.poolFor.mockImplementation(async (v: string) => {
+        if (v === 'Berry Virtual') return 'non_medical';
+        return 'medical';
+      });
+
+      await service.findAll(mockUser);
+
+      const findManyCall = mockPrisma.candidate.findMany.mock.calls[0][0];
+      for (const branch of findManyCall.where.OR) {
+        expect(branch.business_unit).toEqual({ in: ['Berry Virtual'] });
+      }
+    });
+
+    it('does not query organization/pool when user has no organization_id', async () => {
+      const userWithoutOrg = {
+        id: 'user-2',
+        organization_id: null,
+        role: 'system_admin',
+      } as any;
+
+      await service.findAll(userWithoutOrg);
+
+      expect(mockPrisma.organization.findUnique).not.toHaveBeenCalled();
+      expect(businessUnitContextMock.poolFor).not.toHaveBeenCalled();
     });
   });
 
@@ -750,6 +852,77 @@ describe('CandidatesService', () => {
       expect(result.candidates).toHaveLength(1);
       expect(result.candidates[0].specialization).not.toBe('n/a');
       expect(result.candidates[0].specialization).not.toBe('N/A');
+    });
+  });
+
+  describe('getRandomTalentPoolCandidates — business_unit pool filtering (public talent pool)', () => {
+    beforeEach(() => {
+      mockPrisma.candidate.findMany.mockReset();
+      mockPrisma.candidate.findMany.mockResolvedValue([]);
+      mockPrisma.candidate.count.mockReset();
+      mockPrisma.candidate.count.mockResolvedValue(0);
+      mockPrisma.$transaction.mockReset();
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+    });
+
+    it('applies NO business_unit filter for MedVirtual (sees all candidates)', async () => {
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.getRandomTalentPoolCandidates('MedVirtual');
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith(
+        'MedVirtual',
+      );
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toBeUndefined();
+    });
+
+    it('applies NO business_unit filter for MMVA (sees all candidates)', async () => {
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.getRandomTalentPoolCandidates('MMVA');
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith('MMVA');
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toBeUndefined();
+    });
+
+    it('restricts to non_medical BU hubspot_values for BerryVirtual', async () => {
+      businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+        'MedVirtual',
+        'Berry Virtual',
+        'MMVA',
+      ]);
+      businessUnitContextMock.poolFor.mockImplementation(async (v: string) => {
+        if (v === 'BerryVirtual' || v === 'Berry Virtual') return 'non_medical';
+        return 'medical';
+      });
+
+      await service.getRandomTalentPoolCandidates('BerryVirtual');
+
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toEqual({ in: ['Berry Virtual'] });
+    });
+
+    it('applies NO business_unit filter when business_unit param is empty/undefined', async () => {
+      businessUnitContextMock.poolFor.mockResolvedValue(null);
+
+      await service.getRandomTalentPoolCandidates(undefined as unknown as string);
+
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toBeUndefined();
     });
   });
 

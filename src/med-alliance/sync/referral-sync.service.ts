@@ -44,6 +44,22 @@ export class ReferralSyncService {
   async run(organizationId: string): Promise<SyncResult> {
     this.logger.log(`Starting sync for organization ${organizationId}`);
 
+    // Deleted organizations must never re-enter the pipeline — the deletion hook
+    // already voided their commissions; syncing would re-detect them.
+    const orgStatus = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { status: true },
+    });
+    if (orgStatus?.status === 'deleted') {
+      this.logger.warn(
+        `Sync skipped for org ${organizationId} — organization is deleted`,
+      );
+      return {
+        organizationId,
+        phaseA: { outcome: 'skipped_deleted' },
+      };
+    }
+
     // -------------------------------------------------------------------------
     // Phase A: HubSpot company matching
     // -------------------------------------------------------------------------

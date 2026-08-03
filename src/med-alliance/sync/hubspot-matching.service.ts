@@ -5,7 +5,7 @@ import { MailService } from '../../mail/mail.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
 import { EmailTemplatesService } from '../../email-templates/email-templates.service';
-import { getEmailThemeByBusinessUnit } from '../../common/utils/email-templates/theme';
+import { getBusinessUnitEmailTheme } from '../../common/utils/email-templates/theme-helper';
 
 export type MatchOutcome =
   | 'already_matched' // hubspot_id was already set — Phase A skipped
@@ -265,7 +265,7 @@ export class HubspotMatchingService {
           '{{affiliateName}}': affiliateName,
           '{{reviewLink}}': reviewLink,
         },
-        getEmailThemeByBusinessUnit('MedVirtual'),
+        await getBusinessUnitEmailTheme(this.prisma, 'MedVirtual'),
       );
     } catch {
       tpl = null;

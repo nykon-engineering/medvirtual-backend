@@ -81,6 +81,21 @@ describe('CommissionDetectionService', () => {
   afterEach(() => jest.clearAllMocks());
 
   // -------------------------------------------------------------------------
+  // Guard: deleted organization
+  // -------------------------------------------------------------------------
+  it('should return zeros when the organization is deleted', async () => {
+    mockPrisma.organization.findUnique.mockResolvedValue(
+      makeOrg({ status: 'deleted' }),
+    );
+
+    const result = await service.run('org-1');
+
+    expect(result).toEqual({ created: 0, skipped: 0 });
+    expect(mockPrisma.affiliateProfile.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.affiliateCommission.create).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
   // Guard: no affiliate
   // -------------------------------------------------------------------------
   it('should return zeros when org has no referred_by_affiliate_id', async () => {

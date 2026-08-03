@@ -41,7 +41,7 @@ export class GetOrganizationsDto {
   @ApiProperty({
     required: false,
     description:
-      'Search term to filter organizations by name, email, or description',
+      'Search term to filter organizations by name, email, description, or member user name',
   })
   @IsOptional()
   @IsString()

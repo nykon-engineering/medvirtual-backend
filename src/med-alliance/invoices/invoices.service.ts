@@ -167,6 +167,7 @@ export class InvoicesService {
         referred_by_affiliate_id: profile.user_id,
         referral_stage: 'deployed',
         med_alliance_referral_status: { not: 'expired' },
+        status: { not: 'deleted' },
       },
       select: { id: true },
     });

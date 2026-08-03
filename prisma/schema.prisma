@@ -2,6 +2,7 @@ generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
+
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
@@ -9,8 +10,8 @@ datasource db {
 }
 
 model USER {
-  id                           String              @id @default(uuid())
-  email                        String              @unique
+  id                           String               @id @default(uuid())
+  email                        String               @unique
   organization_id              String?
   organization_name            String
   first_name                   String
@@ -20,78 +21,86 @@ model USER {
   job_title                    String
   role                         String
   workos_id                    String
-  password                     String              @db.VarChar(255)
+  password                     String               @db.VarChar(255)
   authentication_method        String
   status                       String
   status_before_deactivation   String?
-  verified                     Boolean             @default(false)
-  createdAt                    DateTime            @default(now())
-  updatedAt                    DateTime            @updatedAt
+  verified                     Boolean              @default(false)
+  createdAt                    DateTime             @default(now())
+  updatedAt                    DateTime             @updatedAt
   activatedAt                  DateTime?
-  is_organization_owner        Boolean             @default(false)
-  createdByMethod              String              @default("self_signup")
+  is_organization_owner        Boolean              @default(false)
+  createdByMethod              String               @default("self_signup")
   createdByUserId              String?
-  hubspot_id                   String?             @unique
-  hubspot_contact_id           String?             @unique
+  hubspot_id                   String?              @unique
+  hubspot_contact_id           String?              @unique
   email_invitations            EmailInvitation[]
   email_verifications          EmailVerification[]
-  hireRequestsSourcingAssigned HireRequest[]       @relation("AssignedSourcing")
-  hireRequestsStaffingAssigned HireRequest[]       @relation("AssignedStaffing")
-  hireRequestsAssignedMany     HireRequest[]       @relation("AssignedUsers")
-  hireRequestsCreated          HireRequest[]       @relation("HireRequestCreatedBy")
-  panelCandidatesCreated       PanelCandidate[]    @relation("PanelCandidateCreatedBy")
-  adminOrganizations           Organization[]      @relation("OrganizationAdmin")
-  ownedOrganizations           Organization[]      @relation("OrganizationOwner")
+  hireRequestsSourcingAssigned HireRequest[]        @relation("AssignedSourcing")
+  hireRequestsStaffingAssigned HireRequest[]        @relation("AssignedStaffing")
+  hireRequestsAssignedMany     HireRequest[]        @relation("AssignedUsers")
+  hireRequestsCreated          HireRequest[]        @relation("HireRequestCreatedBy")
+  panelCandidatesCreated       PanelCandidate[]     @relation("PanelCandidateCreatedBy")
+  adminOrganizations           Organization[]       @relation("OrganizationAdmin")
+  ownedOrganizations           Organization[]       @relation("OrganizationOwner")
   sessions                     Session[]
   tickets                      Ticket[]
   ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
   TicketNotes                  TicketNotes[]
-  createdBy                    USER?               @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
-  createdUsers                 USER[]              @relation("UserCreatedBy")
-  organization                 Organization?       @relation(fields: [organization_id], references: [id])
+  createdBy                    USER?                @relation("UserCreatedBy", fields: [createdByUserId], references: [id])
+  createdUsers                 USER[]               @relation("UserCreatedBy")
+  organization                 Organization?        @relation(fields: [organization_id], references: [id])
   talentPoolLeads              TalentPoolLead[]
   PasswordResetTokens          PasswordResetToken[]
 
-  contact                      Contact?
+  contact Contact?
 
   // --- Med Alliance relations ---
   // One-to-one affiliate profile storing commission settings and payout preferences
-  affiliateProfile             AffiliateProfile?
+  affiliateProfile          AffiliateProfile?
   // Organizations this user referred into the Med Alliance program
-  referredOrganizations        Organization[]             @relation("OrganizationReferredBy")
+  referredOrganizations     Organization[]               @relation("OrganizationReferredBy")
   // Organizations where this user was selected as the staff contact by an affiliate
-  referToOrganizations         Organization[]             @relation("OrganizationReferTo")
+  referToOrganizations      Organization[]               @relation("OrganizationReferTo")
   // Payout requests submitted by this user as an affiliate
-  payoutRequestsAsAffiliate    AffiliatePayoutRequest[]   @relation("AffiliatePayoutRequests")
+  payoutRequestsAsAffiliate AffiliatePayoutRequest[]     @relation("AffiliatePayoutRequests")
   // Payout requests approved or rejected by this admin user
-  payoutApprovals              AffiliatePayoutRequest[]   @relation("PayoutApprovedBy")
+  payoutApprovals           AffiliatePayoutRequest[]     @relation("PayoutApprovedBy")
   // Payout requests moved to under_review by this admin user
-  payoutReviews                AffiliatePayoutRequest[]   @relation("PayoutReviewedBy")
+  payoutReviews             AffiliatePayoutRequest[]     @relation("PayoutReviewedBy")
   // Notes authored on payout requests
-  payoutRequestNotes           PayoutRequestNote[]        @relation("PayoutRequestNoteAuthor")
+  payoutRequestNotes        PayoutRequestNote[]          @relation("PayoutRequestNoteAuthor")
   // Payout requests cancelled by this admin user
-  payoutCancellations          AffiliatePayoutRequest[]   @relation("PayoutCancelledBy")
+  payoutCancellations       AffiliatePayoutRequest[]     @relation("PayoutCancelledBy")
   // Commission records where this admin user made the eligibility decision
-  commissionAdminDecisions     AffiliateCommission[]      @relation("CommissionAdminDecision")
+  commissionAdminDecisions  AffiliateCommission[]        @relation("CommissionAdminDecision")
   // Commissions linked to this user as the affiliate owner
-  affiliateCommissions         AffiliateCommission[]      @relation("AffiliateCommissions")
+  affiliateCommissions      AffiliateCommission[]        @relation("AffiliateCommissions")
   // Audit log entries where this user was the acting subject
-  medAllianceAuditActorLogs    MedAllianceAuditLog[]      @relation("MedAllianceAuditActor")
+  medAllianceAuditActorLogs MedAllianceAuditLog[]        @relation("MedAllianceAuditActor")
   // Hubspot audit log entries where this user triggered the API call
-  hubspotAuditLogs             HubspotAuditLog[]          @relation("HubspotAuditActor")
+  hubspotAuditLogs          HubspotAuditLog[]            @relation("HubspotAuditActor")
+  // Ticket audit log entries where this user was the acting subject
+  ticketAuditActorLogs      TicketAuditLog[]             @relation("TicketAuditActor")
+  // Tickets this user soft-deleted
+  ticketsDeleted            Ticket[]                     @relation("TicketDeletedBy")
   // MA-006 review cases resolved by this admin user
-  resolvedReviewCases          MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
+  resolvedReviewCases       MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
 
   // --- Offer Panels relations ---
-  offerPanelsCreated           OfferPanel[]               @relation("OfferPanelCreatedBy")
-  offerPanelsAsRecipient       OfferPanel[]               @relation("OfferPanelRecipientUser")
+  offerPanelsCreated     OfferPanel[] @relation("OfferPanelCreatedBy")
+  offerPanelsAsRecipient OfferPanel[] @relation("OfferPanelRecipientUser")
 
   // --- Bill.com per-user credentials (admin's own bill.com login/session) ---
-  billcom_session_id           String?    // only ever a trusted, MFA-confirmed session
-  billcom_session_expires      DateTime?
-  billcom_pending_session_id   String?    // transient, untrusted session in-flight during MFA/phone-setup
-  billcom_remember_me_id       String?
-  billcom_device               String?
+  billcom_session_id         String? // only ever a trusted, MFA-confirmed session
+  billcom_session_expires    DateTime?
+  billcom_pending_session_id String? // transient, untrusted session in-flight during MFA/phone-setup
+  billcom_remember_me_id     String?
+  billcom_device             String?
+
+  // Multi Business Unit — tags the BU slug that caused this user to be soft-deactivated
+  // (cron reconcile / dormant BU). Cleared on reactivation.
+  deactivated_by_bu String?
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -100,6 +109,7 @@ model USER {
   @@index([is_organization_owner], map: "idx_users_is_organization_owner")
   @@index([createdByMethod], map: "idx_users_created_by_method")
   @@index([createdByUserId], map: "idx_users_created_by_user_id")
+  @@index([deactivated_by_bu], map: "idx_users_deactivated_by_bu")
 }
 
 model Session {
@@ -134,42 +144,42 @@ model EmailInvitation {
 }
 
 model Organization {
-  id                      String                  @id @default(uuid())
-  name                    String
-  email                   String?                 
-  hubspot_id              String?                 @unique
-  createdAt               DateTime                @default(now())
-  deletedAt               DateTime?
-  admin_id                String?
-  description             String?
-  owner_id                String?                 
-  date_became_client      DateTime?
-  date_founded            DateTime?
-  date_joined             DateTime?
-  industry                String?
-  location                String?
-  number_of_employees     Int?
-  organization_role       OrganizationRole        @default(prospect)
-  phone                   String?
-  services                String[]
-  signed_document_date    DateTime?
-  signed_document_url     String?
-  updatedAt               DateTime                @updatedAt
-  website_url             String?
-  status                  OrganizationStatus      @default(active)
-  specialties             String[]
-  address                 String?
-  city                    String?
-  postal_code             String?
-  state                   String?
-  business_unit           String?
-  source                  String?
-  type                    String?
+  id                   String             @id @default(uuid())
+  name                 String
+  email                String?
+  hubspot_id           String?            @unique
+  createdAt            DateTime           @default(now())
+  deletedAt            DateTime?
+  admin_id             String?
+  description          String?
+  owner_id             String?
+  date_became_client   DateTime?
+  date_founded         DateTime?
+  date_joined          DateTime?
+  industry             String?
+  location             String?
+  number_of_employees  Int?
+  organization_role    OrganizationRole   @default(prospect)
+  phone                String?
+  services             String[]
+  signed_document_date DateTime?
+  signed_document_url  String?
+  updatedAt            DateTime           @updatedAt
+  website_url          String?
+  status               OrganizationStatus @default(active)
+  specialties          String[]
+  address              String?
+  city                 String?
+  postal_code          String?
+  state                String?
+  business_unit        String?
+  source               String?
+  type                 String?
 
   // Primary contact at the referred company (collected at referral time for HubSpot import).
-  contact_first_name           String?
-  contact_last_name            String?
-  contact_email                String?
+  contact_first_name String?
+  contact_last_name  String?
+  contact_email      String?
 
   // Immutable snapshot of the referral submission form, captured once at creation time.
   // Never mutated afterward — protects against HubSpot sync silently overwriting
@@ -178,11 +188,11 @@ model Organization {
   referral_submission_snapshot Json?
 
   // User ID of the affiliate who referred this organization into the Med Alliance program
-  referred_by_affiliate_id     String?
+  referred_by_affiliate_id String?
 
   // Internal staff member (concierge) the affiliate selected to handle this referral
-  refer_to_user_id             String?
-  referToUser                  USER?                   @relation("OrganizationReferTo", fields: [refer_to_user_id], references: [id])
+  refer_to_user_id String?
+  referToUser      USER?   @relation("OrganizationReferTo", fields: [refer_to_user_id], references: [id])
 
   // Med Alliance eligibility status — only set for referred organizations (referred_by_affiliate_id IS NOT NULL).
   // 'pending_confirmation' is the resting state (shown to users as "Pending"): new referrals start here and stay
@@ -204,15 +214,20 @@ model Organization {
   deployment_date              DateTime?
   // Pipeline stage tracking where this referral is in the sales-to-deployment lifecycle.
   // 'deployed' is when eligibility decisions (Confirm/Block) become available — no waiting period.
-  referral_stage               ReferralStage?              @default(referred)
+  referral_stage               ReferralStage?             @default(referred)
 
   // HubSpot sync state — only relevant for referred organizations
   // 'pending' | 'synced' | 'no_match' | 'multiple_matches' | 'error'
-  hubspot_sync_status          String?
+  hubspot_sync_status String?
   // Last sync error message, cleared on successful sync
-  hubspot_sync_error           String?
+  hubspot_sync_error  String?
   // Timestamp of the last successful HubSpot sync
-  hubspot_synced_at            DateTime?
+  hubspot_synced_at   DateTime?
+
+  // Multi Business Unit — tags the BU slug that caused this org to be soft-deleted
+  // (cron reconcile / dormant BU). Cleared on reactivation. Used to find the exact
+  // set of objects to restore when a super-admin re-activates a BU.
+  deactivated_by_bu String?
 
   hire_requests           HireRequest[]
   admin                   USER?                   @relation("OrganizationAdmin", fields: [admin_id], references: [id], onDelete: Restrict)
@@ -223,15 +238,15 @@ model Organization {
   users                   USER[]
 
   // The affiliate user who referred this organization; null for organizations not coming from Med Alliance
-  referredByAffiliate          USER?                   @relation("OrganizationReferredBy", fields: [referred_by_affiliate_id], references: [id])
+  referredByAffiliate     USER?                        @relation("OrganizationReferredBy", fields: [referred_by_affiliate_id], references: [id])
   // Commission records generated from invoices tied to this organization
-  affiliateCommissions         AffiliateCommission[]
+  affiliateCommissions    AffiliateCommission[]
   // HubSpot invoice snapshots pulled during sync for this organization
-  hubspotInvoiceSnapshots      HubspotInvoiceSnapshot[]
+  hubspotInvoiceSnapshots HubspotInvoiceSnapshot[]
   // MA-006 admin review cases opened for this referred organization
-  adminReviewCases             MedAllianceAdminReviewCase[]
-  contacts                     Contact[]
-  offerPanelsAsRecipient       OfferPanel[]               @relation("OfferPanelRecipientCompany")
+  adminReviewCases        MedAllianceAdminReviewCase[]
+  contacts                Contact[]
+  offerPanelsAsRecipient  OfferPanel[]                 @relation("OfferPanelRecipientCompany")
 
   @@index([hubspot_id], map: "idx_organizations_hubspot_id")
   @@index([status], map: "idx_organizations_status")
@@ -248,11 +263,13 @@ model Organization {
   @@index([refer_to_user_id], map: "idx_organizations_refer_to_user")
   // Med Alliance pipeline: find deployed companies ready for eligibility promotion
   @@index([referral_stage, eligibility_start_at], map: "idx_organizations_referral_stage")
+  // Multi Business Unit — reactivation lookup by the BU slug that deactivated this org
+  @@index([deactivated_by_bu], map: "idx_organizations_deactivated_by_bu")
 }
 
 model Candidate {
-  id                         String                  @id @default(uuid())
-  hubspot_id                 String                  @unique
+  id                         String           @id @default(uuid())
+  hubspot_id                 String           @unique
   email                      String
   first_name                 String?
   last_name                  String?
@@ -260,14 +277,14 @@ model Candidate {
   about_me                   String?
   description_summary        String?
   processed_resume_data      Json?
-  processing_status          ProcessingStatus        @default(pending)
+  processing_status          ProcessingStatus @default(pending)
   processing_error           String?
   processed_at               DateTime?
-  createdAt                  DateTime                @default(now())
-  updatedAt                  DateTime                @updatedAt @default(now())
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @default(now()) @updatedAt
   hourly_pay_rate            Decimal?
   organization_id            String?
-  pipeline_status            String                  @default("available")
+  pipeline_status            String           @default("available")
   years_of_experience        Int?
   country                    String?
   specialization             String?
@@ -278,58 +295,63 @@ model Candidate {
   gender                     String?
   pipeline_status_origin     String?
   approved_positions_pairing String[]
-  processing_cost            Decimal?                @default(0)
+  processing_cost            Decimal?         @default(0)
   avatar_url                 String?
   headshot_url               String?
   shift_block                String?
   video_link                 String?
   business_unit              String?
+  // Multi Business Unit — tags the BU slug that caused this candidate to be soft-deactivated
+  // (cron reconcile / dormant BU). Cleared on reactivation.
+  deactivated_by_bu          String?
 
   //Fields from VA Score Card
-  active_listening_and_comprehension_demonstrated               String?
-  adaptability_to_different_client_personalities_and_workflows  String?
-  can_articulate_experience_clearly_to_clients                  String?
-  can_multitask_between_systems_or_windows_efficiently          String?
-  client_readiness___fit_evaluator_notes                        String?
-  comfortable_with_basic_tools__google_workspace__zoom__ehr_software_ String? @map("comfortable_with_basic_tools__google_workspace__zoom__ehr_softw")
-  comfortable_with_camera_on_setup                              String?
-  communication_skills_evaluator_notes                          String?
-  confident_on_video_and_phone_calls                            String?
-  cultural_alignment_with_us_healthcare_environment             String?
-  demonstrates_problem_solving_and_tech_adaptability            String?
-  demonstrates_stability_and_commitment                         String?
-  demonstrates_understanding_of_medical_terminology_and_procedures String? @map("demonstrates_understanding_of_medical_terminology_and_procedure")
-  exhibits_confidence_and_empathy_in_roleplay_scenarios         String?
+  active_listening_and_comprehension_demonstrated                        String?
+  adaptability_to_different_client_personalities_and_workflows           String?
+  can_articulate_experience_clearly_to_clients                           String?
+  can_multitask_between_systems_or_windows_efficiently                   String?
+  client_readiness___fit_evaluator_notes                                 String?
+  comfortable_with_basic_tools__google_workspace__zoom__ehr_software_    String? @map("comfortable_with_basic_tools__google_workspace__zoom__ehr_softw")
+  comfortable_with_camera_on_setup                                       String?
+  communication_skills_evaluator_notes                                   String?
+  confident_on_video_and_phone_calls                                     String?
+  cultural_alignment_with_us_healthcare_environment                      String?
+  demonstrates_problem_solving_and_tech_adaptability                     String?
+  demonstrates_stability_and_commitment                                  String?
+  demonstrates_understanding_of_medical_terminology_and_procedures       String? @map("demonstrates_understanding_of_medical_terminology_and_procedure")
+  exhibits_confidence_and_empathy_in_roleplay_scenarios                  String?
   familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__ String? @map("familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks")
-  for_bilinguals__fluent_and_accurate_in_both_english_and_spanish String?
-  grammar__vocabulary__and_tone_are_appropriate_for_us_clients  String?
-  handles_feedback_constructively                               String?
-  has_functioning_headset__webcam__and_backup_device            String?
-  knowledge_of_hipaa_compliance_and_confidentiality             String?
-  medical_knowledge_evaluator_notes                             String?
-  no_medical_industry_experience                                String?
-  positive_attitude_and_professional_demeanor                   String?
-  prior_experience_in_healthcare_or_medical_va_roles            String?
-  professionalism___work_readiness_evaluator_notes              String?
-  punctual_and_responsive_during_recruitment_stages             String?
-  remote_work_discipline_and_time_management                    String?
-  speaks_clearly_and_professionally                             String?
-  stable_internet_connection__min__20_mbps_                     String?
-  technical_competence_evaluator_notes                          String?
-  tier_level                                                    String?
-  total_points                                                  String?
-  understands_workflow_in_medical_offices___telehealth_environments String? @map("understands_workflow_in_medical_offices___telehealth_environmen")
+  for_bilinguals__fluent_and_accurate_in_both_english_and_spanish        String?
+  grammar__vocabulary__and_tone_are_appropriate_for_us_clients           String?
+  handles_feedback_constructively                                        String?
+  has_functioning_headset__webcam__and_backup_device                     String?
+  knowledge_of_hipaa_compliance_and_confidentiality                      String?
+  medical_knowledge_evaluator_notes                                      String?
+  no_medical_industry_experience                                         String?
+  positive_attitude_and_professional_demeanor                            String?
+  prior_experience_in_healthcare_or_medical_va_roles                     String?
+  professionalism___work_readiness_evaluator_notes                       String?
+  punctual_and_responsive_during_recruitment_stages                      String?
+  remote_work_discipline_and_time_management                             String?
+  speaks_clearly_and_professionally                                      String?
+  stable_internet_connection__min__20_mbps_                              String?
+  technical_competence_evaluator_notes                                   String?
+  tier_level                                                             String?
+  total_points                                                           String?
+  understands_workflow_in_medical_offices___telehealth_environments      String? @map("understands_workflow_in_medical_offices___telehealth_environmen")
 
-  educations                 CandidateEducation[]
-  experiences                CandidateExperience[]
-  languages                  CandidateLanguage[]
-  skills                     CandidateSkill[]
-  selectedInInterviews       Interview[]             @relation("SelectedCandidate")
-  organizationCandidates     OrganizationCandidate[]
-  panelCandidates            PanelCandidate[]
-  staff                      Staff[]
-  tickets                    Ticket[]
-  offerPanelCandidates       OfferPanelCandidate[]
+  educations             CandidateEducation[]
+  experiences            CandidateExperience[]
+  languages              CandidateLanguage[]
+  skills                 CandidateSkill[]
+  selectedInInterviews   Interview[]             @relation("SelectedCandidate")
+  organizationCandidates OrganizationCandidate[]
+  panelCandidates        PanelCandidate[]
+  staff                  Staff[]
+  tickets                Ticket[]
+  offerPanelCandidates   OfferPanelCandidate[]
+
+  @@index([deactivated_by_bu], map: "idx_candidates_deactivated_by_bu")
 }
 
 model CandidateLanguage {
@@ -397,78 +419,77 @@ model CandidateEducation {
 }
 
 model HireRequest {
-  id                                String             @id @default(uuid())
-  org_id                            String
-  title                             String
-  description                       String?
-  status                            HireRequestStatus  @default(new)
-  priority                          Priority           @default(medium)
-  createdAt                         DateTime           @default(now())
-  updatedAt                         DateTime?          @updatedAt
-  availability                      String
-  contract_length                   String?
-  expected_start_date               DateTime?
-  salary_range_from                 Decimal?
-  salary_range_to                   Decimal?
-  specialization                    String?
-  location                          String?
-  assign_user_id                    String?
-  createdByUserId                   String?
-  hubspot_contract_amount           Decimal?
-  hubspot_language                  String?
-  hubspot_numberVA                  Int?
-  hubspot_role_type                 String?
-  hubspot_ticket_id                 String?            @unique
-  hubspot_business_unit             String?
-  hubspot_company_name              String?
-  hubspot_company_url               String?
-  hubspot_pairing_request_type      String?
-  hubspot_pipeline                  String?
-  hubspot_pipeline_stage            String?
-  hubspot_ticket_type               String?
-  hubspot_tasks                     String?
-  hubspot_n2_monitors_required      String?
-  hubspot_va_shift_hours            String?
-  other_shift_hours                 String?
-  hubspot_tools_familiarization     String?
-  hubspot_training_request_notes    String?
-  hubspot_camera_on_during_shift    String?
-  hubspot_special_sourcing_needed   String?
-  hubspot_special_requirements      String?
-  hubspot_additional_training_requested String?
-  hubspot_pairing_date              String? //String for avoid misunderstanding about timeZone
-  hubspot_pairing_time              String?
-  background_requirements_of_candidate String?
-  request_role                      String?
-  assign_staffing_coordinator       String?
+  id                                       String            @id @default(uuid())
+  org_id                                   String
+  title                                    String
+  description                              String?
+  status                                   HireRequestStatus @default(new)
+  priority                                 Priority          @default(medium)
+  createdAt                                DateTime          @default(now())
+  updatedAt                                DateTime?         @updatedAt
+  availability                             String
+  contract_length                          String?
+  expected_start_date                      DateTime?
+  salary_range_from                        Decimal?
+  salary_range_to                          Decimal?
+  specialization                           String?
+  location                                 String?
+  assign_user_id                           String?
+  createdByUserId                          String?
+  hubspot_contract_amount                  Decimal?
+  hubspot_language                         String?
+  hubspot_numberVA                         Int?
+  hubspot_role_type                        String?
+  hubspot_ticket_id                        String?           @unique
+  hubspot_business_unit                    String?
+  hubspot_company_name                     String?
+  hubspot_company_url                      String?
+  hubspot_pairing_request_type             String?
+  hubspot_pipeline                         String?
+  hubspot_pipeline_stage                   String?
+  hubspot_ticket_type                      String?
+  hubspot_tasks                            String?
+  hubspot_n2_monitors_required             String?
+  hubspot_va_shift_hours                   String?
+  other_shift_hours                        String?
+  hubspot_tools_familiarization            String?
+  hubspot_training_request_notes           String?
+  hubspot_camera_on_during_shift           String?
+  hubspot_special_sourcing_needed          String?
+  hubspot_special_requirements             String?
+  hubspot_additional_training_requested    String?
+  hubspot_pairing_date                     String? //String for avoid misunderstanding about timeZone
+  hubspot_pairing_time                     String?
+  background_requirements_of_candidate     String?
+  request_role                             String?
+  assign_staffing_coordinator              String?
   client_signed_contract_ticket_submission String?
-  client_signed_contract_closing_ticket String?
+  client_signed_contract_closing_ticket    String?
 
+  description_summary  String?
+  summary_generated_at DateTime?
 
-  description_summary               String?
-  summary_generated_at              DateTime?
-
-  hubspot_tasks_summary             String?
+  hubspot_tasks_summary              String?
   hubspot_tasks_summary_generated_at DateTime?
 
-  cancel_date                       DateTime?
-  cancel_reason                     String?
+  cancel_date   DateTime?
+  cancel_reason String?
 
-  assign_sourcing_id                String?
-  old_status                        HireRequestStatus?
-  staff_to_be_replaced_id           String?
-  offer_panel_id                    String?            @unique
-  staff_to_be_replaced              Staff?             @relation("StaffToBeReplaced", fields: [staff_to_be_replaced_id], references: [id])
-  offerPanel                        OfferPanel?        @relation(fields: [offer_panel_id], references: [id])
-  panels                            CandidatePanel[]
-  assigned_sourcing                 USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
-  assigned_staffing                 USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
-  assigned_users                    USER[]             @relation("AssignedUsers")
-  createdBy                         USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
-  organization                      Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  skills                            HireRequestSkill[]
-  staff                             Staff[]
-  tickets                           Ticket[]
+  assign_sourcing_id      String?
+  old_status              HireRequestStatus?
+  staff_to_be_replaced_id String?
+  offer_panel_id          String?            @unique
+  staff_to_be_replaced    Staff?             @relation("StaffToBeReplaced", fields: [staff_to_be_replaced_id], references: [id])
+  offerPanel              OfferPanel?        @relation(fields: [offer_panel_id], references: [id])
+  panels                  CandidatePanel[]
+  assigned_sourcing       USER?              @relation("AssignedSourcing", fields: [assign_sourcing_id], references: [id])
+  assigned_staffing       USER?              @relation("AssignedStaffing", fields: [assign_staffing_coordinator], references: [id])
+  assigned_users          USER[]             @relation("AssignedUsers")
+  createdBy               USER?              @relation("HireRequestCreatedBy", fields: [createdByUserId], references: [id])
+  organization            Organization       @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  skills                  HireRequestSkill[]
+  staff                   Staff[]
+  tickets                 Ticket[]
 
   @@index([org_id], map: "idx_hire_requests_org_id")
   @@index([status], map: "idx_hire_requests_status")
@@ -497,7 +518,7 @@ model CandidatePanel {
   scheduled_date  DateTime?
   decided_date    DateTime?
   createdAt       DateTime         @default(now())
-  updatedAt       DateTime?         @updatedAt
+  updatedAt       DateTime?        @updatedAt
   readable        Boolean          @default(false)
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
@@ -514,11 +535,11 @@ model PanelCandidate {
   candidate_id    String
   status          PanelCandidateStatus @default(selected)
   createdAt       DateTime             @default(now())
-  updatedAt       DateTime?             @updatedAt
+  updatedAt       DateTime?            @updatedAt
   createdByUserId String?
   candidate       Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
   panel           CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
-  createdBy       USER?              @relation("PanelCandidateCreatedBy", fields: [createdByUserId], references: [id])
+  createdBy       USER?                @relation("PanelCandidateCreatedBy", fields: [createdByUserId], references: [id])
 
   @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
   @@index([panel_id], map: "idx_panel_candidates_panel_id")
@@ -550,30 +571,38 @@ model Interview {
 }
 
 model Ticket {
-  id            String        @id @default(uuid())
-  user_id       String?
-  title         String
-  description   String
-  status        TicketStatus  @default(new)
-  createdAt     DateTime      @default(now())
-  type          String
-  org_id        String?
-  priority      Priority
-  staff_id      String?
-  candidate_id  String?
-  hireRequest_id  String?
-  offer_panel_id  String?
-  updatedAt       DateTime      @updatedAt
-  created_by    String?
-  candidate     Candidate?    @relation(fields: [candidate_id], references: [id])
-  organization  Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  staff         Staff?        @relation(fields: [staff_id], references: [id])
-  hireRequest   HireRequest?  @relation(fields: [hireRequest_id], references: [id])
-  offerPanel    OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
-  user          USER?         @relation(fields: [user_id], references: [id])
-  createdBy     USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
-  TicketNotes   TicketNotes[]
+  id             String        @id @default(uuid())
+  user_id        String?
+  title          String
+  description    String
+  status         TicketStatus  @default(new)
+  createdAt      DateTime      @default(now())
+  type           String
+  org_id         String?
+  priority       Priority
+  staff_id       String?
+  candidate_id   String?
+  hireRequest_id String?
+  offer_panel_id String?
+  updatedAt      DateTime      @updatedAt
+  created_by     String?
+  // Soft delete. deleted_by/deletion_reason are denormalized here (the full history lives in
+  // TicketAuditLog) so tombstone listings render "deleted by X" without a correlated subquery.
+  deleted_at      DateTime?
+  deleted_by      String?
+  deletion_reason String?
+  candidate      Candidate?    @relation(fields: [candidate_id], references: [id])
+  organization   Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  staff          Staff?        @relation(fields: [staff_id], references: [id])
+  hireRequest    HireRequest?  @relation(fields: [hireRequest_id], references: [id])
+  offerPanel     OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
+  user           USER?         @relation(fields: [user_id], references: [id])
+  createdBy      USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
+  deletedBy      USER?         @relation("TicketDeletedBy", fields: [deleted_by], references: [id])
+  TicketNotes    TicketNotes[]
 
+  @@index([deleted_at], map: "idx_tickets_deleted_at")
+  @@index([deleted_at, status], map: "idx_tickets_deleted_at_status")
   @@index([user_id], map: "idx_tickets_user_id")
   @@index([type], map: "idx_tickets_type")
   @@index([status], map: "idx_tickets_status")
@@ -634,16 +663,19 @@ model Staff {
 }
 
 model Bonus {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   staff_id    String
   amount      Decimal
   description String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
   created_by  String?
-  staff       Staff    @relation(fields: [staff_id], references: [id], onDelete: Cascade)
+  // Soft-deleted alongside the bonus Ticket that created it, so deletion stays reversible.
+  deleted_at  DateTime?
+  staff       Staff     @relation(fields: [staff_id], references: [id], onDelete: Cascade)
 
   @@index([staff_id], map: "idx_bonus_staff_id")
+  @@index([deleted_at], map: "idx_bonus_deleted_at")
 }
 
 model Mail_Settings {
@@ -674,10 +706,10 @@ model TicketNotes {
 model TalentPoolLead {
   id                  String    @id @default(uuid())
   name                String    @db.VarChar(255)
-  first_name           String?   @db.VarChar(255)
-  last_name            String?   @db.VarChar(255)
-  website_url          String?   @db.VarChar(500)
-  language_preference  String?   @db.VarChar(50)
+  first_name          String?   @db.VarChar(255)
+  last_name           String?   @db.VarChar(255)
+  website_url         String?   @db.VarChar(500)
+  language_preference String?   @db.VarChar(50)
   email               String    @db.VarChar(255)
   organization        String    @db.VarChar(255)
   main_need           String?
@@ -699,29 +731,29 @@ model TalentPoolLead {
 }
 
 model Contact {
-  id                       String    @id @default(uuid())
-  user_id                  String?    @unique
-  hubspot_id               String?   @unique
+  id                         String   @id @default(uuid())
+  user_id                    String?  @unique
+  hubspot_id                 String?  @unique
   hubspot_id_before_deletion String?
-  organization_id          String?
-  first_name               String?
-  last_name                String?
-  email                    String?
-  phone                    String?
-  job_title                String?
-  company_name              String?
-  business_unit             String?
-  account_type              String?
-  website_url               String?
-  type                      String?
-  referral_source           String?
-  hubspot_owner_id          String?
-  hubspot_billcom_vendor_id String?
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  organization_id            String?
+  first_name                 String?
+  last_name                  String?
+  email                      String?
+  phone                      String?
+  job_title                  String?
+  company_name               String?
+  business_unit              String?
+  account_type               String?
+  website_url                String?
+  type                       String?
+  referral_source            String?
+  hubspot_owner_id           String?
+  hubspot_billcom_vendor_id  String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
-  user             USER?            @relation(fields: [user_id], references: [id], onDelete: SetNull)
-  organization     Organization?    @relation(fields: [organization_id], references: [id])
+  user              USER?              @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  organization      Organization?      @relation(fields: [organization_id], references: [id])
   affiliateProfiles AffiliateProfile[]
 
   @@index([user_id], map: "idx_contacts_user_id")
@@ -731,30 +763,29 @@ model Contact {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   tokenHash String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
-  user      USER @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user USER @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-
 model PositionRateConfig {
-  id                                  String   @id @default(uuid())
-  position                            String   @unique
-  medVirtual_floor_price_english      Decimal?
-  medVirtual_floor_price_bilingual    Decimal?
-  medVirtual_margin_per_hour          Decimal?
-  berryVirtual_floor_price_english    Decimal?
-  berryVirtual_floor_price_bilingual  Decimal?
-  berryVirtual_margin_per_hour         Decimal?
-  createdAt                           DateTime @default(now())
-  updatedAt                           DateTime @updatedAt
+  id                                 String   @id @default(uuid())
+  position                           String   @unique
+  medVirtual_floor_price_english     Decimal?
+  medVirtual_floor_price_bilingual   Decimal?
+  medVirtual_margin_per_hour         Decimal?
+  berryVirtual_floor_price_english   Decimal?
+  berryVirtual_floor_price_bilingual Decimal?
+  berryVirtual_margin_per_hour       Decimal?
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime @updatedAt
 }
 
 // =============================================================================
@@ -782,16 +813,20 @@ model AffiliateProfile {
   created_by                  String?
   createdAt                   DateTime        @default(now())
   updatedAt                   DateTime        @updatedAt
+  // Multi Business Unit — tags the BU slug that caused this affiliate profile to be
+  // soft-deactivated (cron reconcile / dormant BU). Cleared on reactivation.
+  deactivated_by_bu           String?
 
-  user           USER?                  @relation(fields: [user_id], references: [id])
-  contact        Contact?               @relation(fields: [contact_id], references: [id])
+  user           USER?                    @relation(fields: [user_id], references: [id])
+  contact        Contact?                 @relation(fields: [contact_id], references: [id])
   commissions    AffiliateCommission[]
   payoutRequests AffiliatePayoutRequest[]
 
-  contact_id     String? 
+  contact_id String?
 
   @@index([status], map: "idx_affiliate_profiles_status")
   @@index([user_id], map: "idx_affiliate_profiles_user_id")
+  @@index([deactivated_by_bu], map: "idx_affiliate_profiles_deactivated_by_bu")
 }
 
 // HubspotInvoiceSnapshot
@@ -799,23 +834,23 @@ model AffiliateProfile {
 // Used as the source of truth for commission detection. Never mutated after
 // commission creation; raw_payload enables replay if parsing logic changes.
 model HubspotInvoiceSnapshot {
-  id             String    @id @default(uuid())
-  hubspot_id     String    @unique
-  organization_id String
-  invoice_status String
-  payment_status String?
-  invoice_amount Decimal   @db.Decimal(14, 2)
-  currency       String    @default("USD") @db.VarChar(3)
-  paid_at        DateTime?
-  due_date       DateTime?
-  sync_hash      String?
-  raw_payload    Json?
+  id               String    @id @default(uuid())
+  hubspot_id       String    @unique
+  organization_id  String
+  invoice_status   String
+  payment_status   String?
+  invoice_amount   Decimal   @db.Decimal(14, 2)
+  currency         String    @default("USD") @db.VarChar(3)
+  paid_at          DateTime?
+  due_date         DateTime?
+  sync_hash        String?
+  raw_payload      Json?
   hubspot_pdf_link String?
-  invoice_number  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  invoice_number   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  organization Organization            @relation(fields: [organization_id], references: [id])
+  organization Organization              @relation(fields: [organization_id], references: [id])
   commissions  AffiliateCommission[]
   lineItems    HubspotLineItemSnapshot[]
 
@@ -863,22 +898,22 @@ model AffiliateCommission {
   createdAt                   DateTime         @default(now())
   updatedAt                   DateTime         @updatedAt
 
-  affiliate              USER                              @relation("AffiliateCommissions", fields: [affiliate_id], references: [id])
+  affiliate                USER                               @relation("AffiliateCommissions", fields: [affiliate_id], references: [id])
   // Back-relation to AffiliateProfile — enables AffiliateProfile.commissions[]
-  affiliateProfile       AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
-  organization           Organization                      @relation(fields: [organization_id], references: [id])
-  hubspotInvoiceSnapshot HubspotInvoiceSnapshot            @relation(fields: [hubspot_invoice_snapshot_id], references: [id])
-  adminDecisionBy        USER?                             @relation("CommissionAdminDecision", fields: [admin_decision_by], references: [id])
+  affiliateProfile         AffiliateProfile                   @relation(fields: [affiliate_profile_id], references: [id])
+  organization             Organization                       @relation(fields: [organization_id], references: [id])
+  hubspotInvoiceSnapshot   HubspotInvoiceSnapshot             @relation(fields: [hubspot_invoice_snapshot_id], references: [id])
+  adminDecisionBy          USER?                              @relation("CommissionAdminDecision", fields: [admin_decision_by], references: [id])
   // Junction records linking this commission to payout requests
   payoutRequestCommissions AffiliatePayoutRequestCommission[]
 
+  // Enforces one commission per invoice snapshot — closes the gap left by the hash-based idempotency_key
+  @@unique([hubspot_invoice_snapshot_id], map: "uq_affiliate_commissions_invoice_snapshot")
   // Scoped listing: all commissions for a given affiliate filtered by status
   @@index([affiliate_id, status], map: "idx_affiliate_commissions_affiliate_status")
   // Scoped listing: all commissions for a given organization filtered by status
   @@index([organization_id, status], map: "idx_affiliate_commissions_org_status")
   @@index([status], map: "idx_affiliate_commissions_status")
-  // Enforces one commission per invoice snapshot — closes the gap left by the hash-based idempotency_key
-  @@unique([hubspot_invoice_snapshot_id], map: "uq_affiliate_commissions_invoice_snapshot")
 }
 
 // AffiliatePayoutRequest
@@ -887,41 +922,41 @@ model AffiliateCommission {
 //            requested → approved → paid  (legacy path kept for backwards compat).
 // The set of commissions included is stored in AffiliatePayoutRequestCommission.
 model AffiliatePayoutRequest {
-  id                    String              @id @default(uuid())
-  affiliate_id          String
-  affiliate_profile_id  String
-  status                PayoutRequestStatus @default(requested)
-  requested_amount      Decimal             @db.Decimal(14, 2)
-  approved_amount       Decimal?            @db.Decimal(14, 2)
-  paid_amount           Decimal?            @db.Decimal(14, 2)
-  payment_method        PayoutMethod?
-  payment_reference     String?
-  transaction_reference String?
-  payment_proof_notes   String?
-  bill_com_billId       String?
-  bill_com_payment_id   String?
-  bill_com_status       String?
-  bill_com_paymentStatus String?
+  id                      String              @id @default(uuid())
+  affiliate_id            String
+  affiliate_profile_id    String
+  status                  PayoutRequestStatus @default(requested)
+  requested_amount        Decimal             @db.Decimal(14, 2)
+  approved_amount         Decimal?            @db.Decimal(14, 2)
+  paid_amount             Decimal?            @db.Decimal(14, 2)
+  payment_method          PayoutMethod?
+  payment_reference       String?
+  transaction_reference   String?
+  payment_proof_notes     String?
+  bill_com_billId         String?
+  bill_com_payment_id     String?
+  bill_com_status         String?
+  bill_com_paymentStatus  String?
   bill_com_approvalStatus String?
-  bill_com_error        String?
-  approved_by           String?
-  approved_at           DateTime?
-  paid_at               DateTime?
-  rejection_reason      String?
-  reviewed_by           String?
-  reviewed_at           DateTime?
-  cancellation_reason   String?
-  cancelled_by          String?
-  cancelled_at          DateTime?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  bill_com_error          String?
+  approved_by             String?
+  approved_at             DateTime?
+  paid_at                 DateTime?
+  rejection_reason        String?
+  reviewed_by             String?
+  reviewed_at             DateTime?
+  cancellation_reason     String?
+  cancelled_by            String?
+  cancelled_at            DateTime?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
 
-  affiliate        USER                              @relation("AffiliatePayoutRequests", fields: [affiliate_id], references: [id])
+  affiliate        USER                               @relation("AffiliatePayoutRequests", fields: [affiliate_id], references: [id])
   // Back-relation to AffiliateProfile — enables AffiliateProfile.payoutRequests[]
-  affiliateProfile AffiliateProfile                  @relation(fields: [affiliate_profile_id], references: [id])
-  approvedBy       USER?                             @relation("PayoutApprovedBy", fields: [approved_by], references: [id])
-  reviewedBy       USER?                             @relation("PayoutReviewedBy", fields: [reviewed_by], references: [id])
-  cancelledBy      USER?                             @relation("PayoutCancelledBy", fields: [cancelled_by], references: [id])
+  affiliateProfile AffiliateProfile                   @relation(fields: [affiliate_profile_id], references: [id])
+  approvedBy       USER?                              @relation("PayoutApprovedBy", fields: [approved_by], references: [id])
+  reviewedBy       USER?                              @relation("PayoutReviewedBy", fields: [reviewed_by], references: [id])
+  cancelledBy      USER?                              @relation("PayoutCancelledBy", fields: [cancelled_by], references: [id])
   // Junction records linking this request to its selected commissions
   commissions      AffiliatePayoutRequestCommission[]
   // Admin + affiliate notes on this request
@@ -937,12 +972,12 @@ model AffiliatePayoutRequest {
 // PayoutRequestNote
 // Admin-to-admin (internal) or admin-to-affiliate (user) notes attached to a payout request.
 model PayoutRequestNote {
-  id                String            @id @default(uuid())
+  id                String         @id @default(uuid())
   payout_request_id String
   author_user_id    String?
   type              PayoutNoteType
   content           String
-  createdAt         DateTime          @default(now())
+  createdAt         DateTime       @default(now())
 
   payoutRequest AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
   author        USER?                  @relation("PayoutRequestNoteAuthor", fields: [author_user_id], references: [id])
@@ -1004,19 +1039,19 @@ model MedAllianceAdminReviewCase {
   status          AdminReviewStatus     @default(open)
 
   // Contextual payload stored at case-creation time (snapshot of trigger data)
-  metadata        Json?
+  metadata Json?
 
   // Resolution fields — populated when admin closes the case
-  resolved_by_id  String?
-  resolved_at     DateTime?
-  resolution      String?               // free-form note by the admin
+  resolved_by_id String?
+  resolved_at    DateTime?
+  resolution     String? // free-form note by the admin
 
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  organization    Organization          @relation(fields: [organization_id], references: [id])
-  resolvedBy      USER?                 @relation("ReviewCaseResolvedBy", fields: [resolved_by_id], references: [id])
+  organization Organization @relation(fields: [organization_id], references: [id])
+  resolvedBy   USER?        @relation("ReviewCaseResolvedBy", fields: [resolved_by_id], references: [id])
 
   // Deduplication: at most one open case per (org + reason)
   @@unique([organization_id, reason_code, status], name: "uq_open_review_case")
@@ -1221,9 +1256,10 @@ enum MedAllianceReferralStatus {
 
 // MA-006 — Reason why a review case was opened
 enum AdminReviewReasonCode {
-  multiple_hubspot_matches        // HubSpot returned 2+ company matches — admin must pick the correct one
-  reconciliation_invoice_changed  // A paid invoice was updated in HubSpot after commission was already detected
-  soft_duplicate_referral         // A referred org appears to match an existing referred org (name/email similarity)
+  multiple_hubspot_matches // HubSpot returned 2+ company matches — admin must pick the correct one
+  reconciliation_invoice_changed // A paid invoice was updated in HubSpot after commission was already detected
+  soft_duplicate_referral // A referred org appears to match an existing referred org (name/email similarity)
+  org_deleted_with_pending_payout // Org was deleted in HubSpot while commissions sit in a pending payout request — admin must decide pay vs void
 }
 
 // MA-006 — Lifecycle status of an admin review case
@@ -1284,11 +1320,55 @@ model HubspotAuditLog {
   actorUser USER? @relation("HubspotAuditActor", fields: [actor_user_id], references: [id])
 
   @@index([entity_type, entity_id, createdAt], map: "idx_hs_audit_entity_timeline")
-  @@index([actor_user_id],                      map: "idx_hs_audit_actor")
-  @@index([actor_label],                        map: "idx_hs_audit_actor_label")
-  @@index([source],                             map: "idx_hs_audit_source")
-  @@index([success],                            map: "idx_hs_audit_success")
-  @@index([createdAt],                          map: "idx_hs_audit_created_at")
+  @@index([actor_user_id], map: "idx_hs_audit_actor")
+  @@index([actor_label], map: "idx_hs_audit_actor_label")
+  @@index([source], map: "idx_hs_audit_source")
+  @@index([success], map: "idx_hs_audit_success")
+  @@index([createdAt], map: "idx_hs_audit_created_at")
+}
+
+// Append-only audit trail for the Ticket lifecycle. Never soft-delete or mutate records.
+//
+// ticket_id is deliberately NOT a foreign key: the log must survive a future hard purge of the
+// ticket row (data retention / erasure requests), matching MedAllianceAuditLog.entity_id and
+// HubspotAuditLog.entity_id.
+//
+// `event` is a plain String rather than an enum because ticket lifecycle events are an open,
+// business-defined set that grows over time; each new enum value would cost a migration.
+// Compile-time safety comes from the TICKET_AUDIT_EVENTS union in ticket-audit.service.ts.
+// `source` stays an enum — that set genuinely is closed.
+//
+// PII: `before`/`after` hold ticket-column state only and never carry ticket `description`,
+// note content, or recipient emails. `title` is stored only for system-generated ticket types.
+model TicketAuditLog {
+  id            String            @id @default(uuid())
+  ticket_id     String
+  actor_user_id String?
+  // Denormalized actor display name, so the log stays readable after a user is hard-deleted.
+  actor_label   String?
+  event         String
+  old_status    String?
+  new_status    String?
+  reason        String?
+  source        TicketAuditSource @default(user)
+  before        Json?
+  after         Json?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+
+  actorUser USER? @relation("TicketAuditActor", fields: [actor_user_id], references: [id])
+
+  @@index([ticket_id, createdAt], map: "idx_ticket_audit_timeline")
+  @@index([actor_user_id], map: "idx_ticket_audit_actor")
+  @@index([event], map: "idx_ticket_audit_event")
+  @@index([createdAt], map: "idx_ticket_audit_created_at")
+}
+
+enum TicketAuditSource {
+  user
+  system
+  cron
+  webhook
 }
 
 // @deprecated Superseded by per-user billcom_* fields on USER. Safe to drop
@@ -1338,33 +1418,33 @@ model OfferPanel {
   createdAt            DateTime                @default(now())
   updatedAt            DateTime                @updatedAt
 
-  createdBy        USER                    @relation("OfferPanelCreatedBy", fields: [created_by_user_id], references: [id])
-  recipientUser    USER?                   @relation("OfferPanelRecipientUser", fields: [recipient_user_id], references: [id])
-  recipientCompany Organization?           @relation("OfferPanelRecipientCompany", fields: [recipient_company_id], references: [id])
+  createdBy        USER                  @relation("OfferPanelCreatedBy", fields: [created_by_user_id], references: [id])
+  recipientUser    USER?                 @relation("OfferPanelRecipientUser", fields: [recipient_user_id], references: [id])
+  recipientCompany Organization?         @relation("OfferPanelRecipientCompany", fields: [recipient_company_id], references: [id])
   candidates       OfferPanelCandidate[]
   tickets          Ticket[]
   hireRequest      HireRequest?
 
-  @@index([status],               map: "idx_offer_panels_status")
-  @@index([created_by_user_id],   map: "idx_offer_panels_created_by")
-  @@index([recipient_user_id],    map: "idx_offer_panels_recipient_user")
+  @@index([status], map: "idx_offer_panels_status")
+  @@index([created_by_user_id], map: "idx_offer_panels_created_by")
+  @@index([recipient_user_id], map: "idx_offer_panels_recipient_user")
   @@index([recipient_company_id], map: "idx_offer_panels_recipient_company")
-  @@index([recipient_type],       map: "idx_offer_panels_recipient_type")
-  @@index([createdAt],            map: "idx_offer_panels_created_at")
+  @@index([recipient_type], map: "idx_offer_panels_recipient_type")
+  @@index([createdAt], map: "idx_offer_panels_created_at")
 }
 
 model OfferPanelCandidate {
-  id             String     @id @default(uuid())
+  id             String   @id @default(uuid())
   offer_panel_id String
   candidate_id   String
-  createdAt      DateTime   @default(now())
+  createdAt      DateTime @default(now())
 
   offerPanel OfferPanel @relation(fields: [offer_panel_id], references: [id], onDelete: Cascade)
   candidate  Candidate  @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
 
   @@unique([offer_panel_id, candidate_id], name: "idx_offer_panel_candidates_unique")
   @@index([offer_panel_id], map: "idx_offer_panel_candidates_panel_id")
-  @@index([candidate_id],   map: "idx_offer_panel_candidates_candidate_id")
+  @@index([candidate_id], map: "idx_offer_panel_candidates_candidate_id")
 }
 
 // ─── Editable Emails ─────────────────────────────────────────────────────────
@@ -1377,10 +1457,24 @@ model BusinessUnit {
   created_at DateTime @default(now())
   created_by String?
 
+  // --- Multi Business Unit (MMVA) fields ---
+  // Whether this BU is allowed to operate (visible/live) vs dormant (known but not yet activated).
+  is_visible     Boolean @default(false)
+  // Exact label used by the HubSpot `business_unit` company property (e.g. "MedVirtual", "Berry Virtual", "MMVA").
+  hubspot_value  String? @unique
+  // Candidate visibility pool this BU draws from: "medical" (sees all) | "non_medical" (restricted).
+  candidate_pool String  @default("medical")
+  // App branding
+  primary_color  String?
+  primary_hover  String?
+  logo_url       String?
+  favicon_url    String?
+
   branding  EmailBranding?
   templates EmailTemplate[]
 
   @@index([is_active], map: "idx_business_units_is_active")
+  @@index([is_visible], map: "idx_business_units_is_visible")
 }
 
 model EmailTemplate {
@@ -1406,10 +1500,10 @@ model EmailTemplate {
   history      EmailTemplateHistory[]
 
   @@unique([key, business_unit], map: "idx_email_templates_key_bu")
-  @@index([key],           map: "idx_email_templates_key")
+  @@index([key], map: "idx_email_templates_key")
   @@index([business_unit], map: "idx_email_templates_bu")
-  @@index([is_active],     map: "idx_email_templates_is_active")
-  @@index([category],      map: "idx_email_templates_category")
+  @@index([is_active], map: "idx_email_templates_is_active")
+  @@index([category], map: "idx_email_templates_category")
   @@index([functionality], map: "idx_email_templates_functionality")
 }
 
@@ -1430,7 +1524,7 @@ model EmailTemplateHistory {
   template EmailTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
 
   @@index([template_id], map: "idx_email_template_history_template_id")
-  @@index([changed_at],  map: "idx_email_template_history_changed_at")
+  @@index([changed_at], map: "idx_email_template_history_changed_at")
 }
 
 model EmailBranding {
@@ -1446,21 +1540,21 @@ model EmailBranding {
   updated_by        String?
   updated_at        DateTime @updatedAt
 
-  businessUnit BusinessUnit         @relation(fields: [business_unit], references: [slug])
+  businessUnit BusinessUnit           @relation(fields: [business_unit], references: [slug])
   history      EmailBrandingHistory[]
 
   @@index([business_unit], map: "idx_email_branding_bu")
 }
 
 model EmailBrandingHistory {
-  id         String   @id @default(uuid())
+  id          String   @id @default(uuid())
   branding_id String
-  snapshot   Json
-  changed_by String
-  changed_at DateTime @default(now())
+  snapshot    Json
+  changed_by  String
+  changed_at  DateTime @default(now())
 
   branding EmailBranding @relation(fields: [branding_id], references: [id], onDelete: Cascade)
 
   @@index([branding_id], map: "idx_email_branding_history_branding_id")
-  @@index([changed_at],  map: "idx_email_branding_history_changed_at")
+  @@index([changed_at], map: "idx_email_branding_history_changed_at")
 }

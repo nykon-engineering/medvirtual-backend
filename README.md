@@ -49,6 +49,28 @@ npx prisma generate
 npx prisma migrate dev
 ```
 
+### System dependency: poppler
+
+The candidate resume pipeline converts PDFs to page images with `pdftocairo`. In
+AWS Lambda this binary comes from the `poppler` layer mounted at `/opt/bin`
+(built by `layers/poppler/Dockerfile`), but locally you must install it:
+
+```bash
+# macOS
+brew install poppler
+
+# Debian/Ubuntu
+sudo apt-get install poppler-utils
+```
+
+Verify with `which pdftocairo`. No environment variable is needed — `node-poppler`
+auto-discovers a system install. Set `POPPLER_BIN_PATH` only if you need to point
+at a specific binary.
+
+Without poppler, any resume route fails with
+`No images could be converted from the PDF.` — an error that does not mention the
+missing dependency.
+
 ## 🔧 Environment Variables
 
 Create a `.env` file with the following variables:

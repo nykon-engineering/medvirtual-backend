@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { reRunPipelineDto } from './dto/re-run-pipeline.dto';
 import { CandidatesService } from '../candidate/candidates.service';
@@ -16,6 +16,17 @@ import quarterlyPayoutReport, {
 import medAllianceExpiredEligibilityReport, {
   ExpiredCompanyEntry,
 } from '../common/utils/email-templates/med-alliance-expired-eligibility-report';
+import offerPanelWeeklyReport, {
+  OfferPanelReportRow,
+  OfferPanelReportSection,
+} from '../common/utils/email-templates/offer-panel-weekly-report';
+import {
+  formatDuration,
+  getEtWeekWindow,
+  getZonedDateParts,
+  zonedWallClockToUtc,
+} from '../common/utils/formatDate';
+import { getBusinessUnitEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { MailService } from '../mail/mail.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { HireRequestService } from '../hire-request/hire-request.service';
@@ -30,10 +41,23 @@ import { CommissionDetectionService } from '../med-alliance/sync/commission-dete
 import { AllianceNotificationsService } from '../med-alliance/notifications/notifications.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { BusinessUnitsService } from '../business-units/business-units.service';
 
 type Event = {
   objectId?: string;
 };
+
+const REPORT_TIMEZONE = 'America/New_York';
+
+// Narrowed outside PROD so staging deploys cannot mail stakeholders every week.
+// MailService's [DEV] subject prefix alone would not prevent that. Read at call
+// time rather than module load so the environment is never captured too early.
+function getOfferPanelReportRecipients(): string[] {
+  return process.env.ENVIRONMENT === 'PROD'
+    ? ['hanieh@berryvirtual.com', 'paulo@regenta.ai', 'shayan@regenta.ai']
+    : ['paulo@regenta.ai'];
+}
 
 @Injectable()
 export class CronService {
@@ -50,6 +74,8 @@ export class CronService {
     private readonly allianceNotifications: AllianceNotificationsService,
     private readonly emailTemplates: EmailTemplatesService,
     private readonly contactDeletion: HandlerContactDeletion,
+    private readonly businessUnitContext: BusinessUnitContext,
+    private readonly businessUnitsService: BusinessUnitsService,
   ) {}
 
   // ── EmailTemplatesService fallback helper ─────────────────────────────────
@@ -682,7 +708,7 @@ export class CronService {
     );
     await this.mailService.sendMail({
       from: 'MedVirtual <noreply@medvirtual.ai>',
-      to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+      to: ['paulo@regenta.ai'],
       subject:
         tplQuarterly?.subject ?? `Quarterly Payout Report — ${quarterlyDate}`,
       html: quarterlyPayoutReport(successes, failures, runAt),
@@ -1026,6 +1052,7 @@ export class CronService {
         med_alliance_referral_status: {
           in: ['pending_confirmation', 'eligible', 'not_eligible'] as any,
         },
+        status: { not: 'deleted' },
       },
       select: {
         id: true,
@@ -1110,7 +1137,7 @@ export class CronService {
         );
         await this.mailService.sendMail({
           from: 'MedVirtual <noreply@medvirtual.ai>',
-          to: ['paulo@regenta.ai', 'pauli@regenta.ai'],
+          to: ['paulo@regenta.ai'],
           subject:
             tplExpired?.subject ??
             `Med Alliance — Expired Eligibility Report (${runDate})`,
@@ -1211,6 +1238,7 @@ export class CronService {
     const orgs = await this.prisma.organization.findMany({
       where: {
         referred_by_affiliate_id: profile.user_id,
+        status: { not: 'deleted' },
         hubspotInvoiceSnapshots: {
           some: { invoice_status: 'paid', invoice_amount: { gt: 0 } },
         },
@@ -1284,6 +1312,189 @@ export class CronService {
     });
 
     return { sent: true, count: commissions.length };
+  }
+
+  private formatEtTimestamp(date: Date): string {
+    return date.toLocaleString('en-US', {
+      timeZone: REPORT_TIMEZONE,
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+  }
+
+  async weeklyOfferPanelReport(weekOf?: string): Promise<{
+    sent: boolean;
+    totalPanels: number;
+    totalCreators: number;
+    weekStart: string;
+    weekEnd: string;
+    ranOnFridayEt: boolean;
+    error?: string;
+  }> {
+    // Anchor a backfill date at noon ET so it lands unambiguously inside its own
+    // civil day regardless of the UTC offset.
+    let now = new Date();
+    if (weekOf) {
+      const [year, month, day] = weekOf.split('-').map(Number);
+      if (!year || !month || !day) {
+        throw new BadRequestException(
+          `Invalid week_of value "${weekOf}". Expected format YYYY-MM-DD.`,
+        );
+      }
+      now = zonedWallClockToUtc(year, month, day, 12, 0, 0, 0, REPORT_TIMEZONE);
+    }
+
+    const { start, end, weekStartLabel, weekEndLabel } = getEtWeekWindow(
+      now,
+      REPORT_TIMEZONE,
+    );
+    const ranOnFridayEt = getZonedDateParts(now, REPORT_TIMEZONE).weekday === 5;
+
+    const panels = await this.prisma.offerPanel.findMany({
+      where: { createdAt: { gte: start, lte: end } },
+      select: {
+        id: true,
+        title: true,
+        business_unit: true,
+        status: true,
+        is_public: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        viewed_at: true,
+        view_count: true,
+        decided_at: true,
+        createdAt: true,
+        created_by_user_id: true,
+        createdBy: {
+          select: { id: true, first_name: true, last_name: true, email: true },
+        },
+        recipientCompany: { select: { name: true } },
+        _count: { select: { candidates: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const statusTotals = { sent: 0, viewed: 0, accepted: 0, declined: 0 };
+    const sectionsByCreator = new Map<string, OfferPanelReportSection>();
+
+    for (const panel of panels) {
+      if (panel.status in statusTotals) {
+        statusTotals[panel.status as keyof typeof statusTotals] += 1;
+      }
+
+      const creator = panel.createdBy;
+      const creatorId = panel.created_by_user_id;
+
+      let section = sectionsByCreator.get(creatorId);
+      if (!section) {
+        section = {
+          creatorId,
+          creatorName:
+            [creator?.first_name, creator?.last_name]
+              .filter(Boolean)
+              .join(' ')
+              .trim() ||
+            creator?.email ||
+            'Unknown user',
+          creatorEmail: creator?.email ?? '',
+          panels: [],
+        };
+        sectionsByCreator.set(creatorId, section);
+      }
+
+      const createdMs = panel.createdAt.getTime();
+      const row: OfferPanelReportRow = {
+        panelId: panel.id,
+        title: panel.title,
+        // recipient_org_name is null for recipient_type 'email' and often for
+        // client_user panels, so fall through to the contact then the address.
+        recipientLabel:
+          panel.recipient_org_name ||
+          panel.recipientCompany?.name ||
+          panel.recipient_name ||
+          panel.recipient_email ||
+          '—',
+        recipientSub: panel.recipient_email ?? '',
+        businessUnit: panel.business_unit ?? '—',
+        status: panel.status,
+        isPublic: panel.is_public,
+        candidateCount: panel._count.candidates,
+        createdAtLabel: this.formatEtTimestamp(panel.createdAt),
+        viewedAtLabel: panel.viewed_at
+          ? this.formatEtTimestamp(panel.viewed_at)
+          : null,
+        decidedAtLabel: panel.decided_at
+          ? this.formatEtTimestamp(panel.decided_at)
+          : null,
+        timeToViewLabel: panel.viewed_at
+          ? formatDuration(createdMs, panel.viewed_at.getTime())
+          : null,
+        timeToDecisionLabel: panel.decided_at
+          ? formatDuration(createdMs, panel.decided_at.getTime())
+          : null,
+        viewCount: panel.view_count,
+      };
+
+      section.panels.push(row);
+    }
+
+    const sections = [...sectionsByCreator.values()].sort(
+      (a, b) =>
+        b.panels.length - a.panels.length ||
+        a.creatorName.localeCompare(b.creatorName),
+    );
+
+    const theme = await getBusinessUnitEmailTheme(this.prisma, 'MedVirtual');
+
+    // Subject and body are intentionally hardcoded: this is an internal
+    // maintenance report, not client-facing copy, so it is not an EmailTemplate.
+    const html = offerPanelWeeklyReport(
+      {
+        weekStartLabel,
+        weekEndLabel,
+        generatedAtLabel: this.formatEtTimestamp(new Date()),
+        totalPanels: panels.length,
+        totalCreators: sections.length,
+        statusTotals,
+        sections,
+        offScheduleNote: ranOnFridayEt
+          ? null
+          : 'This report ran outside the usual Friday schedule, so the week it covers may still be in progress.',
+      },
+      theme,
+    );
+
+    const result = {
+      totalPanels: panels.length,
+      totalCreators: sections.length,
+      weekStart: start.toISOString(),
+      weekEnd: end.toISOString(),
+      ranOnFridayEt,
+    };
+
+    try {
+      await this.mailService.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: getOfferPanelReportRecipients(),
+        subject: `Offer Panel Report — ${weekStartLabel} to ${weekEndLabel}`,
+        html,
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      console.error('weeklyOfferPanelReport: failed to send email', error);
+      return { sent: false, ...result, error };
+    }
+
+    console.log(
+      `weeklyOfferPanelReport: window=${weekStartLabel}..${weekEndLabel} panels=${panels.length} creators=${sections.length}`,
+    );
+
+    return { sent: true, ...result };
   }
 
   async reconcileAffiliateContacts(): Promise<{
@@ -1524,5 +1735,162 @@ export class CronService {
     }
 
     return { updated, skipped, errors, preview };
+  }
+
+  /**
+   * Daily cron (Task 05 — Multi Business Unit): reads the HubSpot `business_unit`
+   * company property options and reconciles our `BusinessUnit` table against them.
+   *
+   * - Upsert (additions): every option becomes/stays a row in `BusinessUnit`. New
+   *   options are created dormant (`is_visible=false`, `candidate_pool='medical'`).
+   *   Existing rows are NEVER flipped visible/invisible here — only a super-admin
+   *   (or the reconcile-removal branch below) changes `is_visible`.
+   * - Reconcile (removals) WITH SAFEGUARD: a BU whose `hubspot_value` is no longer
+   *   present among the HubSpot options is decommissioned — `is_visible=false` and
+   *   every related Organization/USER/Candidate/AffiliateProfile row is tagged
+   *   `deactivated_by_bu=<slug>` (and soft-deleted using each model's existing
+   *   convention: Organization.status=deleted, USER.status=inactive,
+   *   AffiliateProfile.status=inactive; Candidate has no status enum so it is only
+   *   tagged). This step ONLY runs when the HubSpot GET returned HTTP 200 with a
+   *   valid, non-empty `options` array — any other outcome aborts the reconcile
+   *   (upserts still run) so a transient HubSpot outage can never wipe data.
+   *
+   * Idempotent (safe to re-run) and never hard-deletes a `BusinessUnit` row.
+   */
+  async syncBusinessUnits(): Promise<{
+    upserted: string[];
+    removed: string[];
+    aborted: boolean;
+    reason?: string;
+  }> {
+    const upserted: string[] = [];
+    const removed: string[] = [];
+    let aborted = false;
+    let abortReason: string | undefined;
+
+    let options: { label: string }[] | null = null;
+
+    try {
+      const response = await axios.get(
+        'https://api.hubapi.com/crm/v3/properties/companies/business_unit',
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      const isValidRead =
+        response?.status === 200 &&
+        Array.isArray(response?.data?.options) &&
+        response.data.options.length > 0;
+
+      if (isValidRead) {
+        options = response.data.options as { label: string }[];
+      } else {
+        aborted = true;
+        abortReason = `HubSpot business_unit property read was invalid (status=${response?.status}, options=${JSON.stringify(response?.data?.options)})`;
+      }
+    } catch (error) {
+      aborted = true;
+      abortReason = `HubSpot business_unit property read failed: ${(error as Error).message}`;
+    }
+
+    if (aborted || !options) {
+      console.error(
+        `syncBusinessUnits: ABORTING reconcile-removal step — ${abortReason}. No BusinessUnit visibility/cascade changes were made.`,
+      );
+      return { upserted, removed, aborted: true, reason: abortReason };
+    }
+
+    // ── Upsert (additions) — never flips visibility of an existing row ───────
+    const existingRows = await this.prisma.businessUnit.findMany();
+
+    for (const option of options) {
+      const label = option.label;
+      const slug = this.businessUnitContext.displayToSlug(label);
+      if (!slug) continue;
+
+      await this.prisma.businessUnit.upsert({
+        where: { slug },
+        create: {
+          slug,
+          name: label,
+          hubspot_value: label,
+          candidate_pool: 'medical',
+          is_visible: false,
+        },
+        update: {
+          // Keep hubspot_value in sync with HubSpot's current label spelling,
+          // but never touch is_visible here.
+          hubspot_value: label,
+        },
+      });
+
+      // Guarantee the 1:1 BU↔EmailBranding invariant at intake. `create()` and
+      // `seed.ts` create a companion branding row per BU; the cron is the ONLY
+      // real intake path, so without this a HubSpot-discovered BU has no
+      // branding row and editing its "Customize Design" would 404. Empty
+      // `update: {}` makes this create-once and never clobbers later edits.
+      await this.prisma.emailBranding.upsert({
+        where: { business_unit: slug },
+        create: {
+          business_unit: slug,
+          primary_color: '#01546B',
+          secondary_color: '#013A4F',
+          logo_url: 'https://staging.medvirtual.ai/logo.png',
+          company_name: label,
+          layout_preset: 'default',
+          button_color: null,
+          button_text_color: null,
+          updated_by: 'system',
+        },
+        update: {},
+      });
+
+      upserted.push(slug);
+    }
+
+    // ── Reconcile (removals) — only reached when options is valid+non-empty ──
+    // Compared by normalized hubspot_value (not slug) since a BU's slug can be
+    // hyphenated/spelled differently than a straight lowercase of the label.
+    const hubspotValuesNormalized = new Set(
+      options.map((o) =>
+        this.businessUnitContext.normalizeBusinessUnit(o.label),
+      ),
+    );
+
+    const decommissioned = existingRows.filter(
+      (row) =>
+        row.hubspot_value &&
+        !hubspotValuesNormalized.has(
+          this.businessUnitContext.normalizeBusinessUnit(row.hubspot_value),
+        ),
+    );
+
+    for (const bu of decommissioned) {
+      const buValue = bu.hubspot_value ?? bu.name;
+
+      // Shared cascade: flips is_visible=false, soft-deletes orgs, deactivates
+      // their users, tags candidates, sets affiliates inactive — all tagged
+      // deactivated_by_bu=slug — and busts the BU context cache.
+      await this.businessUnitsService.deactivateByBu(bu.slug, buValue);
+
+      removed.push(bu.slug);
+      console.log(
+        `syncBusinessUnits: decommissioned BU "${bu.slug}" — is_visible=false, cascaded soft-delete tagged deactivated_by_bu="${bu.slug}"`,
+      );
+    }
+
+    // Bust the BU context cache once at the end so upsert-only runs (which
+    // never enter deactivateByBu) still invalidate the cache.
+    this.businessUnitContext.bustCache();
+
+    console.log(
+      `syncBusinessUnits: done. upserted=${upserted.length}, removed=${removed.length}`,
+    );
+
+    return { upserted, removed, aborted: false };
   }
 }

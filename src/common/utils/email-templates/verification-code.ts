@@ -1,3 +1,4 @@
+import { getEmailLogoCss, getEmailLogoImg } from './components';
 import { EmailTheme } from './theme';
 
 export default function getVerificationCodeTemplate(
@@ -43,14 +44,7 @@ export default function getVerificationCodeTemplate(
     .content {
       padding: 40px 30px;
     }
-    .logo {
-      text-align: left;
-      margin-bottom: 30px;
-    }
-    .logo img {
-      max-width: 200px;
-      height: auto;
-    }
+${getEmailLogoCss()}
     .greeting {
       color: #333333;
       font-size: 16px;
@@ -152,7 +146,13 @@ export default function getVerificationCodeTemplate(
     <div class="container">
       <div class="content">
         <div class="logo">
-          <img src="https://staging.medvirtual.ai/${isBerryVirtual ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+          ${getEmailLogoImg(
+            // The explicit isBerryVirtual flag wins over the theme: some callers pass
+            // it without a matching theme, and dropping it would switch their logo.
+            isBerryVirtual && !theme?.logoUrl
+              ? ({ companyName: 'Berry Virtual' } as EmailTheme)
+              : theme,
+          )}
         </div>
       
       <div class="greeting">Hi,</div>

@@ -10,6 +10,11 @@ import { UpdateEmailTemplateDto } from './dto/update-email-template.dto';
 import { PreviewEmailTemplateDto } from './dto/preview-email-template.dto';
 import { TestSendEmailTemplateDto } from './dto/test-send-email-template.dto';
 import { EmailTheme } from '../common/utils/email-templates/theme';
+import {
+  getEmailLogoCss,
+  getEmailLogoImg,
+  getLogoUrl,
+} from '../common/utils/email-templates/components';
 
 // Sample data used when filling placeholders for preview / test-send
 const SAMPLE_DATA: Record<string, string> = {
@@ -642,9 +647,10 @@ export class EmailTemplatesService {
     const filledButtonLabel = buttonLabel
       ? this.applyPlaceholders(buttonLabel, overrides)
       : buttonLabel;
-    const logoUrl =
-      branding.logoUrl ??
-      `https://staging.medvirtual.ai/${branding.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}`;
+    const logoUrl = getLogoUrl({
+      logoUrl: branding.logoUrl,
+      companyName: branding.companyName,
+    });
 
     const htmlBody = filledBody.replace(/\n/g, '<br>');
 
@@ -670,7 +676,10 @@ export class EmailTemplatesService {
     const headerHtml = this.renderHeaderForPreset(preset, branding, logoUrl);
     const inlineLogoHtml =
       preset === 'minimal'
-        ? `<div class="logo"><img src="${logoUrl}" alt="${branding.companyName} Logo" /></div>`
+        ? `<div class="logo">${getEmailLogoImg({
+            logoUrl,
+            companyName: branding.companyName,
+          })}</div>`
         : '';
 
     return `<!DOCTYPE html>
@@ -683,9 +692,7 @@ export class EmailTemplatesService {
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
     .email-wrapper { background-color: #f4f4f4; padding: 20px; min-height: 100vh; }
     .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
-    .content { padding: 40px 30px; }
-    .logo { text-align: left; margin-bottom: 30px; }
-    .logo img { max-width: 200px; height: auto; }
+    .content { padding: 40px 30px; }${getEmailLogoCss()}
     .headline { color: #333333; font-size: 22px; font-weight: 700; margin-bottom: 20px; }
     .body-text { color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px; }
     .footer { border-top: 1px solid #e9ecef; padding: 20px 30px; margin-top: 30px; }
@@ -735,6 +742,11 @@ export class EmailTemplatesService {
     branding: { primaryColor: string; companyName: string },
     logoUrl: string,
   ): string {
+    const logoImg = getEmailLogoImg({
+      logoUrl,
+      companyName: branding.companyName,
+    });
+
     switch (preset) {
       case 'minimal':
         // No banner section — the logo is rendered inline inside .content instead.
@@ -743,13 +755,13 @@ export class EmailTemplatesService {
       case 'hero':
         return `<div style="background:${branding.primaryColor}33;padding:48px 20px;text-align:center;">
         <div style="height:4px;width:64px;background:${branding.primaryColor};margin:0 auto 20px;border-radius:2px;"></div>
-        <img src="${logoUrl}" alt="${branding.companyName} Logo" style="max-width:220px;height:auto;" />
+        <div style="display:inline-block;">${logoImg}</div>
       </div>`;
 
       case 'default':
       default:
         return `<div style="background:${branding.primaryColor};padding:30px 20px;text-align:center;">
-        <img src="${logoUrl}" alt="${branding.companyName} Logo" style="max-width:200px;height:auto;" />
+        <div style="display:inline-block;">${logoImg}</div>
       </div>`;
     }
   }

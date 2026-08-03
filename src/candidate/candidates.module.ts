@@ -10,6 +10,7 @@ import { MailModule } from '../mail/mail.module';
 import { HireRequestModule } from '../hire-request/hire-request.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PositionRateConfigModule } from '../position-rate-config/position-rate-config.module';
+import { BusinessUnitsModule } from '../business-units/business-units.module';
 
 @Module({
   controllers: [CandidatesController],
@@ -24,6 +25,7 @@ import { PositionRateConfigModule } from '../position-rate-config/position-rate-
     forwardRef(() => HireRequestModule),
     NotificationsModule,
     PositionRateConfigModule,
+    BusinessUnitsModule,
   ],
   exports: [CandidatesService],
 })

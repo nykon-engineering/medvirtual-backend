@@ -7,13 +7,39 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { HubspotAuditService } from '../hubspot-audit.service';
+import { BusinessUnitContext } from '../../business-units/business-unit-context.service';
 
 @Injectable()
 export class OrganizationCreationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: HubspotAuditService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
+
+  /**
+   * Normalize the outbound `business_unit` we push to HubSpot for an
+   * app-created company. Resolves through `BusinessUnitContext` (the same
+   * data-driven table used by the intake gates) so ANY visible BU — not just
+   * Med/Berry — round-trips with the exact `hubspot_value` HubSpot expects.
+   *
+   * Kept behavior-identical for the historical case: the old hardcoded rule
+   * only special-cased the literal `'Med Virtual'` (mapping it to
+   * `'MedVirtual'`); every other input (including `'MedVirtual'` and
+   * `'Berry Virtual'`) passed through unchanged. `resolveByHubspotValue`
+   * normalizes spacing/case, so `'Med Virtual'` still resolves to the
+   * `hubspot_value` `'MedVirtual'` and Berry/other known values resolve to
+   * their own `hubspot_value` — an unrecognized value falls back to the
+   * raw input (same as before, no destructive rewrite).
+   */
+  private async resolveOutboundBusinessUnit(
+    businessUnit: string | undefined,
+  ): Promise<string> {
+    if (!businessUnit) return '';
+    const bu =
+      await this.businessUnitContext.resolveByHubspotValue(businessUnit);
+    return bu?.hubspot_value ?? bu?.name ?? businessUnit;
+  }
 
   async getOwnerId(userId: string): Promise<string | null> {
     if (!userId) return null;
@@ -66,6 +92,9 @@ export class OrganizationCreationService {
       ? HubspotAuditSource.user_action
       : HubspotAuditSource.cron;
     try {
+      const businessUnit = await this.resolveOutboundBusinessUnit(
+        data.business_unit,
+      );
       const response = await axios.post(
         'https://api.hubapi.com/crm/v3/objects/companies',
         {
@@ -84,10 +113,7 @@ export class OrganizationCreationService {
             phone: data.phone || '',
             referral_email: data.email || '',
             type: data.type || '',
-            business_unit:
-              data.business_unit === 'Med Virtual'
-                ? 'MedVirtual'
-                : data.business_unit || '',
+            business_unit: businessUnit,
             hubspot_owner_id: data.admin_id
               ? await this.getOwnerId(data.admin_id)
               : undefined,
