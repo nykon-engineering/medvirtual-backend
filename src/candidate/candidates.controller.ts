@@ -130,6 +130,21 @@ export class CandidatesController {
     description: 'Comma-separated list of tools to filter by (OR logic)',
     example: 'Zoom,Google Workspace',
   })
+  @ApiQuery({
+    name: 'medical_tools',
+    required: false,
+    type: String,
+    description: 'Comma-separated list of medical tools to filter by (OR logic)',
+    example: 'Athena,eClinicalWorks',
+  })
+  @ApiQuery({
+    name: 'core_skills_count',
+    required: false,
+    type: String,
+    description:
+      'Minimum number of skills the candidate must have (1-10). Omitted or 0 disables the filter.',
+    example: '5',
+  })
   @ApiResponse({
     status: 200,
     description: 'Candidates retrieved successfully',
@@ -154,6 +169,8 @@ export class CandidatesController {
     @Query('all') all: string,
     @Query('scorecard_fields') scorecard_fields: string,
     @Query('tools') tools: string,
+    @Query('medical_tools') medical_tools: string,
+    @Query('core_skills_count') core_skills_count: string,
   ) {
     const result = await this.candidatesService.findAll(
       user,
@@ -173,6 +190,8 @@ export class CandidatesController {
       all,
       scorecard_fields,
       tools,
+      medical_tools,
+      core_skills_count,
     );
     return result;
   }
@@ -268,6 +287,21 @@ export class CandidatesController {
     description: 'Comma-separated list of tools to filter by (OR logic)',
     example: 'Zoom,Google Workspace',
   })
+  @ApiQuery({
+    name: 'medical_tools',
+    required: false,
+    type: String,
+    description: 'Comma-separated list of medical tools to filter by (OR logic)',
+    example: 'Athena,eClinicalWorks',
+  })
+  @ApiQuery({
+    name: 'core_skills_count',
+    required: false,
+    type: String,
+    description:
+      'Minimum number of skills the candidate must have (1-10). Omitted or 0 disables the filter.',
+    example: '5',
+  })
   @ApiResponse({
     status: 200,
     description: 'Candidates retrieved successfully',
@@ -292,6 +326,8 @@ export class CandidatesController {
     @Query('all') all: string,
     @Query('scorecard_fields') scorecard_fields: string,
     @Query('tools') tools: string,
+    @Query('medical_tools') medical_tools: string,
+    @Query('core_skills_count') core_skills_count: string,
   ) {
     const result = await this.candidatesService.findAllForAlliance(
       user,
@@ -311,6 +347,8 @@ export class CandidatesController {
       all,
       scorecard_fields,
       tools,
+      medical_tools,
+      core_skills_count,
     );
     return result;
   }

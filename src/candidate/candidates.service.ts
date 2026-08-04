@@ -51,6 +51,16 @@ import { BusinessUnitContext } from '../business-units/business-unit-context.ser
 
 const NON_MEDICAL_POOL = 'non_medical';
 
+// Filter-option fields served from the HubSpot properties API rather than the
+// database. getProperties() must not run its generic `distinct` query for these:
+// the result would be discarded and overwritten by the HubSpot response below.
+const HUBSPOT_SOURCED_PROPERTY_FIELDS = new Set([
+  'specialization',
+  'shift_block',
+  'tools',
+  'medical_tools',
+]);
+
 const VA_SCORECARD_FIELDS = new Set([
   'active_listening_and_comprehension_demonstrated',
   'adaptability_to_different_client_personalities_and_workflows',
@@ -192,6 +202,8 @@ export class CandidatesService {
     all?: string,
     scorecard_fields?: string,
     tools?: string,
+    medical_tools?: string,
+    core_skills_count?: string,
   ): Promise<any> {
     // Check if all parameter is set to true
     const getAllCandidates = all === 'true';
@@ -303,12 +315,13 @@ export class CandidatesService {
         })),
       );
     }
+    // OR semantics: a candidate matching ANY selected practice area qualifies.
     if (specializationArray.length) {
-      combinedFilters.push(
-        ...specializationArray.map((spec) => ({
-          specialization: { contains: spec, mode: 'insensitive' },
+      combinedFilters.push({
+        OR: specializationArray.map((spec) => ({
+          specialization: { contains: spec, mode: 'insensitive' as const },
         })),
-      );
+      });
     }
     if (positionsArray.length) {
       positionsFilter = {
@@ -331,6 +344,41 @@ export class CandidatesService {
         OR: toolsArray.map((tool) => ({
           tools: { contains: tool, mode: 'insensitive' as const },
         })),
+      });
+    }
+
+    // medical_tools is a semicolon-delimited text column, so it is matched with
+    // `contains` (OR semantics), mirroring the `tools` filter above.
+    const medicalToolsArray = medical_tools
+      ? medical_tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    if (medicalToolsArray.length) {
+      combinedFilters.push({
+        OR: medicalToolsArray.map((tool) => ({
+          medical_tools: { contains: tool, mode: 'insensitive' as const },
+        })),
+      });
+    }
+
+    // "Core skills" filters candidates by HOW MANY skills they have (min N).
+    // Prisma cannot filter on a relation count (CandidateSkillListRelationFilter
+    // only exposes every/some/none), so the matching ids are pre-resolved here.
+    const coreSkillsCount = Number(core_skills_count);
+    if (
+      Number.isInteger(coreSkillsCount) &&
+      coreSkillsCount > 0 &&
+      coreSkillsCount <= 10
+    ) {
+      const groupedBySkillCount = await this.prisma.candidateSkill.groupBy({
+        by: ['candidate_id'],
+        where: { skill_name: { not: 'N/A' } },
+        having: { candidate_id: { _count: { gte: coreSkillsCount } } },
+      });
+      combinedFilters.push({
+        id: { in: groupedBySkillCount.map((row) => row.candidate_id) },
       });
     }
 
@@ -778,6 +826,8 @@ export class CandidatesService {
     all?: string,
     scorecard_fields?: string,
     tools?: string,
+    medical_tools?: string,
+    core_skills_count?: string,
   ): Promise<any> {
     // Check if all parameter is set to true
     const getAllCandidates = all === 'true';
@@ -869,12 +919,13 @@ export class CandidatesService {
         })),
       );
     }
+    // OR semantics: a candidate matching ANY selected practice area qualifies.
     if (specializationArray.length) {
-      combinedFilters.push(
-        ...specializationArray.map((spec) => ({
-          specialization: { contains: spec, mode: 'insensitive' },
+      combinedFilters.push({
+        OR: specializationArray.map((spec) => ({
+          specialization: { contains: spec, mode: 'insensitive' as const },
         })),
-      );
+      });
     }
     if (positionsArray.length) {
       positionsFilter = {
@@ -897,6 +948,41 @@ export class CandidatesService {
         OR: toolsArray.map((tool) => ({
           tools: { contains: tool, mode: 'insensitive' as const },
         })),
+      });
+    }
+
+    // medical_tools is a semicolon-delimited text column, so it is matched with
+    // `contains` (OR semantics), mirroring the `tools` filter above.
+    const medicalToolsArray = medical_tools
+      ? medical_tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    if (medicalToolsArray.length) {
+      combinedFilters.push({
+        OR: medicalToolsArray.map((tool) => ({
+          medical_tools: { contains: tool, mode: 'insensitive' as const },
+        })),
+      });
+    }
+
+    // "Core skills" filters candidates by HOW MANY skills they have (min N).
+    // Prisma cannot filter on a relation count (CandidateSkillListRelationFilter
+    // only exposes every/some/none), so the matching ids are pre-resolved here.
+    const coreSkillsCount = Number(core_skills_count);
+    if (
+      Number.isInteger(coreSkillsCount) &&
+      coreSkillsCount > 0 &&
+      coreSkillsCount <= 10
+    ) {
+      const groupedBySkillCount = await this.prisma.candidateSkill.groupBy({
+        by: ['candidate_id'],
+        where: { skill_name: { not: 'N/A' } },
+        having: { candidate_id: { _count: { gte: coreSkillsCount } } },
+      });
+      combinedFilters.push({
+        id: { in: groupedBySkillCount.map((row) => row.candidate_id) },
       });
     }
 
@@ -1929,7 +2015,7 @@ export class CandidatesService {
           );
           returned = filteredPositions.sort();
           */
-        } else {
+        } else if (!HUBSPOT_SOURCED_PROPERTY_FIELDS.has(field)) {
           returned = await this.prisma.candidate.findMany({
             where: {
               OR: [
@@ -1966,17 +2052,22 @@ export class CandidatesService {
               },
             });
 
+            // The `specialization` column is written from HubSpot's
+            // `practice_area_experience` property (see candidadeToDbDictionary),
+            // so the filter options must come from that same property. It used
+            // to read `career_highlights_relevant_job_experiences` — a different
+            // property that feeds CandidateSkill — which made the dropdown offer
+            // values no candidate has, while hiding real ones like "Urgent Care".
             const vaTypeProperty = response.data.results.find(
-              (prop) =>
-                prop.name === 'career_highlights_relevant_job_experiences',
+              (prop) => prop.name === 'practice_area_experience',
             );
 
             if (!vaTypeProperty) {
               return [];
             }
-            const returnedSpecializations = vaTypeProperty.options.map(
-              (option) => option.value,
-            );
+            const returnedSpecializations = vaTypeProperty.options
+              .filter((option) => !option.hidden && option.value?.trim())
+              .map((option) => option.value.trim());
             result[field] = returnedSpecializations || [];
             //return vaTypeProperty.options || [];
           } catch (error) {
@@ -2039,6 +2130,37 @@ export class CandidatesService {
                 value: option.value?.trim(),
               }));
             result[field] = returnedTools || [];
+          } catch (error) {
+            console.error(
+              'Failed to find types:',
+              error.response?.data || error.message,
+            );
+            throw new Error('Failed to find VA types');
+          }
+        } else if (field === 'medical_tools') {
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === 'medical_tools',
+            );
+
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedMedicalTools = vaTypeProperty.options
+              .filter((option) => !option.hidden && option.value?.trim())
+              .map((option) => ({
+                label: option.label?.trim(),
+                value: option.value?.trim(),
+              }));
+            result[field] = returnedMedicalTools || [];
           } catch (error) {
             console.error(
               'Failed to find types:',
