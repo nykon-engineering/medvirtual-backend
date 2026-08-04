@@ -1431,6 +1431,13 @@ model OfferPanel {
   @@index([recipient_company_id], map: "idx_offer_panels_recipient_company")
   @@index([recipient_type], map: "idx_offer_panels_recipient_type")
   @@index([createdAt], map: "idx_offer_panels_created_at")
+  // Serves the status-count groupBy when a brand filter is applied.
+  @@index([business_unit], map: "idx_offer_panels_business_unit")
+  // The admin list filters by status and orders by createdAt desc; the
+  // single-column indexes above would force a sort.
+  @@index([status, createdAt(sort: Desc)], map: "idx_offer_panels_status_created_at")
+  // Same query with the brand filter applied.
+  @@index([business_unit, status, createdAt(sort: Desc)], map: "idx_offer_panels_bu_status_created_at")
 }
 
 model OfferPanelCandidate {

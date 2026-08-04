@@ -93,6 +93,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
     count: jest.fn(),
+    groupBy: jest.fn(),
   },
   offerPanelCandidate: {
     findMany: jest.fn(),
@@ -115,6 +116,10 @@ const mockPrisma = {
 
 const mockCandidatesService = {
   getTalentPoolCandidateById: jest.fn(),
+  // Batch loader used by the list endpoints (findAll, findForClientUser).
+  // Returns a Map keyed by candidate id, so tests that don't care about the
+  // candidate payload still get a well-formed empty result.
+  getTalentPoolCandidatesByIds: jest.fn().mockResolvedValue(new Map()),
 };
 
 const mockNotificationsService = {
@@ -573,10 +578,30 @@ describe('OfferPanelsService', () => {
   // -------------------------------------------------------------------------
 
   describe('findAll', () => {
+    /**
+     * The page and the status tallies are fetched together in one
+     * $transaction([page, groupBy]), so tests stub the transaction rather than
+     * the individual calls.
+     */
+    const mockFindAll = (
+      panels: any[] = [],
+      grouped: { status: string; _count: { status: number } }[] = [],
+    ) => {
+      mockPrisma.offerPanel.findMany.mockReturnValue('page-query');
+      mockPrisma.offerPanel.groupBy.mockReturnValue('counts-query');
+      mockPrisma.$transaction.mockResolvedValue([panels, grouped]);
+    };
+
+    /** The `where` handed to the paged query. */
+    const pageWhere = () =>
+      mockPrisma.offerPanel.findMany.mock.calls[0][0].where;
+
+    /** The `where` handed to the status tallies. */
+    const countsWhere = () =>
+      mockPrisma.offerPanel.groupBy.mock.calls[0][0].where;
+
     it('returns paginated list with default pagination', async () => {
-      const panels = [makePanel()];
-      mockPrisma.offerPanel.findMany.mockResolvedValue(panels);
-      mockPrisma.offerPanel.count.mockResolvedValue(1);
+      mockFindAll([makePanel()], [{ status: 'sent', _count: { status: 1 } }]);
 
       const result = await service.findAll({});
 
@@ -588,52 +613,144 @@ describe('OfferPanelsService', () => {
     });
 
     it('filters by status', async () => {
-      mockPrisma.offerPanel.findMany.mockResolvedValue([]);
-      mockPrisma.offerPanel.count.mockResolvedValue(0);
+      mockFindAll();
 
       await service.findAll({ status: 'sent' as any });
 
-      const call = mockPrisma.offerPanel.findMany.mock.calls[0][0];
-      expect(call.where.status).toBe('sent');
+      expect(pageWhere().AND).toContainEqual({ status: 'sent' });
     });
 
     it('filters by recipient_type', async () => {
-      mockPrisma.offerPanel.findMany.mockResolvedValue([]);
-      mockPrisma.offerPanel.count.mockResolvedValue(0);
+      mockFindAll();
 
       await service.findAll({ recipient_type: 'client_user' as any });
 
-      const call = mockPrisma.offerPanel.findMany.mock.calls[0][0];
-      expect(call.where.recipient_type).toBe('client_user');
+      expect(pageWhere().AND).toContainEqual({
+        recipient_type: 'client_user',
+      });
     });
 
     it('filters by client org name (partial, insensitive)', async () => {
-      mockPrisma.offerPanel.findMany.mockResolvedValue([]);
-      mockPrisma.offerPanel.count.mockResolvedValue(0);
+      mockFindAll();
 
       await service.findAll({ client: 'sunrise' });
 
-      const call = mockPrisma.offerPanel.findMany.mock.calls[0][0];
-      expect(call.where.recipient_org_name).toEqual({
-        contains: 'sunrise',
-        mode: 'insensitive',
+      expect(pageWhere().AND).toContainEqual({
+        recipient_org_name: { contains: 'sunrise', mode: 'insensitive' },
       });
     });
 
     it('filters by search term across title, recipient name, and email', async () => {
-      mockPrisma.offerPanel.findMany.mockResolvedValue([]);
-      mockPrisma.offerPanel.count.mockResolvedValue(0);
+      mockFindAll();
 
       await service.findAll({ search: 'jane' });
 
-      const call = mockPrisma.offerPanel.findMany.mock.calls[0][0];
-      expect(call.where.OR).toBeDefined();
-      expect(call.where.OR).toHaveLength(3);
+      const searchGroup = pageWhere().AND.find((c: any) => c.OR);
+      expect(searchGroup.OR).toHaveLength(3);
+    });
+
+    // Search and the business-unit filter each need their own OR group. Before
+    // the conditions were collected in an array, assigning both onto `where.OR`
+    // meant the second silently dropped the first.
+    it('keeps search and business_unit as independent conditions', async () => {
+      mockFindAll();
+      businessUnitContextMock.resolveByHubspotValue.mockResolvedValue({
+        hubspot_value: 'Berry Virtual',
+        name: 'Berry Virtual',
+        slug: 'berryvirtual',
+      });
+
+      await service.findAll({ search: 'jane', business_unit: 'berryvirtual' });
+
+      const orGroups = pageWhere().AND.filter((c: any) => c.OR);
+      expect(orGroups).toHaveLength(2);
+    });
+
+    it('matches every stored spelling of a business unit', async () => {
+      mockFindAll();
+      businessUnitContextMock.resolveByHubspotValue.mockResolvedValue({
+        hubspot_value: 'Berry Virtual',
+        name: 'Berry Virtual',
+        slug: 'berryvirtual',
+      });
+
+      await service.findAll({ business_unit: 'berryvirtual' });
+
+      const buGroup = pageWhere().AND.find((c: any) =>
+        c.OR?.some((o: any) => o.business_unit),
+      );
+      const values = buGroup.OR.map((o: any) => o.business_unit.equals);
+      // Rows exist as both "Berry Virtual" and "BerryVirtual"; `insensitive`
+      // covers casing but not the missing space.
+      expect(values).toEqual(
+        expect.arrayContaining(['Berry Virtual', 'BerryVirtual']),
+      );
+    });
+
+    it('returns an empty result for an unknown business unit', async () => {
+      mockFindAll([makePanel()], [{ status: 'sent', _count: { status: 1 } }]);
+      businessUnitContextMock.resolveByHubspotValue.mockResolvedValue(null);
+
+      const result = await service.findAll({ business_unit: 'nope' });
+
+      // Narrows to nothing rather than widening to every panel.
+      expect(result.data).toEqual([]);
+      expect(result.pagination.total).toBe(0);
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('reports a count per status', async () => {
+      mockFindAll(
+        [],
+        [
+          { status: 'sent', _count: { status: 3 } },
+          { status: 'accepted', _count: { status: 2 } },
+        ],
+      );
+
+      const result = await service.findAll({});
+
+      expect(result.counts).toEqual({
+        sent: 3,
+        viewed: 0,
+        accepted: 2,
+        declined: 0,
+      });
+      // No status filter, so the page spans every bucket.
+      expect(result.pagination.total).toBe(5);
+    });
+
+    // The tabs display all four counts at once, so a selected tab must not
+    // zero out the others.
+    it('counts every status but pages only the selected one', async () => {
+      mockFindAll(
+        [],
+        [
+          { status: 'sent', _count: { status: 3 } },
+          { status: 'accepted', _count: { status: 2 } },
+        ],
+      );
+
+      const result = await service.findAll({ status: 'accepted' as any });
+
+      expect(countsWhere().AND).not.toContainEqual({ status: 'accepted' });
+      expect(pageWhere().AND).toContainEqual({ status: 'accepted' });
+      expect(result.counts.sent).toBe(3);
+      // Pagination follows the selected bucket only.
+      expect(result.pagination.total).toBe(2);
+    });
+
+    it('applies search to the counts as well as the page', async () => {
+      mockFindAll();
+
+      await service.findAll({ search: 'jane', status: 'sent' as any });
+
+      const searchGroup = countsWhere().AND.find((c: any) => c.OR);
+      expect(searchGroup.OR).toHaveLength(3);
     });
 
     it('respects page and limit params', async () => {
-      mockPrisma.offerPanel.findMany.mockResolvedValue([]);
-      mockPrisma.offerPanel.count.mockResolvedValue(50);
+      mockFindAll([], [{ status: 'sent', _count: { status: 50 } }]);
 
       const result = await service.findAll({ page: 3, limit: 10 });
 
@@ -641,6 +758,59 @@ describe('OfferPanelsService', () => {
       expect(call.skip).toBe(20);
       expect(call.take).toBe(10);
       expect(result.pagination.totalPages).toBe(5);
+    });
+
+    // Regression guard: this endpoint used to enrich candidates one at a time,
+    // issuing a query (and a full PositionRateConfig read) per candidate per
+    // panel. Candidate loading must stay batched no matter the page size.
+    it('loads candidates for the whole page in a single batch', async () => {
+      mockFindAll([
+        makePanel({
+          id: 'p1',
+          candidates: [{ candidate_id: 'c1' }, { candidate_id: 'c2' }],
+        }),
+        makePanel({
+          id: 'p2',
+          candidates: [{ candidate_id: 'c3' }, { candidate_id: 'c1' }],
+        }),
+      ]);
+      mockCandidatesService.getTalentPoolCandidatesByIds.mockResolvedValue(
+        new Map([
+          ['c1', { id: 'c1' }],
+          ['c2', { id: 'c2' }],
+          ['c3', { id: 'c3' }],
+        ]),
+      );
+
+      await service.findAll({});
+
+      expect(
+        mockCandidatesService.getTalentPoolCandidatesByIds,
+      ).toHaveBeenCalledTimes(1);
+      expect(
+        mockCandidatesService.getTalentPoolCandidateById,
+      ).not.toHaveBeenCalled();
+      // Every candidate of every panel is requested in that one call.
+      expect(
+        mockCandidatesService.getTalentPoolCandidatesByIds.mock.calls[0][0],
+      ).toEqual(['c1', 'c2', 'c3', 'c1']);
+    });
+
+    it('skips candidates that no longer exist instead of failing the list', async () => {
+      mockFindAll([
+        makePanel({
+          id: 'p1',
+          candidates: [{ candidate_id: 'c1' }, { candidate_id: 'gone' }],
+        }),
+      ]);
+      mockCandidatesService.getTalentPoolCandidatesByIds.mockResolvedValue(
+        new Map([['c1', { id: 'c1' }]]),
+      );
+
+      const result = await service.findAll({});
+
+      expect(result.data[0].candidates).toHaveLength(1);
+      expect(result.data[0].candidates[0].id).toBe('c1');
     });
   });
 

@@ -15,7 +15,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
-import { USER, TicketAuditSource } from '@prisma/client';
+import { USER, TicketAuditSource, OfferPanelStatus } from '@prisma/client';
 import {
   TicketAuditService,
   TICKET_AUDIT_EVENTS,
@@ -27,6 +27,17 @@ import {
   RecipientDto,
 } from './dto/create-offer-panel.dto';
 import { buildHireRequestTitle } from '../common/utils/hireRequestTitle.util';
+
+/** Panel tally per lifecycle status, one entry per status tab in the UI. */
+export type OfferPanelStatusCounts = Record<OfferPanelStatus, number>;
+
+/** A zeroed tally, so statuses with no rows still report 0 rather than absent. */
+function emptyOfferPanelStatusCounts(): OfferPanelStatusCounts {
+  return Object.values(OfferPanelStatus).reduce(
+    (acc, status) => ({ ...acc, [status]: 0 }),
+    {} as OfferPanelStatusCounts,
+  );
+}
 
 const CANDIDATE_CARD_SELECT = {
   id: true,
@@ -592,7 +603,10 @@ export class OfferPanelsService {
         createdBy: {
           select: { id: true, first_name: true, last_name: true, email: true },
         },
-        candidates: { select: { candidate_id: true } },
+        candidates: {
+          select: { candidate_id: true },
+          orderBy: { createdAt: 'asc' },
+        },
         _count: { select: { candidates: true } },
         hireRequest: {
           select: { id: true, status: true, title: true, createdAt: true },
@@ -600,24 +614,63 @@ export class OfferPanelsService {
       },
     });
 
-    return Promise.all(
-      panels.map(async (panel) => {
-        const enrichedCandidates = await Promise.all(
-          panel.candidates.map(async (pc) => {
-            const enriched =
-              await this.candidatesService.getTalentPoolCandidateById(
-                pc.candidate_id,
-              );
-            const howManyClientsAreViewing = await this.countOtherPanels(
-              pc.candidate_id,
-              panel.id,
-            );
-            return { ...enriched, howManyClientsAreViewing };
-          }),
-        );
-        return this.withRecipient({ ...panel, candidates: enrichedCandidates });
+    const candidateIds = panels.flatMap((panel) =>
+      panel.candidates.map((pc) => pc.candidate_id),
+    );
+
+    // Both the candidate payloads and the "other active panels" counts are
+    // resolved in bulk here — doing either per candidate meant a query per
+    // candidate per panel.
+    const [candidatesById, activePanelsByCandidate] = await Promise.all([
+      this.candidatesService.getTalentPoolCandidatesByIds(candidateIds),
+      this.countActivePanelsByCandidate(candidateIds),
+    ]);
+
+    return panels.map((panel) =>
+      this.withRecipient({
+        ...panel,
+        candidates: panel.candidates
+          .map((pc) => {
+            const candidate = candidatesById.get(pc.candidate_id);
+            if (!candidate) return null;
+            // Exclude the panel being rendered, matching countOtherPanels.
+            const activePanels =
+              activePanelsByCandidate.get(pc.candidate_id) ?? new Set<string>();
+            const howManyClientsAreViewing =
+              activePanels.size - (activePanels.has(panel.id) ? 1 : 0);
+            return { ...candidate, howManyClientsAreViewing };
+          })
+          .filter((candidate) => !!candidate),
       }),
     );
+  }
+
+  /**
+   * Maps each candidate id to the set of active (sent/viewed) offer panels that
+   * include it, in one query. Callers subtract the panel they are rendering to
+   * get the same number `countOtherPanels` returns for a single candidate.
+   */
+  private async countActivePanelsByCandidate(
+    candidateIds: string[],
+  ): Promise<Map<string, Set<string>>> {
+    const uniqueIds = Array.from(new Set(candidateIds));
+    if (uniqueIds.length === 0) return new Map();
+
+    const rows = await this.prisma.offerPanelCandidate.findMany({
+      where: {
+        candidate_id: { in: uniqueIds },
+        offerPanel: { status: { in: ['sent', 'viewed'] } },
+      },
+      select: { candidate_id: true, offer_panel_id: true },
+    });
+
+    const byCandidate = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const set = byCandidate.get(row.candidate_id) ?? new Set<string>();
+      set.add(row.offer_panel_id);
+      byCandidate.set(row.candidate_id, set);
+    }
+    return byCandidate;
   }
 
   // R17 — called explicitly by POST /viewed endpoints; not inline in GET
@@ -1142,78 +1195,160 @@ export class OfferPanelsService {
 
   async findAll(
     query: QueryOfferPanelsDto,
-  ): Promise<{ data: any[]; pagination: any }> {
+  ): Promise<{ data: any[]; counts: OfferPanelStatusCounts; pagination: any }> {
     const {
       search,
       status,
       recipient_type,
       client,
+      business_unit,
       page = 1,
       limit = 20,
     } = query;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    // Conditions are collected in an array rather than assigned onto a single
+    // `where` object: both search and the business-unit filter need their own
+    // OR group, and a plain `where.OR` would let one silently overwrite the
+    // other.
+    const baseConditions: any[] = [];
 
-    if (status) where.status = status;
-    if (recipient_type) where.recipient_type = recipient_type;
+    if (recipient_type) baseConditions.push({ recipient_type });
     if (client)
-      where.recipient_org_name = { contains: client, mode: 'insensitive' };
+      baseConditions.push({
+        recipient_org_name: { contains: client, mode: 'insensitive' },
+      });
 
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { recipient_name: { contains: search, mode: 'insensitive' } },
-        { recipient_email: { contains: search, mode: 'insensitive' } },
-      ];
+    if (business_unit) {
+      const resolved =
+        await this.businessUnitContext.resolveByHubspotValue(business_unit);
+      // An unrecognized BU must narrow to nothing, never widen to everything.
+      if (!resolved) {
+        return {
+          data: [],
+          counts: emptyOfferPanelStatusCounts(),
+          pagination: { page, limit, total: 0, totalPages: 0 },
+        };
+      }
+      // Rows have been written with several spellings over time ("Berry
+      // Virtual" vs "BerryVirtual"). `mode: 'insensitive'` covers casing but
+      // not whitespace, so match every variant explicitly.
+      const variants = new Set(
+        [resolved.hubspot_value, resolved.name, resolved.slug]
+          .filter((value): value is string => !!value)
+          .flatMap((value) => [value, value.replace(/\s+/g, '')]),
+      );
+      baseConditions.push({
+        OR: [...variants].map((value) => ({
+          business_unit: { equals: value, mode: 'insensitive' as const },
+        })),
+      });
     }
 
-    const [data, total] = await Promise.all([
-      this.prisma.offerPanel.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          createdBy: {
-            select: {
-              id: true,
-              first_name: true,
-              last_name: true,
-              email: true,
-            },
-          },
-          recipientUser: {
-            select: {
-              id: true,
-              first_name: true,
-              last_name: true,
-              email: true,
-            },
-          },
-          candidates: { select: { candidate_id: true } },
-          recipientCompany: { select: { id: true, name: true } },
-          _count: { select: { candidates: true } },
-          hireRequest: {
-            select: { id: true, status: true, title: true, createdAt: true },
+    if (search) {
+      baseConditions.push({
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { recipient_name: { contains: search, mode: 'insensitive' } },
+          { recipient_email: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    // The status tabs show a count each, so the counts must reflect every
+    // filter EXCEPT status — otherwise the selected tab would be the only
+    // non-zero one.
+    const countsWhere = { AND: baseConditions };
+    const where = status
+      ? { AND: [...baseConditions, { status }] }
+      : countsWhere;
+
+    // Built separately so Prisma keeps each call's precise payload type — the
+    // $transaction([...]) array overload widens the tuple otherwise.
+    const pageQuery = this.prisma.offerPanel.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
           },
         },
-      }),
-      this.prisma.offerPanel.count({ where }),
+        recipientUser: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            email: true,
+          },
+        },
+        candidates: {
+          select: { candidate_id: true },
+          orderBy: { createdAt: 'asc' },
+        },
+        recipientCompany: { select: { id: true, name: true } },
+        _count: { select: { candidates: true } },
+        hireRequest: {
+          select: { id: true, status: true, title: true, createdAt: true },
+        },
+      },
+    });
+
+    // One grouped count replaces both the old count() and any per-tab request,
+    // and shares a consistent snapshot with the page above.
+    const countsQuery = this.prisma.offerPanel.groupBy({
+      by: ['status'],
+      where: countsWhere,
+      orderBy: { status: 'asc' },
+      // Counting the (non-nullable) grouping column is equivalent to _all here,
+      // and keeps the result precisely typed.
+      _count: { status: true },
+    });
+
+    const [data, grouped] = await this.prisma.$transaction([
+      pageQuery,
+      countsQuery,
     ]);
 
-    // enhance the result to align with frontend types
-    const enhancedData = await Promise.all(
-      data.map(async (panel) => {
-        const enrichedCandidates = await this.enrichCandidates(
-          panel.candidates.map((pc) => pc.candidate_id),
-        );
-        return this.withRecipient({ ...panel, candidates: enrichedCandidates });
+    const counts = emptyOfferPanelStatusCounts();
+    for (const group of grouped) {
+      counts[group.status] = group._count.status;
+    }
+
+    // With a status filter the page is that bucket; without one it spans them
+    // all — either way the total comes from the same grouped counts.
+    const total = status
+      ? counts[status]
+      : Object.values(counts).reduce((sum, value) => sum + value, 0);
+
+    // Enhance the result to align with frontend types. Candidates for the whole
+    // page are loaded in a single batch — enriching them per panel issued one
+    // query (plus a full PositionRateConfig read) per candidate, which is what
+    // made this endpoint slow enough to freeze the admin list.
+    const candidatesById =
+      await this.candidatesService.getTalentPoolCandidatesByIds(
+        data.flatMap((panel) => panel.candidates.map((pc) => pc.candidate_id)),
+      );
+
+    const enhancedData = data.map((panel) =>
+      this.withRecipient({
+        ...panel,
+        candidates: panel.candidates
+          .map((pc) => candidatesById.get(pc.candidate_id))
+          // A panel row may reference a since-deleted candidate; skip it rather
+          // than failing the whole list.
+          .filter((candidate) => !!candidate),
       }),
     );
 
     return {
       data: enhancedData,
+      counts,
       pagination: {
         page,
         limit,

@@ -1188,4 +1188,158 @@ describe('CandidatesService', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // getTalentPoolCandidatesByIds — batch loader used by list endpoints
+  // ---------------------------------------------------------------------------
+
+  describe('getTalentPoolCandidatesByIds', () => {
+    // Floor prices/margins differ per business unit and language tier, so these
+    // configs make a wrong branch visible as a different bill rate.
+    const positionConfigs = [
+      {
+        position: 'Medical Assistant',
+        medVirtual_floor_price_english: 10,
+        berryVirtual_floor_price_english: 12,
+        medVirtual_floor_price_bilingual: 14,
+        berryVirtual_floor_price_bilingual: 16,
+        medVirtual_margin_per_hour: 5,
+        berryVirtual_margin_per_hour: 7,
+      },
+    ];
+
+    const baseCandidate = {
+      id: 'cand-1',
+      first_name: 'Jane',
+      last_name: 'Doe',
+      name: 'Jane Doe',
+      country: 'PH',
+      employment_type: '1',
+      hourly_pay_rate: 8,
+      years_of_experience: '5',
+      specialization: 'Cardiology',
+      tools: 'EHR',
+      avatar_url: 'jane.png',
+      gender: 'female',
+      shift_block: 'AM',
+      business_unit: 'MedVirtual',
+      // Remapped by the dictionary ('Jr Bookkeeper' -> 'Bookkeeper Jr'), so a
+      // missing or double-applied labelling step is visible in assertions.
+      approved_positions_pairing: ['Jr Bookkeeper'],
+      languages: [{ name: 'English' }],
+      skills: [{ skill_name: 'Charting', skill_type: 'hard' }],
+    };
+
+    beforeEach(() => {
+      positionRateConfigMock.findAllUnpaginated.mockResolvedValue(
+        positionConfigs,
+      );
+    });
+
+    it('returns an empty map without querying when given no ids', async () => {
+      const result = await service.getTalentPoolCandidatesByIds([]);
+
+      expect(result.size).toBe(0);
+      expect(mockPrisma.candidate.findMany).not.toHaveBeenCalled();
+    });
+
+    it('de-duplicates ids and reads the rate config once for the batch', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([baseCandidate]);
+
+      await service.getTalentPoolCandidatesByIds([
+        'cand-1',
+        'cand-1',
+        'cand-2',
+      ]);
+
+      expect(mockPrisma.candidate.findMany).toHaveBeenCalledTimes(1);
+      expect(positionRateConfigMock.findAllUnpaginated).toHaveBeenCalledTimes(1);
+      expect(
+        mockPrisma.candidate.findMany.mock.calls[0][0].where.id.in,
+      ).toEqual(['cand-1', 'cand-2']);
+    });
+
+    it('omits unknown ids instead of throwing', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([baseCandidate]);
+
+      const result = await service.getTalentPoolCandidatesByIds([
+        'cand-1',
+        'missing',
+      ]);
+
+      expect(result.has('cand-1')).toBe(true);
+      expect(result.has('missing')).toBe(false);
+    });
+
+    it('prefixes the avatar URL and labels the approved positions', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([baseCandidate]);
+
+      const candidate = (
+        await service.getTalentPoolCandidatesByIds(['cand-1'])
+      ).get('cand-1');
+
+      expect(candidate.avatar_url).toBe(
+        'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/jane.png',
+      );
+      expect(candidate.approved_positions_pairing).toEqual(['Bookkeeper Jr']);
+    });
+
+    it('leaves a null avatar_url null', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([
+        { ...baseCandidate, avatar_url: null },
+      ]);
+
+      const candidate = (
+        await service.getTalentPoolCandidatesByIds(['cand-1'])
+      ).get('cand-1');
+
+      expect(candidate.avatar_url).toBeNull();
+    });
+
+    // The transform order is load-bearing: computeCandidateRates labels the
+    // positions itself and reads the raw employment_type, so it must run before
+    // either is normalized. Getting this wrong yields wrong money, silently —
+    // these cases pin the output against the single-id path.
+    describe.each([
+      ['monolingual MedVirtual', { languages: [{ name: 'English' }] }],
+      [
+        'bilingual MedVirtual',
+        { languages: [{ name: 'English' }, { name: 'Spanish' }] },
+      ],
+      ['monolingual Berry', { business_unit: 'Berry Virtual' }],
+      [
+        'bilingual Berry',
+        {
+          business_unit: 'Berry Virtual',
+          languages: [{ name: 'English' }, { name: 'Spanish' }],
+        },
+      ],
+      ['no approved positions', { approved_positions_pairing: [] }],
+      ['employment_type as ";"-joined string', { employment_type: '1;2' }],
+      ['part-time employment_type', { employment_type: '2' }],
+      ['null hourly_pay_rate', { hourly_pay_rate: null as any }],
+    ])('matches getTalentPoolCandidateById for a %s candidate', (_label, overrides) => {
+      it('produces identical rates and display fields', async () => {
+        const record = { ...baseCandidate, ...overrides };
+        mockPrisma.candidate.findMany.mockResolvedValue([record]);
+        mockPrisma.candidate.findUnique.mockResolvedValue(record);
+
+        const single = await service.getTalentPoolCandidateById('cand-1');
+        const batched = (
+          await service.getTalentPoolCandidatesByIds(['cand-1'])
+        ).get('cand-1');
+
+        // The four rate fields are what an inverted transform order breaks.
+        expect(batched.bill_rate_hourly).toBe(single.bill_rate_hourly);
+        expect(batched.bill_rate_monthly).toBe(single.bill_rate_monthly);
+        expect(batched.salary).toBe(single.salary);
+        expect(batched.hourlySalary).toBe(single.hourlySalary);
+
+        expect(batched.employment_type).toEqual(single.employment_type);
+        expect(batched.approved_positions_pairing).toEqual(
+          single.approved_positions_pairing,
+        );
+        expect(batched.avatar_url).toBe(single.avatar_url);
+      });
+    });
+  });
 });

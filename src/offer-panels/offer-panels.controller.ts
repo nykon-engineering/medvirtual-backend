@@ -112,6 +112,8 @@ export class OfferPanelsController {
     required: false,
     enum: OfferPanelRecipientType,
   })
+  @ApiQuery({ name: 'client', required: false, type: String })
+  @ApiQuery({ name: 'business_unit', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Panels retrieved successfully' })
@@ -122,6 +124,9 @@ export class OfferPanelsController {
     return {
       status: 200,
       data: result.data,
+      // Per-status tallies for the UI's status tabs. They honour every filter
+      // except status, so each tab shows its own size.
+      counts: result.counts,
       pagination: result.pagination,
     };
   }
