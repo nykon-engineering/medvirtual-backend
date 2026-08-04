@@ -657,6 +657,15 @@ export class CandidatesService {
         },
       },
       panelCandidates: {
+        // Client roles must only ever see panels belonging to their own
+        // organization. Without this filter the payload leaks other clients'
+        // hire request titles and organization names, and the frontend cannot
+        // distinguish "in MY panel" from "in SOMEONE ELSE'S panel". System
+        // roles (no organization_id) still receive every panel, which the
+        // admin conflict disclaimers depend on.
+        where: organization_id
+          ? { panel: { hireRequest: { org_id: organization_id } } }
+          : undefined,
         select: {
           id: true,
           status: true,
@@ -1249,6 +1258,15 @@ export class CandidatesService {
         },
       },
       panelCandidates: {
+        // Client roles must only ever see panels belonging to their own
+        // organization. Without this filter the payload leaks other clients'
+        // hire request titles and organization names, and the frontend cannot
+        // distinguish "in MY panel" from "in SOMEONE ELSE'S panel". System
+        // roles (no organization_id) still receive every panel, which the
+        // admin conflict disclaimers depend on.
+        where: organization_id
+          ? { panel: { hireRequest: { org_id: organization_id } } }
+          : undefined,
         select: {
           id: true,
           status: true,
@@ -1486,6 +1504,10 @@ export class CandidatesService {
         },
       },
       panelCandidates: {
+        // Org-scoped: see the note in `findAll`.
+        where: organization_id
+          ? { panel: { hireRequest: { org_id: organization_id } } }
+          : undefined,
         select: {
           id: true,
           panel: {
@@ -3251,6 +3273,10 @@ export class CandidatesService {
         approved_positions_pairing: true,
         business_unit: true,
         panelCandidates: {
+          // Org-scoped: see the note in `findAll`.
+          where: organizationId
+            ? { panel: { hireRequest: { org_id: organizationId } } }
+            : undefined,
           select: {
             id: true,
             status: true,

@@ -611,6 +611,9 @@ describe('CandidatesService', () => {
             },
           },
           panelCandidates: {
+            // Panels are scoped to the caller's organization so other
+            // clients' hire requests never reach the response.
+            where: { panel: { hireRequest: { org_id: 'org-1' } } },
             select: {
               id: true,
               panel: {
