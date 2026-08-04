@@ -50,6 +50,7 @@ const mockPrisma = {
   },
   candidateSkill: {
     findMany: jest.fn(),
+    groupBy: jest.fn(),
   },
   candidateExperience: {
     createMany: jest.fn(),
@@ -277,6 +278,161 @@ describe('CandidatesService', () => {
     });
   });
 
+  describe('findAll — talent pool filters', () => {
+    // The filter block is built once and spread into every branch of the
+    // four-way where.OR, so each assertion checks all branches.
+    const branchesOf = () =>
+      mockPrisma.candidate.findMany.mock.calls[0][0].where.OR;
+
+    const andFiltersOf = (branch: any) => branch.AND ?? [];
+
+    beforeEach(() => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.ticket.findMany.mockResolvedValue([]);
+      mockPrisma.candidate.findMany.mockClear();
+      mockPrisma.candidateSkill.groupBy.mockReset();
+    });
+
+    it('applies medical_tools as an insensitive OR contains filter in every branch', async () => {
+      await service.findAll(
+        mockUser,
+        undefined, // country
+        undefined, // shift_block
+        undefined, // availability
+        undefined, // monthly_compensation_from
+        undefined, // monthly_compensation_to
+        undefined, // years_of_experience
+        undefined, // specializations
+        undefined, // positions
+        undefined, // skills
+        undefined, // languages
+        undefined, // page
+        undefined, // perPage
+        undefined, // search
+        undefined, // all
+        undefined, // scorecard_fields
+        undefined, // tools
+        'Athena,eClinicalWorks',
+      );
+
+      const branches = branchesOf();
+      expect(branches).toHaveLength(4);
+      for (const branch of branches) {
+        const medicalToolsFilter = andFiltersOf(branch).find(
+          (f: any) => f.OR?.[0]?.medical_tools,
+        );
+        expect(medicalToolsFilter).toEqual({
+          OR: [
+            { medical_tools: { contains: 'Athena', mode: 'insensitive' } },
+            {
+              medical_tools: {
+                contains: 'eClinicalWorks',
+                mode: 'insensitive',
+              },
+            },
+          ],
+        });
+      }
+    });
+
+    it('applies specializations with OR semantics (any selected practice area matches)', async () => {
+      await service.findAll(
+        mockUser,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'Cardiology,Oncology',
+      );
+
+      for (const branch of branchesOf()) {
+        const specFilter = andFiltersOf(branch).find(
+          (f: any) => f.OR?.[0]?.specialization,
+        );
+        expect(specFilter).toEqual({
+          OR: [
+            { specialization: { contains: 'Cardiology', mode: 'insensitive' } },
+            { specialization: { contains: 'Oncology', mode: 'insensitive' } },
+          ],
+        });
+      }
+    });
+
+    it('resolves core_skills_count into an id filter via groupBy', async () => {
+      mockPrisma.candidateSkill.groupBy.mockResolvedValue([
+        { candidate_id: 'cand-1' },
+        { candidate_id: 'cand-2' },
+      ]);
+
+      await service.findAll(
+        mockUser,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined, // medical_tools
+        '3',
+      );
+
+      expect(mockPrisma.candidateSkill.groupBy).toHaveBeenCalledWith({
+        by: ['candidate_id'],
+        where: { skill_name: { not: 'N/A' } },
+        having: { candidate_id: { _count: { gte: 3 } } },
+      });
+
+      for (const branch of branchesOf()) {
+        const idFilter = andFiltersOf(branch).find((f: any) => f.id?.in);
+        expect(idFilter).toEqual({ id: { in: ['cand-1', 'cand-2'] } });
+      }
+    });
+
+    it('ignores core_skills_count outside the 1-10 range', async () => {
+      const callWith = async (value: string) => {
+        mockPrisma.candidate.findMany.mockClear();
+        await service.findAll(
+          mockUser,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          value,
+        );
+      };
+
+      for (const value of ['0', '11', '-1', 'abc', '2.5']) {
+        await callWith(value);
+        expect(mockPrisma.candidateSkill.groupBy).not.toHaveBeenCalled();
+      }
+    });
+  });
+
   describe('findOne', () => {
     it('should return candidate by id and organization_id', async () => {
       const mockCandidate = {
@@ -455,6 +611,9 @@ describe('CandidatesService', () => {
             },
           },
           panelCandidates: {
+            // Panels are scoped to the caller's organization so other
+            // clients' hire requests never reach the response.
+            where: { panel: { hireRequest: { org_id: 'org-1' } } },
             select: {
               id: true,
               panel: {
@@ -535,9 +694,44 @@ describe('CandidatesService', () => {
       expect(result).toEqual({ languages: mockLanguages });
     });
 
+    it('sources "specialization" options from the practice_area_experience property', async () => {
+      // Regression guard: `specialization` is written from HubSpot's
+      // `practice_area_experience` property, so the filter options must come
+      // from the same property. Reading career_highlights_relevant_job_experiences
+      // (which feeds CandidateSkill) made real values like "Urgent Care" missing
+      // from the dropdown while offering values no candidate has.
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          results: [
+            {
+              name: 'career_highlights_relevant_job_experiences',
+              options: [{ label: 'Bookkeeping', value: 'Bookkeeping' }],
+            },
+            {
+              name: 'practice_area_experience',
+              options: [
+                { label: 'Urgent Care', value: 'Urgent Care' },
+                { label: 'Cardiology', value: 'Cardiology' },
+                { label: 'Legacy', value: 'Legacy', hidden: true },
+                { label: 'Blank', value: '   ' },
+              ],
+            },
+          ],
+        },
+      } as any);
+
+      const result = await service.getProperties({ fields: 'specialization' });
+
+      expect(result.specialization).toEqual(['Urgent Care', 'Cardiology']);
+      expect(result.specialization).not.toContain('Bookkeeping');
+    });
+
     it('should return distinct skills when field is "skills"', async () => {
       const mockSkills = [{ skill_name: 'JavaScript' }, { skill_name: 'TypeScript' }];
-      mockPrisma.candidateSkill = { findMany: jest.fn().mockResolvedValue(mockSkills) };
+      mockPrisma.candidateSkill = {
+        findMany: jest.fn().mockResolvedValue(mockSkills),
+        groupBy: jest.fn(),
+      };
 
       const result = await service.getProperties({ fields: 'skills' });
 
@@ -595,7 +789,10 @@ describe('CandidatesService', () => {
       const mockCountries = [{ country: 'USA' }];
 
       mockPrisma.candidateLanguage = { findMany: jest.fn().mockResolvedValue(mockLanguages) };
-      mockPrisma.candidateSkill = { findMany: jest.fn().mockResolvedValue(mockSkills) };
+      mockPrisma.candidateSkill = {
+        findMany: jest.fn().mockResolvedValue(mockSkills),
+        groupBy: jest.fn(),
+      };
       mockPrisma.candidate.findMany.mockResolvedValue(mockCountries);
 
       const result = await service.getProperties({ fields: 'languages,skills,country' });
