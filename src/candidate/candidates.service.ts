@@ -87,6 +87,39 @@ const VA_SCORECARD_FIELDS = new Set([
   'understands_workflow_in_medical_offices___telehealth_environments',
 ]);
 
+/**
+ * Card-level candidate projection used by list endpoints (e.g. the admin offer
+ * panels list). Deliberately narrow: it holds exactly what `TalentPoolCard`
+ * renders plus the fields `computeCandidateRates` needs, and nothing else.
+ *
+ * It must NOT grow to include the VA scorecard columns, `about_me`,
+ * `educations` or `experiences` — the candidate read modal lazy-fetches
+ * `GET /candidates/talent-pool/:id` when opened, so list payloads never need
+ * the full record. Widening this select is what made the offer panels list
+ * slow enough to freeze the page.
+ */
+const CANDIDATE_LIST_CARD_SELECT = {
+  id: true,
+  first_name: true,
+  last_name: true,
+  name: true,
+  country: true,
+  employment_type: true,
+  hourly_pay_rate: true,
+  years_of_experience: true,
+  specialization: true,
+  tools: true,
+  // The card reads `avatar || avatar_url`, but `avatar` is not a Candidate
+  // column — only `avatar_url` exists, and it is what renders today.
+  avatar_url: true,
+  gender: true,
+  shift_block: true,
+  business_unit: true,
+  approved_positions_pairing: true,
+  languages: { select: { name: true } },
+  skills: { select: { skill_name: true, skill_type: true } },
+} satisfies Prisma.CandidateSelect;
+
 @Injectable()
 export class CandidatesService {
   private readonly logger = new Logger(CandidatesService.name);
@@ -2908,6 +2941,94 @@ export class CandidatesService {
     };
 
     return candidateWithFullAvatarUrl;
+  }
+
+  /**
+   * Card-level payload for many candidates in TWO queries, regardless of how
+   * many ids are passed.
+   *
+   * This is the batch counterpart of `getTalentPoolCandidateById`, which list
+   * endpoints must use instead of calling that method in a loop: each call
+   * there re-reads the whole `PositionRateConfig` table, so a per-candidate
+   * fan-out turned a single offer-panels request into thousands of queries.
+   *
+   * Unlike `getTalentPoolCandidateById`, unknown ids are simply absent from the
+   * returned map rather than throwing — a list must not 404 because one row
+   * references a deleted candidate.
+   */
+  async getTalentPoolCandidatesByIds(ids: string[]): Promise<Map<string, any>> {
+    const uniqueIds = Array.from(
+      new Set(ids.map((id) => id?.trim()).filter((id): id is string => !!id)),
+    );
+    if (uniqueIds.length === 0) return new Map();
+
+    const [candidates, positionConfigs] = await Promise.all([
+      this.prisma.candidate.findMany({
+        where: { id: { in: uniqueIds } },
+        select: CANDIDATE_LIST_CARD_SELECT,
+      }),
+      // Read once for the whole batch, not once per candidate.
+      this.positionRateConfigService.findAllUnpaginated(),
+    ]);
+
+    const configMap = buildConfigMap(positionConfigs);
+
+    return new Map(
+      candidates.map((candidate) => [
+        candidate.id,
+        this.toCardCandidate(candidate, configMap),
+      ]),
+    );
+  }
+
+  /**
+   * Applies the same transformations as `getTalentPoolCandidateById` so a card
+   * renders identically whether it came from the batch or the single-id path.
+   *
+   * Order matters: `computeCandidateRates` labels the positions itself and
+   * reads the raw `employment_type`, so it MUST run before either field is
+   * normalized for display. Reversing these steps yields wrong billing rates
+   * without raising an error.
+   */
+  private toCardCandidate(
+    candidate: Prisma.CandidateGetPayload<{
+      select: typeof CANDIDATE_LIST_CARD_SELECT;
+    }>,
+    configMap: Parameters<typeof computeCandidateRates>[1],
+  ): any {
+    const AVATAR_BASE_URL =
+      'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+
+    // 1. Rates first — needs the raw employment_type and unlabelled positions.
+    const rates = computeCandidateRates(candidate, configMap);
+
+    // 2. Then normalize employment_type for display (array, or ";"-joined).
+    let employmentTypeValue: unknown = candidate.employment_type;
+    if (Array.isArray(employmentTypeValue)) {
+      employmentTypeValue = employmentTypeValue[0];
+    } else if (
+      typeof employmentTypeValue === 'string' &&
+      employmentTypeValue.includes(';')
+    ) {
+      employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+    }
+    const transformedEmploymentType =
+      changeLabelAvailability(
+        dbToStageDictionary[Number(employmentTypeValue)],
+      ) || employmentTypeValue;
+
+    // 3. And finally map the positions to their display labels.
+    return {
+      ...candidate,
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
+        : null,
+      employment_type: transformedEmploymentType,
+      approved_positions_pairing:
+        candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+        [],
+      ...rates,
+    };
   }
 
   async getTalentPoolCandidateByIdForLoggedUser(
