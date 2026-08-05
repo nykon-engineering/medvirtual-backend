@@ -2563,6 +2563,26 @@ ${getEmailLogoCss()}
     }
   }
 
+  /**
+   * CC the panel creator on the recipient-facing email, so the admin who sent the
+   * panel holds the exact copy the client received (same branding, same link).
+   *
+   * Returns undefined rather than an empty array when the CC would be redundant or
+   * invalid: Resend treats `cc: []` inconsistently across SDK versions, and CC'ing
+   * the recipient's own address would deliver the same mail twice.
+   */
+  private offerPanelCreatorCc(
+    creatorEmail: string | null | undefined,
+    recipientEmail: string,
+  ): string | undefined {
+    const cc = creatorEmail?.trim();
+    if (!cc) return undefined;
+    if (cc.toLowerCase() === recipientEmail.trim().toLowerCase()) {
+      return undefined;
+    }
+    return cc;
+  }
+
   async notifyOfferPanelCreatedClient(panelId: string): Promise<boolean> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { id: panelId },
@@ -2575,7 +2595,9 @@ ${getEmailLogoCss()}
         recipient_email: true,
         recipient_org_name: true,
         recipientUser: { select: { first_name: true } },
-        createdBy: { select: { first_name: true, last_name: true } },
+        createdBy: {
+          select: { first_name: true, last_name: true, email: true },
+        },
         _count: { select: { candidates: true } },
       },
     });
@@ -2619,6 +2641,10 @@ ${getEmailLogoCss()}
     return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
+      cc: this.offerPanelCreatorCc(
+        panel.createdBy.email,
+        panel.recipient_email,
+      ),
       subject:
         tplOfferClient?.subject ??
         `${candidateLabel} picked for you — ${theme.companyName}`,
@@ -2637,7 +2663,7 @@ ${getEmailLogoCss()}
         recipient_name: true,
         recipient_email: true,
         public_token: true,
-        createdBy: { select: { first_name: true } },
+        createdBy: { select: { first_name: true, email: true } },
         _count: { select: { candidates: true } },
       },
     });
@@ -2679,6 +2705,11 @@ ${getEmailLogoCss()}
     return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
+      // Also applies to the resend path, which reuses this method.
+      cc: this.offerPanelCreatorCc(
+        panel.createdBy.email,
+        panel.recipient_email,
+      ),
       subject:
         tplOfferPublic?.subject ??
         `${candidateLabel} picked for you — ${theme.companyName}`,

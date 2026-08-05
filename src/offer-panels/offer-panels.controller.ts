@@ -32,12 +32,16 @@ import { OfferPanelsService } from './offer-panels.service';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
 import { CreateOfferPanelDto } from './dto/create-offer-panel.dto';
 import { UpdateOfferPanelDto } from './dto/update-offer-panel.dto';
+import { OfferPanelsAuditService } from './offer-panels-audit.service';
 
 @ApiTags('Offer Panels')
 @ApiBearerAuth()
 @Controller()
 export class OfferPanelsController {
-  constructor(private readonly offerPanelsService: OfferPanelsService) {}
+  constructor(
+    private readonly offerPanelsService: OfferPanelsService,
+    private readonly panelAudit: OfferPanelsAuditService,
+  ) {}
 
   @Post('offer-panels')
   @UseGuards(AuthGuard, RolesGuard)
@@ -119,8 +123,11 @@ export class OfferPanelsController {
   @ApiResponse({ status: 200, description: 'Panels retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async findAll(@Query() query: QueryOfferPanelsDto) {
-    const result = await this.offerPanelsService.findAll(query);
+  async findAll(
+    @Query() query: QueryOfferPanelsDto,
+    @CurrentUser() user: USER,
+  ) {
+    const result = await this.offerPanelsService.findAll(query, user);
     return {
       status: 200,
       data: result.data,
@@ -195,6 +202,55 @@ export class OfferPanelsController {
       status: 200,
       data: panel,
     };
+  }
+
+  // ':id/audit' is more specific than ':id' and cannot be shadowed by it, but is
+  // kept adjacent to findOne so the file's route-ordering invariant stays obvious.
+  @Get('offer-panels/:id/audit')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get the audit timeline for an offer panel (admin)',
+    description:
+      'Every audit entry for the panel, oldest first. Covers created, viewed, ' +
+      'updated, candidate_removed, accepted, declined, deleted and resent, across ' +
+      'both the authenticated and public-token paths.',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'Offer panel ID' })
+  @ApiResponse({ status: 200, description: 'Audit entries retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async findAudit(@Param('id') id: string) {
+    const data = await this.panelAudit.findByOfferPanel(id);
+    return { status: 200, data };
+  }
+
+  // POST, not GET: this mutates state (sends an email, writes an audit row) and must
+  // not be triggerable by a link prefetch or an address-bar visit.
+  @Post('offer-panels/:id/resend')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend the public panel link to its recipient (admin)',
+    description:
+      'Re-sends the existing tokenized link. The token is reused, not rotated, so ' +
+      'any link already shared keeps working. Allowed on decided panels — the ' +
+      'public page renders read-only once accepted or declined.',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'Offer panel ID' })
+  @ApiResponse({ status: 200, description: 'Email resent' })
+  @ApiResponse({
+    status: 400,
+    description: 'Panel is not public, or the send failed',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Offer panel not found' })
+  async resend(@Param('id') id: string, @CurrentUser() user: USER) {
+    const data = await this.offerPanelsService.resendPublicLink(id, user);
+    return { status: 200, data };
   }
 
   // Task 4.1 — track view (client auth, R17)
@@ -309,8 +365,12 @@ export class OfferPanelsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Offer panel not found' })
-  async update(@Param('id') id: string, @Body() dto: UpdateOfferPanelDto) {
-    const data = await this.offerPanelsService.update(id, dto);
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateOfferPanelDto,
+    @CurrentUser() user: USER,
+  ) {
+    const data = await this.offerPanelsService.update(id, dto, user);
     return { status: 200, data };
   }
 
@@ -327,7 +387,7 @@ export class OfferPanelsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Offer panel not found' })
-  async remove(@Param('id') id: string) {
-    await this.offerPanelsService.remove(id);
+  async remove(@Param('id') id: string, @CurrentUser() user: USER) {
+    await this.offerPanelsService.remove(id, user);
   }
 }

@@ -12,6 +12,7 @@ import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { TicketAuditService } from '../ticket/ticket-audit.service';
+import { OfferPanelsAuditService } from './offer-panels-audit.service';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -164,6 +165,13 @@ const mockTicketAuditService = {
   findLastDeletedEvent: jest.fn(),
 };
 
+const mockPanelAuditService = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  findAllLogs: jest.fn(),
+  findByOfferPanel: jest.fn(),
+};
+
 describe('OfferPanelsService', () => {
   let service: OfferPanelsService;
 
@@ -180,6 +188,10 @@ describe('OfferPanelsService', () => {
         { provide: HireRequestService, useValue: mockHireRequestService },
         { provide: BusinessUnitContext, useValue: businessUnitContextMock },
         { provide: TicketAuditService, useValue: mockTicketAuditService },
+        {
+          provide: OfferPanelsAuditService,
+          useValue: mockPanelAuditService,
+        },
       ],
     }).compile();
 
@@ -284,7 +296,13 @@ describe('OfferPanelsService', () => {
 
     it('skips users and contacts with no email', async () => {
       mockPrisma.uSER.findMany.mockResolvedValue([
-        { id: 'u1', first_name: 'No', last_name: 'Email', email: null, organization: null },
+        {
+          id: 'u1',
+          first_name: 'No',
+          last_name: 'Email',
+          email: null,
+          organization: null,
+        },
       ]);
       mockPrisma.contact.findMany.mockResolvedValue([]);
 
@@ -334,12 +352,16 @@ describe('OfferPanelsService', () => {
       expect(userCall.where.AND).toHaveLength(2);
       expect(userCall.where.AND[0].OR).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ first_name: expect.objectContaining({ contains: 'Paulo' }) }),
+          expect.objectContaining({
+            first_name: expect.objectContaining({ contains: 'Paulo' }),
+          }),
         ]),
       );
       expect(userCall.where.AND[1].OR).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ last_name: expect.objectContaining({ contains: 'Melo' }) }),
+          expect.objectContaining({
+            last_name: expect.objectContaining({ contains: 'Melo' }),
+          }),
         ]),
       );
     });
@@ -406,9 +428,9 @@ describe('OfferPanelsService', () => {
 
       await service.create(validDto, adminUser);
 
-      expect(businessUnitContextMock.isAllowedHubspotValue).toHaveBeenCalledWith(
-        'MedVirtual',
-      );
+      expect(
+        businessUnitContextMock.isAllowedHubspotValue,
+      ).toHaveBeenCalledWith('MedVirtual');
     });
 
     it('rejects a non-visible/unknown business_unit with BadRequestException', async () => {
@@ -458,7 +480,11 @@ describe('OfferPanelsService', () => {
       const dto = {
         ...validDto,
         recipients: [
-          { recipient_type: 'client_user' as const, email: 'jane@sunrise.com', name: 'Jane' },
+          {
+            recipient_type: 'client_user' as const,
+            email: 'jane@sunrise.com',
+            name: 'Jane',
+          },
         ],
       };
 
@@ -491,7 +517,11 @@ describe('OfferPanelsService', () => {
       const dto = {
         ...validDto,
         recipients: [
-          { recipient_type: 'company_contact' as const, email: 'contact@co.com', name: 'Contact' },
+          {
+            recipient_type: 'company_contact' as const,
+            email: 'contact@co.com',
+            name: 'Contact',
+          },
         ],
       };
 
@@ -520,10 +550,15 @@ describe('OfferPanelsService', () => {
     });
 
     it('creates a public panel for email recipient type', async () => {
-      const emailRecipientPanel = makePanel({ is_public: true, public_token: 'tok-abc' });
+      const emailRecipientPanel = makePanel({
+        is_public: true,
+        public_token: 'tok-abc',
+      });
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         const txPrisma = {
-          offerPanel: { create: jest.fn().mockResolvedValue(emailRecipientPanel) },
+          offerPanel: {
+            create: jest.fn().mockResolvedValue(emailRecipientPanel),
+          },
         };
         return fn(txPrisma);
       });
@@ -531,7 +566,11 @@ describe('OfferPanelsService', () => {
       const dto = {
         ...validDto,
         recipients: [
-          { recipient_type: 'email' as const, email: 'prospect@co.com', name: 'Prospect' },
+          {
+            recipient_type: 'email' as const,
+            email: 'prospect@co.com',
+            name: 'Prospect',
+          },
         ],
       };
 
@@ -558,7 +597,9 @@ describe('OfferPanelsService', () => {
 
       await service.create(validDto, adminUser);
 
-      expect(mockNotificationsService.notifyOfferPanelCreatedClient).toHaveBeenCalledTimes(1);
+      expect(
+        mockNotificationsService.notifyOfferPanelCreatedClient,
+      ).toHaveBeenCalledTimes(1);
       expect(settled).toBe(true);
     });
 
@@ -820,9 +861,15 @@ describe('OfferPanelsService', () => {
 
   describe('findByToken', () => {
     it('returns enriched panel with candidates', async () => {
-      const panel = makePanel({ public_token: 'tok-1', candidates: [{ candidate_id: 'cand-1' }] });
+      const panel = makePanel({
+        public_token: 'tok-1',
+        candidates: [{ candidate_id: 'cand-1' }],
+      });
       mockPrisma.offerPanel.findUnique.mockResolvedValue(panel);
-      mockCandidatesService.getTalentPoolCandidateById.mockResolvedValue({ id: 'cand-1', name: 'Dr. Smith' });
+      mockCandidatesService.getTalentPoolCandidateById.mockResolvedValue({
+        id: 'cand-1',
+        name: 'Dr. Smith',
+      });
 
       const result = await service.findByToken('tok-1');
 
@@ -833,7 +880,9 @@ describe('OfferPanelsService', () => {
     it('throws NotFoundException when token does not match', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.findByToken('bad-token')).rejects.toThrow(NotFoundException);
+      await expect(service.findByToken('bad-token')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('attaches the resolved BU branding for the unauthenticated public page', async () => {
@@ -886,7 +935,10 @@ describe('OfferPanelsService', () => {
 
     it('returns panel for the recipient client user', async () => {
       const client = makeUser({ id: 'user-org-1' });
-      const panel = makePanel({ recipient_user_id: 'user-org-1', candidates: [] });
+      const panel = makePanel({
+        recipient_user_id: 'user-org-1',
+        candidates: [],
+      });
       mockPrisma.offerPanel.findUnique.mockResolvedValue(panel);
 
       await expect(service.findOne('panel-1', client)).resolves.toBeDefined();
@@ -897,13 +949,17 @@ describe('OfferPanelsService', () => {
       const panel = makePanel({ recipient_user_id: 'user-org-1' });
       mockPrisma.offerPanel.findUnique.mockResolvedValue(panel);
 
-      await expect(service.findOne('panel-1', client)).rejects.toThrow(ForbiddenException);
+      await expect(service.findOne('panel-1', client)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('throws NotFoundException when panel does not exist', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne('missing', makeAdminUser())).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing', makeAdminUser())).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -913,7 +969,10 @@ describe('OfferPanelsService', () => {
 
   describe('findForClientUser', () => {
     it('returns panels for the client user excluding declined', async () => {
-      const panels = [makePanel(), makePanel({ id: 'panel-2', status: 'viewed' })];
+      const panels = [
+        makePanel(),
+        makePanel({ id: 'panel-2', status: 'viewed' }),
+      ];
       mockPrisma.offerPanel.findMany.mockResolvedValue(panels);
 
       const result = await service.findForClientUser(makeUser());
@@ -961,7 +1020,9 @@ describe('OfferPanelsService', () => {
     it('throws NotFoundException when panel does not exist', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.trackView('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.trackView('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws ForbiddenException when user is not the recipient', async () => {
@@ -972,7 +1033,9 @@ describe('OfferPanelsService', () => {
 
       const user = makeUser({ id: 'user-org-1' });
 
-      await expect(service.trackView('panel-1', user)).rejects.toThrow(ForbiddenException);
+      await expect(service.trackView('panel-1', user)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('does not throw ForbiddenException when no user is passed (public access)', async () => {
@@ -992,7 +1055,10 @@ describe('OfferPanelsService', () => {
 
   describe('trackViewByToken', () => {
     it('increments view and flips status for sent panel', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ id: 'panel-1', status: 'sent' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        status: 'sent',
+      });
       mockPrisma.offerPanel.update.mockResolvedValue({});
 
       await service.trackViewByToken('tok-1');
@@ -1002,7 +1068,10 @@ describe('OfferPanelsService', () => {
     });
 
     it('does not flip status for already-viewed panel', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ id: 'panel-1', status: 'viewed' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        status: 'viewed',
+      });
       mockPrisma.offerPanel.update.mockResolvedValue({});
 
       await service.trackViewByToken('tok-1');
@@ -1014,7 +1083,9 @@ describe('OfferPanelsService', () => {
     it('throws NotFoundException for unknown token', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.trackViewByToken('bad')).rejects.toThrow(NotFoundException);
+      await expect(service.trackViewByToken('bad')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -1027,7 +1098,10 @@ describe('OfferPanelsService', () => {
 
     it('removes candidate and returns updated panel when others remain', async () => {
       mockPrisma.offerPanel.findUnique
-        .mockResolvedValueOnce({ status: 'sent', recipient_user_id: 'user-org-1' })
+        .mockResolvedValueOnce({
+          status: 'sent',
+          recipient_user_id: 'user-org-1',
+        })
         .mockResolvedValueOnce(makePanel());
       mockPrisma.offerPanelCandidate.deleteMany.mockResolvedValue({ count: 1 });
       mockPrisma.offerPanelCandidate.count.mockResolvedValue(1);
@@ -1042,21 +1116,61 @@ describe('OfferPanelsService', () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue({
         status: 'sent',
         recipient_user_id: 'user-org-1',
+        title: 'Panel',
       });
       mockPrisma.offerPanelCandidate.deleteMany.mockResolvedValue({ count: 1 });
       mockPrisma.offerPanelCandidate.count.mockResolvedValue(0);
-      mockPrisma.offerPanel.delete.mockResolvedValue({});
+      // The delete now runs inside a transaction, alongside the audit tombstone.
+      const txDelete = jest.fn().mockResolvedValue({});
+      mockPrisma.$transaction.mockImplementation(async (fn: any) =>
+        fn({ offerPanel: { delete: txDelete } }),
+      );
 
       const result = await service.removeCandidate('panel-1', 'cand-1', client);
 
       expect(result.deleted).toBe(true);
-      expect(mockPrisma.offerPanel.delete).toHaveBeenCalledWith({ where: { id: 'panel-1' } });
+      expect(txDelete).toHaveBeenCalledWith({ where: { id: 'panel-1' } });
+      expect(mockPanelAuditService.logOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerPanelId: 'panel-1',
+          event: 'deleted',
+          reason: 'Last candidate removed by the recipient',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('audits a candidate removal that leaves the panel intact', async () => {
+      mockPrisma.offerPanel.findUnique
+        .mockResolvedValueOnce({
+          status: 'sent',
+          recipient_user_id: 'user-org-1',
+          title: 'Panel',
+        })
+        .mockResolvedValueOnce(makePanel());
+      mockPrisma.offerPanelCandidate.deleteMany.mockResolvedValue({ count: 1 });
+      mockPrisma.offerPanelCandidate.count.mockResolvedValue(2);
+
+      await service.removeCandidate('panel-1', 'cand-1', client);
+
+      expect(mockPanelAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerPanelId: 'panel-1',
+          event: 'candidate_removed',
+          metadata: expect.objectContaining({
+            candidateId: 'cand-1',
+            remainingCount: 2,
+          }),
+        }),
+      );
     });
 
     it('throws NotFoundException when panel not found', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.removeCandidate('missing', 'cand-1', client)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.removeCandidate('missing', 'cand-1', client),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('throws ForbiddenException when user is not the recipient', async () => {
@@ -1065,7 +1179,9 @@ describe('OfferPanelsService', () => {
         recipient_user_id: 'other-user',
       });
 
-      await expect(service.removeCandidate('panel-1', 'cand-1', client)).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.removeCandidate('panel-1', 'cand-1', client),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throws BadRequestException when panel is already decided', async () => {
@@ -1074,7 +1190,9 @@ describe('OfferPanelsService', () => {
         recipient_user_id: 'user-org-1',
       });
 
-      await expect(service.removeCandidate('panel-1', 'cand-1', client)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.removeCandidate('panel-1', 'cand-1', client),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('throws NotFoundException when candidate is not in the panel', async () => {
@@ -1084,7 +1202,9 @@ describe('OfferPanelsService', () => {
       });
       mockPrisma.offerPanelCandidate.deleteMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.removeCandidate('panel-1', 'cand-missing', client)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.removeCandidate('panel-1', 'cand-missing', client),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -1109,22 +1229,40 @@ describe('OfferPanelsService', () => {
       expect(mockPrisma.offerPanelCandidate.deleteMany).toHaveBeenCalledWith({
         where: { offer_panel_id: 'panel-2', candidate_id: 'cand-1' },
       });
-      expect(mockPrisma.offerPanel.delete).not.toHaveBeenCalled();
+      // Panels still holding candidates are neither deleted nor audited. The delete
+      // path runs inside a transaction, so assert on that rather than on the
+      // top-level client.
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPanelAuditService.logOrThrow).not.toHaveBeenCalled();
     });
 
     it('deletes a panel that becomes empty after removing the candidate', async () => {
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { offer_panel_id: 'panel-1' },
+        {
+          offer_panel_id: 'panel-1',
+          offerPanel: { status: 'sent', title: 'Panel' },
+        },
       ]);
       mockPrisma.offerPanelCandidate.deleteMany.mockResolvedValue({ count: 1 });
       mockPrisma.offerPanelCandidate.count.mockResolvedValue(0);
-      mockPrisma.offerPanel.delete.mockResolvedValue({});
+      const txDelete = jest.fn().mockResolvedValue({});
+      mockPrisma.$transaction.mockImplementation(async (fn: any) =>
+        fn({ offerPanel: { delete: txDelete } }),
+      );
 
       await service.removeCandidateFromAllPanels('cand-1');
 
-      expect(mockPrisma.offerPanel.delete).toHaveBeenCalledWith({
-        where: { id: 'panel-1' },
-      });
+      expect(txDelete).toHaveBeenCalledWith({ where: { id: 'panel-1' } });
+      // A candidate deletion must not make panels vanish without a trace.
+      expect(mockPanelAuditService.logOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerPanelId: 'panel-1',
+          event: 'deleted',
+          reason: 'Candidate removed from the system',
+          source: 'system',
+        }),
+        expect.anything(),
+      );
     });
 
     it('does nothing when the candidate is not present in any panel', async () => {
@@ -1154,7 +1292,9 @@ describe('OfferPanelsService', () => {
       await service.decline('panel-1', client);
 
       expect(mockPrisma.offerPanel.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'declined' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'declined' }),
+        }),
       );
     });
 
@@ -1174,7 +1314,9 @@ describe('OfferPanelsService', () => {
         recipient_user_id: 'user-org-1',
       });
 
-      await expect(service.decline('panel-1', client)).rejects.toThrow(BadRequestException);
+      await expect(service.decline('panel-1', client)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws ForbiddenException when user is not the recipient', async () => {
@@ -1183,13 +1325,17 @@ describe('OfferPanelsService', () => {
         recipient_user_id: 'other-user',
       });
 
-      await expect(service.decline('panel-1', client)).rejects.toThrow(ForbiddenException);
+      await expect(service.decline('panel-1', client)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('throws NotFoundException when panel not found', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.decline('panel-1', client)).rejects.toThrow(NotFoundException);
+      await expect(service.decline('panel-1', client)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -1199,33 +1345,48 @@ describe('OfferPanelsService', () => {
 
   describe('declineByToken', () => {
     it('marks panel as declined via public token', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ id: 'panel-1', status: 'sent' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        status: 'sent',
+      });
       mockPrisma.offerPanel.update.mockResolvedValue({});
 
       await service.declineByToken('tok-1');
 
       expect(mockPrisma.offerPanel.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ status: 'declined' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'declined' }),
+        }),
       );
     });
 
     it('is idempotent when already declined (E8)', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ id: 'panel-1', status: 'declined' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        status: 'declined',
+      });
 
       await expect(service.declineByToken('tok-1')).resolves.toBeUndefined();
       expect(mockPrisma.offerPanel.update).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when already accepted', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ id: 'panel-1', status: 'accepted' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        status: 'accepted',
+      });
 
-      await expect(service.declineByToken('tok-1')).rejects.toThrow(BadRequestException);
+      await expect(service.declineByToken('tok-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws NotFoundException for unknown token', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.declineByToken('bad-token')).rejects.toThrow(NotFoundException);
+      await expect(service.declineByToken('bad-token')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -1249,7 +1410,10 @@ describe('OfferPanelsService', () => {
     beforeEach(() => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(panelData);
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['RN'] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: ['RN'] },
+        },
       ]);
       mockPrisma.organization.findUnique.mockResolvedValue({
         name: 'Sunrise Clinic',
@@ -1351,7 +1515,9 @@ describe('OfferPanelsService', () => {
         recipient_user_id: 'other-user',
       });
 
-      await expect(service.acceptByClientUser('panel-1', client)).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.acceptByClientUser('panel-1', client),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('throws BadRequestException when panel is declined', async () => {
@@ -1360,7 +1526,9 @@ describe('OfferPanelsService', () => {
         status: 'declined',
       });
 
-      await expect(service.acceptByClientUser('panel-1', client)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.acceptByClientUser('panel-1', client),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('is idempotent: returns existing HireRequest when already accepted (E8)', async () => {
@@ -1379,14 +1547,25 @@ describe('OfferPanelsService', () => {
     it('throws NotFoundException when panel not found', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.acceptByClientUser('panel-1', client)).rejects.toThrow(NotFoundException);
+      await expect(
+        service.acceptByClientUser('panel-1', client),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('sets hubspot_role_type to the most common approved position across candidates', async () => {
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['RN'] } },
-        { candidate_id: 'cand-2', candidate: { approved_positions_pairing: ['LPN'] } },
-        { candidate_id: 'cand-3', candidate: { approved_positions_pairing: ['RN'] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: ['RN'] },
+        },
+        {
+          candidate_id: 'cand-2',
+          candidate: { approved_positions_pairing: ['LPN'] },
+        },
+        {
+          candidate_id: 'cand-3',
+          candidate: { approved_positions_pairing: ['RN'] },
+        },
       ]);
 
       let createArgs: any;
@@ -1413,8 +1592,14 @@ describe('OfferPanelsService', () => {
 
     it('breaks approved position ties by picking the first one encountered', async () => {
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['LPN'] } },
-        { candidate_id: 'cand-2', candidate: { approved_positions_pairing: ['RN'] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: ['LPN'] },
+        },
+        {
+          candidate_id: 'cand-2',
+          candidate: { approved_positions_pairing: ['RN'] },
+        },
       ]);
 
       let createArgs: any;
@@ -1438,7 +1623,10 @@ describe('OfferPanelsService', () => {
 
     it('sets hubspot_role_type to null when no candidate has approved positions', async () => {
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: [] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: [] },
+        },
       ]);
 
       let createArgs: any;
@@ -1462,8 +1650,14 @@ describe('OfferPanelsService', () => {
 
     it('counts every approved position across all candidates when a candidate has multiple', async () => {
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['RN', 'LPN'] } },
-        { candidate_id: 'cand-2', candidate: { approved_positions_pairing: ['LPN'] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: ['RN', 'LPN'] },
+        },
+        {
+          candidate_id: 'cand-2',
+          candidate: { approved_positions_pairing: ['LPN'] },
+        },
       ]);
 
       let createArgs: any;
@@ -1487,7 +1681,10 @@ describe('OfferPanelsService', () => {
 
     it('sends the approved position as va_type to HubSpot when it matches a valid option', async () => {
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['Nurse'] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: ['Nurse'] },
+        },
       ]);
 
       await service.acceptByClientUser('panel-1', client);
@@ -1505,7 +1702,10 @@ describe('OfferPanelsService', () => {
 
     it('sends null as va_type to HubSpot when the approved position has no matching HubSpot option, but keeps the title/DB value', async () => {
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['Bookkeeper'] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: ['Bookkeeper'] },
+        },
       ]);
 
       let createArgs: any;
@@ -1536,9 +1736,14 @@ describe('OfferPanelsService', () => {
     });
 
     it('falls back to null va_type when fetching HubSpot va_type options fails', async () => {
-      mockHireRequestService.getVATypes.mockRejectedValueOnce(new Error('network error'));
+      mockHireRequestService.getVATypes.mockRejectedValueOnce(
+        new Error('network error'),
+      );
       mockPrisma.offerPanelCandidate.findMany.mockResolvedValue([
-        { candidate_id: 'cand-1', candidate: { approved_positions_pairing: ['Nurse'] } },
+        {
+          candidate_id: 'cand-1',
+          candidate: { approved_positions_pairing: ['Nurse'] },
+        },
       ]);
 
       await service.acceptByClientUser('panel-1', client);
@@ -1643,7 +1848,10 @@ describe('OfferPanelsService', () => {
     });
 
     it('does not re-log a created event on an idempotent repeat accept', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ ...panelData, status: 'accepted' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        ...panelData,
+        status: 'accepted',
+      });
       mockPrisma.ticket.findFirst.mockResolvedValue(ticketData);
 
       await service.acceptByToken('tok-1');
@@ -1652,13 +1860,21 @@ describe('OfferPanelsService', () => {
     });
 
     it('throws BadRequestException when panel is declined', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ ...panelData, status: 'declined' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        ...panelData,
+        status: 'declined',
+      });
 
-      await expect(service.acceptByToken('tok-1')).rejects.toThrow(BadRequestException);
+      await expect(service.acceptByToken('tok-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('is idempotent: returns existing Ticket when already accepted (E8)', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ ...panelData, status: 'accepted' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        ...panelData,
+        status: 'accepted',
+      });
       mockPrisma.ticket.findFirst.mockResolvedValue(ticketData);
 
       const result = await service.acceptByToken('tok-1');
@@ -1670,7 +1886,9 @@ describe('OfferPanelsService', () => {
     it('throws NotFoundException for unknown token', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.acceptByToken('bad-token')).rejects.toThrow(NotFoundException);
+      await expect(service.acceptByToken('bad-token')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -1681,10 +1899,19 @@ describe('OfferPanelsService', () => {
   describe('update', () => {
     it('updates and returns the panel', async () => {
       const updated = makePanel({ title: 'New Title' });
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ id: 'panel-1' });
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        title: 'Old Title',
+        description: 'desc',
+        status: 'sent',
+      });
       mockPrisma.offerPanel.update.mockResolvedValue(updated);
 
-      const result = await service.update('panel-1', { title: 'New Title' });
+      const result = await service.update(
+        'panel-1',
+        { title: 'New Title' },
+        makeAdminUser(),
+      );
 
       expect(result.title).toBe('New Title');
       expect(mockPrisma.offerPanel.update).toHaveBeenCalledWith(
@@ -1692,10 +1919,53 @@ describe('OfferPanelsService', () => {
       );
     });
 
+    it('audits the change with a before/after diff', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        title: 'Old Title',
+        description: 'desc',
+        status: 'sent',
+      });
+      mockPrisma.offerPanel.update.mockResolvedValue(
+        makePanel({ title: 'New Title', description: 'desc' }),
+      );
+
+      await service.update('panel-1', { title: 'New Title' }, makeAdminUser());
+
+      expect(mockPanelAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerPanelId: 'panel-1',
+          event: 'updated',
+          before: expect.objectContaining({ title: 'Old Title' }),
+          after: expect.objectContaining({ title: 'New Title' }),
+          metadata: expect.objectContaining({ changedFields: ['title'] }),
+        }),
+      );
+    });
+
+    // An "Updated" entry whose before and after match is noise in the timeline.
+    it('writes no audit entry when nothing actually changed', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        title: 'Same Title',
+        description: 'desc',
+        status: 'sent',
+      });
+      mockPrisma.offerPanel.update.mockResolvedValue(
+        makePanel({ title: 'Same Title', description: 'desc' }),
+      );
+
+      await service.update('panel-1', { title: 'Same Title' }, makeAdminUser());
+
+      expect(mockPanelAuditService.log).not.toHaveBeenCalled();
+    });
+
     it('throws NotFoundException when panel not found', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.update('missing', { title: 'x' })).rejects.toThrow(NotFoundException);
+      await expect(
+        service.update('missing', { title: 'x' }, makeAdminUser()),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -1704,19 +1974,189 @@ describe('OfferPanelsService', () => {
   // -------------------------------------------------------------------------
 
   describe('remove', () => {
+    /** remove() deletes inside a transaction so the audit tombstone commits with it. */
+    const mockRemoveTransaction = () => {
+      const txDelete = jest.fn().mockResolvedValue({});
+      mockPrisma.$transaction.mockImplementation(async (fn: any) =>
+        fn({ offerPanel: { delete: txDelete } }),
+      );
+      return txDelete;
+    };
+
     it('deletes the panel', async () => {
-      mockPrisma.offerPanel.findUnique.mockResolvedValue({ id: 'panel-1' });
-      mockPrisma.offerPanel.delete.mockResolvedValue({});
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        title: 'Panel',
+        status: 'sent',
+      });
+      const txDelete = mockRemoveTransaction();
 
-      await service.remove('panel-1');
+      await service.remove('panel-1', makeAdminUser());
 
-      expect(mockPrisma.offerPanel.delete).toHaveBeenCalledWith({ where: { id: 'panel-1' } });
+      expect(txDelete).toHaveBeenCalledWith({ where: { id: 'panel-1' } });
+    });
+
+    // The panel row is hard deleted, so the audit entry is the only surviving record.
+    it('writes the tombstone with logOrThrow inside the transaction', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue({
+        id: 'panel-1',
+        title: 'Panel',
+        status: 'sent',
+        promo_enabled: true,
+      });
+      mockRemoveTransaction();
+
+      await service.remove('panel-1', makeAdminUser());
+
+      expect(mockPanelAuditService.logOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offerPanelId: 'panel-1',
+          event: 'deleted',
+          before: expect.objectContaining({ promo_enabled: true }),
+        }),
+        expect.anything(),
+      );
     });
 
     it('throws NotFoundException when panel not found', async () => {
       mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
 
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing', makeAdminUser())).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // resendPublicLink
+  // -------------------------------------------------------------------------
+
+  describe('resendPublicLink', () => {
+    const publicPanel = (overrides: Record<string, any> = {}) => ({
+      id: 'panel-1',
+      status: 'sent',
+      is_public: true,
+      public_token: 'tok-123',
+      recipient_email: 'jane@sunrise.com',
+      recipient_name: 'Jane Client',
+      ...overrides,
+    });
+
+    it('resends the email and reports the recipient', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(publicPanel());
+      mockNotificationsService.notifyOfferPanelCreatedPublic.mockResolvedValue(
+        true,
+      );
+
+      const result = await service.resendPublicLink(
+        'panel-1',
+        makeAdminUser(),
+      );
+
+      expect(result).toEqual({ sentTo: 'jane@sunrise.com' });
+      expect(
+        mockNotificationsService.notifyOfferPanelCreatedPublic,
+      ).toHaveBeenCalledWith('panel-1');
+      expect(mockPanelAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ offerPanelId: 'panel-1', event: 'resent' }),
+      );
+    });
+
+    // Client-user panels have no token and no public page — nothing to resend.
+    it('rejects a non-public panel', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(
+        publicPanel({ is_public: false, public_token: null }),
+      );
+
+      await expect(
+        service.resendPublicLink('panel-1', makeAdminUser()),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        mockNotificationsService.notifyOfferPanelCreatedPublic,
+      ).not.toHaveBeenCalled();
+    });
+
+    // A decided panel renders read-only publicly, so a resend cannot cause a
+    // second accept — recipients legitimately ask for the link again.
+    it('allows resending an already-accepted panel', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(
+        publicPanel({ status: 'accepted' }),
+      );
+      mockNotificationsService.notifyOfferPanelCreatedPublic.mockResolvedValue(
+        true,
+      );
+
+      await expect(
+        service.resendPublicLink('panel-1', makeAdminUser()),
+      ).resolves.toEqual({ sentTo: 'jane@sunrise.com' });
+    });
+
+    // Never report a false success to the admin.
+    it('throws when the send fails', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(publicPanel());
+      mockNotificationsService.notifyOfferPanelCreatedPublic.mockResolvedValue(
+        false,
+      );
+
+      await expect(
+        service.resendPublicLink('panel-1', makeAdminUser()),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPanelAuditService.log).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when panel not found', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.resendPublicLink('missing', makeAdminUser()),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // public_token exposure
+  // -------------------------------------------------------------------------
+
+  describe('public_token gating', () => {
+    const tokenPanel = makePanel({
+      is_public: true,
+      public_token: 'tok-secret',
+    });
+
+    beforeEach(() => {
+      mockCandidatesService.getTalentPoolCandidateById.mockResolvedValue({
+        id: 'cand-1',
+      });
+    });
+
+    it('returns the token to a system role', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(tokenPanel);
+
+      const result = await service.findOne('panel-1', makeAdminUser());
+
+      expect(result.public_token).toBe('tok-secret');
+    });
+
+    // The token is a bearer credential: holding it permits accept/decline with
+    // no authentication, so it must never reach an organization-role viewer.
+    it('strips the token for an organization role', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(tokenPanel);
+
+      const result = await service.findOne(
+        'panel-1',
+        makeUser({ role: 'organization_admin' }),
+      );
+
+      expect(result).not.toHaveProperty('public_token');
+    });
+
+    it('does not echo the token back on the public token read', async () => {
+      mockPrisma.offerPanel.findUnique.mockResolvedValue(tokenPanel);
+      businessUnitContextMock.brandingFor.mockResolvedValue(null);
+
+      const result = await service.findByToken('tok-secret');
+
+      expect(result).not.toHaveProperty('public_token');
     });
   });
 });
