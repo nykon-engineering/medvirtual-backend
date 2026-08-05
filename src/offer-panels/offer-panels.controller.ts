@@ -110,6 +110,7 @@ export class OfferPanelsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'List all offer panels (admin)' })
   @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'created_by', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, enum: OfferPanelStatus })
   @ApiQuery({
     name: 'recipient_type',

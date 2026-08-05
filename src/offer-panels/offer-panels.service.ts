@@ -1605,6 +1605,7 @@ export class OfferPanelsService {
       status,
       recipient_type,
       client,
+      created_by,
       business_unit,
       page = 1,
       limit = 20,
@@ -1621,6 +1622,14 @@ export class OfferPanelsService {
     if (client)
       baseConditions.push({
         recipient_org_name: { contains: client, mode: 'insensitive' },
+      });
+
+    // `createdBy` is the USER relation; the filterable scalar is the FK
+    // `created_by_user_id`. Filtering on the relation with a raw id string
+    // makes Prisma reject the query (expects USERWhereInput).
+    if (created_by)
+      baseConditions.push({
+        created_by_user_id: created_by,
       });
 
     if (business_unit) {
