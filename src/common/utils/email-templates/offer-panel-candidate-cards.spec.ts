@@ -103,7 +103,56 @@ describe('renderOfferPanelCandidateCards', () => {
 
       expect(html).not.toContain('line-through');
       expect(html).toContain('$1,500');
-      expect(html).not.toContain('$1,760');
+      // The promo price may still appear in the banner headline, so assert on
+      // the card's own rate markup rather than the whole document.
+      expect(html).not.toContain(
+        'letter-spacing:-0.3px;">$1,760',
+      );
+    });
+
+    // Regression: the banner was designed but never implemented, so a promo
+    // panel shipped with only the struck price and no headline offer.
+    it('renders the promo banner above the cards', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme(),
+        true,
+      );
+
+      expect(html).toContain('Limited Time Offer');
+      expect(html).toContain('Select candidates starting at just $1,760/month');
+      expect(html).toContain('Terms &amp; Conditions Apply');
+      // Above the first card, not after it.
+      expect(html.indexOf('Limited Time Offer')).toBeLessThan(
+        html.indexOf('Ana S.'),
+      );
+    });
+
+    it('omits the banner entirely when the panel has no promo', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme(),
+        false,
+      );
+
+      expect(html).not.toContain('Limited Time Offer');
+      expect(html).not.toContain('Terms &amp; Conditions');
+    });
+
+    // Berry copy must never say "healthcare", and that rule cannot be extended
+    // to a BU added later — so the banner says nothing brand-specific.
+    it('keeps the banner copy brand-neutral', () => {
+      const html = renderOfferPanelCandidateCards(
+        // No position/skill data, so candidate fields can't be mistaken for
+        // banner copy (a candidate may legitimately be a "Medical Assistant").
+        [makeCandidate({ approved_positions_pairing: [], skills: [] })],
+        makeTheme({ primaryColor: '#FD7171', companyName: 'Berry Virtual' }),
+        true,
+      );
+
+      expect(html).not.toMatch(/healthcare|HIPAA/i);
+      expect(html).toContain('Pre-vetted');
+      expect(html).toContain('Limited Time Offer');
     });
 
     it('shows the plain rate when the panel has no promo', () => {
@@ -164,7 +213,9 @@ describe('renderOfferPanelCandidateCards', () => {
       );
 
       for (const html of [relative, missing]) {
-        expect(html).not.toContain('<img');
+        // The brand badge is also an <img>, so assert on the avatar specifically.
+        expect(html).not.toContain('avatar_default.png');
+        expect(html).not.toContain(`alt="${'Ana S.'}"`);
         expect(html).toContain('AS'); // Ana Silva
       }
     });
@@ -219,7 +270,7 @@ describe('renderOfferPanelCandidateCards', () => {
       expect(html).not.toContain('#01546B');
     });
 
-    it('renders the logo as a veiled watermark, and omits it when absent', () => {
+    it('renders the brand logo as a badge, and omits it when absent', () => {
       const withLogo = renderOfferPanelCandidateCards(
         [makeCandidate()],
         makeTheme(),
@@ -231,18 +282,53 @@ describe('renderOfferPanelCandidateCards', () => {
         false,
       );
 
-      // The veil layer must come FIRST so it paints on top of the logo; a
-      // bare url() would put the brand mark at full strength behind the text.
       expect(withLogo).toContain(
-        'background-image:linear-gradient(rgba(',
+        '<img src="https://staging.medvirtual.ai/logo.png"',
       );
-      expect(withLogo).toContain("url('https://staging.medvirtual.ai/logo.png')");
-      expect(withLogo.indexOf('linear-gradient')).toBeLessThan(
-        withLogo.indexOf("url('https"),
+      expect(withoutLogo).not.toContain('logo.png');
+    });
+
+    /**
+     * Regression: the badge used to be a CSS background watermark. Outlook.com
+     * rewrites message CSS and drops `background-image` on <td>, so it rendered
+     * in the browser preview but was missing from the actual inbox. It must be
+     * a real <img>. `opacity` is equally unsafe — Outlook strips it, which
+     * would show the logo at full strength rather than faintly.
+     */
+    it('uses a real img, not CSS backgrounds or opacity', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme(),
+        false,
       );
 
-      expect(withoutLogo).not.toContain('linear-gradient');
-      expect(withoutLogo).not.toContain('background-image');
+      expect(html).not.toContain('background-image');
+      expect(html).not.toContain('linear-gradient');
+      expect(html).not.toContain('opacity');
+    });
+
+    it('labels the badge with the company name for screen readers', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ companyName: 'Berry Virtual' }),
+        false,
+      );
+
+      expect(html).toContain('alt="Berry Virtual"');
+    });
+
+    // The identity block is plain white: the earlier tint read as a washed-out
+    // grey panel and also swallowed the watermark.
+    it('leaves the identity block unfilled', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ primaryColor: '#01546B' }),
+        false,
+      );
+
+      expect(html).toContain(
+        'border-radius:12px 12px 0 0;background-color:#ffffff',
+      );
     });
 
     // Pins the derivation to the hand-authored design token rather than an
@@ -258,7 +344,7 @@ describe('renderOfferPanelCandidateCards', () => {
   });
 
   describe('filled footer', () => {
-    it('fills the rate row with the brand colour', () => {
+    it('falls back to the brand primary when no Button Color is configured', () => {
       const html = renderOfferPanelCandidateCards(
         [makeCandidate()],
         makeTheme({ primaryColor: '#7C3AED' }),
@@ -266,6 +352,58 @@ describe('renderOfferPanelCandidateCards', () => {
       );
 
       expect(html).toContain('background-color:#7C3AED');
+    });
+
+    /**
+     * The footer is the card's button-like surface, so admins expect it to
+     * follow the Button Color they set in Customize Design
+     * (EmailBranding.button_color) — the same precedence renderHtml applies to
+     * the CTA, so the two can never disagree inside one email.
+     */
+    it('prefers the configured Button Color over the brand primary', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ primaryColor: '#01546B', buttonColor: '#B8860B' }),
+        false,
+      );
+
+      expect(html).toContain('background-color:#B8860B');
+      expect(html).not.toContain('background-color:#01546B');
+    });
+
+    it('picks ink that contrasts with the Button Color, not the primary', () => {
+      // Dark primary (would take white) + pale button colour (needs dark ink).
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ primaryColor: '#01546B', buttonColor: '#FFE600' }),
+        false,
+      );
+
+      expect(html).toContain('color:#1a1a19;letter-spacing:-0.3px;');
+      expect(html).not.toContain('color:#ffffff;letter-spacing:-0.3px;');
+    });
+
+    it('honours an explicitly configured button text colour', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ buttonColor: '#01546B', buttonTextColor: '#FFEE00' }),
+        false,
+      );
+
+      expect(html).toContain('color:#FFEE00;letter-spacing:-0.3px;');
+    });
+
+    it('uses the same fill for the promo badge as for the footer', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ primaryColor: '#01546B', buttonColor: '#B8860B' }),
+        true,
+      );
+
+      // Both the badge and the footer must sit on the Button Color, otherwise
+      // the shared ink colour would contrast with only one of them.
+      const fills = html.match(/background-color:#B8860B/g) ?? [];
+      expect(fills.length).toBe(2);
     });
 
     /**

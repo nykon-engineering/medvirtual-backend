@@ -1,4 +1,7 @@
-import { OFFER_PANEL_PROMO_PRICE_MONTHLY } from '../../constant/offer-panel-promo.constant';
+import {
+  OFFER_PANEL_PROMO_PRICE_LABEL,
+  OFFER_PANEL_PROMO_PRICE_MONTHLY,
+} from '../../constant/offer-panel-promo.constant';
 import { escapeEmailHtml as esc } from './escape';
 import { EmailTheme } from './theme';
 
@@ -131,26 +134,39 @@ export function isDarkColor(hex: string): boolean {
 
 interface CardTheme {
   primary: string;
+  /** Footer fill: the configured Button Color, else the brand primary. */
+  fill: string;
   onPrimary: string;
   onPrimaryMuted: string;
   onPrimaryFaint: string;
   footerEdge: string;
   logoUrl: string | null;
+  companyName: string;
   pillBg: string;
   pillText: string;
   pillBorder: string;
   panelBg: string;
-  panelVeil: string;
 }
 
 function toCardTheme(theme: EmailTheme): CardTheme {
   const primary = theme?.primaryColor || '#01546B';
-  const ink = inkOn(primary);
-  const onLight = ink === INK_LIGHT;
+
+  // The filled footer is the card's "button-like" surface, so it takes the
+  // Button Color configured in Customize Design (EmailBranding.button_color),
+  // falling back to the brand primary — the same precedence `renderHtml` uses
+  // for the CTA, so the two never disagree within one email.
+  const fill = theme?.buttonColor || primary;
+
+  // Honour an explicitly configured button text colour; otherwise measure.
+  // Defaulting to white (as the CTA does) would put white on Berry's coral at
+  // a 2.70 contrast ratio, under the WCAG floor.
+  const ink = theme?.buttonTextColor || inkOn(fill);
+  const onLight = ink.toLowerCase() === INK_LIGHT;
   const panelBg = mixWithWhite(primary, 0.94);
 
   return {
     primary,
+    fill,
     onPrimary: ink,
     // Secondary/tertiary type on the filled footer, derived from the chosen ink
     // rather than a fixed grey — a fixed grey vanishes on a dark brand and goes
@@ -165,21 +181,12 @@ function toCardTheme(theme: EmailTheme): CardTheme {
       ? 'rgba(255, 255, 255, 0.18)'
       : 'rgba(26, 26, 25, 0.12)',
     logoUrl: theme?.logoUrl ?? null,
+    companyName: theme?.companyName || '',
     pillBg: mixWithWhite(primary, 0.88),
     pillText: primary,
     pillBorder: rgba(primary, 0.22),
     panelBg,
-    // Near-opaque layer of the panel colour, painted OVER the logo to knock it
-    // back to a watermark. See `watermarkStyle`.
-    panelVeil: withAlpha(panelBg, 0.88),
   };
-}
-
-/** Re-expresses an "rgb(r, g, b)" string with an alpha channel. */
-function withAlpha(rgbString: string, alpha: number): string {
-  const parts = rgbString.match(/\d+/g);
-  if (!parts || parts.length < 3) return rgbString;
-  return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`;
 }
 
 // ─── Value formatting ────────────────────────────────────────────────────────
@@ -286,31 +293,54 @@ function rateBlock(
   return `${amount}<span style="font-size:11px;font-weight:400;color:${t.onPrimaryMuted};">/mo</span>`;
 }
 
+/** Width of the brand badge in the card's header row. */
+const BRAND_BADGE_PX = 64;
+
 /**
- * Places the BU logo behind the identity block as a true watermark.
+ * Brand badge: the business unit's logo as a real <img> beside the candidate's
+ * name.
  *
- * The logo arrives as a finished image in the brand's own colours, and email CSS
- * has no dependable `filter`, so it cannot be desaturated. Instead a near-opaque
- * layer of the panel colour is stacked ON TOP of it using two background-images
- * — the veil is listed first because later layers paint underneath.
+ * This is deliberately NOT a background watermark. Outlook.com (hotmail web)
+ * rewrites message CSS and drops `background-image` on `<td>` along with
+ * `linear-gradient`, so the veiled-watermark approach rendered in the preview —
+ * a full browser — but vanished in the inbox. `opacity` is no safer: Outlook
+ * strips it from images, which would put the logo at FULL strength behind the
+ * text rather than faintly behind it.
  *
- * Why not `opacity` on a positioned <img>: Gmail strips `opacity` on images in
- * many cases and Outlook ignores it, which would render the logo at FULL colour
- * behind the text — the exact failure being avoided. The veil fails safe: a
- * client that drops background images (Outlook desktop) loses the logo AND the
- * veil together and shows the flat `panelBg`, the same clean fallback the card
- * already relies on.
+ * Fading the mark would require a pre-lightened copy of the image, but
+ * `EmailBranding.logo_url` is a URL an admin pastes — there is no upload
+ * pipeline to generate one. So the badge uses the logo as-is, kept small and
+ * off to the side where it reads as branding instead of competing with the
+ * content. Plain <img> with width/height renders in every client.
  */
-function watermarkStyle(t: CardTheme): string {
+function brandBadge(t: CardTheme): string {
   if (!t.logoUrl) return '';
 
-  const url = esc(t.logoUrl);
-  return (
-    `background-image:linear-gradient(${t.panelVeil}, ${t.panelVeil}), url('${url}');` +
-    `background-repeat:no-repeat,no-repeat;` +
-    `background-position:right 14px center,right 14px center;` +
-    `background-size:cover,132px auto;`
-  );
+  return `<img src="${esc(t.logoUrl)}" alt="${esc(t.companyName)}" width="${BRAND_BADGE_PX}" style="width:${BRAND_BADGE_PX}px;height:auto;max-height:26px;display:block;border:0;outline:none;text-decoration:none;" />`;
+}
+
+/**
+ * Promo copy is brand-neutral on purpose.
+ *
+ * The public talent pool varies its feature list per brand ("HIPAA-trained" for
+ * MedVirtual vs "Fully-trained" for Berry, because Berry copy must never say
+ * "healthcare"). That rule cannot be extended to a business unit added to the
+ * `EmailBranding` table later, so the email states only what holds for every BU.
+ */
+const PROMO_FEATURES = ['Pre-vetted', 'Ready in days', 'No hidden fees'];
+
+/**
+ * Headline banner shown above the cards when the panel carries the promo. It is
+ * panel-level (not per candidate), which is why it lives here rather than in
+ * `card()`.
+ */
+function promoBanner(t: CardTheme): string {
+  const features = PROMO_FEATURES.map(
+    (f) =>
+      `<span style="font-size:12px;color:#0f172a;font-weight:600;">&#10003; ${esc(f)}</span>`,
+  ).join('<span style="color:#cbd5e1;">&nbsp;&nbsp;&middot;&nbsp;&nbsp;</span>');
+
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:separate;background-color:${t.panelBg};border-radius:10px;margin:0 0 14px;"><tr><td style="padding:18px 20px;text-align:center;"><div style="display:inline-block;padding:6px 16px;border-radius:999px;background-color:${t.fill};color:${t.onPrimary};font-weight:700;font-size:11px;letter-spacing:.4px;text-transform:uppercase;">Limited Time Offer</div><div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.3;padding:10px 0 8px;">Select candidates starting at just ${OFFER_PANEL_PROMO_PRICE_LABEL}/month Full-time</div><div>${features}</div><div style="font-size:10px;color:#888780;padding-top:8px;">*Terms &amp; Conditions Apply*</div></td></tr></table>`;
 }
 
 function card(
@@ -341,12 +371,12 @@ function card(
   const employment = (c.employment_type ?? '').trim();
   const rate = rateBlock(c, t, promoEnabled);
 
-  const watermark = watermarkStyle(t);
+  const badge = brandBadge(t);
 
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:separate;background:#ffffff;border:1px solid #ebebeb;border-radius:12px;margin-bottom:14px;">
       <tr>
-        <td style="padding:18px 18px 16px;border-radius:12px 12px 0 0;background-color:${t.panelBg};${watermark}">
+        <td style="padding:18px 18px 16px;border-radius:12px 12px 0 0;background-color:#ffffff;">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
               <td width="${AVATAR_PX}" valign="top" style="width:${AVATAR_PX}px;padding-right:12px;">${avatar(c, t)}</td>
@@ -355,6 +385,7 @@ function card(
                 ${country ? `<div style="font-size:11px;color:#5f5e5a;padding-bottom:8px;">${esc(country)}</div>` : ''}
                 ${employment ? `${caption('Availability')}<div style="font-size:11px;color:#5f5e5a;">${esc(employment)}</div>` : ''}
               </td>
+              ${badge ? `<td width="${BRAND_BADGE_PX}" valign="top" align="right" style="width:${BRAND_BADGE_PX}px;padding-left:10px;">${badge}</td>` : ''}
             </tr>
           </table>
           ${positionPills ? `<div style="padding-top:14px;">${caption(positions.length > 1 ? 'Positions' : 'Position')}<div>${positionPills}</div></div>` : ''}
@@ -364,7 +395,7 @@ function card(
       ${
         rate
           ? `<tr>
-        <td style="padding:12px 18px 14px;border-radius:0 0 12px 12px;background-color:${t.primary};border-top:1px solid ${t.footerEdge};">
+        <td style="padding:12px 18px 14px;border-radius:0 0 12px 12px;background-color:${t.fill};border-top:1px solid ${t.footerEdge};">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
               <td valign="bottom">
@@ -403,6 +434,7 @@ export function renderOfferPanelCandidateCards(
   const hidden = list.length - shown.length;
 
   const cards = shown.map((c) => card(c, t, promoEnabled)).join('');
+  const banner = promoEnabled ? promoBanner(t) : '';
 
   const moreLine =
     hidden > 0
@@ -413,5 +445,7 @@ export function renderOfferPanelCandidateCards(
         }</div>`
       : '';
 
-  return stripNewlines(`<div style="padding:4px 0 8px;">${cards}${moreLine}</div>`);
+  return stripNewlines(
+    `<div style="padding:4px 0 8px;">${banner}${cards}${moreLine}</div>`,
+  );
 }

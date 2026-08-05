@@ -461,6 +461,8 @@ export class EmailTemplatesService {
       primaryColorHover: string;
       companyName: string;
       logoUrl?: string;
+      buttonColor?: string;
+      buttonTextColor?: string;
     },
   ): Record<string, string> | undefined {
     if (key !== 'offer-panel-created') return undefined;
@@ -475,6 +477,10 @@ export class EmailTemplatesService {
           accentColor: branding.primaryColor,
           companyName: branding.companyName,
           logoUrl: branding.logoUrl,
+          // The card's filled footer takes the Button Color, so the preview
+          // must carry it or it would show a different colour than the send.
+          buttonColor: branding.buttonColor,
+          buttonTextColor: branding.buttonTextColor,
         },
         // Preview the promo treatment — it is the variant worth eyeballing,
         // and the sample rates deliberately straddle the threshold.
