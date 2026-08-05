@@ -4,6 +4,7 @@ import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -24,6 +25,9 @@ describe('NotificationsService', () => {
     organization: {
       findMany: jest.fn(),
     },
+    candidate: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
 
   const mockMailService = {
@@ -34,6 +38,10 @@ describe('NotificationsService', () => {
     getTemplateContent: jest.fn().mockResolvedValue(null),
   };
 
+  const mockPositionRateConfigService = {
+    findAllUnpaginated: jest.fn().mockResolvedValue([]),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -41,6 +49,10 @@ describe('NotificationsService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: MailService, useValue: mockMailService },
         { provide: EmailTemplatesService, useValue: mockEmailTemplatesService },
+        {
+          provide: PositionRateConfigService,
+          useValue: mockPositionRateConfigService,
+        },
       ],
     }).compile();
 
@@ -3152,6 +3164,117 @@ describe('NotificationsService', () => {
       await expect(
         service.notifyHireRequestPlacementCompleted('hr1'),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('offer panel created — candidate cards', () => {
+    const basePanel = {
+      id: 'p1',
+      title: 'Panel',
+      description: null,
+      business_unit: 'MedVirtual',
+      recipient_name: 'Jane',
+      recipient_email: 'jane@client.com',
+      recipient_org_name: 'Client Co',
+      promo_enabled: false,
+      public_token: 'tok-123',
+      recipientUser: { first_name: 'Jane' },
+      createdBy: {
+        first_name: 'Paulo',
+        last_name: 'Melo',
+        email: 'paulo@medvirtual.ai',
+      },
+      candidates: [{ candidate_id: 'c1' }],
+      _count: { candidates: 1 },
+    };
+
+    const candidateRow = {
+      id: 'c1',
+      first_name: 'Ana',
+      last_name: 'Silva',
+      name: 'Ana Silva',
+      country: 'Brazil',
+      avatar_url: 'ana.png',
+      gender: 'female',
+      employment_type: null,
+      hourly_pay_rate: null,
+      business_unit: 'MedVirtual',
+      approved_positions_pairing: [],
+      languages: [],
+      skills: [{ skill_name: 'EMR' }],
+    };
+
+    beforeEach(() => {
+      (mockPrismaService as any).offerPanel = { findUnique: jest.fn() };
+      mockPrismaService.candidate.findMany.mockResolvedValue([candidateRow]);
+      mockPositionRateConfigService.findAllUnpaginated.mockResolvedValue([]);
+      mockEmailTemplatesService.getTemplateContent.mockResolvedValue(null);
+      mockMailService.sendMail.mockResolvedValue(true);
+    });
+
+    it.each([
+      ['public', 'notifyOfferPanelCreatedPublic'],
+      ['client', 'notifyOfferPanelCreatedClient'],
+    ] as const)(
+      'passes the rendered cards to the template on the %s variant',
+      async (_label, method) => {
+        (mockPrismaService as any).offerPanel.findUnique.mockResolvedValue(
+          basePanel,
+        );
+
+        await (service as any)[method]('p1');
+
+        const [, runtimeValues] =
+          mockEmailTemplatesService.getTemplateContent.mock.calls[0];
+        expect(runtimeValues['{{candidateCards}}']).toContain('Ana S.');
+        // Injected into a body that renderHtml then newline-replaces.
+        expect(runtimeValues['{{candidateCards}}']).not.toContain('\n');
+      },
+    );
+
+    it('prefixes the bare S3 avatar key so the image resolves in an inbox', async () => {
+      (mockPrismaService as any).offerPanel.findUnique.mockResolvedValue(
+        basePanel,
+      );
+
+      await service.notifyOfferPanelCreatedPublic('p1');
+
+      const [, runtimeValues] =
+        mockEmailTemplatesService.getTemplateContent.mock.calls[0];
+      expect(runtimeValues['{{candidateCards}}']).toContain(
+        'amazonaws.com/ana.png',
+      );
+    });
+
+    it('still sends when the panel has no candidates', async () => {
+      (mockPrismaService as any).offerPanel.findUnique.mockResolvedValue({
+        ...basePanel,
+        candidates: [],
+        _count: { candidates: 0 },
+      });
+
+      await expect(service.notifyOfferPanelCreatedPublic('p1')).resolves.toBe(
+        true,
+      );
+      expect(mockPrismaService.candidate.findMany).not.toHaveBeenCalled();
+    });
+
+    // A failure building the cards must not cost the recipient the whole email.
+    it('sends a cardless email rather than failing when candidates cannot load', async () => {
+      (mockPrismaService as any).offerPanel.findUnique.mockResolvedValue(
+        basePanel,
+      );
+      mockPrismaService.candidate.findMany.mockRejectedValue(
+        new Error('db down'),
+      );
+
+      await expect(service.notifyOfferPanelCreatedPublic('p1')).resolves.toBe(
+        true,
+      );
+
+      const [, runtimeValues] =
+        mockEmailTemplatesService.getTemplateContent.mock.calls[0];
+      expect(runtimeValues['{{candidateCards}}']).toBe('');
     });
   });
 });

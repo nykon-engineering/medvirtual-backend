@@ -1,10 +1,23 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import {
+  buildConfigMap,
+  computeCandidateRates,
+} from '../common/utils/salary.util';
+import { changeLabelAvailability } from '../common/utils/hubspot.util';
+import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
+import {
+  renderOfferPanelCandidateCards,
+  OfferPanelEmailCandidate,
+} from '../common/utils/email-templates/offer-panel-candidate-cards';
 import {
   getUserEmailTheme,
   getBusinessUnitEmailTheme,
@@ -23,10 +36,13 @@ import { EmailTemplatesService } from '../email-templates/email-templates.servic
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly emailTemplates: EmailTemplatesService,
+    private readonly positionRateConfig: PositionRateConfigService,
   ) {}
 
   // ── EmailTemplatesService fallback helper ─────────────────────────────────
@@ -2583,6 +2599,101 @@ ${getEmailLogoCss()}
     return cc;
   }
 
+  /**
+   * Loads the panel's candidates in the shape the email card needs.
+   *
+   * Deliberately does NOT go through `CandidatesService.getTalentPoolCandidatesByIds`,
+   * which returns the same payload: `CandidatesModule` already imports
+   * `NotificationsModule`, so injecting it here would be a circular dependency
+   * requiring forwardRef, and it would pull S3/OpenAI/HubSpot/Drive into the mail
+   * path. Instead this reads Prisma directly and reuses the two *pure* rate
+   * helpers, with `PositionRateConfigService` (a Prisma-only leaf module).
+   *
+   * Two queries total regardless of candidate count — the position-rate config is
+   * read once for the whole batch, not once per candidate.
+   *
+   * Returns [] on failure: a broken card block must never stop the email from
+   * being sent, and the surrounding copy still stands on its own.
+   */
+  private async loadOfferPanelEmailCandidates(
+    candidateIds: string[],
+  ): Promise<OfferPanelEmailCandidate[]> {
+    const ids = Array.from(new Set(candidateIds.filter(Boolean)));
+    if (ids.length === 0) return [];
+
+    try {
+      const [candidates, positionConfigs] = await Promise.all([
+        this.prisma.candidate.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            name: true,
+            country: true,
+            avatar_url: true,
+            gender: true,
+            employment_type: true,
+            hourly_pay_rate: true,
+            business_unit: true,
+            approved_positions_pairing: true,
+            languages: { select: { name: true } },
+            skills: { select: { skill_name: true } },
+          },
+        }),
+        this.positionRateConfig.findAllUnpaginated(),
+      ]);
+
+      const configMap = buildConfigMap(positionConfigs);
+      const avatarBase =
+        process.env.AVATAR_URL ??
+        'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+
+      // Preserve the order the panel stores them in.
+      const byId = new Map(candidates.map((c) => [c.id, c]));
+
+      return ids
+        .map((id) => byId.get(id))
+        .filter((c): c is (typeof candidates)[number] => !!c)
+        .map((candidate) => {
+          // Rates first: computeCandidateRates reads the RAW employment_type and
+          // unlabelled positions, so normalizing either one before this point
+          // yields silently wrong billing.
+          const rates = computeCandidateRates(candidate, configMap);
+
+          return {
+            id: candidate.id,
+            first_name: candidate.first_name,
+            last_name: candidate.last_name,
+            name: candidate.name,
+            country: candidate.country,
+            // avatar_url is a bare S3 key in the DB; an inbox needs it absolute.
+            avatar_url: candidate.avatar_url
+              ? `${avatarBase}${candidate.avatar_url}`
+              : null,
+            employment_type:
+              changeLabelAvailability(
+                dbToStageDictionary[Number(candidate.employment_type)],
+              ) || null,
+            approved_positions_pairing: (
+              candidate.approved_positions_pairing ?? []
+            ).map(getApprovedPositionLabel),
+            skills: candidate.skills,
+            languages: candidate.languages,
+            bill_rate_monthly: rates.bill_rate_monthly,
+            bill_rate_hourly: rates.bill_rate_hourly,
+          };
+        });
+    } catch (err) {
+      this.logger.error(
+        `Failed to load offer-panel email candidates: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return [];
+    }
+  }
+
   async notifyOfferPanelCreatedClient(panelId: string): Promise<boolean> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { id: panelId },
@@ -2594,10 +2705,12 @@ ${getEmailLogoCss()}
         recipient_name: true,
         recipient_email: true,
         recipient_org_name: true,
+        promo_enabled: true,
         recipientUser: { select: { first_name: true } },
         createdBy: {
           select: { first_name: true, last_name: true, email: true },
         },
+        candidates: { select: { candidate_id: true } },
         _count: { select: { candidates: true } },
       },
     });
@@ -2609,6 +2722,14 @@ ${getEmailLogoCss()}
     );
     const panelUrl = `${process.env.FRONTEND_URL}/modules/talent/client`;
     const candidateCount = panel._count.candidates;
+    const candidateCards = renderOfferPanelCandidateCards(
+      await this.loadOfferPanelEmailCandidates(
+        panel.candidates.map((c) => c.candidate_id),
+      ),
+      theme,
+      panel.promo_enabled,
+      panelUrl,
+    );
     const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
     const greeting = panel.recipientUser?.first_name
       ? `Hi ${panel.recipientUser.first_name},`
@@ -2617,6 +2738,7 @@ ${getEmailLogoCss()}
     const fallbackHtmlOfferClient = this.buildEmail(
       `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
       <p>Take a look at their profiles whenever you're ready.</p>
+      ${candidateCards}
       <div style="text-align: left; margin: 30px 0;">
         <a href="${panelUrl}" class="cta-button">View candidates</a>
       </div>
@@ -2633,6 +2755,7 @@ ${getEmailLogoCss()}
         '{{createdByName}}': panel.createdBy.first_name || '',
         '{{candidateCount}}': String(candidateCount),
         '{{panelLink}}': panelUrl,
+        '{{candidateCards}}': candidateCards,
       },
       theme,
       panel.business_unit,
@@ -2663,7 +2786,9 @@ ${getEmailLogoCss()}
         recipient_name: true,
         recipient_email: true,
         public_token: true,
+        promo_enabled: true,
         createdBy: { select: { first_name: true, email: true } },
+        candidates: { select: { candidate_id: true } },
         _count: { select: { candidates: true } },
       },
     });
@@ -2676,10 +2801,19 @@ ${getEmailLogoCss()}
     const panelUrl = `${process.env.FRONTEND_URL}/modules/public/offer-panel/${panel.public_token}`;
     const candidateCount = panel._count.candidates;
     const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
+    const candidateCards = renderOfferPanelCandidateCards(
+      await this.loadOfferPanelEmailCandidates(
+        panel.candidates.map((c) => c.candidate_id),
+      ),
+      theme,
+      panel.promo_enabled,
+      panelUrl,
+    );
 
     const html = this.buildEmail(
       `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
       <p>Take a look at their profiles whenever you're ready.</p>
+      ${candidateCards}
       <div style="text-align: left; margin: 30px 0;">
         <a href="${panelUrl}" class="cta-button">View candidates</a>
       </div>
@@ -2697,6 +2831,7 @@ ${getEmailLogoCss()}
         '{{createdByName}}': panel.createdBy.first_name || '',
         '{{candidateCount}}': String(candidateCount),
         '{{panelLink}}': panelUrl,
+        '{{candidateCards}}': candidateCards,
       },
       theme,
       panel.business_unit,

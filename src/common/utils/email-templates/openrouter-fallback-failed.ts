@@ -1,4 +1,5 @@
 import { EmailHeader, EmailFooter } from './components';
+import { escapeEmailHtml } from './escape';
 
 /**
  * Sent when OpenAI is out of credit AND the OpenRouter fallback also failed,
@@ -19,12 +20,7 @@ export default function openrouterFallbackFailed(
       minute: '2-digit',
     });
 
-  const escapeHtml = (value: string) =>
-    value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  const escapeHtml = escapeEmailHtml;
 
   const errorMessage = escapeHtml(
     error instanceof Error ? error.message : String(error),
