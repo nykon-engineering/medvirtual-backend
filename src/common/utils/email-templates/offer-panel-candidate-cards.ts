@@ -86,43 +86,100 @@ export function rgba(hex: string, alpha: number): string {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 }
 
-/**
- * Relative luminance test (WCAG). Decides whether text on the brand colour must
- * be white — assuming white would produce white-on-light for any pale BU colour
- * added to the branding table later.
- */
-export function isDarkColor(hex: string): boolean {
+/** WCAG relative luminance. */
+function relativeLuminance(hex: string): number {
   const rgb = hexToRgb(hex);
-  if (!rgb) return true;
+  if (!rgb) return 0;
   const lin = (c: number) => {
     const s = c / 255;
     return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
   };
-  const L = 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
-  return L < 0.45;
+  return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+}
+
+/** WCAG contrast ratio between two colours (1–21). */
+export function contrastRatio(aHex: string, bHex: string): number {
+  const [light, dark] = [relativeLuminance(aHex), relativeLuminance(bHex)].sort(
+    (x, y) => y - x,
+  );
+  return (light + 0.05) / (dark + 0.05);
+}
+
+export const INK_LIGHT = '#ffffff';
+export const INK_DARK = '#1a1a19';
+
+/**
+ * Picks the ink that actually contrasts against `hex`, by measuring both
+ * candidates rather than thresholding luminance.
+ *
+ * Berry's #FD7171 is why: it sits just above a 0.45 luminance cutoff, so a
+ * threshold test classifies it as "light" yet still hands back white — which
+ * scores 2.70 against the coral, under the WCAG 3.0 floor for even large text.
+ * Measuring instead yields near-black at 6.45. This also means a pale brand
+ * colour added to `EmailBranding` later stays legible with no code change.
+ */
+export function inkOn(hex: string): string {
+  return contrastRatio(INK_LIGHT, hex) >= contrastRatio(INK_DARK, hex)
+    ? INK_LIGHT
+    : INK_DARK;
+}
+
+/** True when `hex` needs light ink on top of it. */
+export function isDarkColor(hex: string): boolean {
+  return inkOn(hex) === INK_LIGHT;
 }
 
 interface CardTheme {
   primary: string;
   onPrimary: string;
+  onPrimaryMuted: string;
+  onPrimaryFaint: string;
+  footerEdge: string;
   logoUrl: string | null;
   pillBg: string;
   pillText: string;
   pillBorder: string;
   panelBg: string;
+  panelVeil: string;
 }
 
 function toCardTheme(theme: EmailTheme): CardTheme {
   const primary = theme?.primaryColor || '#01546B';
+  const ink = inkOn(primary);
+  const onLight = ink === INK_LIGHT;
+  const panelBg = mixWithWhite(primary, 0.94);
+
   return {
     primary,
-    onPrimary: isDarkColor(primary) ? '#ffffff' : '#1a1a19',
+    onPrimary: ink,
+    // Secondary/tertiary type on the filled footer, derived from the chosen ink
+    // rather than a fixed grey — a fixed grey vanishes on a dark brand and goes
+    // muddy on a pale one.
+    onPrimaryMuted: onLight
+      ? 'rgba(255, 255, 255, 0.78)'
+      : 'rgba(26, 26, 25, 0.72)',
+    onPrimaryFaint: onLight
+      ? 'rgba(255, 255, 255, 0.55)'
+      : 'rgba(26, 26, 25, 0.5)',
+    footerEdge: onLight
+      ? 'rgba(255, 255, 255, 0.18)'
+      : 'rgba(26, 26, 25, 0.12)',
     logoUrl: theme?.logoUrl ?? null,
     pillBg: mixWithWhite(primary, 0.88),
     pillText: primary,
     pillBorder: rgba(primary, 0.22),
-    panelBg: mixWithWhite(primary, 0.94),
+    panelBg,
+    // Near-opaque layer of the panel colour, painted OVER the logo to knock it
+    // back to a watermark. See `watermarkStyle`.
+    panelVeil: withAlpha(panelBg, 0.88),
   };
+}
+
+/** Re-expresses an "rgb(r, g, b)" string with an alpha channel. */
+function withAlpha(rgbString: string, alpha: number): string {
+  const parts = rgbString.match(/\d+/g);
+  if (!parts || parts.length < 3) return rgbString;
+  return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`;
 }
 
 // ─── Value formatting ────────────────────────────────────────────────────────
@@ -200,7 +257,16 @@ function caption(text: string): string {
   return `<div style="font-size:9px;letter-spacing:.4px;text-transform:uppercase;color:#888780;font-weight:600;padding-bottom:6px;">${esc(text)}</div>`;
 }
 
-function rateBlock(c: OfferPanelEmailCandidate, promoEnabled: boolean): string {
+/**
+ * The rate sits on the brand-filled footer, so its type takes the theme's
+ * computed ink instead of fixed greys — `#5f5e5a` would disappear on a dark
+ * brand and the struck original would be unreadable on a saturated one.
+ */
+function rateBlock(
+  c: OfferPanelEmailCandidate,
+  t: CardTheme,
+  promoEnabled: boolean,
+): string {
   const monthly =
     toNumber(c.bill_rate_monthly) ??
     (toNumber(c.bill_rate_hourly) !== null
@@ -214,10 +280,37 @@ function rateBlock(c: OfferPanelEmailCandidate, promoEnabled: boolean): string {
   const showPromo = promoEnabled && monthly > OFFER_PANEL_PROMO_PRICE_MONTHLY;
 
   const amount = showPromo
-    ? `<span style="display:block;font-size:12px;line-height:15px;color:#94a3b8;text-decoration:line-through;font-weight:600;">${usd.format(monthly)}</span><span style="font-size:18px;font-weight:600;color:#1a1a19;letter-spacing:-0.3px;">${usd.format(OFFER_PANEL_PROMO_PRICE_MONTHLY)}</span>`
-    : `<span style="font-size:18px;font-weight:600;color:#1a1a19;letter-spacing:-0.3px;">${usd.format(monthly)}</span>`;
+    ? `<span style="display:block;font-size:12px;line-height:15px;color:${t.onPrimaryFaint};text-decoration:line-through;font-weight:600;">${usd.format(monthly)}</span><span style="font-size:18px;font-weight:600;color:${t.onPrimary};letter-spacing:-0.3px;">${usd.format(OFFER_PANEL_PROMO_PRICE_MONTHLY)}</span>`
+    : `<span style="font-size:18px;font-weight:600;color:${t.onPrimary};letter-spacing:-0.3px;">${usd.format(monthly)}</span>`;
 
-  return `${amount}<span style="font-size:11px;font-weight:400;color:#5f5e5a;">/mo</span>`;
+  return `${amount}<span style="font-size:11px;font-weight:400;color:${t.onPrimaryMuted};">/mo</span>`;
+}
+
+/**
+ * Places the BU logo behind the identity block as a true watermark.
+ *
+ * The logo arrives as a finished image in the brand's own colours, and email CSS
+ * has no dependable `filter`, so it cannot be desaturated. Instead a near-opaque
+ * layer of the panel colour is stacked ON TOP of it using two background-images
+ * — the veil is listed first because later layers paint underneath.
+ *
+ * Why not `opacity` on a positioned <img>: Gmail strips `opacity` on images in
+ * many cases and Outlook ignores it, which would render the logo at FULL colour
+ * behind the text — the exact failure being avoided. The veil fails safe: a
+ * client that drops background images (Outlook desktop) loses the logo AND the
+ * veil together and shows the flat `panelBg`, the same clean fallback the card
+ * already relies on.
+ */
+function watermarkStyle(t: CardTheme): string {
+  if (!t.logoUrl) return '';
+
+  const url = esc(t.logoUrl);
+  return (
+    `background-image:linear-gradient(${t.panelVeil}, ${t.panelVeil}), url('${url}');` +
+    `background-repeat:no-repeat,no-repeat;` +
+    `background-position:right 14px center,right 14px center;` +
+    `background-size:cover,132px auto;`
+  );
 }
 
 function card(
@@ -246,14 +339,9 @@ function card(
 
   const country = (c.country ?? '').trim();
   const employment = (c.employment_type ?? '').trim();
-  const rate = rateBlock(c, promoEnabled);
+  const rate = rateBlock(c, t, promoEnabled);
 
-  // The BU logo sits behind the identity block as a watermark. Outlook desktop
-  // ignores background-image on a <td> and falls back to the flat panelBg
-  // beneath it, so the block degrades to a clean tinted panel — never broken.
-  const watermark = t.logoUrl
-    ? `background-image:url('${esc(t.logoUrl)}');background-repeat:no-repeat;background-position:right 14px center;background-size:132px auto;`
-    : '';
+  const watermark = watermarkStyle(t);
 
   return `
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:separate;background:#ffffff;border:1px solid #ebebeb;border-radius:12px;margin-bottom:14px;">
@@ -276,11 +364,11 @@ function card(
       ${
         rate
           ? `<tr>
-        <td style="padding:12px 18px 16px;">
+        <td style="padding:12px 18px 14px;border-radius:0 0 12px 12px;background-color:${t.primary};border-top:1px solid ${t.footerEdge};">
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
             <tr>
               <td valign="bottom">
-                ${employment ? `<div style="font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:#888780;">${esc(employment)}</div>` : ''}
+                ${employment ? `<div style="font-size:9px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:${t.onPrimaryMuted};">${esc(employment)}</div>` : ''}
                 <div style="line-height:1.2;">${rate}</div>
               </td>
             </tr>

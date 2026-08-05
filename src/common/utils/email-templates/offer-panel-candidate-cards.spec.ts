@@ -1,4 +1,6 @@
 import {
+  contrastRatio,
+  inkOn,
   isDarkColor,
   maskCandidateName,
   mixWithWhite,
@@ -217,7 +219,7 @@ describe('renderOfferPanelCandidateCards', () => {
       expect(html).not.toContain('#01546B');
     });
 
-    it('renders the logo as a watermark, and omits it when absent', () => {
+    it('renders the logo as a veiled watermark, and omits it when absent', () => {
       const withLogo = renderOfferPanelCandidateCards(
         [makeCandidate()],
         makeTheme(),
@@ -229,8 +231,18 @@ describe('renderOfferPanelCandidateCards', () => {
         false,
       );
 
-      expect(withLogo).toContain('background-image:url(');
-      expect(withoutLogo).not.toContain('background-image:url(');
+      // The veil layer must come FIRST so it paints on top of the logo; a
+      // bare url() would put the brand mark at full strength behind the text.
+      expect(withLogo).toContain(
+        'background-image:linear-gradient(rgba(',
+      );
+      expect(withLogo).toContain("url('https://staging.medvirtual.ai/logo.png')");
+      expect(withLogo.indexOf('linear-gradient')).toBeLessThan(
+        withLogo.indexOf("url('https"),
+      );
+
+      expect(withoutLogo).not.toContain('linear-gradient');
+      expect(withoutLogo).not.toContain('background-image');
     });
 
     // Pins the derivation to the hand-authored design token rather than an
@@ -242,6 +254,71 @@ describe('renderOfferPanelCandidateCards', () => {
     it('flips button text colour on a light brand colour', () => {
       expect(isDarkColor('#01546B')).toBe(true);
       expect(isDarkColor('#FFE600')).toBe(false);
+    });
+  });
+
+  describe('filled footer', () => {
+    it('fills the rate row with the brand colour', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ primaryColor: '#7C3AED' }),
+        false,
+      );
+
+      expect(html).toContain('background-color:#7C3AED');
+    });
+
+    /**
+     * The regression this guards: picking ink by a luminance threshold gave
+     * Berry white-on-coral at 2.70, under the WCAG 3.0 floor for large text.
+     * Every seeded brand — and any added later — must clear AA (4.5).
+     */
+    it.each([
+      ['MedVirtual', '#01546B'],
+      ['Berry Virtual', '#FD7171'],
+      ['MMVA', '#7C3AED'],
+    ])('keeps footer text readable on %s', (_name, primaryColor) => {
+      const ink = inkOn(primaryColor);
+      expect(contrastRatio(ink, primaryColor)).toBeGreaterThanOrEqual(4.5);
+
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ primaryColor }),
+        false,
+      );
+      // The price must actually use that ink.
+      expect(html).toContain(`color:${ink};letter-spacing:-0.3px;`);
+    });
+
+    // Coral is light enough that white fails on it; near-black is chosen.
+    it('uses dark ink on a pale brand colour instead of white', () => {
+      expect(inkOn('#FD7171')).toBe('#1a1a19');
+      expect(inkOn('#01546B')).toBe('#ffffff');
+    });
+
+    it('carries the muted ink into the availability label and /mo suffix', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate()],
+        makeTheme({ primaryColor: '#01546B' }),
+        false,
+      );
+
+      // A fixed grey would be unreadable on the filled footer.
+      expect(html).toContain('color:rgba(255, 255, 255, 0.78);">/mo');
+      expect(html).not.toContain('color:#5f5e5a;">/mo');
+    });
+
+    it('keeps the struck original legible on the fill', () => {
+      const html = renderOfferPanelCandidateCards(
+        [makeCandidate({ bill_rate_monthly: 2500 })],
+        makeTheme({ primaryColor: '#01546B' }),
+        true,
+      );
+
+      expect(html).toContain(
+        'color:rgba(255, 255, 255, 0.55);text-decoration:line-through',
+      );
+      expect(html).not.toContain('color:#94a3b8');
     });
 
     it('survives a malformed brand colour rather than throwing', () => {
