@@ -3,7 +3,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { buildConfigMap, computeCandidateRates } from '../../common/utils/salary.util';
+import {
+  buildConfigMap,
+  computeCandidateRates,
+} from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
 import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
 import { changeLabelAvailability } from '../../common/utils/hubspot.util';
@@ -68,39 +71,37 @@ export class HandlerOrganization {
           responsabilities: true,
           end_date: true,
           start_date: true,
-        }
+        },
       },
       educations: {
         select: {
           degree: true,
           institution: true,
           year: true,
-        }
-      }
+        },
+      },
     };
 
-    if (!user || user.role.includes("organization") && !user.organization_id)
+    if (!user || (user.role.includes('organization') && !user.organization_id))
       throw new BadRequestException('User or organization not found');
 
-
     const hiredStaff = await this.prisma.staff.findMany({
-      where:{
+      where: {
         status: {
           not: { in: ['terminated', 'inactive'] },
         },
-        OR:[
+        OR: [
           {
-            hireRequest:{
+            hireRequest: {
               org_id: user.organization_id,
-            }
+            },
           },
           {
             organization_id: user.organization_id,
           },
-        ]
-        
-      }, 
-      select : {
+        ],
+      },
+      select: {
         id: true,
         hirerequest_id: true,
         status: true,
@@ -120,8 +121,8 @@ export class HandlerOrganization {
         hubspot_business_unit: true,
         hubspot_candidate_id: true,
         hubspot_organization_id: true,
-        candidate:{
-          select:{
+        candidate: {
+          select: {
             id: true,
             first_name: true,
             last_name: true,
@@ -137,18 +138,18 @@ export class HandlerOrganization {
             languages: {
               select: {
                 name: true,
-              }
+              },
             },
-            skills:{
-              select:{
+            skills: {
+              select: {
                 skill_name: true,
-              }
+              },
             },
             createdAt: true,
-          }
+          },
         },
         hireRequest: {
-          select:{
+          select: {
             id: true,
             title: true,
             description: true,
@@ -161,32 +162,40 @@ export class HandlerOrganization {
             salary_range_to: true,
             specialization: true,
             location: true,
-          }
+          },
         },
-        bonus:{
-          select:{
+        bonus: {
+          where: { deleted_at: null },
+          select: {
             id: true,
             amount: true,
             description: true,
             created_at: true,
             created_by: true,
-          }
-        }
-      }
-    })
+          },
+        },
+      },
+    });
 
     const hiredStaffWithAvatar = hiredStaff.map((staff) => ({
       ...staff,
       candidate: {
         ...staff.candidate,
-        avatar: staff.candidate?.avatar_url ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}` :  null,
-      }
-    }))
+        avatar: staff.candidate?.avatar_url
+          ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}`
+          : null,
+      },
+    }));
 
     result.hiredStaff = hiredStaffWithAvatar;
-    
+
     // New: use HireRequestService to bring the same shape as /hire-request (includes specialization and skills)
-    const hireRequestsResult = await this.hireRequestService.findAll(user, undefined, page, perPage);
+    const hireRequestsResult = await this.hireRequestService.findAll(
+      user,
+      undefined,
+      page,
+      perPage,
+    );
     result.hireRequests = hireRequestsResult;
 
     const awaitingDecision = await this.prisma.candidatePanel.findMany({
@@ -200,7 +209,7 @@ export class HandlerOrganization {
         id: true,
         scheduled_date: true,
         status: true,
-        
+
         panelCandidates: {
           select: {
             id: true,
@@ -224,7 +233,7 @@ export class HandlerOrganization {
                 processing_error: true,
                 educations: true,
                 experiences: true,
-                skills:true,
+                skills: true,
                 languages: true,
                 approved_positions_pairing: true,
                 business_unit: true,
@@ -273,24 +282,55 @@ export class HandlerOrganization {
       },
     });
 
+    const crossPanelSelected = await this.prisma.panelCandidate.findMany({
+      where: { status: { in: ['selected_by_client'] } },
+      select: { candidate_id: true, panel_id: true },
+    });
+
+    const candidateSelectedInPanels = new Map<string, Set<string>>();
+    for (const pc of crossPanelSelected) {
+      if (!candidateSelectedInPanels.has(pc.candidate_id)) {
+        candidateSelectedInPanels.set(pc.candidate_id, new Set());
+      }
+      candidateSelectedInPanels.get(pc.candidate_id)!.add(pc.panel_id);
+    }
+
     //change candidate employment_type and calculate salary
     const _pCfgsA = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMapA = buildConfigMap(_pCfgsA);
     const awaitingDecisionSanitized = awaitingDecision.map((item) => ({
       ...item,
-      panelCandidates: item.panelCandidates.map((pc) => {
-        const rates = computeCandidateRates(pc.candidate, _cfgMapA);
-        return {
-          ...pc,
-          candidate: {
-            ...pc.candidate,
-            employment_type: changeLabelAvailability(dbToStageDictionary[Number(pc.candidate.employment_type)]) || pc.candidate.employment_type,
-            approved_positions_pairing: pc.candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
-            ...rates,
-            avatar: pc.candidate?.avatar_url ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}` : null,
+      panelCandidates: item.panelCandidates
+        .filter((pc) => {
+          const panelSet = candidateSelectedInPanels.get(pc.candidate.id);
+          if (panelSet) {
+            const onlyInCurrentPanel =
+              panelSet.size === 1 && panelSet.has(item.id);
+            if (!onlyInCurrentPanel) return false;
           }
-        };
-      })
+          return true;
+        })
+        .map((pc) => {
+          const rates = computeCandidateRates(pc.candidate, _cfgMapA);
+          return {
+            ...pc,
+            candidate: {
+              ...pc.candidate,
+              employment_type:
+                changeLabelAvailability(
+                  dbToStageDictionary[Number(pc.candidate.employment_type)],
+                ) || pc.candidate.employment_type,
+              approved_positions_pairing:
+                pc.candidate.approved_positions_pairing?.map(
+                  getApprovedPositionLabel,
+                ) || [],
+              ...rates,
+              avatar: pc.candidate?.avatar_url
+                ? `${process.env.AVATAR_URL}${pc.candidate.avatar_url}`
+                : null,
+            },
+          };
+        }),
     }));
 
     result.awaitingDecision = awaitingDecisionSanitized;
@@ -298,15 +338,18 @@ export class HandlerOrganization {
     const otherTalents = await this.prisma.candidate.findMany({
       where: {
         organization_id: null,
-        business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+        business_unit:
+          loggedCompany?.business_unit == 'Berry Virtual'
+            ? 'Berry Virtual'
+            : undefined,
         OR: [
           {
-            pipeline_status: '261075105'
+            pipeline_status: '261075105',
           },
           {
-            pipeline_status: '1087596819'
-          }
-        ]
+            pipeline_status: '1087596819',
+          },
+        ],
       },
       select,
       take: 9,
@@ -315,38 +358,38 @@ export class HandlerOrganization {
     lastTimeofDay.setHours(23, 59, 59, 999);
 
     const interviews = await this.prisma.interview.findMany({
-      where:{
-       panel: {
-        hireRequest:{
-          org_id: user.organization_id,
-        }
-       },
-       scheduled_date: {
-        gte: new Date(),
-        lte: lastTimeofDay
-       },
-       alert_closed: false,
+      where: {
+        panel: {
+          hireRequest: {
+            org_id: user.organization_id,
+          },
+        },
+        scheduled_date: {
+          gte: new Date(),
+          lte: lastTimeofDay,
+        },
+        alert_closed: false,
       },
-      select:{
+      select: {
         id: true,
         scheduled_date: true,
         link: true,
         alert_closed: true,
-        panel:{
-          select:{
-            hireRequest:{
-              select:{
+        panel: {
+          select: {
+            hireRequest: {
+              select: {
                 title: true,
-              }
-            }
-          }
-        }
-      }
-    })
+              },
+            },
+          },
+        },
+      },
+    });
     const interviewSanitized = interviews.map((interview) => ({
       ...interview,
       hireRequestTitle: interview.panel.hireRequest.title,
-    }))
+    }));
 
     result.interviews = interviewSanitized;
 
@@ -356,12 +399,19 @@ export class HandlerOrganization {
       const rates = computeCandidateRates(talent, _cfgMapB);
       return {
         ...talent,
-        employment_type: changeLabelAvailability(dbToStageDictionary[Number(talent.employment_type)]) || talent.employment_type,
-        approved_positions_pairing: talent.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
+        employment_type:
+          changeLabelAvailability(
+            dbToStageDictionary[Number(talent.employment_type)],
+          ) || talent.employment_type,
+        approved_positions_pairing:
+          talent.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+          [],
         ...rates,
-        avatar: talent?.avatar_url ? `${process.env.AVATAR_URL}${talent.avatar_url}` : null,
+        avatar: talent?.avatar_url
+          ? `${process.env.AVATAR_URL}${talent.avatar_url}`
+          : null,
       };
-    })
+    });
     result.otherTalents = otherTalentsSalary;
 
     return result;

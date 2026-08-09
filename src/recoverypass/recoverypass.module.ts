@@ -4,11 +4,11 @@ import { RecoverypassService } from './recoverypass.service';
 import { UserModule } from '../user/user.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MailModule } from '../mail/mail.module';
-
+import { EmailTemplatesModule } from '../email-templates/email-templates.module';
 
 @Module({
   controllers: [RecoverypassController],
   providers: [RecoverypassService],
-  imports: [UserModule, PrismaModule, MailModule],
+  imports: [UserModule, PrismaModule, MailModule, EmailTemplatesModule],
 })
 export class RecoverypassModule {}

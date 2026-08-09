@@ -11,7 +11,10 @@ export interface InvoiceRecord {
   invoice_amount: string;
   currency: string;
   paid_at: Date | null;
+  due_date: Date | null;
   raw_payload: any;
+  hubspot_pdf_link: string | null;
+  invoice_number: string | null;
 }
 
 @Injectable()
@@ -26,8 +29,11 @@ export class InvoiceIngestionService {
     'hs_payment_status',
     'hs_amount_billed',
     'hs_currency_code',
-    'hs_due_date',       // paid_at equivalent — date payment was settled
+    'hs_payment_date', // paid_at equivalent — date payment was settled
     'hs_lastmodifieddate',
+    'hs_pdf_download_link',
+    'hs_due_date',
+    'hs_number',
   ].join(',');
 
   constructor(
@@ -108,14 +114,18 @@ export class InvoiceIngestionService {
   /**
    * Fetches full invoice details for a list of invoice IDs.
    * Batches requests individually — HubSpot's batch read could be used for optimization later.
+   * Includes payment associations to resolve paid_at via hs_initiated_date,
+   * since hs_payment_date on the invoice itself is often empty.
    */
-  private async fetchInvoiceDetails(invoiceIds: string[]): Promise<InvoiceRecord[]> {
+  private async fetchInvoiceDetails(
+    invoiceIds: string[],
+  ): Promise<InvoiceRecord[]> {
     const records: InvoiceRecord[] = [];
 
     for (const id of invoiceIds) {
       try {
         const response = await axios.get(
-          `${this.baseUrl}/crm/v3/objects/invoices/${id}?properties=${this.INVOICE_PROPERTIES}`,
+          `${this.baseUrl}/crm/v3/objects/invoices/${id}?properties=${this.INVOICE_PROPERTIES}&associations=payments`,
           {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
@@ -124,14 +134,26 @@ export class InvoiceIngestionService {
         );
 
         const props = response.data?.properties ?? {};
+
+        const paymentResults: Array<{ id: string }> =
+          response.data?.associations?.payments?.results ?? [];
+
+        const paidAt = await this.resolvePaidAt(
+          props.hs_payment_date,
+          paymentResults,
+        );
+
         records.push({
           hubspot_id: id,
           invoice_status: props.hs_invoice_status ?? 'unknown',
           payment_status: props.hs_payment_status ?? null,
           invoice_amount: props.hs_amount_billed ?? '0',
           currency: props.hs_currency_code ?? 'USD',
-          paid_at: props.hs_due_date ? new Date(props.hs_due_date) : null,
+          paid_at: paidAt,
+          due_date: props.hs_due_date ? new Date(props.hs_due_date) : null,
           raw_payload: response.data,
+          hubspot_pdf_link: props.hs_pdf_download_link ?? null,
+          invoice_number: props.hs_number ?? null,
         });
       } catch (err) {
         this.logger.error(
@@ -145,6 +167,43 @@ export class InvoiceIngestionService {
   }
 
   /**
+   * Resolves paid_at for an invoice.
+   * Prefers hs_payment_date from the invoice; falls back to hs_initiated_date
+   * fetched from the first associated payment object when hs_payment_date is absent.
+   */
+  private async resolvePaidAt(
+    hsPaymentDate: string | null | undefined,
+    paymentResults: Array<{ id: string }>,
+  ): Promise<Date | null> {
+    if (hsPaymentDate) {
+      return new Date(hsPaymentDate);
+    }
+
+    if (paymentResults.length === 0) {
+      return null;
+    }
+
+    try {
+      const paymentId = paymentResults[0].id;
+      const paymentResponse = await axios.get(
+        `${this.baseUrl}/crm/v3/objects/payments/${paymentId}?properties=hs_initiated_date`,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+          },
+        },
+      );
+      const initiatedDate = paymentResponse.data?.properties?.hs_initiated_date;
+      return initiatedDate ? new Date(initiatedDate) : null;
+    } catch (err) {
+      this.logger.warn(
+        `Could not fetch payment date for payment ${paymentResults[0].id}: ${err instanceof Error ? err.message : err}`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Upserts a single HubspotInvoiceSnapshot using sync_hash for change detection.
    * - If snapshot does not exist → create
    * - If snapshot exists and hash changed → update
@@ -155,7 +214,7 @@ export class InvoiceIngestionService {
     invoice: InvoiceRecord,
   ): Promise<'created' | 'updated' | 'skipped'> {
     const syncHash = this.computeSyncHash(invoice);
-
+    console.log('Computed sync hash for invoice', invoice.hubspot_id, syncHash);
     const existing = await this.prisma.hubspotInvoiceSnapshot.findUnique({
       where: { hubspot_id: invoice.hubspot_id },
       select: {
@@ -170,6 +229,7 @@ export class InvoiceIngestionService {
         },
       },
     });
+    console.log('Existing snapshot for invoice', invoice.hubspot_id, existing);
 
     if (!existing) {
       await this.prisma.hubspotInvoiceSnapshot.create({
@@ -181,8 +241,11 @@ export class InvoiceIngestionService {
           invoice_amount: invoice.invoice_amount,
           currency: invoice.currency,
           paid_at: invoice.paid_at,
+          due_date: invoice.due_date,
           sync_hash: syncHash,
           raw_payload: invoice.raw_payload,
+          hubspot_pdf_link: invoice.hubspot_pdf_link,
+          invoice_number: invoice.invoice_number,
         },
       });
       return 'created';
@@ -200,8 +263,11 @@ export class InvoiceIngestionService {
         invoice_amount: invoice.invoice_amount,
         currency: invoice.currency,
         paid_at: invoice.paid_at,
+        due_date: invoice.due_date,
         sync_hash: syncHash,
         raw_payload: invoice.raw_payload,
+        hubspot_pdf_link: invoice.hubspot_pdf_link,
+        invoice_number: invoice.invoice_number,
       },
     });
 
@@ -236,6 +302,8 @@ export class InvoiceIngestionService {
       invoice.invoice_amount,
       invoice.currency,
       invoice.paid_at ? invoice.paid_at.toISOString() : '',
+      invoice.due_date ? invoice.due_date.toISOString() : '',
+      invoice.invoice_number ?? '',
     ].join('|');
 
     return createHash('sha256').update(payload).digest('hex');

@@ -10,7 +10,12 @@ import { PositionRateConfigModule } from '../position-rate-config/position-rate-
 
 @Module({
   controllers: [DashboardController],
-  providers: [DashboardService, HandlerOrganization, HandlerClient, HandlerAffiliate],
-  imports: [PrismaModule, HireRequestModule, PositionRateConfigModule]
+  providers: [
+    DashboardService,
+    HandlerOrganization,
+    HandlerClient,
+    HandlerAffiliate,
+  ],
+  imports: [PrismaModule, HireRequestModule, PositionRateConfigModule],
 })
 export class DashboardModule {}

@@ -27,11 +27,6 @@ export class UserService {
     private readonly hubspotService: HubspotService,
   ) {}
 
-  private buildFromWithPrefix(from: string): string {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    return isProduction ? from : `[DEV] ${from}`;
-  }
-
   async create(userData: Prisma.USERUncheckedCreateInput): Promise<USER> {
     const { password, ...rest } = userData;
     const hash = await bcrypt.hash(password, 10);
@@ -98,7 +93,10 @@ export class UserService {
     return users;
   }
 
-  async findUsersByOrganizationByCurrentUser(user: USER, status?: string): Promise<any> {
+  async findUsersByOrganizationByCurrentUser(
+    user: USER,
+    status?: string,
+  ): Promise<any> {
     let whereClause: any = {};
 
     // If user is system_admin, only return users from organizations they admin
@@ -163,83 +161,77 @@ export class UserService {
     search?: string,
     page?: number,
     perPage?: number,
-    ): Promise<any> {
-    
+    status?: string,
+  ): Promise<any> {
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
     const skip = (page - 1) * perPage;
     const take = perPage;
 
-    let whereClause: any = { 
-      role: { in: ['system_admin', 'system_super_admin'] }  
+    const whereClause: any = {
+      role: { in: ['system_admin', 'system_super_admin'] },
     };
+
+    // Status is a literal column on USER ('active' | 'inactive' | 'invited'),
+    // the same value the list already returns and the frontend displays.
+    // Filtering here (shared by findMany and count) keeps meta.total accurate.
+    if (status) {
+      whereClause.status = status;
+    }
 
     // Add search filter if provided
     if (search) {
-      whereClause.OR = [
-        {
-          first_name: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          last_name: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          email: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-        {
-          job_title: {
-            contains: search,
-            mode: 'insensitive',
-          },
-        },
-      ];
+      // Match each whitespace-separated token independently and AND them
+      // together, so a complete full name ("First Last") matches a user
+      // whose first_name and last_name live in different columns. A single OR
+      // per column would never match a full name, since no single column
+      // contains "First Last" as a substring.
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      whereClause.AND = tokens.map((token) => ({
+        OR: [
+          { first_name: { contains: token, mode: 'insensitive' } },
+          { last_name: { contains: token, mode: 'insensitive' } },
+          { email: { contains: token, mode: 'insensitive' } },
+          { job_title: { contains: token, mode: 'insensitive' } },
+        ],
+      }));
     }
-    
+
     const [users, total] = await this.prisma.$transaction([
       this.prisma.uSER.findMany({
-      where: whereClause,
-      skip,
-      take,
-      select: {
-        id: true,
-        email: true,
-        first_name: true,
-        last_name: true,
-        job_title: true,
-        role: true,
-        status: true,
-        createdAt: true,
-        sessions:{
-          orderBy: { createdAt: 'desc'},
-          take: 10,
-          select: {
-            id: true,
-            createdAt: true,
-          }
-        }
-      },
-      orderBy: {
-        first_name: 'asc',
-      },
-    }),
-    this.prisma.uSER.count({
-      where: whereClause,
-    }),
-    ])
+        where: whereClause,
+        skip,
+        take,
+        select: {
+          id: true,
+          email: true,
+          first_name: true,
+          last_name: true,
+          job_title: true,
+          role: true,
+          status: true,
+          createdAt: true,
+          sessions: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+            select: {
+              id: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: {
+          first_name: 'asc',
+        },
+      }),
+      this.prisma.uSER.count({
+        where: whereClause,
+      }),
+    ]);
 
     if (!users || users.length === 0) {
-      throw new NotFoundException(
-        `No system users found.`,
-      );
+      throw new NotFoundException(`No system users found.`);
     }
 
     return {
@@ -293,9 +285,11 @@ export class UserService {
             specialties: user.organization.specialties || undefined,
             services: user.organization.services || undefined,
             description: user.organization.description || undefined,
-            industry:  user.organization.industry 
-            ? organizationIndustryToDbDictionary[user.organization.industry] || user.organization.industry
-            : undefined,
+            industry: user.organization.industry
+              ? organizationIndustryToDbDictionary[
+                  user.organization.industry
+                ] || user.organization.industry
+              : undefined,
             number_of_employees:
               user.organization.number_of_employees || undefined,
             createdAt: user.organization.createdAt,
@@ -479,9 +473,11 @@ export class UserService {
               specialties: updatedUser.organization.specialties || undefined,
               services: updatedUser.organization.services || undefined,
               description: updatedUser.organization.description || undefined,
-              industry: updatedUser.organization.industry 
-              ? organizationIndustryToDbDictionary[updatedUser.organization.industry] || updatedUser.organization.industry
-              : undefined,
+              industry: updatedUser.organization.industry
+                ? organizationIndustryToDbDictionary[
+                    updatedUser.organization.industry
+                  ] || updatedUser.organization.industry
+                : undefined,
               number_of_employees:
                 updatedUser.organization.number_of_employees || undefined,
               createdAt: updatedUser.organization.createdAt,
@@ -496,12 +492,25 @@ export class UserService {
     }
   }
 
-  async update(id: string, userData: Prisma.USERUpdateInput): Promise<USER> {
+  async update(
+    id: string,
+    userData: Prisma.USERUpdateInput,
+    actorUserId?: string,
+  ): Promise<USER> {
     try {
       let user: Prisma.USERUpdateInput;
-      const currentUser = await this.findById(id);
+      const currentUser = await this.prisma.uSER.findUnique({
+        where: { id },
+        include: { contact: true },
+      });
       if (!currentUser) {
         throw new NotFoundException(`User not found`);
+      }
+
+      if (userData.status === 'active' && currentUser.verified === false) {
+        throw new BadRequestException(
+          'Cannot activate a user who has not completed email verification.',
+        );
       }
 
       //verify user to update status
@@ -514,26 +523,30 @@ export class UserService {
       } else {
         user = { ...userData };
       }
-      
 
-      //create contact in hubspot
-      const userForHubspot = {
-        ...user,
-        hubspot_contact_id: currentUser.hubspot_contact_id,
+      const hubspotContactId = currentUser.contact?.hubspot_id ?? null;
+      if (hubspotContactId) {
+        const userForHubspot = {
+          ...user,
+          hubspot_contact_id: hubspotContactId,
+        };
+        await this.hubspotService.updateContactInHubspot(
+          userForHubspot,
+          actorUserId,
+          `User profile updated — contact record synced to HubSpot`,
+        );
       }
-      await this.hubspotService.updateContactInHubspot(userForHubspot);
 
       return await this.prisma.uSER.update({
         where: { id },
         data: user,
       });
-      
     } catch (error) {
       throw new BadRequestException(`Failed to update user: ${error}`);
     }
   }
 
-  async delete(id: string): Promise<USER> {
+  async delete(id: string, actorUserId?: string): Promise<USER> {
     try {
       const user = await this.findById(id);
       if (!user) {
@@ -541,7 +554,10 @@ export class UserService {
       }
 
       // Additional safety check: Prevent deletion of kind admins
-      if (user.role === 'system_super_admin' && user.status !== 'invited' || user.role === 'organization_super_admin' && user.status !== 'invited') {
+      if (
+        (user.role === 'system_super_admin' && user.status !== 'invited') ||
+        (user.role === 'organization_super_admin' && user.status !== 'invited')
+      ) {
         throw new BadRequestException(
           'Cannot delete Admin users for security reasons',
         );
@@ -575,8 +591,12 @@ export class UserService {
       const userForHubspot = {
         ...user,
         hubspot_contact_id: user.hubspot_contact_id,
-      }
-      await this.hubspotService.deleteContactInHubspot(userForHubspot);
+      };
+      await this.hubspotService.deleteContactInHubspot(
+        userForHubspot,
+        actorUserId,
+        `User account deleted — contact record removed from HubSpot`,
+      );
 
       // Use a transaction to handle all deletions atomically
       return await this.prisma.$transaction(async (tx) => {
@@ -596,6 +616,8 @@ export class UserService {
         });
 
         // 4. Delete ticket notes created by this user (has RESTRICT constraint)
+        // Intentionally NOT filtered by deleted_at: the RESTRICT constraint requires every
+        // note to go, soft-deleted ones included, or the user delete fails.
         await tx.ticketNotes.deleteMany({
           where: { author_id: id },
         });
@@ -620,19 +642,28 @@ export class UserService {
         });
 
         // 7. Update tickets where this user is the user (has SET NULL constraint)
+        // Intentionally NOT filtered by deleted_at: soft-deleted tickets still hold an FK to
+        // this user, so skipping them would leave a dangling reference and block the delete.
         await tx.ticket.updateMany({
           where: { user_id: id },
           data: { user_id: null },
         });
 
-        // 8. Finally, delete the user
+        // 8. Reset affiliate profile status if this user was a connected/invited affiliate.
+        // Contact.user_id is now SET NULL on delete, so the Contact record survives —
+        // only the profile's status needs recomputing since it no longer has a user.
+        // updateMany (not update) is a no-op when no profile matches, matching the
+        // best-effort pattern used above for organizations/hire requests/tickets.
+        await tx.affiliateProfile.updateMany({
+          where: { user_id: id },
+          data: { status: 'pending' },
+        });
+
+        // 9. Finally, delete the user
         return await tx.uSER.delete({
           where: { id },
         });
       });
-
-      
-
     } catch (error) {
       if (
         error instanceof NotFoundException ||
@@ -662,7 +693,9 @@ export class UserService {
     }
   }
 
-  async searchOrganizationUsers(query: Omit<SearchUsersDto, 'role'>): Promise<any[]> {
+  async searchOrganizationUsers(
+    query: Omit<SearchUsersDto, 'role'>,
+  ): Promise<any[]> {
     const { search, status, organization_id, limit } = query;
 
     const whereClause: Prisma.USERWhereInput = {
@@ -670,12 +703,21 @@ export class UserService {
     };
 
     if (search) {
-      whereClause.OR = [
-        { first_name: { contains: search, mode: 'insensitive' } },
-        { last_name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { job_title: { contains: search, mode: 'insensitive' } },
-      ];
+      // Match each whitespace-separated token independently and AND them
+      // together, so a complete full name ("First Last") matches a user
+      // whose first_name and last_name live in different columns. A single OR
+      // per column would never match a full name, since no single column
+      // contains "First Last" as a substring.
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      whereClause.AND = tokens.map((token) => ({
+        OR: [
+          { first_name: { contains: token, mode: 'insensitive' } },
+          { last_name: { contains: token, mode: 'insensitive' } },
+          { email: { contains: token, mode: 'insensitive' } },
+          { job_title: { contains: token, mode: 'insensitive' } },
+        ],
+      }));
     }
 
     if (status) {
@@ -989,6 +1031,12 @@ export class UserService {
         throw new NotFoundException('Organization not found');
       }
 
+      if (organization.status === 'inactive') {
+        throw new BadRequestException(
+          'Cannot invite users to an inactive organization',
+        );
+      }
+
       // Create the user with invited status
       const newUser = await this.prisma.uSER.create({
         data: {
@@ -1011,6 +1059,18 @@ export class UserService {
         },
       });
 
+      // Link contact to the new user if contact_id was provided
+      if (inviteData.contact_id) {
+        try {
+          await this.prisma.contact.update({
+            where: { id: inviteData.contact_id },
+            data: { user_id: newUser.id },
+          });
+        } catch (err) {
+          console.error('Failed to link contact to new user:', err);
+        }
+      }
+
       // Generate invitation token
       const code = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET, {
         expiresIn: '48h',
@@ -1018,15 +1078,16 @@ export class UserService {
 
       // Get user email theme
       const emailTheme = await getUserEmailTheme(this.prisma, newUser.id);
-      
+
       // Send signup link via email
       const baseInviteLink = `${process.env.FRONTEND_URL}/invite-signup?code=${code}`;
-      const inviteLink = emailTheme?.companyName === 'Berry Virtual' 
-        ? `${baseInviteLink}&company=berry` 
-        : baseInviteLink;
+      const inviteLink =
+        emailTheme?.companyName === 'Berry Virtual'
+          ? `${baseInviteLink}&company=berry`
+          : baseInviteLink;
       const emailBody = InviteSignup(inviteLink, emailTheme || undefined);
       const mailSent = await this.mailService.sendMail({
-        from: this.buildFromWithPrefix(`${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`),
+        from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
         to: inviteData.email,
         subject: `Welcome to ${emailTheme?.companyName || 'MedVirtual'} - Complete Your Account Setup`,
         html: emailBody,
@@ -1057,19 +1118,23 @@ export class UserService {
       }
 
       //create contact in hubspot
-      try{
-          const newUserForHubspot = {
-            ...newUser,
-            organization: {
-              hubspot_id: organization.hubspot_id || '',
-              business_unit: organization.business_unit || '',
-              name: organization.name,
-              admin_id: organization.admin_id || null,
-            },
-          }
+      try {
+        const newUserForHubspot = {
+          ...newUser,
+          organization: {
+            hubspot_id: organization.hubspot_id || '',
+            business_unit: organization.business_unit || '',
+            name: organization.name,
+            admin_id: organization.admin_id || null,
+          },
+        };
 
-          await this.hubspotService.createContactInHubspot(newUserForHubspot);
-      }catch(err){
+        await this.hubspotService.createContactInHubspot(
+          newUserForHubspot,
+          currentUser.id,
+          `New user invited to organization — contact record created in HubSpot`,
+        );
+      } catch (err) {
         console.error('Error creating contact in Hubspot:', err);
       }
 
@@ -1084,5 +1149,4 @@ export class UserService {
       throw new BadRequestException('Failed to invite user to organization');
     }
   }
-
 }

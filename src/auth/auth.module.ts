@@ -4,14 +4,19 @@ import { AuthService } from './auth.service';
 import { UserModule } from '../user/user.module';
 import { MailModule } from '../mail/mail.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { HubspotModule } from '../hubspot/hubspot.module';
+import { EmailTemplatesModule } from '../email-templates/email-templates.module';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService],
   imports: [
-    forwardRef(() =>UserModule),
-    MailModule, 
-    PrismaModule],
-  exports: [AuthService]
+    forwardRef(() => UserModule),
+    MailModule,
+    PrismaModule,
+    forwardRef(() => HubspotModule),
+    EmailTemplatesModule,
+  ],
+  exports: [AuthService],
 })
 export class AuthModule {}

@@ -9,6 +9,6 @@ import { HubspotModule } from '../hubspot/hubspot.module';
   providers: [UserService],
   controllers: [UserController],
   imports: [PrismaModule, MailModule, HubspotModule],
-  exports: [UserService]
+  exports: [UserService],
 })
 export class UserModule {}

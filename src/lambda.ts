@@ -12,9 +12,18 @@ let cachedServer;
 
 async function bootstrapServer(): Promise<any> {
   const expressApp = express();
-  expressApp.use(express.json());
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
-  
+  expressApp.use(
+    express.json({
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
+  const app = await NestFactory.create(
+    AppModule,
+    new ExpressAdapter(expressApp),
+  );
+
   await app.enableCors({
     origin: [
       'https://app.medvirtual.ai',
@@ -24,28 +33,30 @@ async function bootstrapServer(): Promise<any> {
       'http://localhost:9000',
       'https://med-alliance.d2odvfjc5yqdaj.amplifyapp.com',
       'https://med-alliance-improved.d2odvfjc5yqdaj.amplifyapp.com',
+      'https://audit-logs.d2odvfjc5yqdaj.amplifyapp.com',
       'https://mv.staging.nykon.cloud'
-    ], 
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', 
-    credentials: true
+    ],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
   });
 
   await app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, 
-      forbidNonWhitelisted: false, 
+      whitelist: true,
+      forbidNonWhitelisted: false,
       transform: true,
     }),
   );
 
-  
   //Inicialize the Swagger configuration
   const config = new DocumentBuilder()
-  .setTitle('MedVirtual Backend')
-  .setDescription('API documentation for our backend application developed in  NestJS')
-  .setVersion('1.0')
-  .addServer('/dev')
-  .build();
+    .setTitle('MedVirtual Backend')
+    .setDescription(
+      'API documentation for our backend application developed in  NestJS',
+    )
+    .setVersion('1.0')
+    .addServer('/dev')
+    .build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('documentation', app, document);
@@ -55,10 +66,7 @@ async function bootstrapServer(): Promise<any> {
   return createServer(expressApp);
 }
 
-
-
 export const handler: Handler = async (event, context) => {
-
   if (!cachedServer) {
     console.log('Creating new server instance...');
     cachedServer = await bootstrapServer();

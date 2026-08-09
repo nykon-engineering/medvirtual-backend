@@ -6,15 +6,21 @@ import { AuthModule } from '../auth/auth.module';
 import { HubspotModule } from '../hubspot/hubspot.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SqsModule } from '../sqs/sqs.module';
+import { ContactModule } from '../contacts/contacts.module';
+import { BusinessUnitsModule } from '../business-units/business-units.module';
 
 @Module({
   controllers: [OrganizationController],
   providers: [OrganizationService],
-  imports: [PrismaModule, 
-    forwardRef(() =>AuthModule), 
-    forwardRef(() => HubspotModule), 
+  imports: [
+    PrismaModule,
+    forwardRef(() => AuthModule),
+    forwardRef(() => HubspotModule),
     NotificationsModule,
-    SqsModule],
+    SqsModule,
+    ContactModule,
+    BusinessUnitsModule,
+  ],
   exports: [OrganizationService],
 })
 export class OrganizationModule {}

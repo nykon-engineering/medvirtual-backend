@@ -1,6 +1,9 @@
 import { EmailHeader, EmailFooter } from './components';
 
-export default function googleDriveFailed(candidateName: string, messageError:any) {
+export default function googleDriveFailed(
+  candidateName: string,
+  messageError: any,
+) {
   return `
 <!DOCTYPE html>
 <html lang="en">

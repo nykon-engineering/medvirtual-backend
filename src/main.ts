@@ -27,9 +27,10 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-  }));
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
 
   const server = app.getHttpServer();
   server.setTimeout(20 * 60 * 1000); // 20 min

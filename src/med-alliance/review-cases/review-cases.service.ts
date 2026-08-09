@@ -126,6 +126,15 @@ export class ReviewCasesService {
       item.reason_code === AdminReviewReasonCode.multiple_hubspot_matches &&
       dto.hubspot_company_id
     ) {
+      const currentStatus = item.organization?.med_alliance_referral_status;
+      // Never overwrite a sticky manual/terminal decision (eligible or expired) — resolving
+      // this review case is a MA-005 sync-correctness fix, not a new eligibility decision.
+      // From pending or not_eligible (blocked), moving to pending is a legitimate un-block.
+      const statusUpdate =
+        currentStatus === 'eligible' || currentStatus === 'expired'
+          ? {}
+          : { med_alliance_referral_status: 'pending_confirmation' as any };
+
       await this.prisma.organization.update({
         where: { id: item.organization_id },
         data: {
@@ -133,8 +142,7 @@ export class ReviewCasesService {
           hubspot_sync_status: 'synced',
           hubspot_sync_error: null,
           hubspot_synced_at: new Date(),
-          // Clear the needs_admin_review flag so commission detection can proceed
-          med_alliance_referral_status: 'eligible',
+          ...statusUpdate,
         },
       });
       this.logger.log(
@@ -143,7 +151,9 @@ export class ReviewCasesService {
     }
 
     // --- Side-effect: reconciliation — invoice changed after commission was detected ---
-    if (item.reason_code === AdminReviewReasonCode.reconciliation_invoice_changed) {
+    if (
+      item.reason_code === AdminReviewReasonCode.reconciliation_invoice_changed
+    ) {
       if (dto.action === 'void_and_recreate') {
         await this.handleVoidAndRecreate(item);
       }
@@ -173,7 +183,11 @@ export class ReviewCasesService {
    *
    * Expected metadata shape: { commission_id, snapshot_id, hubspot_invoice_id }
    */
-  private async handleVoidAndRecreate(item: { id: string; organization_id: string; metadata: any }) {
+  private async handleVoidAndRecreate(item: {
+    id: string;
+    organization_id: string;
+    metadata: any;
+  }) {
     const meta = item.metadata as {
       commission_id?: string;
       snapshot_id?: string;
@@ -193,7 +207,10 @@ export class ReviewCasesService {
           old_status: 'eligible',
           new_status: 'void',
           source: 'admin_action',
-          metadata: { review_case_id: item.id, organization_id: item.organization_id },
+          metadata: {
+            review_case_id: item.id,
+            organization_id: item.organization_id,
+          },
         },
       });
 

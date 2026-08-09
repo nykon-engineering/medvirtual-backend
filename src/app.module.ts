@@ -12,6 +12,8 @@ import { OrganizationModule } from './organization/organization.module';
 import { CandidatesModule } from './candidate/candidates.module';
 import { S3Module } from './s3/s3.module';
 import { OpenaiModule } from './openai/openai.module';
+import { OpenrouterModule } from './openrouter/openrouter.module';
+import { AiComparisonModule } from './ai-comparison/ai-comparison.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CronModule } from './cron/cron.module';
 import { HireRequestModule } from './hire-request/hire-request.module';
@@ -26,6 +28,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { SqsModule } from './sqs/sqs.module';
 import { PositionRateConfigModule } from './position-rate-config/position-rate-config.module';
 import { MedAllianceModule } from './med-alliance/med-alliance.module';
+import { OfferPanelsModule } from './offer-panels/offer-panels.module';
+import { EmailTemplatesModule } from './email-templates/email-templates.module';
+import { BusinessUnitsModule } from './business-units/business-units.module';
 import { SecretsModule } from './secrets/secrets.module';
 import { HubstaffModule } from './hubstaff/hubstaff.module';
 import { BullModule } from '@nestjs/bullmq';
@@ -62,10 +67,12 @@ import { isLocalModeSync } from './common/bull.utils';
             },
           }),
         ]),
-    ThrottlerModule.forRoot([{
-      ttl: 60000, // 1 minute
-      limit: 100, // 100 requests per minute (global default, can be overridden per endpoint)
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute
+        limit: 100, // 100 requests per minute (global default, can be overridden per endpoint)
+      },
+    ]),
     UserModule,
     PrismaModule,
     AuthModule,
@@ -76,6 +83,8 @@ import { isLocalModeSync } from './common/bull.utils';
     CandidatesModule,
     S3Module,
     OpenaiModule,
+    OpenrouterModule,
+    AiComparisonModule,
     DashboardModule,
     CronModule,
     HireRequestModule,
@@ -88,6 +97,9 @@ import { isLocalModeSync } from './common/bull.utils';
     SqsModule,
     PositionRateConfigModule,
     MedAllianceModule,
+    OfferPanelsModule,
+    EmailTemplatesModule,
+    BusinessUnitsModule,
     SecretsModule,
     HubstaffModule,
     RedisModule,
@@ -97,7 +109,7 @@ import { isLocalModeSync } from './common/bull.utils';
   ],
   controllers: [AppController],
   providers: [
-    AppService, 
+    AppService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
@@ -105,4 +117,3 @@ import { isLocalModeSync } from './common/bull.utils';
   ],
 })
 export class AppModule {}
-

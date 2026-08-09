@@ -16,6 +16,12 @@ import axios from 'axios';
 import { HandlerObjectCreation } from '../hubspot/handlers/objectCreation';
 import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCreation';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import {
+  TicketAuditService,
+  TICKET_AUDIT_EVENTS,
+  TICKET_AUDIT_ORIGINS,
+  buildActorLabel,
+} from '../ticket/ticket-audit.service';
 
 @Injectable()
 export class StaffService {
@@ -23,10 +29,11 @@ export class StaffService {
     private readonly prisma: PrismaService,
     private readonly objectCreation: HandlerObjectCreation,
     private readonly organizationCreation: HandlerOrganizationCreation,
-  ) { }
+    private readonly ticketAudit: TicketAuditService,
+  ) {}
 
   private async findOne(id: string) {
-    return await this.prisma.staff.findUnique({
+    const staff = await this.prisma.staff.findUnique({
       where: { id },
       select: {
         id: true,
@@ -59,6 +66,8 @@ export class StaffService {
             employment_type: true,
             country: true,
             about_me: true,
+            avatar_url: true,
+            gender: true,
             languages: {
               select: {
                 name: true,
@@ -84,6 +93,7 @@ export class StaffService {
           },
         },
         bonus: {
+          where: { deleted_at: null },
           select: {
             id: true,
             amount: true,
@@ -95,6 +105,18 @@ export class StaffService {
         },
       },
     });
+    if (!staff) return null;
+    return {
+      ...staff,
+      candidate: staff.candidate
+        ? {
+            ...staff.candidate,
+            avatar: staff.candidate.avatar_url
+              ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}`
+              : null,
+          }
+        : null,
+    };
   }
 
   async create(createStaffDto: CreateStaffDto, user: USER) {
@@ -162,7 +184,9 @@ export class StaffService {
       where: { id: user.id },
     });
     if (!creatorUser) {
-      throw new BadRequestException(`User with ID ${user.id} not found. Cannot create ticket.`);
+      throw new BadRequestException(
+        `User with ID ${user.id} not found. Cannot create ticket.`,
+      );
     }
 
     // Validate that the assigned user exists (if provided)
@@ -171,7 +195,9 @@ export class StaffService {
         where: { id: assignedValidated },
       });
       if (!assignedUser) {
-        throw new BadRequestException(`Assigned user with ID ${assignedValidated} not found.`);
+        throw new BadRequestException(
+          `Assigned user with ID ${assignedValidated} not found.`,
+        );
       }
     }
 
@@ -199,6 +225,32 @@ export class StaffService {
         },
       }),
     ]);
+
+    void this.ticketAudit.log({
+      ticketId: ticket.id,
+      actorUserId: user.id,
+      actorLabel: buildActorLabel(user),
+      event: TICKET_AUDIT_EVENTS.CREATED,
+      newStatus: ticket.status,
+      after: {
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        org_id: ticket.org_id,
+        user_id: ticket.user_id,
+        staff_id: ticket.staff_id,
+        title: ticket.title,
+      },
+      metadata: {
+        origin: TICKET_AUDIT_ORIGINS.STAFF_BONUS,
+        actorRole: user.role ?? null,
+        actorOrganizationId: user.organization_id ?? null,
+        bonusId: bonus.id,
+        bonusAmount: data.bonus,
+        assignedAtCreation: ticket.user_id ?? null,
+      },
+    });
+
     return await this.findOne(data.staff_id);
   }
 
@@ -243,7 +295,9 @@ export class StaffService {
       where: { id: user.id },
     });
     if (!creatorUser) {
-      throw new BadRequestException(`User with ID ${user.id} not found. Cannot create ticket.`);
+      throw new BadRequestException(
+        `User with ID ${user.id} not found. Cannot create ticket.`,
+      );
     }
 
     // Validate that the assigned user exists (if provided)
@@ -252,7 +306,9 @@ export class StaffService {
         where: { id: assignedValidated },
       });
       if (!assignedUser) {
-        throw new BadRequestException(`Assigned user with ID ${assignedValidated} not found.`);
+        throw new BadRequestException(
+          `Assigned user with ID ${assignedValidated} not found.`,
+        );
       }
     }
 
@@ -276,6 +332,30 @@ export class StaffService {
         },
       }),
     ]);
+
+    void this.ticketAudit.log({
+      ticketId: ticket.id,
+      actorUserId: user.id,
+      actorLabel: buildActorLabel(user),
+      event: TICKET_AUDIT_EVENTS.CREATED,
+      newStatus: ticket.status,
+      after: {
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        org_id: ticket.org_id,
+        user_id: ticket.user_id,
+        staff_id: ticket.staff_id,
+        title: ticket.title,
+      },
+      metadata: {
+        origin: TICKET_AUDIT_ORIGINS.STAFF_TERMINATION,
+        actorRole: user.role ?? null,
+        actorOrganizationId: user.organization_id ?? null,
+        staffStatusAfter: staffStatus.status,
+        assignedAtCreation: ticket.user_id ?? null,
+      },
+    });
 
     return await this.findOne(data.staff_id);
   }
@@ -304,14 +384,27 @@ export class StaffService {
     }
 
     if (search) {
-      where.OR = [
-        { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
-        { hubspot_client_name: { contains: search, mode: 'insensitive' } },
-        { hubspot_company_name: { contains: search, mode: 'insensitive' } },
-        { candidate: { first_name: { contains: search, mode: 'insensitive' } } },
-        { candidate: { last_name: { contains: search, mode: 'insensitive' } } },
-        { candidate: { email: { contains: search, mode: 'insensitive' } } },
-      ];
+      // Match each whitespace-separated token independently and AND them
+      // together, so a complete full name ("Svetlana Petrova") matches a staff
+      // whose first_name and last_name live in different columns. A single OR
+      // per column would never match a full name, since no single column
+      // contains "Svetlana Petrova" as a substring.
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      where.AND = tokens.map((token) => ({
+        OR: [
+          { hubspot_deal_name: { contains: token, mode: 'insensitive' } },
+          { hubspot_client_name: { contains: token, mode: 'insensitive' } },
+          { hubspot_company_name: { contains: token, mode: 'insensitive' } },
+          {
+            candidate: { first_name: { contains: token, mode: 'insensitive' } },
+          },
+          {
+            candidate: { last_name: { contains: token, mode: 'insensitive' } },
+          },
+          { candidate: { email: { contains: token, mode: 'insensitive' } } },
+        ],
+      }));
     }
 
     const queryOptions: any = {
@@ -390,6 +483,7 @@ export class StaffService {
           },
         },
         bonus: {
+          where: { deleted_at: null },
           select: {
             id: true,
             amount: true,
@@ -413,9 +507,11 @@ export class StaffService {
       ...s,
       candidate: s.candidate
         ? {
-          ...s.candidate,
-          avatar: s.candidate.avatar_url ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}` : null,
-        }
+            ...s.candidate,
+            avatar: s.candidate.avatar_url
+              ? `${process.env.AVATAR_URL}${s.candidate.avatar_url}`
+              : null,
+          }
         : null,
     }));
   }
@@ -486,14 +582,30 @@ export class StaffService {
     }
 
     if (search) {
-      andConditions.push({
-        OR: [
-          { hireRequest: { title: { contains: search, mode: 'insensitive' } } },
-          { candidate: { first_name: { contains: search, mode: 'insensitive' } } },
-          { candidate: { last_name: { contains: search, mode: 'insensitive' } } },
-          { hubspot_deal_name: { contains: search, mode: 'insensitive' } },
-        ],
-      });
+      // AND each whitespace-separated token so a complete full name matches
+      // across first_name/last_name columns (see searchStaff for rationale).
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      for (const token of tokens) {
+        andConditions.push({
+          OR: [
+            {
+              hireRequest: { title: { contains: token, mode: 'insensitive' } },
+            },
+            {
+              candidate: {
+                first_name: { contains: token, mode: 'insensitive' },
+              },
+            },
+            {
+              candidate: {
+                last_name: { contains: token, mode: 'insensitive' },
+              },
+            },
+            { hubspot_deal_name: { contains: token, mode: 'insensitive' } },
+          ],
+        });
+      }
     }
 
     if (andConditions.length > 0) {
@@ -569,6 +681,7 @@ export class StaffService {
         },
       },
       bonus: {
+        where: { deleted_at: null },
         select: {
           id: true,
           amount: true,
@@ -593,9 +706,11 @@ export class StaffService {
       ...staff,
       candidate: {
         ...staff.candidate,
-        avatar: staff.candidate?.avatar_url ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}` : null,
-      }
-    }))
+        avatar: staff.candidate?.avatar_url
+          ? `${process.env.AVATAR_URL}${staff.candidate.avatar_url}`
+          : null,
+      },
+    }));
 
     return {
       status: 200,
@@ -618,7 +733,6 @@ export class StaffService {
     start_date_from: Date,
     start_date_to: Date,
   ): Promise<object> {
-
     //console.log('Organization ID in Service:', organizationId);
     page = page ? Number(page) : 1;
     perPage = perPage ? Number(perPage) : 10;
@@ -632,7 +746,6 @@ export class StaffService {
       candidate: {},
     };
 
-
     where.OR = [
       {
         hireRequest: {
@@ -644,25 +757,30 @@ export class StaffService {
       },
     ];
 
-
     if (search) {
-      where.OR = [
-        {
-          hireRequest: {
-            title: { contains: search, mode: 'insensitive' },
+      // AND each whitespace-separated token so a complete full name matches
+      // across first_name/last_name columns (see searchStaff for rationale).
+      const tokens = search.trim().split(/\s+/).filter(Boolean);
+
+      where.AND = tokens.map((token) => ({
+        OR: [
+          {
+            hireRequest: {
+              title: { contains: token, mode: 'insensitive' },
+            },
           },
-        },
-        {
-          candidate: {
-            first_name: { contains: search, mode: 'insensitive' },
+          {
+            candidate: {
+              first_name: { contains: token, mode: 'insensitive' },
+            },
           },
-        },
-        {
-          candidate: {
-            last_name: { contains: search, mode: 'insensitive' },
+          {
+            candidate: {
+              last_name: { contains: token, mode: 'insensitive' },
+            },
           },
-        },
-      ];
+        ],
+      }));
     }
 
     if (start_date_from || start_date_to) {
@@ -733,6 +851,7 @@ export class StaffService {
         },
       },
       bonus: {
+        where: { deleted_at: null },
         select: {
           id: true,
           amount: true,
@@ -784,9 +903,7 @@ export class StaffService {
       }
 
       // Extract staff-specific fields and candidate fields
-      const {
-        status,
-      } = updateData;
+      const { status } = updateData;
 
       // Update staff record
       const staffUpdateData: any = {};
@@ -875,6 +992,7 @@ export class StaffService {
               },
             },
             bonus: {
+              where: { deleted_at: null },
               select: {
                 id: true,
                 amount: true,
@@ -900,15 +1018,13 @@ export class StaffService {
     }
   }
 
-
   async populateDbFromHubspot(): Promise<any> {
     const BATCH_SIZE = 100;
     const ASSOCIATION_BATCH_SIZE = 100;
     let hasMore = true;
     let after: string | undefined = undefined;
     const allDeals: any[] = [];
-    const properties = Object.keys(dealToDbDictionary)
-
+    const properties = Object.keys(dealToDbDictionary);
 
     while (hasMore) {
       const body: any = {
@@ -917,7 +1033,7 @@ export class StaffService {
             filters: [
               { propertyName: 'pipeline', operator: 'EQ', value: '85165570' }, // MV OPERATIONS PIPELINE
             ],
-          }
+          },
         ],
         properties: properties,
         limit: BATCH_SIZE,
@@ -947,29 +1063,27 @@ export class StaffService {
 
     console.log(`Total deals fetched from HubSpot: ${allDeals.length}`);
 
-    const mappedDeals = allDeals.map(deal => {
+    const mappedDeals = allDeals.map((deal) => {
       const mapped: any = { hubspot_id: deal.id };
       for (const [hubspotKey, dbKey] of Object.entries(dealToDbDictionary)) {
         let value = deal.properties[hubspotKey];
 
-        if (value === "" || value === undefined) {
+        if (value === '' || value === undefined) {
           value = null;
         }
 
         if (
-          dbKey === 'hubspot_close_date' && value ||
-          dbKey === 'start_date' && value
+          (dbKey === 'hubspot_close_date' && value) ||
+          (dbKey === 'start_date' && value)
         ) {
           const dateValue = new Date(value);
           value = isNaN(dateValue.getTime()) ? null : dateValue;
         }
 
-
         mapped[dbKey] = value;
       }
       return mapped;
     });
-
 
     const VADeals: any[] = [];
     const CompanyDeals: any[] = [];
@@ -985,9 +1099,9 @@ export class StaffService {
           {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
-          }
+          },
         );
 
         const associations = response.data.results;
@@ -995,7 +1109,7 @@ export class StaffService {
         // Mapping the results back to each deal
         for (const deal of chunk) {
           const assoc = associations.find(
-            (a: any) => a.from?.id === deal.hubspot_id
+            (a: any) => a.from?.id === deal.hubspot_id,
           );
           if (assoc?.to?.length > 0) {
             const hubspotCandidateId = assoc.to[0].id;
@@ -1008,30 +1122,33 @@ export class StaffService {
             if (candidateExists) {
               deal.candidate_id = candidateExists.id;
             } else {
-              let event = {
-                objectId: hubspotCandidateId
-              }
+              const event = {
+                objectId: hubspotCandidateId,
+              };
               await this.objectCreation.execute(event);
               candidateExists = await this.prisma.candidate.findUnique({
                 where: { hubspot_id: String(hubspotCandidateId) },
                 select: { id: true },
               });
-              if (candidateExists)
-                deal.candidate_id = candidateExists.id;
+              if (candidateExists) deal.candidate_id = candidateExists.id;
             }
             deal.hubspot_candidate_id = hubspotCandidateId;
           }
-          deal.status = activePipelines.some(([key]) => key === deal.hubspot_dealstage) ? 'active' : 'inactive';
+          deal.status = activePipelines.some(
+            ([key]) => key === deal.hubspot_dealstage,
+          )
+            ? 'active'
+            : 'inactive';
           VADeals.push(deal);
         }
-
       } catch (error: any) {
-        console.error("Error to find batch process :", error.response?.data || error);
+        console.error(
+          'Error to find batch process :',
+          error.response?.data || error,
+        );
       }
     }
-    console.log('Deals with candidates Associated: ', VADeals)
-
-
+    console.log('Deals with candidates Associated: ', VADeals);
 
     for (let i = 0; i < VADeals.length; i += ASSOCIATION_BATCH_SIZE) {
       const chunk = VADeals.slice(i, i + ASSOCIATION_BATCH_SIZE);
@@ -1044,9 +1161,9 @@ export class StaffService {
           {
             headers: {
               Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
-          }
+          },
         );
 
         const associations = response.data.results;
@@ -1054,15 +1171,16 @@ export class StaffService {
         // Mapping the results back to each deal
         for (const deal of chunk) {
           const assoc = associations.find(
-            (a: any) => a.from?.id === deal.hubspot_id
+            (a: any) => a.from?.id === deal.hubspot_id,
           );
           if (assoc?.to?.length > 0) {
             const hubspotCandidateId = assoc.to[0].id;
 
-            const organizationExists = await this.prisma.organization.findUnique({
-              where: { hubspot_id: String(hubspotCandidateId) },
-              select: { id: true },
-            });
+            const organizationExists =
+              await this.prisma.organization.findUnique({
+                where: { hubspot_id: String(hubspotCandidateId) },
+                select: { id: true },
+              });
 
             if (organizationExists) {
               deal.organization_id = organizationExists.id;
@@ -1072,14 +1190,18 @@ export class StaffService {
 
           CompanyDeals.push(deal);
         }
-
       } catch (error: any) {
-        console.error("Error to find batch process :", error.response?.data || error);
+        console.error(
+          'Error to find batch process :',
+          error.response?.data || error,
+        );
       }
     }
 
-
-    console.log('Deals with companies and candidates Associated: ', CompanyDeals)
+    console.log(
+      'Deals with companies and candidates Associated: ',
+      CompanyDeals,
+    );
 
     const CHUNK_SIZE = 500; // Adjust chunk size as needed
     for (let i = 0; i < CompanyDeals.length; i += CHUNK_SIZE) {
@@ -1091,9 +1213,7 @@ export class StaffService {
     }
 
     return `DB populated from HubSpot successfully with ${CompanyDeals.length} deals`;
-
   }
-
 
   async syncOrganizationIds(): Promise<any> {
     const staffWithoutOrg = await this.prisma.staff.findMany({
@@ -1108,12 +1228,18 @@ export class StaffService {
     });
 
     if (staffWithoutOrg.length === 0) {
-      return { updated: 0, skipped: 0, errors: [], message: 'No staff records to sync' };
+      return {
+        updated: 0,
+        skipped: 0,
+        errors: [],
+        message: 'No staff records to sync',
+      };
     }
 
     let updated = 0;
     let skipped = 0;
-    const errors: { staffId: string; hubspotOrgId: string; reason: string }[] = [];
+    const errors: { staffId: string; hubspotOrgId: string; reason: string }[] =
+      [];
 
     for (const staff of staffWithoutOrg) {
       const hubspotOrgId = staff.hubspot_organization_id as string;
@@ -1164,15 +1290,17 @@ export class StaffService {
     const staff = await this.prisma.staff.findUnique({
       where: {
         id: staffId,
-        status: 'termination-requested'
+        status: 'termination-requested',
       },
       select: {
         id: true,
-      }
+      },
     });
 
     if (!staff) {
-      throw new NotFoundException('Staff member not found or not in termination-requested status');
+      throw new NotFoundException(
+        'Staff member not found or not in termination-requested status',
+      );
     }
 
     const updatedStaff = await this.prisma.staff.update({
@@ -1180,11 +1308,11 @@ export class StaffService {
       data: { status: 'active' },
     });
     if (!updatedStaff) {
-      throw new BadRequestException('Failed to move staff member back to active');
+      throw new BadRequestException(
+        'Failed to move staff member back to active',
+      );
     }
 
     return this.findOne(staffId);
   }
-
-
 }

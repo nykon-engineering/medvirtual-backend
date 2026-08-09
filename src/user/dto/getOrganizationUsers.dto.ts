@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsInt, Min, Max, IsEnum, IsDateString } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsInt,
+  Min,
+  Max,
+  IsEnum,
+  IsDateString,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class GetOrganizationUsersDto {
@@ -85,7 +93,8 @@ export class GetOrganizationUsersDto {
 
   @ApiProperty({
     required: false,
-    description: 'Filter by creation date from (ISO date string, e.g., 2025-01-01)',
+    description:
+      'Filter by creation date from (ISO date string, e.g., 2025-01-01)',
     type: String,
     format: 'date',
   })
@@ -95,7 +104,8 @@ export class GetOrganizationUsersDto {
 
   @ApiProperty({
     required: false,
-    description: 'Filter by creation date to (ISO date string, e.g., 2025-10-09)',
+    description:
+      'Filter by creation date to (ISO date string, e.g., 2025-10-09)',
     type: String,
     format: 'date',
   })

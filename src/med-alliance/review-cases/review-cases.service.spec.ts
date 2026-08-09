@@ -225,6 +225,111 @@ describe('ReviewCasesService', () => {
       expect(mockPrisma.organization.update).not.toHaveBeenCalled();
     });
 
+    // -----------------------------------------------------------------------
+    // multiple_hubspot_matches — med_alliance_referral_status guard
+    // -----------------------------------------------------------------------
+    describe('multiple_hubspot_matches status guard', () => {
+      it('should NOT include med_alliance_referral_status in the update when org is already eligible', async () => {
+        mockPrisma.medAllianceAdminReviewCase.findUnique.mockResolvedValue(
+          makeCase({
+            organization: {
+              id: 'org-1',
+              med_alliance_referral_status: 'eligible',
+            },
+          }),
+        );
+        mockPrisma.organization.update.mockResolvedValue({});
+        mockPrisma.medAllianceAdminReviewCase.update.mockResolvedValue({});
+
+        await service.resolve('case-1', 'admin-1', {
+          resolution: 'Set correct company',
+          hubspot_company_id: 'hs-company-99',
+        });
+
+        const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+        expect(updateData).not.toHaveProperty('med_alliance_referral_status');
+        expect(updateData).toEqual(
+          expect.objectContaining({
+            hubspot_id: 'hs-company-99',
+            hubspot_sync_status: 'synced',
+          }),
+        );
+      });
+
+      it('should NOT include med_alliance_referral_status in the update when org is expired', async () => {
+        mockPrisma.medAllianceAdminReviewCase.findUnique.mockResolvedValue(
+          makeCase({
+            organization: {
+              id: 'org-1',
+              med_alliance_referral_status: 'expired',
+            },
+          }),
+        );
+        mockPrisma.organization.update.mockResolvedValue({});
+        mockPrisma.medAllianceAdminReviewCase.update.mockResolvedValue({});
+
+        await service.resolve('case-1', 'admin-1', {
+          resolution: 'Set correct company',
+          hubspot_company_id: 'hs-company-99',
+        });
+
+        const updateData = mockPrisma.organization.update.mock.calls[0][0].data;
+        expect(updateData).not.toHaveProperty('med_alliance_referral_status');
+      });
+
+      it('should set med_alliance_referral_status to pending_confirmation when org is pending_confirmation', async () => {
+        mockPrisma.medAllianceAdminReviewCase.findUnique.mockResolvedValue(
+          makeCase({
+            organization: {
+              id: 'org-1',
+              med_alliance_referral_status: 'pending_confirmation',
+            },
+          }),
+        );
+        mockPrisma.organization.update.mockResolvedValue({});
+        mockPrisma.medAllianceAdminReviewCase.update.mockResolvedValue({});
+
+        await service.resolve('case-1', 'admin-1', {
+          resolution: 'Set correct company',
+          hubspot_company_id: 'hs-company-99',
+        });
+
+        expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              med_alliance_referral_status: 'pending_confirmation',
+            }),
+          }),
+        );
+      });
+
+      it('should set med_alliance_referral_status to pending_confirmation when org is not_eligible (un-block)', async () => {
+        mockPrisma.medAllianceAdminReviewCase.findUnique.mockResolvedValue(
+          makeCase({
+            organization: {
+              id: 'org-1',
+              med_alliance_referral_status: 'not_eligible',
+            },
+          }),
+        );
+        mockPrisma.organization.update.mockResolvedValue({});
+        mockPrisma.medAllianceAdminReviewCase.update.mockResolvedValue({});
+
+        await service.resolve('case-1', 'admin-1', {
+          resolution: 'Set correct company',
+          hubspot_company_id: 'hs-company-99',
+        });
+
+        expect(mockPrisma.organization.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              med_alliance_referral_status: 'pending_confirmation',
+            }),
+          }),
+        );
+      });
+    });
+
     it('should void commission and clear sync_hash on void_and_recreate action', async () => {
       const reconCase = makeCase({
         reason_code: AdminReviewReasonCode.reconciliation_invoice_changed,

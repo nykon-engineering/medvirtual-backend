@@ -14,15 +14,17 @@ import { RecoveryForgotPasswordDto } from './dto/recoveryForgotPassword.dto';
 import getResetPasswordTemplate from '../common/utils/email-templates/reset-password';
 import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
 import { RecoveryResetPasswordDto } from './dto/recoveryResetPassword.dto';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
 export class RecoverypassService {
   private readonly RESET_TOKEN_EXPIRATION_MINUTES = 10;
-  
+
   constructor(
     private readonly user: UserService,
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
 
   async forgotPassword(data: RecoveryForgotPasswordDto): Promise<boolean> {
@@ -32,11 +34,15 @@ export class RecoverypassService {
     }
     const user = await this.user.findByEmail(data.email);
     if (!user) {
-      throw new NotFoundException('User not found! Please check the email provided.');
+      throw new NotFoundException(
+        'User not found! Please check the email provided.',
+      );
     }
 
-    if (user.status === 'invited'){
-      throw new BadRequestException('User account is not active. Please accept the invitation before resetting password.');
+    if (user.status === 'invited') {
+      throw new BadRequestException(
+        'User account is not active. Please accept the invitation before resetting password.',
+      );
     }
 
     const rawToken = randomBytes(32).toString('hex');
@@ -66,22 +72,35 @@ export class RecoverypassService {
       },
     });
 
-    // Get user email theme
     const emailTheme = await getUserEmailTheme(this.prisma, user.id);
-    
-    // Send verification code via email
-    const emailBody = getResetPasswordTemplate(
-      user.first_name,
-      `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`,
-      emailTheme || undefined
-    );
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
+    const resetLink = `${process.env.FRONTEND_URL}/set-password?t=${rawToken}`;
 
+    const fallbackSubject = `Reset Your MedVirtual Password - Action Required`;
+    const fallbackHtml = getResetPasswordTemplate(
+      user.first_name,
+      resetLink,
+      emailTheme || undefined,
+    );
+    const tplContent = await this.emailTemplates.getTemplateContent(
+      'reset-password',
+      {
+        '{{userName}}': user.first_name,
+        '{{resetLink}}': resetLink,
+        '{{companyName}}': emailTheme?.companyName || 'MedVirtual',
+      },
+      emailTheme || {
+        primaryColor: '#01546B',
+        primaryColorHover: '#013A4F',
+        secondaryColor: '#F8F9FA',
+        accentColor: '#00B2E2',
+        companyName: 'MedVirtual',
+      },
+    );
     const mailSent = await this.mail.sendMail({
-      from: `${!isProduction ? '[DEV] ' : ''}MedVirtual <noreply@medvirtual.ai>`,
+      from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: user.email,
-      subject: `Reset Your MedVirtual Password - Action Required`,
-      html: emailBody,
+      subject: tplContent?.subject ?? fallbackSubject,
+      html: tplContent?.html ?? fallbackHtml,
       headers: {
         'X-Mailer': 'MedVirtual Platform',
         'X-Priority': '3',
@@ -90,7 +109,7 @@ export class RecoverypassService {
       },
       tags: [
         { name: 'type', value: 'password_reset' },
-        { name: 'source', value: 'medvirtual' }
+        { name: 'source', value: 'medvirtual' },
       ],
     });
 
@@ -100,14 +119,10 @@ export class RecoverypassService {
     return true;
   }
 
-
-
   async setPassword(data: RecoveryResetPasswordDto): Promise<boolean> {
     const { token, password } = data;
     if (!token) throw new BadRequestException('Reset token is required');
     if (!password) throw new BadRequestException('New password is required');
-
-
 
     const resetToken = await this.prisma.passwordResetToken.findFirst({
       where: {
@@ -126,17 +141,13 @@ export class RecoverypassService {
       throw new BadRequestException('Invalid or expired token');
     }
 
-    const isValidToken = await bcrypt.compare(
-      token,
-      resetToken.tokenHash,
-    );
+    const isValidToken = await bcrypt.compare(token, resetToken.tokenHash);
 
     if (!isValidToken) {
       throw new BadRequestException('Invalid or expired token');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
 
     // Atomic operation
     await this.prisma.$transaction([

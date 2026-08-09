@@ -63,7 +63,8 @@ export class CreateTalentPoolLeadDto {
   website_url: string;
 
   @ApiProperty({
-    description: 'Language preference - Are your patients bilingual (English/Spanish)?',
+    description:
+      'Language preference - Are your patients bilingual (English/Spanish)?',
     example: 'yes',
     enum: ['yes', 'no'],
     required: true,
@@ -76,7 +77,8 @@ export class CreateTalentPoolLeadDto {
   language_preference: string;
 
   @ApiProperty({
-    description: 'Main need or requirement (deprecated - kept for backward compatibility)',
+    description:
+      'Main need or requirement (deprecated - kept for backward compatibility)',
     example: 'E.g: 3 bilingual VAs for telemedicine',
     required: false,
   })
@@ -86,7 +88,8 @@ export class CreateTalentPoolLeadDto {
 
   @ApiProperty({
     description: 'Additional details about the requirement',
-    example: 'Monthly volume, specialties, schedules, or critical certifications...',
+    example:
+      'Monthly volume, specialties, schedules, or critical certifications...',
     required: false,
   })
   @IsOptional()
@@ -102,7 +105,18 @@ export class CreateTalentPoolLeadDto {
   @IsString()
   @IsNotEmpty()
   @IsIn(['talent-pool-page', 'berry-talent-pool-page'], {
-    message: 'Source must be either "talent-pool-page" or "berry-talent-pool-page"',
+    message:
+      'Source must be either "talent-pool-page" or "berry-talent-pool-page"',
   })
   source: string;
+
+  @ApiProperty({
+    description:
+      'ID of the talent pool candidate the visitor was viewing when they submitted the form',
+    example: 'abc123',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  candidate_id?: string;
 }

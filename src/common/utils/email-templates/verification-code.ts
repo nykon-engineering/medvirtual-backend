@@ -1,8 +1,16 @@
+import { getEmailLogoCss, getEmailLogoImg } from './components';
 import { EmailTheme } from './theme';
 
-export default function getVerificationCodeTemplate(verificationCode: string, theme?: EmailTheme, isBerryVirtual?: boolean, verificationUrl?: string) {
+export default function getVerificationCodeTemplate(
+  verificationCode: string,
+  theme?: EmailTheme,
+  isBerryVirtual?: boolean,
+  verificationUrl?: string,
+) {
   const primaryColor = theme?.primaryColor || '#01546B';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
 
   return `
 <!DOCTYPE html>
@@ -36,14 +44,7 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
     .content {
       padding: 40px 30px;
     }
-    .logo {
-      text-align: left;
-      margin-bottom: 30px;
-    }
-    .logo img {
-      max-width: 200px;
-      height: auto;
-    }
+${getEmailLogoCss()}
     .greeting {
       color: #333333;
       font-size: 16px;
@@ -81,8 +82,8 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
     }
     .cta-button {
       display: inline-block;
-      background-color: ${primaryColor};
-      color: #ffffff !important;
+      background-color: ${buttonColor};
+      color: ${buttonTextColor} !important;
       padding: 14px 28px;
       text-decoration: none;
       border-radius: 30px;
@@ -93,13 +94,13 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
     }
     .cta-button:hover {
       background-color: ${theme?.primaryColorHover || '#013A4F'};
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:visited {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:link {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .closing {
       color: #333333;
@@ -145,7 +146,13 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
     <div class="container">
       <div class="content">
         <div class="logo">
-          <img src="https://staging.medvirtual.ai/${isBerryVirtual ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+          ${getEmailLogoImg(
+            // The explicit isBerryVirtual flag wins over the theme: some callers pass
+            // it without a matching theme, and dropping it would switch their logo.
+            isBerryVirtual && !theme?.logoUrl
+              ? ({ companyName: 'Berry Virtual' } as EmailTheme)
+              : theme,
+          )}
         </div>
       
       <div class="greeting">Hi,</div>
@@ -154,11 +161,15 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
         Here is your verification code. Just enter the code below to easily and securely verify your account :)
       </div>
 
-      ${isBerryVirtual ? `
+      ${
+        isBerryVirtual
+          ? `
       <div style="background-color: #FD7171; color: white; padding: 12px; border-radius: 8px; margin: 20px 0; text-align: center; font-weight: 600; font-size: 14px;">
         <strong>Berry virtual account</strong>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
 
       <div class="code-box">
         <div class="code-label">
@@ -169,13 +180,17 @@ export default function getVerificationCodeTemplate(verificationCode: string, th
         </p>
       </div>
       
-      ${verificationUrl ? `
+      ${
+        verificationUrl
+          ? `
       <div style="text-align: left; margin: 30px 0;">
         <a href="${verificationUrl}" class="cta-button">
           Verify Account
         </a>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
       
         <strong>⏰ Important:</strong> This code will expire in 10 minutes for security reasons.
       

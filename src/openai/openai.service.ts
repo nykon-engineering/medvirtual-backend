@@ -1,41 +1,198 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import fs from "fs";
-import OpenAI, { toFile } from "openai";
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import fs from 'fs';
+import OpenAI, { toFile } from 'openai';
 import insufficient_quota from '../common/utils/email-templates/insufficient_quota-openai';
+import openrouter_fallback_failed from '../common/utils/email-templates/openrouter-fallback-failed';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { isOpenRouterEnabled } from '../openrouter/openrouter.config';
+import {
+  isInsufficientQuotaError,
+  isRateLimitError,
+} from '../openrouter/openrouter.errors';
+import { OpenrouterService } from '../openrouter/openrouter.service';
+import { parseJsonLoose } from '../openrouter/openrouter.service';
+import {
+  buildResumeExtractionPayload,
+  buildTextSummaryPrompt,
+  normalizeResumeExtraction,
+  TEXT_SUMMARY_SYSTEM_PROMPT,
+} from './openai.prompts';
 import path from 'path';
 
-import { File as NodeFile } from "node:buffer";
+import { File as NodeFile } from 'node:buffer';
 if (!globalThis.File) {
-    globalThis.File = NodeFile as unknown as typeof File;
+  globalThis.File = NodeFile as unknown as typeof File;
 }
 
 @Injectable()
 export class OpenaiService {
-    constructor(
-        private readonly mailService: MailService,
-        private readonly prisma: PrismaService
-    ) { }
-    /* istanbul ignore next */
+  private readonly logger = new Logger(OpenaiService.name);
 
+  constructor(
+    private readonly mailService: MailService,
+    private readonly prisma: PrismaService,
+    private readonly openrouter: OpenrouterService,
+  ) {}
 
+  /**
+   * Sends the quota alert at most once per day. Failures here must never stop
+   * the fallback from running, so everything is swallowed.
+   */
+  private async notifyInsufficientQuota(): Promise<void> {
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
 
+      const existingMail = await this.prisma.mail_Settings.findFirst({
+        where: {
+          title: 'insufficient_quota',
+          created_at: { gte: start, lt: end },
+        },
+      });
+      if (existingMail) return;
 
-    async organizeText(text: string, candidate: any): Promise<string> {
+      const mailSent = await this.mailService.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: 'shayan@regenta.ai',
+        cc: 'paulo@regenta.ai',
+        subject: 'Insufficient Quota from OpenAI',
+        html: insufficient_quota(),
+      });
+      if (!mailSent) {
+        this.logger.warn(
+          'Failed to send insufficient quota email notification.',
+        );
+      }
 
-        const candidateJSON = JSON.stringify(candidate);
+      await this.prisma.mail_Settings.create({
+        data: { title: 'insufficient_quota' },
+      });
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to record insufficient quota notification: ${error?.message}`,
+      );
+    }
+  }
 
-        const apiKey = process.env.OPENAI_API_KEY;
+  /**
+   * Alerts when OpenAI is out of credit AND the OpenRouter fallback failed too,
+   * so nothing processed the request. Deduped per day like the quota alert, to
+   * avoid a mail storm when a whole batch of candidates fails at once.
+   */
+  private async notifyFallbackFailed(
+    operation: string,
+    error: unknown,
+  ): Promise<void> {
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
 
-        if (!apiKey) {
-            throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
-        }
-        const openai = new OpenAI({
-            apiKey: apiKey
-        });
+      const existingMail = await this.prisma.mail_Settings.findFirst({
+        where: {
+          title: 'openrouter_fallback_failed',
+          created_at: { gte: start, lt: end },
+        },
+      });
+      if (existingMail) return;
 
-        const prompt = `
+      const mailSent = await this.mailService.sendMail({
+        from: 'MedVirtual <noreply@medvirtual.ai>',
+        to: 'paulo@regenta.ai',
+        subject: 'OpenRouter Fallback Failed - Both AI Providers Down',
+        html: openrouter_fallback_failed(operation, error, new Date()),
+      });
+      if (!mailSent) {
+        this.logger.warn('Failed to send OpenRouter fallback failure email.');
+      }
+
+      await this.prisma.mail_Settings.create({
+        data: { title: 'openrouter_fallback_failed' },
+      });
+    } catch (notifyError: any) {
+      this.logger.error(
+        `Failed to record fallback failure notification: ${notifyError?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Runs `primary` against OpenAI and, only when the account is out of credit,
+   * retries through OpenRouter. Rate limits and every other error keep their
+   * existing behaviour — the fallback is deliberately narrow.
+   */
+  private async withQuotaFallback<T>(
+    label: string,
+    primary: () => Promise<T>,
+    fallback: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await primary();
+    } catch (error: any) {
+      if (isRateLimitError(error)) {
+        this.logger.warn(`[OpenAI] rate limit on ${label}`);
+        throw new BadRequestException(
+          'Rate limit exceeded. Please try again later.',
+        );
+      }
+
+      if (!isInsufficientQuotaError(error)) {
+        this.logger.error(
+          `[OpenAI] unexpected error on ${label}: ${error?.message}`,
+        );
+        throw new BadRequestException(
+          `Unexpected error requesting OpenAI on ${label}.`,
+        );
+      }
+
+      this.logger.error(
+        `[OpenAI] insufficient_quota on ${label} — engaging OpenRouter fallback`,
+      );
+      await this.notifyInsufficientQuota();
+
+      if (!isOpenRouterEnabled()) {
+        throw new BadRequestException(
+          'You dont have credits. Check your plan/billing.',
+        );
+      }
+
+      try {
+        const result = await fallback();
+        this.logger.warn(`[OpenRouter] fallback succeeded for ${label}`);
+        return result;
+      } catch (fallbackError: any) {
+        this.logger.error(
+          `[OpenRouter] fallback failed for ${label}: ${fallbackError?.message}`,
+        );
+        await this.notifyFallbackFailed(label, fallbackError);
+        throw new BadRequestException(
+          'You dont have credits. Check your plan/billing.',
+        );
+      }
+    }
+  }
+
+  /* istanbul ignore next */
+
+  async organizeText(text: string, candidate: any): Promise<string> {
+    const candidateJSON = JSON.stringify(candidate);
+
+    const apiKey = process.env.OPENAI_API_KEY;
+
+    if (!apiKey) {
+      throw new BadRequestException(
+        'OPENAI_API_KEY is not defined in environment variables',
+      );
+    }
+    const openai = new OpenAI({
+      apiKey: apiKey,
+    });
+
+    const prompt = `
         You are a resume data extraction assistant.
 
         Your job is to read:
@@ -125,105 +282,109 @@ export class OpenaiService {
         Return only a **single valid JSON object** that passes strict JSON.parse().
         `;
 
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a resume data extractor. return only the JSON request',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.2,
+      });
+      const usage = response.usage;
+      let cost = 0;
+      if (usage) {
+        const inputCost = (usage.prompt_tokens / 1000) * 0.002;
+        const outputCost = (usage.completion_tokens / 1000) * 0.006;
+        cost = inputCost + outputCost;
+      }
 
-        try {
-            const response = await openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'You are a resume data extractor. return only the JSON request',
-                    },
-                    {
-                        role: 'user',
-                        content: prompt,
-                    },
-                ],
-                temperature: 0.2,
-            });
-            const usage = response.usage;
-            let cost = 0;
-            if (usage) {
-                const inputCost = (usage.prompt_tokens / 1000) * 0.0020;
-                const outputCost = (usage.completion_tokens / 1000) * 0.0060;
-                cost = inputCost + outputCost;
-            }
+      let message: any = response.choices?.[0]?.message?.content;
+      if (!message) {
+        throw new BadRequestException('OpenAI did not return a valid message.');
+      }
 
-            let message: any = response.choices?.[0]?.message?.content;
-            if (!message) {
-                throw new BadRequestException('OpenAI did not return a valid message.');
-            }
+      let parsedMessage;
 
-            let parsedMessage;
+      try {
+        parsedMessage = JSON.parse(message);
+      } catch (e) {
+        console.error('Erro ao converter resposta JSON da OpenAI:', e);
+        throw new BadRequestException('Invalid JSON returned from OpenAI');
+      }
+      parsedMessage.cost = `$${cost.toFixed(4)}`;
+      message = JSON.stringify(parsedMessage, null, 2);
 
-            try {
-                parsedMessage = JSON.parse(message);
-            } catch (e) {
-                console.error('Erro ao converter resposta JSON da OpenAI:', e);
-                throw new BadRequestException('Invalid JSON returned from OpenAI');
-            }
-            parsedMessage.cost = `$${cost.toFixed(4)}`;
-            message = JSON.stringify(parsedMessage, null, 2);
+      return message;
+    } catch (error: any) {
+      if (error?.type === 'insufficient_quota') {
+        console.error('[OpenAI] Insufficient Quota:');
 
-            return message;
-
-        } catch (error: any) {
-
-            if (error?.type === 'insufficient_quota') {
-                console.error('[OpenAI] Insufficient Quota:');
-
-                const today = new Date();
-                const existingMail = await this.prisma.mail_Settings.findFirst({
-                    where: {
-                        title: 'insufficient_quota',
-                        created_at: {
-                            gte: new Date(today.setHours(0, 0, 0, 0)),
-                            lt: new Date(today.setHours(23, 59, 59, 999)),
-                        },
-                    },
-                });
-                if (!existingMail) {
-                    // Send insufficient quota via email
-                    const emailBody = insufficient_quota();
-                    const mailSent = await this.mailService.sendMail({
-                        from: 'MedVirtual <noreply@medvirtual.ai>',
-                        to: 'shayan@regenta.ai',
-                        cc: 'paulo@regenta.ai',
-                        subject: 'Insufficient Quota from OpenAI',
-                        html: emailBody,
-                    });
-                    if (!mailSent) {
-                        console.log('Failed to send insufficient quota email notification.');
-                    }
-                    //Here I save in the database that I sent the email
-                    await this.prisma.mail_Settings.create({
-                        data: {
-                            title: 'insufficient_quota',
-                        },
-                    });
-                }
-
-
-
-                throw new BadRequestException('You dont have credits. Check your plan/billing.');
-            }
-
-            if (error?.type === 'rate_limit_error') {
-                console.log('[OpenAI] Rate Limit Exceeded:');
-                throw new BadRequestException('Rate limit exceeded. Please try again later.');
-            }
-
-            console.log('[OpenAI] unexpected error:', error);
-            throw new BadRequestException('unexpected error to request OpenAI.', error);
+        const today = new Date();
+        const existingMail = await this.prisma.mail_Settings.findFirst({
+          where: {
+            title: 'insufficient_quota',
+            created_at: {
+              gte: new Date(today.setHours(0, 0, 0, 0)),
+              lt: new Date(today.setHours(23, 59, 59, 999)),
+            },
+          },
+        });
+        if (!existingMail) {
+          // Send insufficient quota via email
+          const emailBody = insufficient_quota();
+          const mailSent = await this.mailService.sendMail({
+            from: 'MedVirtual <noreply@medvirtual.ai>',
+            to: 'shayan@regenta.ai',
+            cc: 'paulo@regenta.ai',
+            subject: 'Insufficient Quota from OpenAI',
+            html: emailBody,
+          });
+          if (!mailSent) {
+            console.log(
+              'Failed to send insufficient quota email notification.',
+            );
+          }
+          //Here I save in the database that I sent the email
+          await this.prisma.mail_Settings.create({
+            data: {
+              title: 'insufficient_quota',
+            },
+          });
         }
 
+        throw new BadRequestException(
+          'You dont have credits. Check your plan/billing.',
+        );
+      }
+
+      if (error?.type === 'rate_limit_error') {
+        console.log('[OpenAI] Rate Limit Exceeded:');
+        throw new BadRequestException(
+          'Rate limit exceeded. Please try again later.',
+        );
+      }
+
+      console.log('[OpenAI] unexpected error:', error);
+      throw new BadRequestException(
+        'unexpected error to request OpenAI.',
+        error,
+      );
     }
+  }
 
-    async generateAvatarWithScreenshoot(candidate: any, imageDownloaded: any): Promise<any> {
-
-        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-        const prompt = `
+  async generateAvatarWithScreenshoot(
+    candidate: any,
+    imageDownloaded: any,
+  ): Promise<{ imagePath: string; cost: number }> {
+    const prompt = `
         Generate a realistic professional avatar inspired by the person in the reference image.
         Keep a similar lighting setup (soft studio light) and neutral background, but without accessories like headphone.
         Style: modern corporate headshot, natural facial expression, confident and friendly.
@@ -231,209 +392,158 @@ export class OpenaiService {
         The avatar result need to be on format 1024x1024 pixels.
         `;
 
+    return this.withQuotaFallback(
+      'generateAvatarWithScreenshoot',
+      async () => {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const image = fs.createReadStream(imageDownloaded);
 
         const result = await openai.images.edit({
-            model: "gpt-image-1",
-            image: await toFile(image, null, {
-                type: "image/png",
-            }),
-            //mask: await toFile(fs.createReadStream("mask.png"), null, {
-            //    type: "image/png",
-            //}),
-            prompt,
+          model: 'gpt-image-1',
+          image: await toFile(image, null, {
+            type: 'image/png',
+          }),
+          prompt,
         });
 
-        //=> calculate the cost
-
+        // gpt-image-1 image edit pricing: $0.04 per 1024x1024 standard quality image
+        const cost = 0.04;
 
         if (!result.data || !result.data[0] || !result.data[0].b64_json) {
-            throw new Error("A resposta da API OpenAI não contém os dados esperados.");
+          throw new Error(
+            'The OpenAI API response did not contain the expected image data.',
+          );
         }
         const imageBase64 = result.data[0].b64_json;
         const fileName = `${Date.now()}_avatarX.png`;
         const outputPath = path.resolve('/tmp', fileName);
-        console.log('Output path for avatar:', outputPath);
-        fs.writeFileSync(outputPath, Buffer.from(imageBase64, "base64"));
+        fs.writeFileSync(outputPath, Buffer.from(imageBase64, 'base64'));
 
-        return outputPath;
+        return { imagePath: outputPath, cost };
+      },
+      async () => {
+        const result = await this.openrouter.editImage(imageDownloaded, prompt);
+        this.logger.warn(
+          `[OpenRouter] avatar served by ${result.model} at $${result.cost}`,
+        );
+        return { imagePath: result.imagePath, cost: result.cost };
+      },
+    );
+  }
+
+  async generateTextSummary(text: string): Promise<string> {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new BadRequestException(
+        'OPENAI_API_KEY is not defined in environment variables',
+      );
     }
 
+    const prompt = buildTextSummaryPrompt(text);
 
-    async generateTextSummary(text: string): Promise<string> {
-        const apiKey = process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-            throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
-        }
+    return this.withQuotaFallback(
+      'generateTextSummary',
+      async () => {
         const openai = new OpenAI({ apiKey });
-
-        const prompt = `
-        You are a professional content summarizer for a medical staffing platform.
-        Summarize the following hire request description in up to 3 clear, concise sentences.
-        Focus on the role, key responsibilities, and main requirements.
-        Do not include personal or patient information.
-        Return ONLY the summary text, no JSON, no markdown, no extra formatting.
-
-        Description:
-        ${text}
-        `;
-
-        try {
-            const response = await openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                messages: [
-                    { role: 'system', content: 'You are a professional content summarizer. Return only plain text.' },
-                    { role: 'user', content: prompt },
-                ],
-                temperature: 0.3,
-                max_tokens: 300,
-            });
-
-            const content = response.choices?.[0]?.message?.content?.trim();
-            if (!content) {
-                throw new BadRequestException('OpenAI did not return a valid summary.');
-            }
-            return content;
-
-        } catch (error: any) {
-            if (error?.type === 'insufficient_quota') {
-                console.error('[OpenAI] Insufficient Quota on generateTextSummary');
-                throw new BadRequestException('You dont have credits. Check your plan/billing.');
-            }
-            if (error?.type === 'rate_limit_error') {
-                throw new BadRequestException('Rate limit exceeded. Please try again later.');
-            }
-            console.error('[OpenAI] generateTextSummary unexpected error:', error);
-            throw new BadRequestException('Unexpected error requesting OpenAI.');
-        }
-    }
-
-    async extractDataFromResumeImages(imagePaths: string[]): Promise<any> {
-        const apiKey = process.env.OPENAI_API_KEY_RESUME_EXTRACTION || process.env.OPENAI_API_KEY;
-        if (!apiKey) {
-            throw new BadRequestException('OPENAI_API_KEY is not defined in environment variables');
-        }
-        const openai = new OpenAI({
-            apiKey: apiKey
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: TEXT_SUMMARY_SYSTEM_PROMPT },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 300,
         });
 
-        const contentPayload: any[] = [
-            {
-                type: "text",
-                text: `You are a professional resume parser. Your goal is to extract **100% of the information** from the resume images provided. 
-            
-            ### JSON Schema
-            Return a single valid JSON object. Do not wrap in markdown code blocks.
-            {
-                "bio": "string (professional summary, 3-5 sentences highlighting key skills and value)",
-                "experience": [
-                    { 
-                        "company": "string", 
-                        "role": "string", 
-                        "start_date": "YYYY-MM-DD (or null)", 
-                        "end_date": "YYYY-MM-DD (or null)", 
-                        "description": ["string (full sentence)"] 
-                    }
-                ],
-                "education": [
-                    { 
-                        "institution": "string", 
-                        "degree": "string", 
-                        "year": "YYYY-MM-DD (graduation date or latest date)" 
-                    }
-                ],
-                "skills": ["string"]
-            }
-
-            ### Extraction Rules
-            1. **EXTRACT ALL DATA**: Do not summarize or select "top" roles. Extract **EVERY** single experience and education entry visible on the resume.
-            2. **Experience Descriptions**:
-               - Capture the full richness of the role. 
-               - Each distinct responsibility or achievement should be a separate string in the "description" array.
-               - Do not truncate sentences.
-            3. **Dates**:
-               - Format: "YYYY-MM-DD".
-               - "Present", "Current", "Now" -> null for end_date.
-               - "Jan 2020" -> "2020-01-01".
-               - "2020" -> "2020-01-01".
-               - If only a year is given for education, use "YYYY-01-01".
-            4. **Bio**:
-               - Synthesize a strong professional profile based on the visible text.
-               - Do not include the candidate's name or contact info in the bio.
-            `
-            }
-        ];
-
-        for (const imgPath of imagePaths) {
-            const fileData = fs.readFileSync(imgPath);
-            const b64 = fileData.toString('base64');
-            contentPayload.push({
-                type: "image_url",
-                image_url: {
-                    url: `data:image/png;base64,${b64}`,
-                    detail: "high"
-                }
-            });
+        const content = response.choices?.[0]?.message?.content?.trim();
+        if (!content) {
+          throw new BadRequestException(
+            'OpenAI did not return a valid summary.',
+          );
         }
+        return content;
+      },
+      async () => {
+        const result = await this.openrouter.chatText(prompt, {
+          temperature: 0.3,
+          maxTokens: 300,
+          systemPrompt: TEXT_SUMMARY_SYSTEM_PROMPT,
+        });
+        this.logger.warn(`[OpenRouter] text summary served by ${result.model}`);
+        return result.data.trim();
+      },
+    );
+  }
 
-        try {
-            const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: [
-                    {
-                        role: "user",
-                        content: contentPayload
-                    }
-                ],
-                max_tokens: 4500,
-                temperature: 0.1,
-                response_format: { type: "json_object" }
-            });
-
-            const result = response.choices[0].message.content;
-            return JSON.parse(result || '{}');
-
-        } catch (error: any) {
-
-            if (error?.type === 'insufficient_quota') {
-
-                const today = new Date();
-                const existingMail = await this.prisma.mail_Settings.findFirst({
-                    where: {
-                        title: 'insufficient_quota',
-                        created_at: {
-                            gte: new Date(today.setHours(0, 0, 0, 0)),
-                            lt: new Date(today.setHours(23, 59, 59, 999)),
-                        },
-                    },
-                });
-                if (!existingMail) {
-                    // Send insufficient quota via email
-                    const emailBody = insufficient_quota();
-                    const mailSent = await this.mailService.sendMail({
-                        from: 'MedVirtual <noreply@medvirtual.ai>',
-                        to: 'shayan@regenta.ai',
-                        cc: 'paulo@regenta.ai',
-                        subject: 'Insufficient Quota from OpenAI',
-                        html: emailBody,
-                    });
-                    //Here I save in the database that I sent the email
-                    await this.prisma.mail_Settings.create({
-                        data: {
-                            title: 'insufficient_quota',
-                        },
-                    });
-                }
-
-                throw new BadRequestException('You dont have credits. Check your plan/billing.');
-            }
-
-            if (error?.type === 'rate_limit_error') {
-                throw new BadRequestException('Rate limit exceeded. Please try again later.');
-            }
-            throw new BadRequestException('Failed to extract data from resume images');
-        }
+  async extractDataFromResumeImages(
+    imagePaths: string[],
+  ): Promise<{ data: any; cost: number }> {
+    const apiKey =
+      process.env.OPENAI_API_KEY_RESUME_EXTRACTION ||
+      process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new BadRequestException(
+        'OPENAI_API_KEY is not defined in environment variables',
+      );
     }
+    // Built once so both providers receive byte-identical input.
+    const contentPayload = buildResumeExtractionPayload(imagePaths);
 
+    return this.withQuotaFallback(
+      'extractDataFromResumeImages',
+      async () => {
+        const openai = new OpenAI({ apiKey });
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: contentPayload as any }],
+          max_tokens: 4500,
+          temperature: 0.1,
+          response_format: { type: 'json_object' },
+        });
 
+        const result = response.choices?.[0]?.message?.content;
+        const usage = response.usage;
+        let cost = 0;
+        if (usage) {
+          cost =
+            (usage.prompt_tokens / 1000) * 0.00015 +
+            (usage.completion_tokens / 1000) * 0.0006;
+        }
+        return {
+          data: result ? normalizeResumeExtraction(parseJsonLoose(result)) : {},
+          cost,
+        };
+      },
+      async () => {
+        const result = await this.openrouter.chatJson<any>(contentPayload, {
+          temperature: 0.1,
+          maxTokens: 4500,
+          // Runs per model inside the cascade: free models often break the
+          // schema (e.g. wrapping the payload in a "0" key), and an empty
+          // result must be rejected rather than returned — updateFromJson
+          // deletes the candidate's education/experience before reinserting,
+          // so returning it wipes real data and still marks them `completed`.
+          // Throwing here advances to the next free model; exhausting them all
+          // leaves the candidate `failed` for the daily cron to retry.
+          validate: (raw) => {
+            const data = normalizeResumeExtraction(raw);
+            if (
+              imagePaths.length > 0 &&
+              !data?.bio &&
+              !data?.experience?.length
+            ) {
+              throw new BadRequestException(
+                `OpenRouter returned an empty resume extraction for ${imagePaths.length} page(s).`,
+              );
+            }
+            return data;
+          },
+        });
+        this.logger.warn(
+          `[OpenRouter] resume extraction served by ${result.model}`,
+        );
+        return { data: result.data, cost: result.cost };
+      },
+    );
+  }
 }

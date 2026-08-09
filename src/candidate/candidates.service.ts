@@ -1,12 +1,32 @@
-import { BadGatewayException, BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { PanelStatus, Prisma, ProcessingStatus, USER } from '@prisma/client';
+import {
+  BadGatewayException,
+  BadRequestException,
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  HireRequestStatus,
+  PanelStatus,
+  Prisma,
+  ProcessingStatus,
+  USER,
+} from '@prisma/client';
 import * as path from 'path';
 import * as fs from 'fs';
 
-import { dbToStageDictionary, stageToDbDictionary } from '../common/dictionaries/stage-dictionary';
-import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
+import { isInClientOpenPanel } from '../common/constant/panel-availability.constant';
+import {
+  dbToStageDictionary,
+  stageToDbDictionary,
+} from '../common/dictionaries/stage-dictionary';
 import { PrismaService } from '../prisma/prisma.service';
-import { changeLabelAvailability, extractDriveFileId } from '../common/utils/hubspot.util';
+import {
+  changeLabelAvailability,
+  extractDriveFileId,
+} from '../common/utils/hubspot.util';
 import { GoogledriveService } from '../googledrive/googledrive.service';
 import { S3Service } from '../s3/s3.service';
 import { OpenaiService } from '../openai/openai.service';
@@ -17,14 +37,30 @@ import { EndorseCandidateDto } from './dto/endorse-candidate.dto';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
-import { buildConfigMap, computeCandidateRates, findHourlyPerRate } from '../common/utils/salary.util';
+import {
+  buildConfigMap,
+  computeCandidateRates,
+  findHourlyPerRate,
+} from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
+import { RemoveCandidateAndCancelDto } from './dto/remove-candidate-and-cancel.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
+const NON_MEDICAL_POOL = 'non_medical';
 
+// Filter-option fields served from the HubSpot properties API rather than the
+// database. getProperties() must not run its generic `distinct` query for these:
+// the result would be discarded and overwritten by the HubSpot response below.
+const HUBSPOT_SOURCED_PROPERTY_FIELDS = new Set([
+  'specialization',
+  'shift_block',
+  'tools',
+  'medical_tools',
+]);
 
 const VA_SCORECARD_FIELDS = new Set([
   'active_listening_and_comprehension_demonstrated',
@@ -62,8 +98,47 @@ const VA_SCORECARD_FIELDS = new Set([
   'understands_workflow_in_medical_offices___telehealth_environments',
 ]);
 
+/**
+ * Card-level candidate projection used by list endpoints (e.g. the admin offer
+ * panels list). Deliberately narrow: it holds exactly what `TalentPoolCard`
+ * renders plus the fields `computeCandidateRates` needs, and nothing else.
+ *
+ * It must NOT grow to include the VA scorecard columns, `about_me`,
+ * `educations` or `experiences` — the candidate read modal lazy-fetches
+ * `GET /candidates/talent-pool/:id` when opened, so list payloads never need
+ * the full record. Widening this select is what made the offer panels list
+ * slow enough to freeze the page.
+ */
+const CANDIDATE_LIST_CARD_SELECT = {
+  id: true,
+  first_name: true,
+  last_name: true,
+  name: true,
+  country: true,
+  employment_type: true,
+  hourly_pay_rate: true,
+  years_of_experience: true,
+  specialization: true,
+  tools: true,
+  // The card reads `avatar || avatar_url`, but `avatar` is not a Candidate
+  // column — only `avatar_url` exists, and it is what renders today.
+  avatar_url: true,
+  gender: true,
+  shift_block: true,
+  business_unit: true,
+  approved_positions_pairing: true,
+  languages: { select: { name: true } },
+  skills: { select: { skill_name: true, skill_type: true } },
+} satisfies Prisma.CandidateSelect;
+
 @Injectable()
 export class CandidatesService {
+  private readonly logger = new Logger(CandidatesService.name);
+
+  static readonly UNAVAILABLE_PIPELINE_STATUSES = [
+    '261214844', // Hired
+    '261173428', // Lost
+  ];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -77,7 +152,38 @@ export class CandidatesService {
     private readonly hireRequest: HireRequestService,
     private readonly notifications: NotificationsService,
     private readonly positionRateConfigService: PositionRateConfigService,
-  ) { }
+    private readonly businessUnitContext: BusinessUnitContext,
+  ) {}
+
+  /**
+   * Resolves the candidate-visibility restriction for a given business unit
+   * (identified by its hubspot_value, e.g. "MedVirtual", "Berry Virtual", "MMVA").
+   *
+   * Preserves today's behavior exactly:
+   * - `non_medical` pool (Berry today) → restrict to the hubspot_values of every
+   *   visible BU that shares the non_medical pool.
+   * - any other pool (or unknown BU) → no restriction (see all candidates).
+   *   This is what keeps MedVirtual AND MMVA seeing everything.
+   */
+  private async getBusinessUnitFilterValues(
+    businessUnitHubspotValue?: string | null,
+  ): Promise<string[] | undefined> {
+    if (!businessUnitHubspotValue) return undefined;
+
+    const pool = await this.businessUnitContext.poolFor(
+      businessUnitHubspotValue,
+    );
+    if (pool !== NON_MEDICAL_POOL) return undefined;
+
+    const visibleValues =
+      await this.businessUnitContext.getVisibleHubspotValues();
+    const nonMedicalValues: string[] = [];
+    for (const value of visibleValues) {
+      const valuePool = await this.businessUnitContext.poolFor(value);
+      if (valuePool === NON_MEDICAL_POOL) nonMedicalValues.push(value);
+    }
+    return nonMedicalValues.length > 0 ? nonMedicalValues : undefined;
+  }
 
   async findAll(
     user: USER,
@@ -97,8 +203,9 @@ export class CandidatesService {
     all?: string,
     scorecard_fields?: string,
     tools?: string,
+    medical_tools?: string,
+    core_skills_count?: string,
   ): Promise<any> {
-
     // Check if all parameter is set to true
     const getAllCandidates = all === 'true';
 
@@ -109,14 +216,15 @@ export class CandidatesService {
     const skip = getAllCandidates ? 0 : (page - 1) * perPage;
     const take = getAllCandidates ? undefined : perPage;
 
+    if (!user || (user.role.includes('organization') && !user.organization_id))
+      throw new BadRequestException(
+        'The current user doent have an organization_id',
+      );
 
-    if (!user || user.role.includes("organization") && !user.organization_id)
-      throw new BadRequestException('The current user doent have an organization_id');
-    
     //if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
 
     let loggedCompany;
-    if (user.organization_id) { 
+    if (user.organization_id) {
       loggedCompany = await this.prisma.organization.findUnique({
         where: {
           id: user.organization_id,
@@ -127,138 +235,229 @@ export class CandidatesService {
       });
     }
 
+    // Pool-based candidate visibility (preserves today's behavior exactly):
+    // non_medical BUs (Berry today) are restricted to non_medical BUs' hubspot
+    // values; every other BU (MedVirtual, MMVA, future medical BUs) sees all
+    // candidates — i.e. no business_unit filter is applied.
+    const businessUnitFilterValues = await this.getBusinessUnitFilterValues(
+      loggedCompany?.business_unit,
+    );
+
     const { organization_id } = user;
 
-    const hourly_from = monthly_compensation_from ? findHourlyPerRate(Number(monthly_compensation_from)) : undefined;
-    const hourly_to = monthly_compensation_to ? findHourlyPerRate(Number(monthly_compensation_to)) : undefined;
+    const hourly_from = monthly_compensation_from
+      ? findHourlyPerRate(Number(monthly_compensation_from))
+      : undefined;
+    const hourly_to = monthly_compensation_to
+      ? findHourlyPerRate(Number(monthly_compensation_to))
+      : undefined;
 
     const combinedFilters: Record<string, any>[] = [];
-    let positionsFilter: Record<string, any> | null = null
+    let positionsFilter: Record<string, any> | null = null;
 
     const scorecardFilters: Record<string, any>[] = scorecard_fields
       ? scorecard_fields
           .split(',')
-          .map(f => f.trim())
-          .filter(f => VA_SCORECARD_FIELDS.has(f))
-          .flatMap(f => {
-            const dbField = (candidadeToDbDictionary[f] as string) || f;
-            return [
-              { [dbField]: { not: null } },
-              { [dbField]: { not: 'false' } },
-            ];
-          })
+          .map((f) => f.trim())
+          .filter((f) => VA_SCORECARD_FIELDS.has(f))
+          .flatMap((f) => [{ [f]: { not: null } }, { [f]: { not: 'false' } }])
       : [];
 
     const availabilityArray = availability
-      ? availability.split(',').map((a) => a.trim()).filter(Boolean)
+      ? availability
+          .split(',')
+          .map((a) => a.trim())
+          .filter(Boolean)
       : [];
-    const availabilityNumbers = availabilityArray.map(a => stageToDbDictionary[a]).filter(Boolean).map(av => String(av));
+    const availabilityNumbers = availabilityArray
+      .map((a) => stageToDbDictionary[a])
+      .filter(Boolean)
+      .map((av) => String(av));
 
-
-    const languagesArray = languages ?
-      languages.split(',').map(l => l.trim()).filter(Boolean)
+    const languagesArray = languages
+      ? languages
+          .split(',')
+          .map((l) => l.trim())
+          .filter(Boolean)
       : [];
-    const skillsArray = skills ?
-      skills.split(',').map(s => s.trim()).filter(Boolean)
+    const skillsArray = skills
+      ? skills
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [];
     const specializationArray = specializations
-      ? specializations.split(',').map(s => s.trim()).filter(Boolean)
+      ? specializations
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [];
     const positionsArray = positions
-      ? positions.split(',').map(s => s.trim()).filter(Boolean)
+      ? positions
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [];
 
     if (languagesArray.length) {
       combinedFilters.push(
-        ...languagesArray.map(lang => ({
-          languages: { some: { name: lang } }
-        }))
+        ...languagesArray.map((lang) => ({
+          languages: { some: { name: lang } },
+        })),
       );
     }
 
     if (skillsArray.length) {
       combinedFilters.push(
-        ...skillsArray.map(skill => ({
-          skills: { some: { skill_name: { contains: skill, mode: 'insensitive' } } }
-        }))
+        ...skillsArray.map((skill) => ({
+          skills: {
+            some: { skill_name: { contains: skill, mode: 'insensitive' } },
+          },
+        })),
       );
     }
+    // OR semantics: a candidate matching ANY selected practice area qualifies.
     if (specializationArray.length) {
-      combinedFilters.push(
-        ...specializationArray.map(spec => ({
-          specialization: { contains: spec, mode: 'insensitive' }
-        }))
-      );
+      combinedFilters.push({
+        OR: specializationArray.map((spec) => ({
+          specialization: { contains: spec, mode: 'insensitive' as const },
+        })),
+      });
     }
     if (positionsArray.length) {
       positionsFilter = {
-        OR: positionsArray.map(position => ({
+        OR: positionsArray.map((position) => ({
           approved_positions_pairing: {
-            has: position
-          }
-        }))
+            has: position,
+          },
+        })),
       };
     }
 
     const toolsArray = tools
-      ? tools.split(',').map(t => t.trim()).filter(Boolean)
+      ? tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
       : [];
     if (toolsArray.length) {
       combinedFilters.push({
-        OR: toolsArray.map(tool => ({
-          tools: { contains: tool, mode: 'insensitive' as const }
-        }))
+        OR: toolsArray.map((tool) => ({
+          tools: { contains: tool, mode: 'insensitive' as const },
+        })),
       });
     }
 
+    // medical_tools is a semicolon-delimited text column, so it is matched with
+    // `contains` (OR semantics), mirroring the `tools` filter above.
+    const medicalToolsArray = medical_tools
+      ? medical_tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    if (medicalToolsArray.length) {
+      combinedFilters.push({
+        OR: medicalToolsArray.map((tool) => ({
+          medical_tools: { contains: tool, mode: 'insensitive' as const },
+        })),
+      });
+    }
+
+    // "Core skills" filters candidates by HOW MANY skills they have (min N).
+    // Prisma cannot filter on a relation count (CandidateSkillListRelationFilter
+    // only exposes every/some/none), so the matching ids are pre-resolved here.
+    const coreSkillsCount = Number(core_skills_count);
+    if (
+      Number.isInteger(coreSkillsCount) &&
+      coreSkillsCount > 0 &&
+      coreSkillsCount <= 10
+    ) {
+      const groupedBySkillCount = await this.prisma.candidateSkill.groupBy({
+        by: ['candidate_id'],
+        where: { skill_name: { not: 'N/A' } },
+        having: { candidate_id: { _count: { gte: coreSkillsCount } } },
+      });
+      combinedFilters.push({
+        id: { in: groupedBySkillCount.map((row) => row.candidate_id) },
+      });
+    }
 
     // Calculate limit date
     let experienceFilter = {};
     if (years_of_experience) {
       const years = Number(years_of_experience);
       const today = new Date();
-      const cutoffDate = new Date(today.setFullYear(today.getFullYear() - years));
+      const cutoffDate = new Date(
+        today.setFullYear(today.getFullYear() - years),
+      );
 
       experienceFilter = {
         experiences: {
           some: {
-            start_date: { lte: cutoffDate }
-          }
-        }
+            start_date: { lte: cutoffDate },
+          },
+        },
       };
     }
 
-
     const searchFilter = search
       ? {
-        OR: [
-          { first_name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
-          { last_name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
-          { name: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
-          { email: { contains: search, mode: 'insensitive' as Prisma.QueryMode } },
-        ],
-      }
+          OR: [
+            {
+              first_name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              last_name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+          ],
+        }
       : {};
-
 
     const where = {
       OR: [
         {
-          ...(country && country === 'latinAmerica' 
-            ? { country: { in: latinAmericaCountries } } 
-            : country === 'otherCountries' 
-              ? { country: { notIn: latinAmericaCountries } } 
-              : {country}),
-          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
-          ...(hourly_from !== undefined || hourly_to !== undefined ? {
-            hourly_pay_rate: {
-              ...(hourly_from !== undefined && { gte: hourly_from }),
-              ...(hourly_to !== undefined && { lte: hourly_to })
-            }
-          } : {}),
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
           organization_id: organization_id,
           pipeline_status: '261075105',
-          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -269,21 +468,29 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && country === 'latinAmerica' 
-            ? { country: { in: latinAmericaCountries } } 
-            : country === 'otherCountries' 
-              ? { country: { notIn: latinAmericaCountries } } 
-              : {country}),
-          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
-          ...(hourly_from !== undefined || hourly_to !== undefined ? {
-            hourly_pay_rate: {
-              ...(hourly_from !== undefined && { gte: hourly_from }),
-              ...(hourly_to !== undefined && { lte: hourly_to })
-            }
-          } : {}),
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '261075105',
-          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -294,21 +501,29 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && country === 'latinAmerica' 
-            ? { country: { in: latinAmericaCountries } } 
-            : country === 'otherCountries' 
-              ? { country: { notIn: latinAmericaCountries } } 
-              : {country}),
-          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
-          ...(hourly_from !== undefined || hourly_to !== undefined ? {
-            hourly_pay_rate: {
-              ...(hourly_from !== undefined && { gte: hourly_from }),
-              ...(hourly_to !== undefined && { lte: hourly_to })
-            }
-          } : {}),
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
           organization_id: organization_id,
           pipeline_status: '1087596819',
-          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -319,21 +534,29 @@ export class CandidatesService {
           ...searchFilter,
         },
         {
-          ...(country && country === 'latinAmerica' 
-            ? { country: { in: latinAmericaCountries } } 
-            : country === 'otherCountries' 
-              ? { country: { notIn: latinAmericaCountries } } 
-              : {country}),
-          ...(availabilityNumbers.length > 0 ? { employment_type: { in: availabilityNumbers.map(String) } } : (availability ? { employment_type: String(stageToDbDictionary[availability]) } : {})),
-          ...(hourly_from !== undefined || hourly_to !== undefined ? {
-            hourly_pay_rate: {
-              ...(hourly_from !== undefined && { gte: hourly_from }),
-              ...(hourly_to !== undefined && { lte: hourly_to })
-            }
-          } : {}),
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
           organization_id: null, // This allows candidates without an organization_id to be included
           pipeline_status: '1087596819',
-          business_unit: loggedCompany?.business_unit == 'Berry Virtual' ? 'Berry Virtual' : undefined,
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
           ...(shift_block ? { shift_block: shift_block } : {}),
           AND: [
             ...(combinedFilters.length > 0 ? combinedFilters : []),
@@ -342,9 +565,9 @@ export class CandidatesService {
           ],
           ...experienceFilter,
           ...searchFilter,
-        }
-      ]
-    }
+        },
+      ],
+    };
     const select = {
       id: true,
       first_name: true,
@@ -372,16 +595,16 @@ export class CandidatesService {
       can_articulate_experience_clearly_to_clients: true,
       can_multitask_between_systems_or_windows_efficiently: true,
       client_readiness___fit_evaluator_notes: true,
-      comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
       comfortable_with_camera_on_setup: true,
       communication_skills_evaluator_notes: true,
       confident_on_video_and_phone_calls: true,
       cultural_alignment_with_us_healthcare_environment: true,
       demonstrates_problem_solving_and_tech_adaptability: true,
       demonstrates_stability_and_commitment: true,
-      demonstrates_understanding_of_medical_terminology_and_procedure: true,
+      demonstrates_understanding_of_medical_terminology_and_procedures: true,
       exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
       for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
       grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
       handles_feedback_constructively: true,
@@ -399,23 +622,23 @@ export class CandidatesService {
       technical_competence_evaluator_notes: true,
       tier_level: true,
       total_points: true,
-      understands_workflow_in_medical_offices___telehealth_environmen: true,
+      understands_workflow_in_medical_offices___telehealth_environments: true,
       languages: {
         select: {
           name: true,
-        }
+        },
       },
       skills: {
         select: {
-          skill_name: true
-        }
+          skill_name: true,
+        },
       },
       educations: {
         select: {
           institution: true,
           degree: true,
-          year: true
-        }
+          year: true,
+        },
       },
       experiences: {
         orderBy: { start_date: Prisma.SortOrder.desc },
@@ -424,17 +647,26 @@ export class CandidatesService {
           position: true,
           start_date: true,
           end_date: true,
-          responsabilities: true
-        }
+          responsabilities: true,
+        },
       },
       approved_positions_pairing: true,
       business_unit: true,
       selectedInInterviews: {
         select: {
           scheduled_date: true,
-        }
+        },
       },
       panelCandidates: {
+        // Client roles must only ever see panels belonging to their own
+        // organization. Without this filter the payload leaks other clients'
+        // hire request titles and organization names, and the frontend cannot
+        // distinguish "in MY panel" from "in SOMEONE ELSE'S panel". System
+        // roles (no organization_id) still receive every panel, which the
+        // admin conflict disclaimers depend on.
+        where: organization_id
+          ? { panel: { hireRequest: { org_id: organization_id } } }
+          : undefined,
         select: {
           id: true,
           status: true,
@@ -450,17 +682,15 @@ export class CandidatesService {
                     select: {
                       id: true,
                       name: true,
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
-
-    }
-
+    };
 
     try {
       const [candidates, total] = await this.prisma.$transaction([
@@ -473,92 +703,716 @@ export class CandidatesService {
             {
               first_name: {
                 sort: 'asc',
-                nulls: 'last'
-              }
+                nulls: 'last',
+              },
             },
             {
               last_name: {
                 sort: 'asc',
-                nulls: 'last'
-              }
-            }
-          ]
+                nulls: 'last',
+              },
+            },
+          ],
         }),
-        this.prisma.candidate.count({ where })
-      ])
+        this.prisma.candidate.count({ where }),
+      ]);
 
-      candidates.forEach(candidate => {
+      candidates.forEach((candidate) => {
         if (candidate.pipeline_status) {
-          const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
+          const stageName =
+            dbToStageDictionary[Number(candidate.pipeline_status)];
           candidate.pipeline_status = stageName || 'Unknown Stage';
         }
-
       });
 
-      const candidateIds = candidates.map(candidate => candidate.id);
+      const candidateIds = candidates.map((candidate) => candidate.id);
 
       const interviewRequestTickets = await this.prisma.ticket.findMany({
         where: {
           organization: { is: { id: organization_id || undefined } },
           type: 'interview',
           status: {
-            in: ['new', 'in_progress']
+            in: ['new', 'in_progress'],
           },
           candidate_id: {
-            in: candidateIds
-          }
+            in: candidateIds,
+          },
+          deleted_at: null,
         },
         select: {
-          candidate_id: true
-        }
+          candidate_id: true,
+        },
       });
 
       const candidatesWithInterviewScheduled = new Set(
-        interviewRequestTickets.map(ticket => ticket.candidate_id)
+        interviewRequestTickets.map((ticket) => ticket.candidate_id),
       );
 
-      const _pConfigs1 = await this.positionRateConfigService.findAllUnpaginated();
+      const _pConfigs1 =
+        await this.positionRateConfigService.findAllUnpaginated();
       const _configMap1 = buildConfigMap(_pConfigs1);
 
-      const candidatesWithScheduledInterview = candidates.map(candidate => {
+      const candidatesWithScheduledInterview = candidates.map((candidate) => {
         const rates = computeCandidateRates(candidate, _configMap1);
-        return ({
-        ...candidate,
-        approved_positions_pairing: candidate.approved_positions_pairing &&
-          candidate.approved_positions_pairing.map((position) => getApprovedPositionLabel(position)) || [],
-        employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-        scheduledInterviewDate: candidate.selectedInInterviews[0]?.scheduled_date || null,
-        hasInterviewScheduled: candidatesWithInterviewScheduled.has(candidate.id),
-        selectedInInterviews: undefined,
-        ...rates,
-        avatar: candidate.avatar_url ? `${process.env.AVATAR_URL}${candidate.avatar_url}` : null,
-        panelCandidates: candidate.panelCandidates ? candidate.panelCandidates.map(pc => ({
-          title: pc.panel.hireRequest.title,
-          organization_name: pc.panel.hireRequest.organization.name,
-          status: 'test',
-
-        })) : []
-      });
+        return {
+          ...candidate,
+          approved_positions_pairing:
+            (candidate.approved_positions_pairing &&
+              candidate.approved_positions_pairing.map((position) =>
+                getApprovedPositionLabel(position),
+              )) ||
+            [],
+          employment_type:
+            changeLabelAvailability(
+              dbToStageDictionary[Number(candidate.employment_type)],
+            ) || candidate.employment_type,
+          scheduledInterviewDate:
+            candidate.selectedInInterviews[0]?.scheduled_date || null,
+          hasInterviewScheduled: candidatesWithInterviewScheduled.has(
+            candidate.id,
+          ),
+          selectedInInterviews: undefined,
+          ...rates,
+          avatar: candidate.avatar_url
+            ? `${process.env.AVATAR_URL}${candidate.avatar_url}`
+            : null,
+          panelCandidates: candidate.panelCandidates
+            ? candidate.panelCandidates.map((pc) => ({
+                title: pc.panel.hireRequest.title,
+                organization_name: pc.panel.hireRequest.organization.name,
+                status: 'test',
+              }))
+            : [],
+          existingInOtherClientPanel: isInClientOpenPanel(
+            candidate.panelCandidates,
+            organization_id,
+          ),
+        };
       });
 
       return {
         data: candidatesWithScheduledInterview,
-        meta: getAllCandidates ? {
-          total,
-          page: 1,
-          perPage: total,
-          totalPages: 1,
-          all: true
-        } : {
-          total,
-          page,
-          perPage,
-          totalPages: Math.ceil(Number(total) / perPage),
-          all: false
-        }
+        meta: getAllCandidates
+          ? {
+              total,
+              page: 1,
+              perPage: total,
+              totalPages: 1,
+              all: true,
+            }
+          : {
+              total,
+              page,
+              perPage,
+              totalPages: Math.ceil(Number(total) / perPage),
+              all: false,
+            },
       };
     } catch (error) {
-      throw new BadGatewayException('Failed to fetch candidates', error.message);
+      throw new BadGatewayException(
+        'Failed to fetch candidates',
+        error.message,
+      );
+    }
+  }
+
+  //Function that should be used only for alliance module
+  async findAllForAlliance(
+    user: USER,
+    country?: string,
+    shift_block?: string,
+    availability?: string,
+    monthly_compensation_from?: string,
+    monthly_compensation_to?: string,
+    years_of_experience?: string,
+    specializations?: string,
+    positions?: string,
+    skills?: string,
+    languages?: string,
+    page?: number,
+    perPage?: number,
+    search?: string,
+    all?: string,
+    scorecard_fields?: string,
+    tools?: string,
+    medical_tools?: string,
+    core_skills_count?: string,
+  ): Promise<any> {
+    // Check if all parameter is set to true
+    const getAllCandidates = all === 'true';
+
+    page = page ? Number(page) : 1;
+    perPage = perPage ? Number(perPage) : 10;
+
+    // If all=true, skip pagination (set skip=0, take=undefined)
+    const skip = getAllCandidates ? 0 : (page - 1) * perPage;
+    const take = getAllCandidates ? undefined : perPage;
+
+    if (!user || (user.role.includes('organization') && !user.organization_id))
+      throw new BadRequestException(
+        'The current user doent have an organization_id',
+      );
+
+    //if (!user.organization_id) throw new BadRequestException('Organization ID is required for fetching candidates');
+
+    const { organization_id } = user;
+
+    const hourly_from = monthly_compensation_from
+      ? findHourlyPerRate(Number(monthly_compensation_from))
+      : undefined;
+    const hourly_to = monthly_compensation_to
+      ? findHourlyPerRate(Number(monthly_compensation_to))
+      : undefined;
+
+    const combinedFilters: Record<string, any>[] = [];
+    let positionsFilter: Record<string, any> | null = null;
+
+    const scorecardFilters: Record<string, any>[] = scorecard_fields
+      ? scorecard_fields
+          .split(',')
+          .map((f) => f.trim())
+          .filter((f) => VA_SCORECARD_FIELDS.has(f))
+          .flatMap((f) => [{ [f]: { not: null } }, { [f]: { not: 'false' } }])
+      : [];
+
+    const availabilityArray = availability
+      ? availability
+          .split(',')
+          .map((a) => a.trim())
+          .filter(Boolean)
+      : [];
+    const availabilityNumbers = availabilityArray
+      .map((a) => stageToDbDictionary[a])
+      .filter(Boolean)
+      .map((av) => String(av));
+
+    const languagesArray = languages
+      ? languages
+          .split(',')
+          .map((l) => l.trim())
+          .filter(Boolean)
+      : [];
+    const skillsArray = skills
+      ? skills
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const specializationArray = specializations
+      ? specializations
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+    const positionsArray = positions
+      ? positions
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
+    if (languagesArray.length) {
+      combinedFilters.push(
+        ...languagesArray.map((lang) => ({
+          languages: { some: { name: lang } },
+        })),
+      );
+    }
+
+    if (skillsArray.length) {
+      combinedFilters.push(
+        ...skillsArray.map((skill) => ({
+          skills: {
+            some: { skill_name: { contains: skill, mode: 'insensitive' } },
+          },
+        })),
+      );
+    }
+    // OR semantics: a candidate matching ANY selected practice area qualifies.
+    if (specializationArray.length) {
+      combinedFilters.push({
+        OR: specializationArray.map((spec) => ({
+          specialization: { contains: spec, mode: 'insensitive' as const },
+        })),
+      });
+    }
+    if (positionsArray.length) {
+      positionsFilter = {
+        OR: positionsArray.map((position) => ({
+          approved_positions_pairing: {
+            has: position,
+          },
+        })),
+      };
+    }
+
+    const toolsArray = tools
+      ? tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    if (toolsArray.length) {
+      combinedFilters.push({
+        OR: toolsArray.map((tool) => ({
+          tools: { contains: tool, mode: 'insensitive' as const },
+        })),
+      });
+    }
+
+    // medical_tools is a semicolon-delimited text column, so it is matched with
+    // `contains` (OR semantics), mirroring the `tools` filter above.
+    const medicalToolsArray = medical_tools
+      ? medical_tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+    if (medicalToolsArray.length) {
+      combinedFilters.push({
+        OR: medicalToolsArray.map((tool) => ({
+          medical_tools: { contains: tool, mode: 'insensitive' as const },
+        })),
+      });
+    }
+
+    // "Core skills" filters candidates by HOW MANY skills they have (min N).
+    // Prisma cannot filter on a relation count (CandidateSkillListRelationFilter
+    // only exposes every/some/none), so the matching ids are pre-resolved here.
+    const coreSkillsCount = Number(core_skills_count);
+    if (
+      Number.isInteger(coreSkillsCount) &&
+      coreSkillsCount > 0 &&
+      coreSkillsCount <= 10
+    ) {
+      const groupedBySkillCount = await this.prisma.candidateSkill.groupBy({
+        by: ['candidate_id'],
+        where: { skill_name: { not: 'N/A' } },
+        having: { candidate_id: { _count: { gte: coreSkillsCount } } },
+      });
+      combinedFilters.push({
+        id: { in: groupedBySkillCount.map((row) => row.candidate_id) },
+      });
+    }
+
+    // Calculate limit date
+    let experienceFilter = {};
+    if (years_of_experience) {
+      const years = Number(years_of_experience);
+      const today = new Date();
+      const cutoffDate = new Date(
+        today.setFullYear(today.getFullYear() - years),
+      );
+
+      experienceFilter = {
+        experiences: {
+          some: {
+            start_date: { lte: cutoffDate },
+          },
+        },
+      };
+    }
+
+    const searchFilter = search
+      ? {
+          OR: [
+            {
+              first_name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              last_name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              name: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: 'insensitive' as Prisma.QueryMode,
+              },
+            },
+          ],
+        }
+      : {};
+
+    const where = {
+      OR: [
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: organization_id,
+          pipeline_status: '261075105',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: null, // This allows candidates without an organization_id to be included
+          pipeline_status: '261075105',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: organization_id,
+          pipeline_status: '1087596819',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+        {
+          ...(country && country === 'latinAmerica'
+            ? { country: { in: latinAmericaCountries } }
+            : country === 'otherCountries'
+              ? { country: { notIn: latinAmericaCountries } }
+              : { country }),
+          ...(availabilityNumbers.length > 0
+            ? { employment_type: { in: availabilityNumbers.map(String) } }
+            : availability
+              ? { employment_type: String(stageToDbDictionary[availability]) }
+              : {}),
+          ...(hourly_from !== undefined || hourly_to !== undefined
+            ? {
+                hourly_pay_rate: {
+                  ...(hourly_from !== undefined && { gte: hourly_from }),
+                  ...(hourly_to !== undefined && { lte: hourly_to }),
+                },
+              }
+            : {}),
+          organization_id: null, // This allows candidates without an organization_id to be included
+          pipeline_status: '1087596819',
+          ...(shift_block ? { shift_block: shift_block } : {}),
+          AND: [
+            ...(combinedFilters.length > 0 ? combinedFilters : []),
+            ...(positionsFilter ? [positionsFilter] : []),
+            ...scorecardFilters,
+          ],
+          ...experienceFilter,
+          ...searchFilter,
+        },
+      ],
+    };
+    const select = {
+      id: true,
+      first_name: true,
+      last_name: true,
+      name: true,
+      email: true,
+      country: true,
+      employment_type: true,
+      hourly_pay_rate: true,
+      years_of_experience: true,
+      pipeline_status: true, // This will be converted to name later
+      about_me: true,
+      specialization: true,
+      tools: true,
+      medical_tools: true,
+      processing_status: true,
+      processing_error: true,
+      avatar_url: true,
+      gender: true,
+      shift_block: true,
+      video_link: true,
+      // VA Score Card fields
+      active_listening_and_comprehension_demonstrated: true,
+      adaptability_to_different_client_personalities_and_workflows: true,
+      can_articulate_experience_clearly_to_clients: true,
+      can_multitask_between_systems_or_windows_efficiently: true,
+      client_readiness___fit_evaluator_notes: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+      comfortable_with_camera_on_setup: true,
+      communication_skills_evaluator_notes: true,
+      confident_on_video_and_phone_calls: true,
+      cultural_alignment_with_us_healthcare_environment: true,
+      demonstrates_problem_solving_and_tech_adaptability: true,
+      demonstrates_stability_and_commitment: true,
+      demonstrates_understanding_of_medical_terminology_and_procedures: true,
+      exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+      for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+      grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+      handles_feedback_constructively: true,
+      has_functioning_headset__webcam__and_backup_device: true,
+      knowledge_of_hipaa_compliance_and_confidentiality: true,
+      medical_knowledge_evaluator_notes: true,
+      no_medical_industry_experience: true,
+      positive_attitude_and_professional_demeanor: true,
+      prior_experience_in_healthcare_or_medical_va_roles: true,
+      professionalism___work_readiness_evaluator_notes: true,
+      punctual_and_responsive_during_recruitment_stages: true,
+      remote_work_discipline_and_time_management: true,
+      speaks_clearly_and_professionally: true,
+      stable_internet_connection__min__20_mbps_: true,
+      technical_competence_evaluator_notes: true,
+      tier_level: true,
+      total_points: true,
+      understands_workflow_in_medical_offices___telehealth_environments: true,
+      languages: {
+        select: {
+          name: true,
+        },
+      },
+      skills: {
+        select: {
+          skill_name: true,
+        },
+      },
+      educations: {
+        select: {
+          institution: true,
+          degree: true,
+          year: true,
+        },
+      },
+      experiences: {
+        orderBy: { start_date: Prisma.SortOrder.desc },
+        select: {
+          company: true,
+          position: true,
+          start_date: true,
+          end_date: true,
+          responsabilities: true,
+        },
+      },
+      approved_positions_pairing: true,
+      business_unit: true,
+      selectedInInterviews: {
+        select: {
+          scheduled_date: true,
+        },
+      },
+      panelCandidates: {
+        // Client roles must only ever see panels belonging to their own
+        // organization. Without this filter the payload leaks other clients'
+        // hire request titles and organization names, and the frontend cannot
+        // distinguish "in MY panel" from "in SOMEONE ELSE'S panel". System
+        // roles (no organization_id) still receive every panel, which the
+        // admin conflict disclaimers depend on.
+        where: organization_id
+          ? { panel: { hireRequest: { org_id: organization_id } } }
+          : undefined,
+        select: {
+          id: true,
+          status: true,
+          panel: {
+            select: {
+              hire_request_id: true,
+              hireRequest: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  organization: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    try {
+      const [candidates, total] = await this.prisma.$transaction([
+        this.prisma.candidate.findMany({
+          where,
+          skip,
+          take,
+          select,
+          orderBy: [
+            {
+              first_name: {
+                sort: 'asc',
+                nulls: 'last',
+              },
+            },
+            {
+              last_name: {
+                sort: 'asc',
+                nulls: 'last',
+              },
+            },
+          ],
+        }),
+        this.prisma.candidate.count({ where }),
+      ]);
+
+      candidates.forEach((candidate) => {
+        if (candidate.pipeline_status) {
+          const stageName =
+            dbToStageDictionary[Number(candidate.pipeline_status)];
+          candidate.pipeline_status = stageName || 'Unknown Stage';
+        }
+      });
+
+      const candidateIds = candidates.map((candidate) => candidate.id);
+
+      const interviewRequestTickets = await this.prisma.ticket.findMany({
+        where: {
+          organization: { is: { id: organization_id || undefined } },
+          type: 'interview',
+          status: {
+            in: ['new', 'in_progress'],
+          },
+          candidate_id: {
+            in: candidateIds,
+          },
+          deleted_at: null,
+        },
+        select: {
+          candidate_id: true,
+        },
+      });
+
+      const candidatesWithInterviewScheduled = new Set(
+        interviewRequestTickets.map((ticket) => ticket.candidate_id),
+      );
+
+      const _pConfigs1 =
+        await this.positionRateConfigService.findAllUnpaginated();
+      const _configMap1 = buildConfigMap(_pConfigs1);
+
+      const candidatesWithScheduledInterview = candidates.map((candidate) => {
+        const rates = computeCandidateRates(candidate, _configMap1);
+        return {
+          ...candidate,
+          approved_positions_pairing:
+            (candidate.approved_positions_pairing &&
+              candidate.approved_positions_pairing.map((position) =>
+                getApprovedPositionLabel(position),
+              )) ||
+            [],
+          employment_type:
+            changeLabelAvailability(
+              dbToStageDictionary[Number(candidate.employment_type)],
+            ) || candidate.employment_type,
+          scheduledInterviewDate:
+            candidate.selectedInInterviews[0]?.scheduled_date || null,
+          hasInterviewScheduled: candidatesWithInterviewScheduled.has(
+            candidate.id,
+          ),
+          selectedInInterviews: undefined,
+          ...rates,
+          avatar: candidate.avatar_url
+            ? `${process.env.AVATAR_URL}${candidate.avatar_url}`
+            : null,
+          panelCandidates: candidate.panelCandidates
+            ? candidate.panelCandidates.map((pc) => ({
+                title: pc.panel.hireRequest.title,
+                organization_name: pc.panel.hireRequest.organization.name,
+                status: 'test',
+              }))
+            : [],
+          existingInOtherClientPanel: isInClientOpenPanel(
+            candidate.panelCandidates,
+            organization_id,
+          ),
+        };
+      });
+
+      return {
+        data: candidatesWithScheduledInterview,
+        meta: getAllCandidates
+          ? {
+              total,
+              page: 1,
+              perPage: total,
+              totalPages: 1,
+              all: true,
+            }
+          : {
+              total,
+              page,
+              perPage,
+              totalPages: Math.ceil(Number(total) / perPage),
+              all: false,
+            },
+      };
+    } catch (error) {
+      throw new BadGatewayException(
+        'Failed to fetch candidates',
+        error.message,
+      );
     }
   }
 
@@ -590,16 +1444,16 @@ export class CandidatesService {
       can_articulate_experience_clearly_to_clients: true,
       can_multitask_between_systems_or_windows_efficiently: true,
       client_readiness___fit_evaluator_notes: true,
-      comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
+      comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
       comfortable_with_camera_on_setup: true,
       communication_skills_evaluator_notes: true,
       confident_on_video_and_phone_calls: true,
       cultural_alignment_with_us_healthcare_environment: true,
       demonstrates_problem_solving_and_tech_adaptability: true,
       demonstrates_stability_and_commitment: true,
-      demonstrates_understanding_of_medical_terminology_and_procedure: true,
+      demonstrates_understanding_of_medical_terminology_and_procedures: true,
       exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
+      familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
       for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
       grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
       handles_feedback_constructively: true,
@@ -617,24 +1471,24 @@ export class CandidatesService {
       technical_competence_evaluator_notes: true,
       tier_level: true,
       total_points: true,
-      understands_workflow_in_medical_offices___telehealth_environmen: true,
+      understands_workflow_in_medical_offices___telehealth_environments: true,
       languages: {
         select: {
           name: true,
-        }
+        },
       },
       skills: {
         select: {
           skill_name: true,
-          skill_type: true
-        }
+          skill_type: true,
+        },
       },
       educations: {
         select: {
           institution: true,
           degree: true,
-          year: true
-        }
+          year: true,
+        },
       },
       approved_positions_pairing: true,
       business_unit: true,
@@ -645,12 +1499,19 @@ export class CandidatesService {
           position: true,
           start_date: true,
           end_date: true,
-          responsabilities: true
-        }
+          responsabilities: true,
+        },
       },
       panelCandidates: {
+        // Org-scoped: see the note in `findAll`.
+        where: organization_id
+          ? { panel: { hireRequest: { org_id: organization_id } } }
+          : undefined,
         select: {
           id: true,
+          // Needed by `isInClientOpenPanel` to ignore candidates already
+          // released back to the pool (`returned_to_pool`).
+          status: true,
           panel: {
             select: {
               hire_request_id: true,
@@ -658,25 +1519,25 @@ export class CandidatesService {
                 select: {
                   id: true,
                   title: true,
+                  status: true,
                   organization: {
                     select: {
                       id: true,
                       name: true,
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-    }
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
 
     const candidate = await this.prisma.candidate.findUnique({
       where: {
         id: id,
-        organization_id: organization_id
+        organization_id: organization_id,
       },
       select,
     });
@@ -687,21 +1548,33 @@ export class CandidatesService {
       const stageName = dbToStageDictionary[Number(candidate.pipeline_status)];
       candidate.pipeline_status = stageName || 'Unknown Stage';
     }
-    candidate.employment_type = changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type;
+    candidate.employment_type =
+      changeLabelAvailability(
+        dbToStageDictionary[Number(candidate.employment_type)],
+      ) || candidate.employment_type;
 
     const formattedCandidate = {
       ...candidate, // mantém os outros campos do candidato
-      approved_positions_pairing: candidate.approved_positions_pairing &&
-        candidate.approved_positions_pairing.map((position) => getApprovedPositionLabel(position)) || [],
-      panelCandidates: candidate.panelCandidates && candidate.panelCandidates.length > 0
-        ? candidate.panelCandidates.map(pc => ({
-          title: pc.panel?.hireRequest?.title || '',
-          organization_name: pc.panel?.hireRequest?.organization?.name || '',
-        }))
-        : [],
+      approved_positions_pairing:
+        (candidate.approved_positions_pairing &&
+          candidate.approved_positions_pairing.map((position) =>
+            getApprovedPositionLabel(position),
+          )) ||
+        [],
+      panelCandidates:
+        candidate.panelCandidates && candidate.panelCandidates.length > 0
+          ? candidate.panelCandidates.map((pc) => ({
+              title: pc.panel?.hireRequest?.title || '',
+              organization_name:
+                pc.panel?.hireRequest?.organization?.name || '',
+            }))
+          : [],
+      existingInOtherClientPanel: isInClientOpenPanel(
+        candidate.panelCandidates,
+        organization_id,
+      ),
     };
     return formattedCandidate;
-
   }
 
   async update(id: string, data: UpdateCandidateDto): Promise<any> {
@@ -709,29 +1582,77 @@ export class CandidatesService {
     if (!data) throw new BadRequestException('Update data is required');
 
     if (data.pipeline_status) {
-      const stageName = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === data.pipeline_status?.toLowerCase())?.[0];
+      const stageName = Object.entries(dbToStageDictionary).find(
+        ([key, value]) =>
+          value.toLowerCase() === data.pipeline_status?.toLowerCase(),
+      )?.[0];
       data.pipeline_status = stageName || 'Unknown Stage';
     }
 
     const updatedCandidate = await this.prisma.candidate.update({
       where: { id: id },
       data: {
-        ...data
-      }
+        ...data,
+      },
     });
-    if (!updatedCandidate) throw new BadGatewayException('Failed to update candidate');
+    if (!updatedCandidate)
+      throw new BadGatewayException('Failed to update candidate');
+
+    // R9 — remove from all OfferPanels when candidate becomes unavailable
+    if (
+      data.pipeline_status &&
+      CandidatesService.UNAVAILABLE_PIPELINE_STATUSES.includes(
+        data.pipeline_status,
+      )
+    ) {
+      await this.removeFromOfferPanels(id);
+    }
+
     return updatedCandidate;
   }
 
-  private async updateStatus(id: string, status: ProcessingStatus, error?: string): Promise<void> {
+  async removeFromOfferPanels(candidateId: string): Promise<void> {
+    const affected = await this.prisma.offerPanelCandidate.findMany({
+      where: { candidate_id: candidateId },
+      select: { offer_panel_id: true },
+    });
+
+    if (affected.length === 0) return;
+
+    const panelIds = [...new Set(affected.map((r) => r.offer_panel_id))];
+
+    await this.prisma.offerPanelCandidate.deleteMany({
+      where: { candidate_id: candidateId },
+    });
+
+    let deletedPanels = 0;
+    for (const panelId of panelIds) {
+      const remaining = await this.prisma.offerPanelCandidate.count({
+        where: { offer_panel_id: panelId },
+      });
+      if (remaining === 0) {
+        await this.prisma.offerPanel.delete({ where: { id: panelId } });
+        deletedPanels++;
+      }
+    }
+
+    this.logger.log(
+      `R9: candidate ${candidateId} removed from ${panelIds.length} offer panel(s); ${deletedPanels} panel(s) deleted`,
+    );
+  }
+
+  private async updateStatus(
+    id: string,
+    status: ProcessingStatus,
+    error?: string,
+  ): Promise<void> {
     await this.prisma.candidate.update({
       where: { id },
       data: {
         processing_status: status,
         processing_error: error || null,
-        processed_at: new Date()
-
-      }
+        processed_at: new Date(),
+      },
     });
   }
 
@@ -742,22 +1663,22 @@ export class CandidatesService {
 
     //Clear database to avoid duplicates
     await this.prisma.candidateEducation.deleteMany({
-      where: { candidate_id: id }
-    })
+      where: { candidate_id: id },
+    });
     await this.prisma.candidateExperience.deleteMany({
-      where: { candidate_id: id }
-    })
+      where: { candidate_id: id },
+    });
 
     if (jsonData.education !== '' && jsonData.education !== undefined) {
       const educationData = jsonData.education;
       if (Array.isArray(educationData)) {
         await this.prisma.candidateEducation.createMany({
-          data: educationData.map(item => ({
+          data: educationData.map((item) => ({
             candidate_id: id,
             institution: item.institution || '',
             degree: item.degree || '',
             year: item.year || null,
-          }))
+          })),
         });
       }
     }
@@ -767,19 +1688,18 @@ export class CandidatesService {
 
       if (Array.isArray(experienceData)) {
         await this.prisma.candidateExperience.createMany({
-          data: experienceData.map(item => ({
+          data: experienceData.map((item) => ({
             candidate_id: id,
             company: item.company || '',
             position: item.role || '',
             start_date: item.start_date ? new Date(item.start_date) : null,
             end_date: item.end_date ? new Date(item.end_date) : null,
             responsabilities: item.description || '',
-
-          }))
+          })),
         });
       }
     }
-    return true
+    return true;
   }
 
   async processAvatar(id: string): Promise<boolean> {
@@ -788,17 +1708,20 @@ export class CandidatesService {
 
     const candidate = await this.prisma.candidate.findUnique({
       where: {
-        id: id
+        id: id,
       },
       select: {
         id: true,
         headshot_url: true,
-      }
+      },
     });
     if (!candidate) throw new BadRequestException('Candidate not found');
 
-    if (candidate && candidate.headshot_url && candidate.headshot_url.includes('http')) {
-
+    if (
+      candidate &&
+      candidate.headshot_url &&
+      candidate.headshot_url.includes('http')
+    ) {
       const idImage = extractDriveFileId(candidate.headshot_url);
       if (!idImage) {
         console.log('Error in extracting image ID from URL');
@@ -808,30 +1731,48 @@ export class CandidatesService {
       const imageName = `${candidate.id}__image.png`;
       const downloadDir = path.resolve(__dirname, '/tmp');
 
-      const imageDownloaded = await this.google.downloadImage(idImage, imageName, downloadDir);
+      const imageDownloaded = await this.google.downloadImage(
+        idImage,
+        imageName,
+        downloadDir,
+      );
       if (!imageDownloaded) {
-        console.log('Failed to download image from Google Drive:', imageDownloaded);
+        console.log(
+          'Failed to download image from Google Drive:',
+          imageDownloaded,
+        );
       }
-      console.log('Image downloaded successfully from Google Drive', imageDownloaded);
-      const avatarImage = await this.openai.generateAvatarWithScreenshoot(candidate, imageDownloaded);
+      console.log(
+        'Image downloaded successfully from Google Drive',
+        imageDownloaded,
+      );
+      const { imagePath: avatarImage, cost: avatarCost } =
+        await this.openai.generateAvatarWithScreenshoot(
+          candidate,
+          imageDownloaded,
+        );
       console.log('Avatar generated successfully: ', avatarImage);
 
-      const bucketFile = await this.s3.uploadFile(avatarImage, path.basename(avatarImage), 'medvirtual-avatar');
+      const bucketFile = await this.s3.uploadFile(
+        avatarImage,
+        path.basename(avatarImage),
+        'medvirtual-avatar',
+      );
       if (!bucketFile) {
         console.log('Failed to upload avatar to S3');
         return false;
       }
       console.log('Avatar uploaded successfully to S3:', bucketFile);
-      //Save Avatar on S3 and update candidate database 
+      //Save Avatar on S3 and update candidate database
 
       //update database with new avatar URL
       const updatedCandidate = await this.prisma.candidate.update({
         where: { id: id },
         data: {
           avatar_url: bucketFile,
-        }
+          processing_cost: { increment: avatarCost },
+        },
       });
-
     }
     return true;
   }
@@ -842,18 +1783,25 @@ export class CandidatesService {
 
     const candidate = await this.prisma.candidate.findUnique({
       where: {
-        id: id
-      }
+        id: id,
+      },
     });
     //console.log('Candidate data retrieved:', candidate);
-    if (candidate && candidate.resume_url && candidate.resume_url.includes('http')) {
-
+    if (
+      candidate &&
+      candidate.resume_url &&
+      candidate.resume_url.includes('http')
+    ) {
       const idFile = extractDriveFileId(candidate.resume_url);
       const pdfName = `${candidate.id}_resume.pdf`;
       const downloadDir = path.resolve(__dirname, '/tmp'); // Ensuring temp dir usage
 
       if (!idFile) {
-        await this.updateStatus(id, 'failed', 'Error in extracting file ID from URL');
+        await this.updateStatus(
+          id,
+          'failed',
+          'Error in extracting file ID from URL',
+        );
         console.log('Error in extracting file ID from URL');
         return false;
       }
@@ -861,9 +1809,12 @@ export class CandidatesService {
       console.log('starting with download step...');
       //processing_downloadFile
       await this.updateStatus(id, 'processing_downloadFile');
-      const fileDownloaded = await this.google.downloadFile(idFile, pdfName, downloadDir);
+      const fileDownloaded = await this.google.downloadFile(
+        idFile,
+        pdfName,
+        downloadDir,
+      );
       if (fileDownloaded !== 'Download successful') {
-
         //=> Send failed via email
         /*
         const candidateName = candidate.first_name ? `${candidate.first_name} ${candidate.last_name}` : `${candidate.name}`;
@@ -889,16 +1840,19 @@ export class CandidatesService {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-
       try {
-        console.log('Splitting PDF and converting to images with node-poppler...');
+        console.log(
+          'Splitting PDF and converting to images with node-poppler...',
+        );
         await this.updateStatus(id, 'processing_extractText');
 
         const pdfPath = path.join(downloadDir, pdfName);
         const outputPrefix = path.join(tempDir, 'page');
 
         const { Poppler } = require('node-poppler');
-        const popplerPath = process.env.POPPLER_BIN_PATH || (fs.existsSync('/opt/bin/pdftocairo') ? '/opt/bin' : undefined);
+        const popplerPath =
+          process.env.POPPLER_BIN_PATH ||
+          (fs.existsSync('/opt/bin/pdftocairo') ? '/opt/bin' : undefined);
         const poppler = new Poppler(popplerPath);
 
         const options = {
@@ -912,8 +1866,8 @@ export class CandidatesService {
         // Read the generated directory to find the images
         const files = fs.readdirSync(tempDir);
         const imagePaths = files
-          .filter(file => file.startsWith('page') && file.endsWith('.png'))
-          .map(file => path.join(tempDir, file))
+          .filter((file) => file.startsWith('page') && file.endsWith('.png'))
+          .map((file) => path.join(tempDir, file))
           .sort((a, b) => {
             // Sort by page number if needed
             const numA = parseInt(a.match(/page-(\d+)\.png/)?.[1] || '0');
@@ -930,20 +1884,28 @@ export class CandidatesService {
         console.log('Sending images to OpenAI...');
         await this.updateStatus(id, 'processing_organizeData');
 
-        const organizedData = await this.openai.extractDataFromResumeImages(imagePaths);
+        const { data: organizedData, cost: resumeCost } =
+          await this.openai.extractDataFromResumeImages(imagePaths);
 
         // Transform data to match expectations (e.g. join array descriptions)
         const transformedData = {
           ...organizedData,
-          experience: organizedData.experience?.map(exp => ({
-            ...exp,
-            description: Array.isArray(exp.description) ? exp.description.join("; ") : exp.description
-          })) || [],
-          education: organizedData.education || []
+          experience:
+            organizedData.experience?.map((exp) => ({
+              ...exp,
+              description: Array.isArray(exp.description)
+                ? exp.description.join('; ')
+                : exp.description,
+            })) || [],
+          education: organizedData.education || [],
         };
 
         if (!transformedData) {
-          await this.updateStatus(id, 'failed', 'Failed to organize data from OpenAI');
+          await this.updateStatus(
+            id,
+            'failed',
+            'Failed to organize data from OpenAI',
+          );
           return false;
         }
 
@@ -958,7 +1920,8 @@ export class CandidatesService {
             processed_at: new Date(),
             about_me: transformedData.bio,
             years_of_experience: transformedData.years_of_experience || 0,
-          }
+            processing_cost: { increment: resumeCost },
+          },
         });
 
         //call function to populate skills, education, experience....
@@ -970,10 +1933,13 @@ export class CandidatesService {
 
         //completed
         await this.updateStatus(id, 'completed');
-
       } catch (error) {
         console.error('Error in processData:', error);
-        await this.updateStatus(id, 'failed', error.message || 'Unknown processing error');
+        await this.updateStatus(
+          id,
+          'failed',
+          error.message || 'Unknown processing error',
+        );
         return false;
       } finally {
         // Cleanup
@@ -986,7 +1952,6 @@ export class CandidatesService {
           fs.unlinkSync(pdfPath);
         }
       }
-
     } else {
       await this.updateStatus(id, 'failed', 'Resume URL not found');
       return false;
@@ -996,21 +1961,25 @@ export class CandidatesService {
   }
 
   async getPipelines() {
-    const pipelines = Object.entries(dbToStageDictionary).map(([key, value]) => ({
-      name: value
-    }));
-    if (!pipelines || pipelines.length === 0) throw new NotFoundException('No pipelines found');
+    const pipelines = Object.entries(dbToStageDictionary).map(
+      ([key, value]) => ({
+        name: value,
+      }),
+    );
+    if (!pipelines || pipelines.length === 0)
+      throw new NotFoundException('No pipelines found');
     return pipelines;
   }
 
   async getProperties(data): Promise<any> {
     try {
-      const fields = data.fields ? data.fields.split(',').map((field) => field.trim()) : [];
-      let result: Record<string, any> = {};
-      let returned
+      const fields = data.fields
+        ? data.fields.split(',').map((field) => field.trim())
+        : [];
+      const result: Record<string, any> = {};
+      let returned;
 
       for (const field of fields) {
-
         if (field === 'languages') {
           returned = await this.prisma.candidateLanguage.findMany({
             where: {
@@ -1026,7 +1995,6 @@ export class CandidatesService {
             distinct: ['name'],
           });
         } else if (field === 'skills') {
-
           returned = await this.prisma.candidateSkill.findMany({
             where: {
               candidate: {
@@ -1043,9 +2011,7 @@ export class CandidatesService {
             },
             distinct: ['skill_name'],
           });
-
         } else if (field === 'approved_positions_pairing') {
-          
           /* it was moved to get the options from hubspot instead of the database, because we want to have all the options available even if they are not used by any candidate yet, and also to avoid having to filter the options that have "do not use" in the name, because they are already filtered in hubspot and we don't want to have them in our options list. But I'm leaving this here just in case we want to revert this decision in the future.
           returned = await this.prisma.candidate.findMany({
             where: {
@@ -1072,97 +2038,109 @@ export class CandidatesService {
           );
           returned = filteredPositions.sort();
           */
-        } else {
-
+        } else if (!HUBSPOT_SOURCED_PROPERTY_FIELDS.has(field)) {
           returned = await this.prisma.candidate.findMany({
             where: {
               OR: [
                 { pipeline_status: '261075105' },
-                { pipeline_status: '1087596819' }
+                { pipeline_status: '1087596819' },
               ],
               AND: [
                 {
                   [field]: {
-                    not: null
-                  }
+                    not: null,
+                  },
                 },
                 {
                   [field]: {
-                    not: 'N/A'
-                  }
-                }
-              ]
+                    not: 'N/A',
+                  },
+                },
+              ],
             },
             distinct: [field],
             select: {
-              [field]: true
+              [field]: true,
             },
-          })
+          });
         }
 
         if (field === 'specialization') {
-         
           try {
             const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
             const response = await axios.get(url, {
               headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                "Content-Type": "application/json",
+                'Content-Type': 'application/json',
               },
             });
 
+            // The `specialization` column is written from HubSpot's
+            // `practice_area_experience` property (see candidadeToDbDictionary),
+            // so the filter options must come from that same property. It used
+            // to read `career_highlights_relevant_job_experiences` — a different
+            // property that feeds CandidateSkill — which made the dropdown offer
+            // values no candidate has, while hiding real ones like "Urgent Care".
             const vaTypeProperty = response.data.results.find(
-              (prop) => prop.name === "career_highlights_relevant_job_experiences"
+              (prop) => prop.name === 'practice_area_experience',
             );
 
             if (!vaTypeProperty) {
               return [];
             }
-            const returnedSpecializations = vaTypeProperty.options.map((option) => option.value);
+            const returnedSpecializations = vaTypeProperty.options
+              .filter((option) => !option.hidden && option.value?.trim())
+              .map((option) => option.value.trim());
             result[field] = returnedSpecializations || [];
             //return vaTypeProperty.options || [];
           } catch (error) {
-            console.error("Failed to find types:", error.response?.data || error.message);
-            throw new Error("Failed to find VA types");
+            console.error(
+              'Failed to find types:',
+              error.response?.data || error.message,
+            );
+            throw new Error('Failed to find VA types');
           }
-        }else if (field === 'shift_block') {
-         
+        } else if (field === 'shift_block') {
           try {
             const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
             const response = await axios.get(url, {
               headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                "Content-Type": "application/json",
+                'Content-Type': 'application/json',
               },
             });
 
             const vaTypeProperty = response.data.results.find(
-              (prop) => prop.name === "shift_block"
+              (prop) => prop.name === 'shift_block',
             );
 
             if (!vaTypeProperty) {
               return [];
             }
-            const returnedShiftBlocks = vaTypeProperty.options.map((option) => option.value);
+            const returnedShiftBlocks = vaTypeProperty.options.map(
+              (option) => option.value,
+            );
             result[field] = returnedShiftBlocks || [];
             //return vaTypeProperty.options || [];
           } catch (error) {
-            console.error("Failed to find types:", error.response?.data || error.message);
-            throw new Error("Failed to find VA types");
+            console.error(
+              'Failed to find types:',
+              error.response?.data || error.message,
+            );
+            throw new Error('Failed to find VA types');
           }
-        }else if (field === 'tools') {
-         
+        } else if (field === 'tools') {
           try {
             const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
             const response = await axios.get(url, {
               headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                "Content-Type": "application/json",
+                'Content-Type': 'application/json',
               },
             });
 
             const vaTypeProperty = response.data.results.find(
-              (prop) => prop.name === "tools"
+              (prop) => prop.name === 'tools',
             );
 
             if (!vaTypeProperty) {
@@ -1176,21 +2154,55 @@ export class CandidatesService {
               }));
             result[field] = returnedTools || [];
           } catch (error) {
-            console.error("Failed to find types:", error.response?.data || error.message);
-            throw new Error("Failed to find VA types");
+            console.error(
+              'Failed to find types:',
+              error.response?.data || error.message,
+            );
+            throw new Error('Failed to find VA types');
           }
-        }else if (field === 'approved_positions_pairing') {
+        } else if (field === 'medical_tools') {
           try {
             const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
             const response = await axios.get(url, {
               headers: {
                 Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-                "Content-Type": "application/json",
+                'Content-Type': 'application/json',
               },
             });
 
             const vaTypeProperty = response.data.results.find(
-              (prop) => prop.name === "va_role_s"
+              (prop) => prop.name === 'medical_tools',
+            );
+
+            if (!vaTypeProperty) {
+              return [];
+            }
+            const returnedMedicalTools = vaTypeProperty.options
+              .filter((option) => !option.hidden && option.value?.trim())
+              .map((option) => ({
+                label: option.label?.trim(),
+                value: option.value?.trim(),
+              }));
+            result[field] = returnedMedicalTools || [];
+          } catch (error) {
+            console.error(
+              'Failed to find types:',
+              error.response?.data || error.message,
+            );
+            throw new Error('Failed to find VA types');
+          }
+        } else if (field === 'approved_positions_pairing') {
+          try {
+            const url = `https://api.hubapi.com/crm/v3/properties/${process.env.HUBSPOT_CUSTOM_OBJECT}`;
+            const response = await axios.get(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            const vaTypeProperty = response.data.results.find(
+              (prop) => prop.name === 'va_role_s',
             );
 
             if (!vaTypeProperty) {
@@ -1198,76 +2210,103 @@ export class CandidatesService {
             }
             const returnedPositions = vaTypeProperty.options
               .filter((option) => !option.hidden && option.value?.trim())
-              .filter((option) => !option.value.toLowerCase().includes('do not use'))
+              .filter(
+                (option) => !option.value.toLowerCase().includes('do not use'),
+              )
               .map((option) => ({
                 label: option.label?.trim(),
                 value: option.value?.trim(),
               }));
             result[field] = returnedPositions || [];
           } catch (error) {
-            console.error("Failed to find types:", error.response?.data || error.message);
-            throw new Error("Failed to find VA types");
+            console.error(
+              'Failed to find types:',
+              error.response?.data || error.message,
+            );
+            throw new Error('Failed to find VA types');
           }
         } else {
           result[field] = returned;
         }
-
-
       }
       return result;
-
     } catch (error) {
-      throw new BadRequestException(`Error fetching countries: ${error.message}`);
+      throw new BadRequestException(
+        `Error fetching countries: ${error.message}`,
+      );
     }
   }
 
-  async updateStatusHubspot(id: string, data: updateStatusHubspotDTO): Promise<any> {
+  async updateStatusHubspot(
+    id: string,
+    data: updateStatusHubspotDTO,
+  ): Promise<any> {
     if (!id) throw new BadRequestException('Candidate ID is required');
-    if (!data || !data.status) throw new BadRequestException('Status data is required');
+    if (!data || !data.status)
+      throw new BadRequestException('Status data is required');
 
-    const stageName = Object.entries(dbToStageDictionary).find(([key, value]) => value.toLowerCase() === data.status?.toLowerCase())?.[0];
+    const stageName = Object.entries(dbToStageDictionary).find(
+      ([key, value]) => value.toLowerCase() === data.status?.toLowerCase(),
+    )?.[0];
     if (!stageName) throw new BadRequestException('Invalid status provided');
 
     const candidate = await this.prisma.candidate.findUnique({
       where: { id: id },
-      select: { hubspot_id: true }
+      select: { hubspot_id: true },
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
 
     const body = {
       properties: {
-        hs_pipeline_stage: stageName
-      }
+        hs_pipeline_stage: stageName,
+      },
     };
 
     //communication with hubspot to update status can be added here
-    const response = await axios.patch(`https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
+    const response = await axios.patch(
+      `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
       body,
       {
         headers: {
           Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    )
+          'Content-Type': 'application/json',
+        },
+      },
+    );
 
     if (response.status !== 200) {
-      throw new BadGatewayException('Failed to update candidate status in HubSpot');
+      throw new BadGatewayException(
+        'Failed to update candidate status in HubSpot',
+      );
     }
     const updatedCandidate = await this.prisma.candidate.update({
       where: { id: id },
       data: {
-        pipeline_status: stageName
-      }
+        pipeline_status: stageName,
+      },
     });
-    if (!updatedCandidate) throw new BadGatewayException('Failed to update candidate status');
+    if (!updatedCandidate)
+      throw new BadGatewayException('Failed to update candidate status');
+
+    // R9 — remove from all OfferPanels when candidate becomes unavailable
+    if (CandidatesService.UNAVAILABLE_PIPELINE_STATUSES.includes(stageName)) {
+      await this.removeFromOfferPanels(id);
+    }
 
     return updatedCandidate;
   }
 
-  async showMatchHireRequests(user: USER, candidateId: string): Promise<object[]> {
-    if (!user || (user.role.includes("organization") && !user.organization_id)) {
-      throw new NotFoundException("User not found or not part of an organization");
+  async showMatchHireRequests(
+    user: USER,
+    candidateId: string,
+  ): Promise<object[]> {
+    if (
+      !user ||
+      (user.role.includes('organization') && !user.organization_id)
+    ) {
+      throw new NotFoundException(
+        'User not found or not part of an organization',
+      );
     }
 
     const candidate = await this.prisma.candidate.findUnique({
@@ -1286,7 +2325,7 @@ export class CandidatesService {
       },
     });
 
-    if (!candidate) throw new NotFoundException("Candidate not found");
+    if (!candidate) throw new NotFoundException('Candidate not found');
 
     const hireRequests = await this.prisma.hireRequest.findMany({
       where: {
@@ -1294,9 +2333,9 @@ export class CandidatesService {
         //assigned_user: user.role === 'system_admin' ? { is: { id: user.id } } : undefined,
         panels: {
           some: {
-            panelCandidates: {}
-          }
-        }
+            panelCandidates: {},
+          },
+        },
       },
       select: {
         id: true,
@@ -1309,7 +2348,9 @@ export class CandidatesService {
         salary_range_to: true,
         organization: { select: { id: true, name: true } },
         skills: { select: { skill_name: true, required_level: true } },
-        panels: { select: { id: true, _count: { select: { panelCandidates: true } } } },
+        panels: {
+          select: { id: true, _count: { select: { panelCandidates: true } } },
+        },
       },
     });
 
@@ -1323,7 +2364,7 @@ export class CandidatesService {
       const matchedCriteria: string[] = [];
 
       const hrSpecialization = hr.specialization
-        ? hr.specialization.split(";").map((s) => s.trim())
+        ? hr.specialization.split(';').map((s) => s.trim())
         : [];
       if (
         hrSpecialization.length > 0 &&
@@ -1360,14 +2401,12 @@ export class CandidatesService {
         candidate.hourly_pay_rate.toNumber() <= hourly_to
       ) {
         score += 3;
-        matchedCriteria.push(
-          `Salary between range`
-        );
+        matchedCriteria.push(`Salary between range`);
       }
 
       const requiredSkills = hr.skills.map((s) => s.skill_name);
       const matchedSkills = candidateSkills.filter((skill) =>
-        requiredSkills.includes(skill)
+        requiredSkills.includes(skill),
       );
 
       const skillMatchPercent =
@@ -1393,24 +2432,28 @@ export class CandidatesService {
     return scoredHireRequests;
   }
 
-  async endorseCandidate(data: EndorseCandidateDto, user: USER): Promise<boolean> {
-
+  async endorseCandidate(
+    data: EndorseCandidateDto,
+    user: USER,
+  ): Promise<boolean> {
     //console.log('Starting endorsement process for candidates:', data.candidatesId, 'to hire request:', data.hireRequestId);
 
-    if (!data.candidatesId) throw new BadRequestException('Candidates ID is required');
-    if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
+    if (!data.candidatesId)
+      throw new BadRequestException('Candidates ID is required');
+    if (!data.hireRequestId)
+      throw new BadRequestException('Hire Request ID is required');
 
     let panel = await this.prisma.candidatePanel.findFirst({
       where: { hire_request_id: data.hireRequestId },
-      select: { id: true }
-    })
+      select: { id: true },
+    });
     if (!panel) {
       panel = await this.prisma.candidatePanel.create({
         data: {
           hire_request_id: data.hireRequestId,
           status: PanelStatus.created,
           readable: true,
-        }
+        },
       });
     }
 
@@ -1419,98 +2462,291 @@ export class CandidatesService {
       select: {
         id: true,
         hubspot_id: true,
-        pipeline_status: true
-      }
+        pipeline_status: true,
+      },
     });
     if (!candidates) throw new NotFoundException('Candidate not found');
 
-
     //verify if the candidates is within the panel already. If so, skip this specific candidate
     for (const candidate of candidates) {
-      const existingPanelCandidate = await this.prisma.panelCandidate.findFirst({
-        where: {
-          panel_id: panel.id,
-          candidate_id: candidate.id,
-        }
-      });
+      const existingPanelCandidate = await this.prisma.panelCandidate.findFirst(
+        {
+          where: {
+            panel_id: panel.id,
+            candidate_id: candidate.id,
+          },
+        },
+      );
 
       if (existingPanelCandidate) {
-        data.candidatesId = data.candidatesId.filter(id => id !== candidate.id);
+        data.candidatesId = data.candidatesId.filter(
+          (id) => id !== candidate.id,
+        );
       }
     }
 
     const endorsement = await this.prisma.panelCandidate.createMany({
-      data: data.candidatesId.map(candidateId => ({
+      data: data.candidatesId.map((candidateId) => ({
         panel_id: panel.id,
         candidate_id: candidateId,
         status: 'selected',
-        createdByUserId: user.id
-      }))
-    })
+        createdByUserId: user.id,
+      })),
+    });
 
-
-    if (!endorsement) throw new BadGatewayException('Failed to endorse candidate');
+    if (!endorsement)
+      throw new BadGatewayException('Failed to endorse candidate');
 
     try {
       if (user.role.includes('organization')) {
-        const result = await this.notifications.notifyEndorseCandidates(data.hireRequestId);
-        console.log(`[notifications] Hire request endorsement notification sent successfully:`, result);
+        const result = await this.notifications.notifyEndorseCandidates(
+          data.hireRequestId,
+        );
+        console.log(
+          `[notifications] Hire request endorsement notification sent successfully:`,
+          result,
+        );
       } else {
-        console.log(`[notifications] Hire request endorsement skipped for user role: ${user.role}`);
+        console.log(
+          `[notifications] Hire request endorsement skipped for user role: ${user.role}`,
+        );
       }
     } catch (err) {
-      console.error('[notifications] hire-request-endorsement email failed', err?.message || err);
+      console.error(
+        '[notifications] hire-request-endorsement email failed',
+        err?.message || err,
+      );
     }
 
     return true;
   }
 
-  async removeCandidate(data: RemoveCandidateDto, user: USER): Promise<boolean> {
-    if (!data.candidateId) throw new BadRequestException('Candidate ID is required');
-    if (!data.hireRequestId) throw new BadRequestException('Hire Request ID is required');
+  async removeCandidate(
+    data: RemoveCandidateDto,
+    user: USER,
+  ): Promise<{ success: boolean; shouldPromptCancel: boolean }> {
+    if (!data.candidateId)
+      throw new BadRequestException('Candidate ID is required');
+    if (!data.hireRequestId)
+      throw new BadRequestException('Hire Request ID is required');
 
-
-    await this.prisma.panelCandidate.deleteMany({
-      where: {
-        candidate_id: data.candidateId,
-        panel: {
-          hire_request_id: data.hireRequestId
-        }
-      }
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: data.candidateId },
+      select: {
+        hubspot_id: true,
+        pipeline_status_origin: true,
+      },
     });
+    if (!candidate) throw new NotFoundException('Candidate not found');
 
-    //if no has more candidate, cancel panel
-    const lengthCandidates = await this.prisma.panelCandidate.count({
-      where: {
-        panel: {
-          hire_request_id: data.hireRequestId
-        }
-      }
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id: data.hireRequestId },
+      select: { status: true },
     });
+    if (!hireRequest) throw new NotFoundException('Hire request not found');
 
-    if (lengthCandidates === 0) {
-      //call the function hireRequest Update Status to cancel
-      await this.hireRequest.updateStatus(data.hireRequestId, { status: 'cancelled' }, user);
+    const PANEL_READY_OR_ABOVE: HireRequestStatus[] = [
+      'panel_ready',
+      'interview_scheduled',
+      'awaiting_decision',
+      'placement_completed',
+    ];
+
+    const currentCount = await this.prisma.panelCandidate.count({
+      where: { panel: { hire_request_id: data.hireRequestId } },
+    });
+    const wouldBeLastCandidate = currentCount === 1;
+
+    if (wouldBeLastCandidate) {
+      if (PANEL_READY_OR_ABOVE.includes(hireRequest.status)) {
+        throw new BadRequestException(
+          'Cannot remove the last candidate from a panel at this stage of the hire request',
+        );
+      }
+      // Status is below panel_ready — signal frontend to open cancel modal without removing
+      return { success: true, shouldPromptCancel: true };
     }
 
-    return true;
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.panelCandidate.deleteMany({
+          where: {
+            candidate_id: data.candidateId,
+            panel: {
+              hire_request_id: data.hireRequestId,
+            },
+          },
+        });
+
+        //check if the candidate is in other panels with status selected_by_client or blocked.
+        //if not, change pipeline_status to Available Candidates and update in hubspot
+        const thereOtherPanels = await tx.panelCandidate.findMany({
+          where: {
+            candidate_id: data.candidateId,
+            status: { in: ['selected_by_client', 'blocked'] },
+            panel: { hire_request_id: { not: data.hireRequestId } },
+          },
+          select: { id: true },
+        });
+
+        if (thereOtherPanels.length === 0) {
+          const pipelineStatus = Object.keys(dbToStageDictionary).find(
+            (key) => dbToStageDictionary[key] === 'Available Candidates',
+          );
+          const pipeline_treated =
+            candidate.pipeline_status_origin || pipelineStatus || '';
+
+          await tx.candidate.update({
+            where: { id: data.candidateId },
+            data: { pipeline_status: pipeline_treated },
+          });
+
+          await this.hubspot.updateOneCandidateFromHireRequest(
+            candidate.hubspot_id,
+            pipeline_treated,
+            user?.id,
+            undefined,
+            `Candidate removed from hire request ${data.hireRequestId} panel`,
+          );
+        }
+      });
+
+      return { success: true, shouldPromptCancel: false };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error('Error removing candidate from panel:', error);
+      return { success: false, shouldPromptCancel: false };
+    }
+  }
+
+  async removeCandidateAndCancel(
+    data: RemoveCandidateAndCancelDto,
+    user: USER,
+  ): Promise<boolean> {
+    if (!data.candidateId)
+      throw new BadRequestException('Candidate ID is required');
+    if (!data.hireRequestId)
+      throw new BadRequestException('Hire Request ID is required');
+
+    const hireRequest = await this.prisma.hireRequest.findUnique({
+      where: { id: data.hireRequestId },
+      select: { status: true },
+    });
+    if (!hireRequest) throw new NotFoundException('Hire request not found');
+
+    const PANEL_READY_OR_ABOVE: HireRequestStatus[] = [
+      'panel_ready',
+      'interview_scheduled',
+      'awaiting_decision',
+      'placement_completed',
+    ];
+    if (PANEL_READY_OR_ABOVE.includes(hireRequest.status)) {
+      throw new BadRequestException(
+        'Cannot remove the last candidate from a panel at this stage of the hire request',
+      );
+    }
+
+    const currentCount = await this.prisma.panelCandidate.count({
+      where: { panel: { hire_request_id: data.hireRequestId } },
+    });
+    if (currentCount !== 1) {
+      throw new BadRequestException(
+        'This action is only allowed when removing the last candidate from a panel',
+      );
+    }
+
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: data.candidateId },
+      select: { hubspot_id: true, pipeline_status_origin: true },
+    });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.panelCandidate.deleteMany({
+          where: {
+            candidate_id: data.candidateId,
+            panel: { hire_request_id: data.hireRequestId },
+          },
+        });
+
+        const thereOtherPanels = await tx.panelCandidate.findMany({
+          where: {
+            candidate_id: data.candidateId,
+            status: { in: ['selected_by_client', 'blocked'] },
+            panel: { hire_request_id: { not: data.hireRequestId } },
+          },
+          select: { id: true },
+        });
+
+        if (thereOtherPanels.length === 0) {
+          const pipelineStatus = Object.keys(dbToStageDictionary).find(
+            (key) => dbToStageDictionary[key] === 'Available Candidates',
+          );
+          const pipeline_treated =
+            candidate.pipeline_status_origin || pipelineStatus || '';
+
+          await tx.candidate.update({
+            where: { id: data.candidateId },
+            data: { pipeline_status: pipeline_treated },
+          });
+
+          await this.hubspot.updateOneCandidateFromHireRequest(
+            candidate.hubspot_id,
+            pipeline_treated,
+            user?.id,
+            undefined,
+            `Last candidate removed from hire request ${data.hireRequestId} panel — cancellation initiated`,
+          );
+        }
+      });
+
+      await this.hireRequest.updateStatus(
+        data.hireRequestId,
+        {
+          status: 'cancelled',
+          reason: data.reason,
+          staffing_coordinator: data.staffing_coordinator,
+          pairing_session_conducted: data.pairing_session_conducted,
+          pairing_session_outcome_reason: data.pairing_session_outcome_reason,
+          count_of_candidates_invited_: data.count_of_candidates_invited_,
+          count_of_candidates_attended_: data.count_of_candidates_attended_,
+          count_of_candidates_interviewed_:
+            data.count_of_candidates_interviewed_,
+          client_signed_contract_closing_ticket:
+            data.client_signed_contract_closing_ticket,
+        },
+        user,
+      );
+
+      return true;
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error(
+        'Error removing last candidate and cancelling hire request:',
+        error,
+      );
+      return false;
+    }
   }
 
   async processAllAvatars(): Promise<boolean> {
     const candidates = await this.prisma.candidate.findMany({
       where: {
         headshot_url: {
-          contains: 'http'
+          contains: 'http',
         },
-        avatar_url: null
+        avatar_url: null,
       },
       select: {
         id: true,
         headshot_url: true,
-      }
+      },
     });
     if (!candidates || candidates.length === 0) {
-      console.log('No candidates found with headshot_url and without avatar_url');
+      console.log(
+        'No candidates found with headshot_url and without avatar_url',
+      );
       return true;
     }
 
@@ -1519,25 +2755,39 @@ export class CandidatesService {
       try {
         const result = await this.processAvatar(candidate.id);
         if (result) {
-          console.log(`Successfully processed avatar for candidate ID: ${candidate.id}`);
+          console.log(
+            `Successfully processed avatar for candidate ID: ${candidate.id}`,
+          );
         } else {
-          console.log(`Failed to process avatar for candidate ID: ${candidate.id}`);
+          console.log(
+            `Failed to process avatar for candidate ID: ${candidate.id}`,
+          );
         }
       } catch (error) {
-        console.error(`Error processing avatar for candidate ID: ${candidate.id}`, error);
+        console.error(
+          `Error processing avatar for candidate ID: ${candidate.id}`,
+          error,
+        );
       }
     }
     return true;
   }
 
   async getRandomTalentPoolCandidates(business_unit: string): Promise<any> {
+    // Pool-based candidate visibility (preserves today's behavior exactly):
+    // non_medical BUs (Berry today) are restricted to non_medical BUs'
+    // hubspot values; every other BU (MedVirtual, MMVA, future medical BUs)
+    // sees all candidates — i.e. no business_unit filter is applied.
+    const businessUnitFilterValues =
+      await this.getBusinessUnitFilterValues(business_unit);
+
     // Base filter for "available" candidates in talent pool
     const pipelineStatusFilter = {
       pipeline_status: {
         in: ['261075105', '1087596819'],
       },
     };
- 
+
     // Filtros adicionales solo para obtener los candidatos que se muestran
     const whereClauseForCandidates = {
       AND: [
@@ -1555,21 +2805,25 @@ export class CandidatesService {
           },
         },
         {
-          business_unit: business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
         },
         {
           // Solo candidatos disponibles
           ...pipelineStatusFilter,
-        }
+        },
       ],
     };
 
     // Para el conteo total de candidatos disponibles, solo usamos el filtro por pipeline_status
     const whereClauseForCount = {
       AND: [
-        {...pipelineStatusFilter},
+        { ...pipelineStatusFilter },
         {
-          business_unit: business_unit == 'BerryVirtual' ? 'Berry Virtual' : undefined, // Si es BerryVirtual, filtramos por ese business_unit, si no, no filtramos por business_unit
+          business_unit: businessUnitFilterValues
+            ? { in: businessUnitFilterValues }
+            : undefined,
         },
       ],
     };
@@ -1599,20 +2853,20 @@ export class CandidatesService {
           languages: {
             select: {
               name: true,
-            }
+            },
           },
           skills: {
             select: {
               skill_name: true,
-              skill_type: true
-            }
+              skill_type: true,
+            },
           },
           educations: {
             select: {
               institution: true,
               degree: true,
-              year: true
-            }
+              year: true,
+            },
           },
           experiences: {
             orderBy: { start_date: Prisma.SortOrder.desc },
@@ -1621,8 +2875,8 @@ export class CandidatesService {
               position: true,
               start_date: true,
               end_date: true,
-              responsabilities: true
-            }
+              responsabilities: true,
+            },
           },
           approved_positions_pairing: true,
           business_unit: true,
@@ -1630,7 +2884,6 @@ export class CandidatesService {
       }),
       this.prisma.candidate.count({ where: whereClauseForCount }), // Count available candidates only by pipeline_status
     ]);
-
 
     // Shuffle array to get random candidates
     const shuffled = candidates.sort(() => 0.5 - Math.random());
@@ -1642,16 +2895,25 @@ export class CandidatesService {
     // Note: We're not including pipeline_status in the select, so it won't be in the response
 
     // Construct full avatar URL for each candidate and calculate salary
-    const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
-    const _pConfigs2 = await this.positionRateConfigService.findAllUnpaginated();
+    const AVATAR_BASE_URL =
+      'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+    const _pConfigs2 =
+      await this.positionRateConfigService.findAllUnpaginated();
     const _configMap2 = buildConfigMap(_pConfigs2);
-    const candidatesWithFullAvatarUrl = randomCandidates.map(candidate => {
+    const candidatesWithFullAvatarUrl = randomCandidates.map((candidate) => {
       const rates = computeCandidateRates(candidate, _configMap2);
       return {
         ...candidate,
-        avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
-        employment_type: changeLabelAvailability(dbToStageDictionary[Number(candidate.employment_type)]) || candidate.employment_type,
-        approved_positions_pairing: candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
+        avatar_url: candidate.avatar_url
+          ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
+          : null,
+        employment_type:
+          changeLabelAvailability(
+            dbToStageDictionary[Number(candidate.employment_type)],
+          ) || candidate.employment_type,
+        approved_positions_pairing:
+          candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+          [],
         ...rates,
       };
     });
@@ -1659,7 +2921,7 @@ export class CandidatesService {
     return {
       candidates: candidatesWithFullAvatarUrl,
       total: totalTableCount, // Return count of available candidates with filters
-      totalTable: totalTableCount
+      totalTable: totalTableCount,
     };
   }
 
@@ -1696,16 +2958,16 @@ export class CandidatesService {
         can_articulate_experience_clearly_to_clients: true,
         can_multitask_between_systems_or_windows_efficiently: true,
         client_readiness___fit_evaluator_notes: true,
-        comfortable_with_basic_tools__google_workspace__zoom__ehr_softw: true,
+        comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
         comfortable_with_camera_on_setup: true,
         communication_skills_evaluator_notes: true,
         confident_on_video_and_phone_calls: true,
         cultural_alignment_with_us_healthcare_environment: true,
         demonstrates_problem_solving_and_tech_adaptability: true,
         demonstrates_stability_and_commitment: true,
-        demonstrates_understanding_of_medical_terminology_and_procedure: true,
+        demonstrates_understanding_of_medical_terminology_and_procedures: true,
         exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
-        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks: true,
+        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
         for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
         grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
         handles_feedback_constructively: true,
@@ -1723,24 +2985,24 @@ export class CandidatesService {
         technical_competence_evaluator_notes: true,
         tier_level: true,
         total_points: true,
-        understands_workflow_in_medical_offices___telehealth_environmen: true,
+        understands_workflow_in_medical_offices___telehealth_environments: true,
         languages: {
           select: {
             name: true,
-          }
+          },
         },
         skills: {
           select: {
             skill_name: true,
-            skill_type: true
-          }
+            skill_type: true,
+          },
         },
         educations: {
           select: {
             institution: true,
             degree: true,
-            year: true
-          }
+            year: true,
+          },
         },
         experiences: {
           orderBy: { start_date: Prisma.SortOrder.desc },
@@ -1749,22 +3011,35 @@ export class CandidatesService {
             position: true,
             start_date: true,
             end_date: true,
-            responsabilities: true
-          }
+            responsabilities: true,
+          },
         },
         approved_positions_pairing: true,
         business_unit: true,
         panelCandidates: {
-        select: {
-          id: true,
-          status: true,
-          panel: {
-            include: {
-              hireRequest: true
-            }
-          }
-        }
-      },
+          select: {
+            id: true,
+            status: true,
+            panel: {
+              select: {
+                hire_request_id: true,
+                hireRequest: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    organization: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1773,29 +3048,306 @@ export class CandidatesService {
     }
 
     // Construct full avatar URL and calculate salary
-    const AVATAR_BASE_URL = 'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+    const AVATAR_BASE_URL =
+      'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
 
     // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
     let employmentTypeValue = candidate.employment_type;
     if (Array.isArray(employmentTypeValue)) {
       employmentTypeValue = employmentTypeValue[0];
-    } else if (typeof employmentTypeValue === 'string' && employmentTypeValue.includes(';')) {
+    } else if (
+      typeof employmentTypeValue === 'string' &&
+      employmentTypeValue.includes(';')
+    ) {
       employmentTypeValue = employmentTypeValue.split(';')[0].trim();
     }
 
     // Apply the same transformation as in findOne and other places
-    const transformedEmploymentType = changeLabelAvailability(dbToStageDictionary[Number(employmentTypeValue)]) || employmentTypeValue;
+    const transformedEmploymentType =
+      changeLabelAvailability(
+        dbToStageDictionary[Number(employmentTypeValue)],
+      ) || employmentTypeValue;
 
-    const _pConfigs3 = await this.positionRateConfigService.findAllUnpaginated();
+    const _pConfigs3 =
+      await this.positionRateConfigService.findAllUnpaginated();
     const _configMap3 = buildConfigMap(_pConfigs3);
     const rates3 = computeCandidateRates(candidate as any, _configMap3);
 
     const candidateWithFullAvatarUrl = {
       ...candidate,
-      avatar_url: candidate.avatar_url ? `${AVATAR_BASE_URL}${candidate.avatar_url}` : null,
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
+        : null,
       employment_type: transformedEmploymentType,
-      approved_positions_pairing: candidate.approved_positions_pairing?.map(getApprovedPositionLabel) || [],
+      approved_positions_pairing:
+        candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+        [],
       ...rates3,
+    };
+
+    return candidateWithFullAvatarUrl;
+  }
+
+  /**
+   * Card-level payload for many candidates in TWO queries, regardless of how
+   * many ids are passed.
+   *
+   * This is the batch counterpart of `getTalentPoolCandidateById`, which list
+   * endpoints must use instead of calling that method in a loop: each call
+   * there re-reads the whole `PositionRateConfig` table, so a per-candidate
+   * fan-out turned a single offer-panels request into thousands of queries.
+   *
+   * Unlike `getTalentPoolCandidateById`, unknown ids are simply absent from the
+   * returned map rather than throwing — a list must not 404 because one row
+   * references a deleted candidate.
+   */
+  async getTalentPoolCandidatesByIds(ids: string[]): Promise<Map<string, any>> {
+    const uniqueIds = Array.from(
+      new Set(ids.map((id) => id?.trim()).filter((id): id is string => !!id)),
+    );
+    if (uniqueIds.length === 0) return new Map();
+
+    const [candidates, positionConfigs] = await Promise.all([
+      this.prisma.candidate.findMany({
+        where: { id: { in: uniqueIds } },
+        select: CANDIDATE_LIST_CARD_SELECT,
+      }),
+      // Read once for the whole batch, not once per candidate.
+      this.positionRateConfigService.findAllUnpaginated(),
+    ]);
+
+    const configMap = buildConfigMap(positionConfigs);
+
+    return new Map(
+      candidates.map((candidate) => [
+        candidate.id,
+        this.toCardCandidate(candidate, configMap),
+      ]),
+    );
+  }
+
+  /**
+   * Applies the same transformations as `getTalentPoolCandidateById` so a card
+   * renders identically whether it came from the batch or the single-id path.
+   *
+   * Order matters: `computeCandidateRates` labels the positions itself and
+   * reads the raw `employment_type`, so it MUST run before either field is
+   * normalized for display. Reversing these steps yields wrong billing rates
+   * without raising an error.
+   */
+  private toCardCandidate(
+    candidate: Prisma.CandidateGetPayload<{
+      select: typeof CANDIDATE_LIST_CARD_SELECT;
+    }>,
+    configMap: Parameters<typeof computeCandidateRates>[1],
+  ): any {
+    const AVATAR_BASE_URL =
+      'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+
+    // 1. Rates first — needs the raw employment_type and unlabelled positions.
+    const rates = computeCandidateRates(candidate, configMap);
+
+    // 2. Then normalize employment_type for display (array, or ";"-joined).
+    let employmentTypeValue: unknown = candidate.employment_type;
+    if (Array.isArray(employmentTypeValue)) {
+      employmentTypeValue = employmentTypeValue[0];
+    } else if (
+      typeof employmentTypeValue === 'string' &&
+      employmentTypeValue.includes(';')
+    ) {
+      employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+    }
+    const transformedEmploymentType =
+      changeLabelAvailability(
+        dbToStageDictionary[Number(employmentTypeValue)],
+      ) || employmentTypeValue;
+
+    // 3. And finally map the positions to their display labels.
+    return {
+      ...candidate,
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
+        : null,
+      employment_type: transformedEmploymentType,
+      approved_positions_pairing:
+        candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+        [],
+      ...rates,
+    };
+  }
+
+  async getTalentPoolCandidateByIdForLoggedUser(
+    id: string,
+    user: USER,
+  ): Promise<any> {
+    // Validate ID
+    if (!id || id.trim() === '') {
+      throw new BadRequestException('Invalid candidate ID');
+    }
+
+    console.log(`Fetching candidate with ID: ${user}`);
+    const organizationId = user?.organization_id ?? null;
+
+    // Search candidate by ID without any filters
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id: id.trim() },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        country: true,
+        employment_type: true,
+        hourly_pay_rate: true,
+        years_of_experience: true,
+        about_me: true,
+        specialization: true,
+        tools: true,
+        medical_tools: true,
+        avatar_url: true,
+        gender: true,
+        shift_block: true,
+        video_link: true,
+        // VA Score Card fields
+        active_listening_and_comprehension_demonstrated: true,
+        adaptability_to_different_client_personalities_and_workflows: true,
+        can_articulate_experience_clearly_to_clients: true,
+        can_multitask_between_systems_or_windows_efficiently: true,
+        client_readiness___fit_evaluator_notes: true,
+        comfortable_with_basic_tools__google_workspace__zoom__ehr_software_: true,
+        comfortable_with_camera_on_setup: true,
+        communication_skills_evaluator_notes: true,
+        confident_on_video_and_phone_calls: true,
+        cultural_alignment_with_us_healthcare_environment: true,
+        demonstrates_problem_solving_and_tech_adaptability: true,
+        demonstrates_stability_and_commitment: true,
+        demonstrates_understanding_of_medical_terminology_and_procedures: true,
+        exhibits_confidence_and_empathy_in_roleplay_scenarios: true,
+        familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__: true,
+        for_bilinguals__fluent_and_accurate_in_both_english_and_spanish: true,
+        grammar__vocabulary__and_tone_are_appropriate_for_us_clients: true,
+        handles_feedback_constructively: true,
+        has_functioning_headset__webcam__and_backup_device: true,
+        knowledge_of_hipaa_compliance_and_confidentiality: true,
+        medical_knowledge_evaluator_notes: true,
+        no_medical_industry_experience: true,
+        positive_attitude_and_professional_demeanor: true,
+        prior_experience_in_healthcare_or_medical_va_roles: true,
+        professionalism___work_readiness_evaluator_notes: true,
+        punctual_and_responsive_during_recruitment_stages: true,
+        remote_work_discipline_and_time_management: true,
+        speaks_clearly_and_professionally: true,
+        stable_internet_connection__min__20_mbps_: true,
+        technical_competence_evaluator_notes: true,
+        tier_level: true,
+        total_points: true,
+        understands_workflow_in_medical_offices___telehealth_environments: true,
+        languages: {
+          select: {
+            name: true,
+          },
+        },
+        skills: {
+          select: {
+            skill_name: true,
+            skill_type: true,
+          },
+        },
+        educations: {
+          select: {
+            institution: true,
+            degree: true,
+            year: true,
+          },
+        },
+        experiences: {
+          orderBy: { start_date: Prisma.SortOrder.desc },
+          select: {
+            company: true,
+            position: true,
+            start_date: true,
+            end_date: true,
+            responsabilities: true,
+          },
+        },
+        approved_positions_pairing: true,
+        business_unit: true,
+        panelCandidates: {
+          // Org-scoped: see the note in `findAll`.
+          where: organizationId
+            ? { panel: { hireRequest: { org_id: organizationId } } }
+            : undefined,
+          select: {
+            id: true,
+            status: true,
+            panel: {
+              select: {
+                hire_request_id: true,
+                hireRequest: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    organization: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!candidate) {
+      throw new NotFoundException('Candidate not found');
+    }
+
+    // Construct full avatar URL and calculate salary
+    const AVATAR_BASE_URL =
+      'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+
+    // Normalize employment_type: handle array or string with multiple values (similar to objectCreation.ts)
+    let employmentTypeValue = candidate.employment_type;
+    if (Array.isArray(employmentTypeValue)) {
+      employmentTypeValue = employmentTypeValue[0];
+    } else if (
+      typeof employmentTypeValue === 'string' &&
+      employmentTypeValue.includes(';')
+    ) {
+      employmentTypeValue = employmentTypeValue.split(';')[0].trim();
+    }
+
+    // Apply the same transformation as in findOne and other places
+    const transformedEmploymentType =
+      changeLabelAvailability(
+        dbToStageDictionary[Number(employmentTypeValue)],
+      ) || employmentTypeValue;
+
+    const _pConfigs3 =
+      await this.positionRateConfigService.findAllUnpaginated();
+    const _configMap3 = buildConfigMap(_pConfigs3);
+    const rates3 = computeCandidateRates(candidate, _configMap3);
+
+    const candidateWithFullAvatarUrl = {
+      ...candidate,
+      avatar_url: candidate.avatar_url
+        ? `${AVATAR_BASE_URL}${candidate.avatar_url}`
+        : null,
+      employment_type: transformedEmploymentType,
+      approved_positions_pairing:
+        candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
+        [],
+      ...rates3,
+      existingInOtherClientPanel: isInClientOpenPanel(
+        candidate.panelCandidates,
+        organizationId,
+      ),
     };
 
     return candidateWithFullAvatarUrl;
@@ -1805,16 +3357,18 @@ export class CandidatesService {
     const candidates = await this.prisma.candidate.findMany({
       where: {
         pipeline_status: {
-          in: ['261075105', '1087596819']
-        }
+          in: ['261075105', '1087596819'],
+        },
       },
       select: {
         id: true,
-        hubspot_id: true
-      }
+        hubspot_id: true,
+      },
     });
 
-    console.log(`Found ${candidates.length} candidates to sync business units.`);
+    console.log(
+      `Found ${candidates.length} candidates to sync business units.`,
+    );
     let updatedCount = 0;
     let errorCount = 0;
 
@@ -1824,29 +3378,34 @@ export class CandidatesService {
           `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
           {
             params: {
-              properties: 'business_units'
+              properties: 'business_units',
             },
             headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`
-            }
-          }
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
         );
 
         const businessUnit = response.data.properties.business_units;
 
-        console.log(`Candidate ID: ${candidate.id}, HubSpot ID: ${candidate.hubspot_id}, Business Unit from HubSpot: ${businessUnit}`);
+        console.log(
+          `Candidate ID: ${candidate.id}, HubSpot ID: ${candidate.hubspot_id}, Business Unit from HubSpot: ${businessUnit}`,
+        );
 
         if (businessUnit) {
           await this.prisma.candidate.update({
             where: { id: candidate.id },
             data: {
-              business_unit: businessUnit
-            }
+              business_unit: businessUnit,
+            },
           });
           updatedCount++;
         }
       } catch (error) {
-        console.error(`Failed to sync business unit for candidate ${candidate.id} (HubSpot ID: ${candidate.hubspot_id}):`, error.message);
+        console.error(
+          `Failed to sync business unit for candidate ${candidate.id} (HubSpot ID: ${candidate.hubspot_id}):`,
+          error.message,
+        );
         errorCount++;
       }
     }
@@ -1894,16 +3453,18 @@ export class CandidatesService {
     const candidates = await this.prisma.candidate.findMany({
       where: {
         pipeline_status: {
-          in: ['261075105', '1087596819']
-        }
+          in: ['261075105', '1087596819'],
+        },
       },
       select: {
         id: true,
-        hubspot_id: true
-      }
+        hubspot_id: true,
+      },
     });
 
-    console.log(`Found ${candidates.length} available candidates to sync VA Score Card fields.`);
+    console.log(
+      `Found ${candidates.length} available candidates to sync VA Score Card fields.`,
+    );
     let updatedCount = 0;
     let errorCount = 0;
 
@@ -1913,45 +3474,41 @@ export class CandidatesService {
           `https://api.hubapi.com/crm/v3/objects/${process.env.HUBSPOT_CUSTOM_OBJECT}/${candidate.hubspot_id}`,
           {
             params: {
-              properties: vaScoreCardProperties.join(',')
+              properties: vaScoreCardProperties.join(','),
             },
             headers: {
-              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`
-            }
-          }
+              Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+            },
+          },
         );
 
         const properties = response.data.properties;
-        console.log('Properties fetched from HubSpot for candidate ID:', candidate.id, properties);
-
-        const hubspotToPrismaMap: Record<string, string> = {
-          'comfortable_with_basic_tools__google_workspace__zoom__ehr_software_': 'comfortable_with_basic_tools__google_workspace__zoom__ehr_softw',
-          'demonstrates_understanding_of_medical_terminology_and_procedures': 'demonstrates_understanding_of_medical_terminology_and_procedure',
-          'familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks__etc__': 'familiarity_with_emr_ehr_systems__kareo__athena__eclinicalworks',
-          'understands_workflow_in_medical_offices___telehealth_environments': 'understands_workflow_in_medical_offices___telehealth_environmen',
-        };
+        console.log(
+          'Properties fetched from HubSpot for candidate ID:',
+          candidate.id,
+          properties,
+        );
 
         const updateData: Record<string, string | null> = {};
         for (const prop of vaScoreCardProperties) {
-          const prismaProp = hubspotToPrismaMap[prop] || prop;
-          updateData[prismaProp] = properties[prop] || null;
+          updateData[prop] = properties[prop] || null;
         }
 
         await this.prisma.candidate.update({
           where: { id: candidate.id },
-          data: updateData
+          data: updateData,
         });
 
         updatedCount++;
       } catch (error) {
-        console.error(`Failed to sync VA Score Card fields for candidate ${candidate.id} (HubSpot ID: ${candidate.hubspot_id}):`, error.message);
+        console.error(
+          `Failed to sync VA Score Card fields for candidate ${candidate.id} (HubSpot ID: ${candidate.hubspot_id}):`,
+          error.message,
+        );
         errorCount++;
       }
     }
 
     return `Sync complete. Updated: ${updatedCount}, Errors: ${errorCount}`;
   }
-
 }
-
-

@@ -44,6 +44,22 @@ export class ReferralSyncService {
   async run(organizationId: string): Promise<SyncResult> {
     this.logger.log(`Starting sync for organization ${organizationId}`);
 
+    // Deleted organizations must never re-enter the pipeline — the deletion hook
+    // already voided their commissions; syncing would re-detect them.
+    const orgStatus = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { status: true },
+    });
+    if (orgStatus?.status === 'deleted') {
+      this.logger.warn(
+        `Sync skipped for org ${organizationId} — organization is deleted`,
+      );
+      return {
+        organizationId,
+        phaseA: { outcome: 'skipped_deleted' },
+      };
+    }
+
     // -------------------------------------------------------------------------
     // Phase A: HubSpot company matching
     // -------------------------------------------------------------------------
@@ -59,7 +75,10 @@ export class ReferralSyncService {
     };
 
     // Multiple matches or hard error — halt pipeline
-    if (matchResult.outcome === 'multiple_matches' || matchResult.outcome === 'error') {
+    if (
+      matchResult.outcome === 'multiple_matches' ||
+      matchResult.outcome === 'error'
+    ) {
       this.logger.warn(
         `Sync halted for org ${organizationId} — Phase A outcome: ${matchResult.outcome}`,
       );
@@ -96,11 +115,23 @@ export class ReferralSyncService {
       this.logger.log(
         `Phase B skipped for org ${organizationId} — no hubspot_id (no_match outcome)`,
       );
-      return { ...result, phaseB: { invoices: { created: 0, updated: 0, skipped: 0 }, commissions: { created: 0, skipped: 0 } } };
+      return {
+        ...result,
+        phaseB: {
+          invoices: { created: 0, updated: 0, skipped: 0 },
+          commissions: { created: 0, skipped: 0 },
+        },
+      };
     }
 
-    const invoiceStats = await this.invoiceIngestion.run(organizationId, org.hubspot_id);
+    const invoiceStats = await this.invoiceIngestion.run(
+      organizationId,
+      org.hubspot_id,
+    );
+
+    //commented only for populate databse
     const commissionStats = await this.commissionDetection.run(organizationId);
+    //const commissionStats = { created: 0, skipped: 0 };
 
     result.phaseB = {
       invoices: invoiceStats,

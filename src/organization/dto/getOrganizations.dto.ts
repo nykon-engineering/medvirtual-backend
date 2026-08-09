@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsEnum, IsInt, Min, Max, IsBoolean } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsInt,
+  Min,
+  Max,
+  IsBoolean,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
@@ -33,7 +41,7 @@ export class GetOrganizationsDto {
   @ApiProperty({
     required: false,
     description:
-      'Search term to filter organizations by name, email, or description',
+      'Search term to filter organizations by name, email, description, or member user name',
   })
   @IsOptional()
   @IsString()
@@ -55,7 +63,7 @@ export class GetOrganizationsDto {
   })
   @IsOptional()
   @IsString()
-  type?: String;
+  type?: string;
 
   @ApiProperty({
     required: false,
@@ -85,7 +93,7 @@ export class GetOrganizationsDto {
   @ApiProperty({
     required: false,
     description:
-      'Filter by admin ID (only available for system_super_admin)',
+      'Filter by admin ID (available for system_super_admin and system_admin)',
   })
   @IsOptional()
   @IsString()
@@ -93,13 +101,11 @@ export class GetOrganizationsDto {
 
   @ApiProperty({
     required: false,
-    description:
-      'Filter by Business Unit',
+    description: 'Filter by Business Unit',
   })
   @IsOptional()
   @IsString()
   business_unit?: string;
-
 
   @ApiProperty({
     required: false,
@@ -152,7 +158,15 @@ export class GetOrganizationsDto {
   @ApiProperty({
     required: false,
     description: 'Sort field',
-    enum: ['name', 'email', 'createdAt', 'updatedAt', 'number_of_employees', 'userCount', 'activeStaffCount'],
+    enum: [
+      'name',
+      'email',
+      'createdAt',
+      'updatedAt',
+      'number_of_employees',
+      'userCount',
+      'activeStaffCount',
+    ],
     default: 'createdAt',
   })
   @IsOptional()
@@ -168,4 +182,19 @@ export class GetOrganizationsDto {
   @IsOptional()
   @IsString()
   sortOrder?: 'asc' | 'desc' = 'desc';
+
+  @ApiProperty({
+    required: false,
+    description:
+      'When true, only return organizations that have no referral (referred_by_affiliate_id is null)',
+    type: Boolean,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return undefined;
+  })
+  @IsBoolean()
+  without_referral?: boolean;
 }

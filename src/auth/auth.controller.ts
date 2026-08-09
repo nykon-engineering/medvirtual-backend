@@ -19,7 +19,6 @@ import { AuthService } from './auth.service';
 
 import { AuthSignInDto } from './dto/authSignIn.dto';
 import { AuthSignUpDto } from './dto/authSignUp.dto';
-import { AuthLogoutDto } from './dto/authLogOut.dto';
 import { AuthResendCodeDto } from './dto/authResendCode.dto';
 import { AuthInviteUserDto } from './dto/authInviteUser.dto';
 import { AuthVerifyCodeDto } from './dto/authVerifyCode.dto';
@@ -159,15 +158,14 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(302)
-  @ApiBody({ type: AuthLogoutDto })
+  @UseGuards(AuthGuard)
   @Redirect()
   @ApiOperation({ summary: 'Logout user' })
   @ApiResponse({ status: 302, description: 'User logged out successfully' })
-  @ApiResponse({ status: 400, description: 'Token is required' })
   @ApiResponse({ status: 400, description: 'Failed to revoke token' })
   @ApiResponse({ status: 500, description: 'Failed to log out user' })
-  async logout(@Body() data: AuthLogoutDto) {
-    const result = await this.authService.logout({ token: data.token });
+  async logout(@CurrentUser() user: USER) {
+    const result = await this.authService.logout(user.id);
     if (result) {
       return {
         statusCode: 302,
@@ -214,7 +212,7 @@ export class AuthController {
   @Get('re-invite/:id')
   @HttpCode(200)
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('system_super_admin', 'organization_super_admin')
+  @Roles('system_super_admin', 'system_admin', 'organization_super_admin')
   @ApiOperation({ summary: 'Resend invitation to an invited user' })
   @ApiResponse({
     status: 200,

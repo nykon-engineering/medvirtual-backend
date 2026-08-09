@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadGatewayException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 
 import { CandidatesService } from './candidates.service';
 import { HubspotService } from '../hubspot/hubspot.service';
@@ -12,6 +12,7 @@ import { MailService } from '../mail/mail.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -49,6 +50,7 @@ const mockPrisma = {
   },
   candidateSkill: {
     findMany: jest.fn(),
+    groupBy: jest.fn(),
   },
   candidateExperience: {
     createMany: jest.fn(),
@@ -58,7 +60,29 @@ const mockPrisma = {
     createMany: jest.fn(),
     deleteMany: jest.fn(),
   },
+  hireRequest: {
+    findUnique: jest.fn(),
+  },
+  panelCandidate: {
+    count: jest.fn(),
+  },
+  organization: {
+    findUnique: jest.fn(),
+  },
+  ticket: {
+    findMany: jest.fn(),
+  },
   $transaction: jest.fn(),
+};
+
+const businessUnitContextMock = {
+  getVisibleHubspotValues: jest.fn(),
+  isAllowedHubspotValue: jest.fn(),
+  resolveByHubspotValue: jest.fn(),
+  poolFor: jest.fn(),
+  displayToSlug: jest.fn(),
+  normalizeBusinessUnit: jest.fn(),
+  bustCache: jest.fn(),
 };
 
 const textractMock = {
@@ -82,6 +106,7 @@ const openAIMock = {
 
 const hubspotMock = {
   updateContact: jest.fn(),
+  updateOneCandidateFromHireRequest: jest.fn(),
 }
 
 const MailMock = {
@@ -109,6 +134,7 @@ describe('CandidatesService', () => {
   const mockUser = {
     id: 'user-1',
     organization_id: 'org-1',
+    role: 'organization_admin',
   } as any; // Cast as USER
 
   beforeEach(async () => {
@@ -124,6 +150,8 @@ describe('CandidatesService', () => {
         { provide: HireRequestService, useValue: HireRequestMock },
         { provide: NotificationsService, useValue: notificationsMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigMock },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
+        { provide: Logger, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn() } },
       ],
     }).compile();
 
@@ -131,6 +159,14 @@ describe('CandidatesService', () => {
     prisma = module.get<PrismaService>(PrismaService);
 
     jest.clearAllMocks();
+
+    // Default: no restriction (medical pool), mirrors current MedVirtual/MMVA behavior
+    businessUnitContextMock.poolFor.mockResolvedValue('medical');
+    businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+      'MedVirtual',
+      'Berry Virtual',
+      'MMVA',
+    ]);
   });
 
   describe.skip('findAll', () => {
@@ -164,6 +200,236 @@ describe('CandidatesService', () => {
       mockPrisma.$transaction.mockRejectedValue(new Error('DB error'));
 
       await expect(service.findAll(mockUser)).rejects.toThrow(BadGatewayException);
+    });
+  });
+
+  describe('findAll — business_unit pool filtering (internal talent pool)', () => {
+    beforeEach(() => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.ticket.findMany.mockResolvedValue([]);
+    });
+
+    it('applies NO business_unit filter for a MedVirtual logged company (sees all candidates)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        business_unit: 'MedVirtual',
+      });
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.findAll(mockUser);
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith(
+        'MedVirtual',
+      );
+      const findManyCall = mockPrisma.candidate.findMany.mock.calls[0][0];
+      for (const branch of findManyCall.where.OR) {
+        expect(branch.business_unit).toBeUndefined();
+      }
+    });
+
+    it('applies NO business_unit filter for an MMVA logged company (sees all candidates)', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        business_unit: 'MMVA',
+      });
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.findAll(mockUser);
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith('MMVA');
+      const findManyCall = mockPrisma.candidate.findMany.mock.calls[0][0];
+      for (const branch of findManyCall.where.OR) {
+        expect(branch.business_unit).toBeUndefined();
+      }
+    });
+
+    it('restricts to non_medical BU hubspot_values for a Berry Virtual logged company', async () => {
+      mockPrisma.organization.findUnique.mockResolvedValue({
+        business_unit: 'Berry Virtual',
+      });
+      businessUnitContextMock.poolFor.mockResolvedValue('non_medical');
+      businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+        'MedVirtual',
+        'Berry Virtual',
+        'MMVA',
+      ]);
+      businessUnitContextMock.poolFor.mockImplementation(async (v: string) => {
+        if (v === 'Berry Virtual') return 'non_medical';
+        return 'medical';
+      });
+
+      await service.findAll(mockUser);
+
+      const findManyCall = mockPrisma.candidate.findMany.mock.calls[0][0];
+      for (const branch of findManyCall.where.OR) {
+        expect(branch.business_unit).toEqual({ in: ['Berry Virtual'] });
+      }
+    });
+
+    it('does not query organization/pool when user has no organization_id', async () => {
+      const userWithoutOrg = {
+        id: 'user-2',
+        organization_id: null,
+        role: 'system_admin',
+      } as any;
+
+      await service.findAll(userWithoutOrg);
+
+      expect(mockPrisma.organization.findUnique).not.toHaveBeenCalled();
+      expect(businessUnitContextMock.poolFor).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findAll — talent pool filters', () => {
+    // The filter block is built once and spread into every branch of the
+    // four-way where.OR, so each assertion checks all branches.
+    const branchesOf = () =>
+      mockPrisma.candidate.findMany.mock.calls[0][0].where.OR;
+
+    const andFiltersOf = (branch: any) => branch.AND ?? [];
+
+    beforeEach(() => {
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+      mockPrisma.ticket.findMany.mockResolvedValue([]);
+      mockPrisma.candidate.findMany.mockClear();
+      mockPrisma.candidateSkill.groupBy.mockReset();
+    });
+
+    it('applies medical_tools as an insensitive OR contains filter in every branch', async () => {
+      await service.findAll(
+        mockUser,
+        undefined, // country
+        undefined, // shift_block
+        undefined, // availability
+        undefined, // monthly_compensation_from
+        undefined, // monthly_compensation_to
+        undefined, // years_of_experience
+        undefined, // specializations
+        undefined, // positions
+        undefined, // skills
+        undefined, // languages
+        undefined, // page
+        undefined, // perPage
+        undefined, // search
+        undefined, // all
+        undefined, // scorecard_fields
+        undefined, // tools
+        'Athena,eClinicalWorks',
+      );
+
+      const branches = branchesOf();
+      expect(branches).toHaveLength(4);
+      for (const branch of branches) {
+        const medicalToolsFilter = andFiltersOf(branch).find(
+          (f: any) => f.OR?.[0]?.medical_tools,
+        );
+        expect(medicalToolsFilter).toEqual({
+          OR: [
+            { medical_tools: { contains: 'Athena', mode: 'insensitive' } },
+            {
+              medical_tools: {
+                contains: 'eClinicalWorks',
+                mode: 'insensitive',
+              },
+            },
+          ],
+        });
+      }
+    });
+
+    it('applies specializations with OR semantics (any selected practice area matches)', async () => {
+      await service.findAll(
+        mockUser,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'Cardiology,Oncology',
+      );
+
+      for (const branch of branchesOf()) {
+        const specFilter = andFiltersOf(branch).find(
+          (f: any) => f.OR?.[0]?.specialization,
+        );
+        expect(specFilter).toEqual({
+          OR: [
+            { specialization: { contains: 'Cardiology', mode: 'insensitive' } },
+            { specialization: { contains: 'Oncology', mode: 'insensitive' } },
+          ],
+        });
+      }
+    });
+
+    it('resolves core_skills_count into an id filter via groupBy', async () => {
+      mockPrisma.candidateSkill.groupBy.mockResolvedValue([
+        { candidate_id: 'cand-1' },
+        { candidate_id: 'cand-2' },
+      ]);
+
+      await service.findAll(
+        mockUser,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined, // medical_tools
+        '3',
+      );
+
+      expect(mockPrisma.candidateSkill.groupBy).toHaveBeenCalledWith({
+        by: ['candidate_id'],
+        where: { skill_name: { not: 'N/A' } },
+        having: { candidate_id: { _count: { gte: 3 } } },
+      });
+
+      for (const branch of branchesOf()) {
+        const idFilter = andFiltersOf(branch).find((f: any) => f.id?.in);
+        expect(idFilter).toEqual({ id: { in: ['cand-1', 'cand-2'] } });
+      }
+    });
+
+    it('ignores core_skills_count outside the 1-10 range', async () => {
+      const callWith = async (value: string) => {
+        mockPrisma.candidate.findMany.mockClear();
+        await service.findAll(
+          mockUser,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          value,
+        );
+      };
+
+      for (const value of ['0', '11', '-1', 'abc', '2.5']) {
+        await callWith(value);
+        expect(mockPrisma.candidateSkill.groupBy).not.toHaveBeenCalled();
+      }
     });
   });
 
@@ -244,11 +510,13 @@ describe('CandidatesService', () => {
               hireRequest: {
                 id: 'hr-1',
                 title: 'Hire Request 1',
+                status: 'interview_scheduled',
                 organization: { id: 'org-1', name: 'Org 1' },
               },
             },
           },
         ],
+        existingInOtherClientPanel: true,
       };
 
       mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidate);
@@ -343,8 +611,12 @@ describe('CandidatesService', () => {
             },
           },
           panelCandidates: {
+            // Panels are scoped to the caller's organization so other
+            // clients' hire requests never reach the response.
+            where: { panel: { hireRequest: { org_id: 'org-1' } } },
             select: {
               id: true,
+              status: true,
               panel: {
                 select: {
                   hire_request_id: true,
@@ -352,6 +624,7 @@ describe('CandidatesService', () => {
                     select: {
                       id: true,
                       title: true,
+                      status: true,
                       organization: {
                         select: {
                           id: true,
@@ -422,9 +695,44 @@ describe('CandidatesService', () => {
       expect(result).toEqual({ languages: mockLanguages });
     });
 
+    it('sources "specialization" options from the practice_area_experience property', async () => {
+      // Regression guard: `specialization` is written from HubSpot's
+      // `practice_area_experience` property, so the filter options must come
+      // from the same property. Reading career_highlights_relevant_job_experiences
+      // (which feeds CandidateSkill) made real values like "Urgent Care" missing
+      // from the dropdown while offering values no candidate has.
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          results: [
+            {
+              name: 'career_highlights_relevant_job_experiences',
+              options: [{ label: 'Bookkeeping', value: 'Bookkeeping' }],
+            },
+            {
+              name: 'practice_area_experience',
+              options: [
+                { label: 'Urgent Care', value: 'Urgent Care' },
+                { label: 'Cardiology', value: 'Cardiology' },
+                { label: 'Legacy', value: 'Legacy', hidden: true },
+                { label: 'Blank', value: '   ' },
+              ],
+            },
+          ],
+        },
+      } as any);
+
+      const result = await service.getProperties({ fields: 'specialization' });
+
+      expect(result.specialization).toEqual(['Urgent Care', 'Cardiology']);
+      expect(result.specialization).not.toContain('Bookkeeping');
+    });
+
     it('should return distinct skills when field is "skills"', async () => {
       const mockSkills = [{ skill_name: 'JavaScript' }, { skill_name: 'TypeScript' }];
-      mockPrisma.candidateSkill = { findMany: jest.fn().mockResolvedValue(mockSkills) };
+      mockPrisma.candidateSkill = {
+        findMany: jest.fn().mockResolvedValue(mockSkills),
+        groupBy: jest.fn(),
+      };
 
       const result = await service.getProperties({ fields: 'skills' });
 
@@ -482,7 +790,10 @@ describe('CandidatesService', () => {
       const mockCountries = [{ country: 'USA' }];
 
       mockPrisma.candidateLanguage = { findMany: jest.fn().mockResolvedValue(mockLanguages) };
-      mockPrisma.candidateSkill = { findMany: jest.fn().mockResolvedValue(mockSkills) };
+      mockPrisma.candidateSkill = {
+        findMany: jest.fn().mockResolvedValue(mockSkills),
+        groupBy: jest.fn(),
+      };
       mockPrisma.candidate.findMany.mockResolvedValue(mockCountries);
 
       const result = await service.getProperties({ fields: 'languages,skills,country' });
@@ -742,6 +1053,77 @@ describe('CandidatesService', () => {
     });
   });
 
+  describe('getRandomTalentPoolCandidates — business_unit pool filtering (public talent pool)', () => {
+    beforeEach(() => {
+      mockPrisma.candidate.findMany.mockReset();
+      mockPrisma.candidate.findMany.mockResolvedValue([]);
+      mockPrisma.candidate.count.mockReset();
+      mockPrisma.candidate.count.mockResolvedValue(0);
+      mockPrisma.$transaction.mockReset();
+      mockPrisma.$transaction.mockResolvedValue([[], 0]);
+    });
+
+    it('applies NO business_unit filter for MedVirtual (sees all candidates)', async () => {
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.getRandomTalentPoolCandidates('MedVirtual');
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith(
+        'MedVirtual',
+      );
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toBeUndefined();
+    });
+
+    it('applies NO business_unit filter for MMVA (sees all candidates)', async () => {
+      businessUnitContextMock.poolFor.mockResolvedValue('medical');
+
+      await service.getRandomTalentPoolCandidates('MMVA');
+
+      expect(businessUnitContextMock.poolFor).toHaveBeenCalledWith('MMVA');
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toBeUndefined();
+    });
+
+    it('restricts to non_medical BU hubspot_values for BerryVirtual', async () => {
+      businessUnitContextMock.getVisibleHubspotValues.mockResolvedValue([
+        'MedVirtual',
+        'Berry Virtual',
+        'MMVA',
+      ]);
+      businessUnitContextMock.poolFor.mockImplementation(async (v: string) => {
+        if (v === 'BerryVirtual' || v === 'Berry Virtual') return 'non_medical';
+        return 'medical';
+      });
+
+      await service.getRandomTalentPoolCandidates('BerryVirtual');
+
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toEqual({ in: ['Berry Virtual'] });
+    });
+
+    it('applies NO business_unit filter when business_unit param is empty/undefined', async () => {
+      businessUnitContextMock.poolFor.mockResolvedValue(null);
+
+      await service.getRandomTalentPoolCandidates(undefined as unknown as string);
+
+      const findManyArgs = mockPrisma.candidate.findMany.mock.calls[0][0];
+      const buCondition = findManyArgs.where.AND.find(
+        (c: any) => 'business_unit' in c,
+      );
+      expect(buCondition.business_unit).toBeUndefined();
+    });
+  });
+
   describe('processData', () => {
     const candidateId = 'test-candidate-id';
     // Use a file ID > 25 characters to satisfy the regex in extractDriveFileId
@@ -792,7 +1174,7 @@ describe('CandidatesService', () => {
 
       // Mock OpenAI service specific method for this test
       // Note: We need to cast to any because extractDataFromResumeImages is not in the initial mock definition at top of file
-      (service['openai'] as any).extractDataFromResumeImages = jest.fn().mockResolvedValue(mockExtractedData);
+      (service['openai'] as any).extractDataFromResumeImages = jest.fn().mockResolvedValue({ data: mockExtractedData, cost: 0 });
 
       // We need to mock updateFromJson or let it run. Since it uses prisma calls, we can let it run and verify prisma calls.
       // But updateFromJson is private/internal. We are testing processData which calls it.
@@ -850,4 +1232,312 @@ describe('CandidatesService', () => {
     });
   });
 
+  describe('removeCandidate', () => {
+    const mockRemoveData = {
+      candidateId: 'candidate-1',
+      hireRequestId: 'hire-request-1',
+    };
+
+    const mockCandidateRecord = {
+      hubspot_id: 'hs-1',
+      pipeline_status_origin: '261075105',
+    };
+
+    /** Sets up the outer panelCandidate.count mock (pre-removal check) and
+     *  the $transaction mock for the actual deletion path. */
+    const setupScenario = (
+      currentCount: number,
+      hireRequestStatus: string,
+      otherPanels: { id: string }[] = [],
+    ) => {
+      mockPrisma.hireRequest.findUnique.mockResolvedValue({ status: hireRequestStatus });
+      mockPrisma.panelCandidate.count.mockResolvedValue(currentCount);
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const tx = {
+          panelCandidate: {
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+            findMany: jest.fn().mockResolvedValue(otherPanels),
+          },
+          candidate: {
+            update: jest.fn().mockResolvedValue({}),
+          },
+        };
+        return fn(tx);
+      });
+    };
+
+    beforeEach(() => {
+      hubspotMock.updateOneCandidateFromHireRequest.mockResolvedValue(true);
+      HireRequestMock.updateStatus.mockResolvedValue(true);
+    });
+
+    it('should throw BadRequestException if candidateId is missing', async () => {
+      await expect(
+        service.removeCandidate({ candidateId: '', hireRequestId: 'hr-1' } as any, mockUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if hireRequestId is missing', async () => {
+      await expect(
+        service.removeCandidate({ candidateId: 'c-1', hireRequestId: '' } as any, mockUser),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw NotFoundException if candidate does not exist', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(null);
+
+      await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if hire request does not exist', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      mockPrisma.hireRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when removing last candidate from panel_ready hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'panel_ready');
+
+      await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when removing last candidate from interview_scheduled hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'interview_scheduled');
+
+      await expect(service.removeCandidate(mockRemoveData, mockUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return shouldPromptCancel=true when removing last candidate from sourcing hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'sourcing');
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: true, shouldPromptCancel: true });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(hubspotMock.updateOneCandidateFromHireRequest).not.toHaveBeenCalled();
+    });
+
+    it('should return shouldPromptCancel=true when removing last candidate from new hire request', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(1, 'new');
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: true, shouldPromptCancel: true });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('should remove candidate and update HubSpot when panel still has multiple candidates', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(3, 'sourcing', []); // 3 candidates, no critical other panels
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: true, shouldPromptCancel: false });
+      expect(HireRequestMock.updateStatus).not.toHaveBeenCalled();
+      expect(hubspotMock.updateOneCandidateFromHireRequest).toHaveBeenCalledWith(
+        mockCandidateRecord.hubspot_id,
+        mockCandidateRecord.pipeline_status_origin,
+        mockUser.id,
+        undefined,
+        expect.stringContaining(mockRemoveData.hireRequestId),
+      );
+    });
+
+    it('should use Available Candidates pipeline status when pipeline_status_origin is null', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue({ hubspot_id: 'hs-1', pipeline_status_origin: null });
+      setupScenario(2, 'sourcing', []);
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: true, shouldPromptCancel: false });
+      expect(hubspotMock.updateOneCandidateFromHireRequest).toHaveBeenCalledWith(
+        'hs-1',
+        expect.any(String),
+        mockUser.id,
+        undefined,
+        expect.any(String),
+      );
+    });
+
+    it('should NOT update HubSpot if candidate is in another panel with selected_by_client or blocked', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      setupScenario(2, 'sourcing', [{ id: 'other-panel-candidate-1' }]);
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: true, shouldPromptCancel: false });
+      expect(hubspotMock.updateOneCandidateFromHireRequest).not.toHaveBeenCalled();
+    });
+
+    it('should return { success: false } when an unexpected error occurs during transaction', async () => {
+      mockPrisma.candidate.findUnique.mockResolvedValue(mockCandidateRecord);
+      mockPrisma.hireRequest.findUnique.mockResolvedValue({ status: 'sourcing' });
+      mockPrisma.panelCandidate.count.mockResolvedValue(2);
+      mockPrisma.$transaction.mockRejectedValue(new Error('DB failure'));
+
+      const result = await service.removeCandidate(mockRemoveData, mockUser);
+
+      expect(result).toEqual({ success: false, shouldPromptCancel: false });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // getTalentPoolCandidatesByIds — batch loader used by list endpoints
+  // ---------------------------------------------------------------------------
+
+  describe('getTalentPoolCandidatesByIds', () => {
+    // Floor prices/margins differ per business unit and language tier, so these
+    // configs make a wrong branch visible as a different bill rate.
+    const positionConfigs = [
+      {
+        position: 'Medical Assistant',
+        medVirtual_floor_price_english: 10,
+        berryVirtual_floor_price_english: 12,
+        medVirtual_floor_price_bilingual: 14,
+        berryVirtual_floor_price_bilingual: 16,
+        medVirtual_margin_per_hour: 5,
+        berryVirtual_margin_per_hour: 7,
+      },
+    ];
+
+    const baseCandidate = {
+      id: 'cand-1',
+      first_name: 'Jane',
+      last_name: 'Doe',
+      name: 'Jane Doe',
+      country: 'PH',
+      employment_type: '1',
+      hourly_pay_rate: 8,
+      years_of_experience: '5',
+      specialization: 'Cardiology',
+      tools: 'EHR',
+      avatar_url: 'jane.png',
+      gender: 'female',
+      shift_block: 'AM',
+      business_unit: 'MedVirtual',
+      // Remapped by the dictionary ('Jr Bookkeeper' -> 'Bookkeeper Jr'), so a
+      // missing or double-applied labelling step is visible in assertions.
+      approved_positions_pairing: ['Jr Bookkeeper'],
+      languages: [{ name: 'English' }],
+      skills: [{ skill_name: 'Charting', skill_type: 'hard' }],
+    };
+
+    beforeEach(() => {
+      positionRateConfigMock.findAllUnpaginated.mockResolvedValue(
+        positionConfigs,
+      );
+    });
+
+    it('returns an empty map without querying when given no ids', async () => {
+      const result = await service.getTalentPoolCandidatesByIds([]);
+
+      expect(result.size).toBe(0);
+      expect(mockPrisma.candidate.findMany).not.toHaveBeenCalled();
+    });
+
+    it('de-duplicates ids and reads the rate config once for the batch', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([baseCandidate]);
+
+      await service.getTalentPoolCandidatesByIds([
+        'cand-1',
+        'cand-1',
+        'cand-2',
+      ]);
+
+      expect(mockPrisma.candidate.findMany).toHaveBeenCalledTimes(1);
+      expect(positionRateConfigMock.findAllUnpaginated).toHaveBeenCalledTimes(1);
+      expect(
+        mockPrisma.candidate.findMany.mock.calls[0][0].where.id.in,
+      ).toEqual(['cand-1', 'cand-2']);
+    });
+
+    it('omits unknown ids instead of throwing', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([baseCandidate]);
+
+      const result = await service.getTalentPoolCandidatesByIds([
+        'cand-1',
+        'missing',
+      ]);
+
+      expect(result.has('cand-1')).toBe(true);
+      expect(result.has('missing')).toBe(false);
+    });
+
+    it('prefixes the avatar URL and labels the approved positions', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([baseCandidate]);
+
+      const candidate = (
+        await service.getTalentPoolCandidatesByIds(['cand-1'])
+      ).get('cand-1');
+
+      expect(candidate.avatar_url).toBe(
+        'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/jane.png',
+      );
+      expect(candidate.approved_positions_pairing).toEqual(['Bookkeeper Jr']);
+    });
+
+    it('leaves a null avatar_url null', async () => {
+      mockPrisma.candidate.findMany.mockResolvedValue([
+        { ...baseCandidate, avatar_url: null },
+      ]);
+
+      const candidate = (
+        await service.getTalentPoolCandidatesByIds(['cand-1'])
+      ).get('cand-1');
+
+      expect(candidate.avatar_url).toBeNull();
+    });
+
+    // The transform order is load-bearing: computeCandidateRates labels the
+    // positions itself and reads the raw employment_type, so it must run before
+    // either is normalized. Getting this wrong yields wrong money, silently —
+    // these cases pin the output against the single-id path.
+    describe.each([
+      ['monolingual MedVirtual', { languages: [{ name: 'English' }] }],
+      [
+        'bilingual MedVirtual',
+        { languages: [{ name: 'English' }, { name: 'Spanish' }] },
+      ],
+      ['monolingual Berry', { business_unit: 'Berry Virtual' }],
+      [
+        'bilingual Berry',
+        {
+          business_unit: 'Berry Virtual',
+          languages: [{ name: 'English' }, { name: 'Spanish' }],
+        },
+      ],
+      ['no approved positions', { approved_positions_pairing: [] }],
+      ['employment_type as ";"-joined string', { employment_type: '1;2' }],
+      ['part-time employment_type', { employment_type: '2' }],
+      ['null hourly_pay_rate', { hourly_pay_rate: null as any }],
+    ])('matches getTalentPoolCandidateById for a %s candidate', (_label, overrides) => {
+      it('produces identical rates and display fields', async () => {
+        const record = { ...baseCandidate, ...overrides };
+        mockPrisma.candidate.findMany.mockResolvedValue([record]);
+        mockPrisma.candidate.findUnique.mockResolvedValue(record);
+
+        const single = await service.getTalentPoolCandidateById('cand-1');
+        const batched = (
+          await service.getTalentPoolCandidatesByIds(['cand-1'])
+        ).get('cand-1');
+
+        // The four rate fields are what an inverted transform order breaks.
+        expect(batched.bill_rate_hourly).toBe(single.bill_rate_hourly);
+        expect(batched.bill_rate_monthly).toBe(single.bill_rate_monthly);
+        expect(batched.salary).toBe(single.salary);
+        expect(batched.hourlySalary).toBe(single.hourlySalary);
+
+        expect(batched.employment_type).toEqual(single.employment_type);
+        expect(batched.approved_positions_pairing).toEqual(
+          single.approved_positions_pairing,
+        );
+        expect(batched.avatar_url).toBe(single.avatar_url);
+      });
+    });
+  });
 });

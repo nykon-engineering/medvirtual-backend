@@ -81,10 +81,16 @@ export class EligibilityCheckService {
    * Runs the eligibility check and persists the result on the organization.
    * Always writes to MedAllianceAuditLog regardless of the outcome.
    *
+   * This method only ever writes the active-client block (not_eligible + active_client_block
+   * reason) or clears a previously-set one. It never writes pending_confirmation/eligible/expired —
+   * those are owned by referral creation, the deployment_date webhook, admin actions, and the
+   * expiry sweep. This keeps MA-004 (active-client duplicate detection) orthogonal to the rest of
+   * the eligibility state machine so it can never clobber a pending/eligible/expired decision.
+   *
    * @param organizationId - The referred organization to evaluate
    * @param actorUserId    - The user who triggered the check (affiliate or admin)
    * @param source         - Audit log source ('user' | 'admin_action' | 'sync')
-   * @returns The organization after update
+   * @returns The organization after update (unchanged if no active-client match was found or cleared)
    */
   async runAndPersist(
     organizationId: string,
@@ -93,34 +99,41 @@ export class EligibilityCheckService {
   ) {
     const result = await this.check(organizationId);
 
-    let newStatus: 'eligible' | 'not_eligible';
-    let newBlockReason: string | null;
+    const current = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        med_alliance_referral_status: true,
+        med_alliance_block_reason: true,
+      },
+    });
+
+    let updated;
+    let newStatus = current?.med_alliance_referral_status;
 
     if (!result.eligible) {
       newStatus = 'not_eligible';
-      newBlockReason = result.reason ?? null;
-    } else {
-      newBlockReason = null;
-      // Do not reset an already-active eligibility window (set by CommissionDetectionService
-      // on first paid invoice). Only keep eligible if eligibility_start_at is still set.
-      const current = await this.prisma.organization.findUnique({
+      updated = await this.prisma.organization.update({
         where: { id: organizationId },
-        select: { med_alliance_referral_status: true, eligibility_start_at: true },
+        data: {
+          med_alliance_referral_status: 'not_eligible',
+          med_alliance_block_reason: result.reason ?? null,
+        },
       });
-      const isActiveWindow =
-        current?.med_alliance_referral_status === 'eligible' &&
-        current?.eligibility_start_at != null;
-      newStatus = isActiveWindow ? 'eligible' : 'not_eligible';
+    } else if (
+      current?.med_alliance_block_reason?.startsWith('active_client_block')
+    ) {
+      // Previously blocked as an active-client duplicate, no longer matches — clear the block,
+      // leave the status untouched (it stays whatever it already was, e.g. pending_confirmation).
+      updated = await this.prisma.organization.update({
+        where: { id: organizationId },
+        data: { med_alliance_block_reason: null },
+      });
+    } else {
+      // No active-client match, and no prior active-client block to clear — no-op write.
+      updated = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
     }
-
-    // Persist the eligibility result on the organization
-    const updated = await this.prisma.organization.update({
-      where: { id: organizationId },
-      data: {
-        med_alliance_referral_status: newStatus,
-        med_alliance_block_reason: newBlockReason,
-      },
-    });
 
     // Write audit log entry (non-critical — outside transaction)
     await this.prisma.medAllianceAuditLog.create({
@@ -128,8 +141,8 @@ export class EligibilityCheckService {
         entity_type: MedAllianceEntityType.referred_company,
         entity_id: organizationId,
         event: 'eligibility_check',
-        old_status: null,
-        new_status: newStatus,
+        old_status: current?.med_alliance_referral_status ?? null,
+        new_status: newStatus ?? null,
         reason: result.reason ?? null,
         source,
         actor_user_id: actorUserId,

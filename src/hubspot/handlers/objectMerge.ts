@@ -1,99 +1,96 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from '@nestjs/common';
 
-import { mapDbToHubspot, mapHubspotToDb } from "../../common/utils/hubspot.util";
-import { PrismaService } from "../../prisma/prisma.service";
-
-
+import {
+  mapDbToHubspot,
+  mapHubspotToDb,
+} from '../../common/utils/hubspot.util';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class HandlerObjectMerge {
-    constructor(
-        private readonly prisma: PrismaService,
-    ){}
+  constructor(private readonly prisma: PrismaService) {}
 
-    private mergeCandidateData(primary: any, merged: any): Partial<any> {
-        const mergedAsHubspot = mapDbToHubspot(merged);
+  private mergeCandidateData(primary: any, merged: any): Partial<any> {
+    const mergedAsHubspot = mapDbToHubspot(merged);
 
-        const dbMapped = mapHubspotToDb(mergedAsHubspot);
+    const dbMapped = mapHubspotToDb(mergedAsHubspot);
 
-        const updateData: Record<string, any> = {};
+    const updateData: Record<string, any> = {};
 
-        for (const [key, value] of Object.entries(dbMapped)) {
-            const primaryValue = primary[key];
+    for (const [key, value] of Object.entries(dbMapped)) {
+      const primaryValue = primary[key];
 
-            if ((primaryValue === null || primaryValue === undefined || primaryValue === '') && value) {
-            updateData[key] = value;
-            }
-        }
-
-        return updateData;
+      if (
+        (primaryValue === null ||
+          primaryValue === undefined ||
+          primaryValue === '') &&
+        value
+      ) {
+        updateData[key] = value;
+      }
     }
 
+    return updateData;
+  }
 
+  async execute(event) {
+    try {
+      const primaryCandidate = await this.prisma.candidate.findUnique({
+        where: { hubspot_id: String(event.primaryObjectId) },
+      });
+      if (!primaryCandidate) {
+        throw new BadRequestException(
+          `Primary candidate hubspotId=${event.primaryObjectId} not found in database.`,
+        );
+      }
 
-    async execute(event){
+      const otherMergedIds = event.mergedObjectIds
+        .map((id) => String(id))
+        .filter((id) => id !== String(event.primaryObjectId));
 
-        try{
-            const primaryCandidate = await this.prisma.candidate.findUnique({
-                where: { hubspot_id: String(event.primaryObjectId) }
-            });
-            if (!primaryCandidate) {
-                throw new BadRequestException(`Primary company hubspotId=${event.primaryObjectId} not found in database.`);
-            }
+      const mergedCandidates = await this.prisma.candidate.findMany({
+        where: {
+          hubspot_id: { in: otherMergedIds },
+        },
+      });
 
-            
-            const otherMergedIds = event.mergedObjectIds
-                .map(id => String(id))
-                .filter(
-                id => id !== String(event.primaryObjectId)
-            );
+      if (mergedCandidates.length === 0) {
+        throw new BadRequestException(
+          `No merged companies found with the provided HubSpot IDs.`,
+        );
+      }
 
-            
-            const mergedCompanies = await this.prisma.candidate.findMany({
-            where: {
-                hubspot_id: { in: otherMergedIds }
-            }
-            });
+      let dataToUpdate: Record<string, any> = {};
+      for (const merged of mergedCandidates) {
+        const partialUpdate = this.mergeCandidateData(primaryCandidate, merged);
 
-            if (mergedCompanies.length === 0) {
-                throw new BadRequestException(`No merged companies found with the provided HubSpot IDs.`);
-            }
+        dataToUpdate = {
+          ...dataToUpdate,
+          ...partialUpdate,
+        };
+      }
 
-            let dataToUpdate: Record<string, any> = {};
-            for (const merged of mergedCompanies) {
-                const partialUpdate = this.mergeCandidateData(primaryCandidate, merged);
+      if (Object.keys(dataToUpdate).length > 0) {
+        await this.prisma.candidate.update({
+          where: { hubspot_id: String(event.primaryObjectId) },
+          data: dataToUpdate,
+        });
+      }
 
-                dataToUpdate = {
-                ...dataToUpdate,
-                ...partialUpdate
-                };
-            }
+      await this.prisma.candidate.update({
+        where: { hubspot_id: String(event.primaryObjectId) },
+        data: {
+          hubspot_id: String(event.newObjectId),
+        },
+      });
 
-            if (Object.keys(dataToUpdate).length > 0) {
-                await this.prisma.candidate.update({
-                    where: { hubspot_id: String(event.primaryObjectId) },
-                    data: dataToUpdate
-                });
-            }
-
-            await this.prisma.candidate.update({
-                where: { hubspot_id: String(event.primaryObjectId) },
-                data: {
-                    hubspot_id: String(event.newObjectId)
-                }
-            });
-
-            await this.prisma.candidate.deleteMany({
-                where: { 
-                    hubspot_id: { in: otherMergedIds },
-                }
-            });
-            
-
-        }catch(error){
-            throw new BadRequestException(`HandlerObjectMerge: ${error.message}`);
-        }
-
-
+      await this.prisma.candidate.deleteMany({
+        where: {
+          hubspot_id: { in: otherMergedIds },
+        },
+      });
+    } catch (error) {
+      throw new BadRequestException(`HandlerObjectMerge: ${error.message}`);
     }
+  }
 }

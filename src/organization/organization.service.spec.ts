@@ -11,6 +11,8 @@ import { HandlerOrganizationCreation } from '../hubspot/handlers/organizationCre
 import { HandlerDealCreation } from '../hubspot/handlers/dealCreation';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SqsService } from '../sqs/sqs.service';
+import { ContactService } from '../contacts/contacts.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 
 const userfake = { 
@@ -38,6 +40,12 @@ const userfake = {
   createdByUserId: null,
   hubspot_id: null,
   hubspot_contact_id: null,
+  billcom_session_id: null,
+  billcom_session_expires: null,
+  billcom_pending_session_id: null,
+  billcom_remember_me_id: null,
+  billcom_device: null,
+  deactivated_by_bu: null,
 }
 
 describe('OrganizationService', () => {
@@ -51,6 +59,10 @@ describe('OrganizationService', () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn(),
+    },
+    sync: {
+      findFirst: jest.fn(),
     },
     $transaction: jest.fn(),
     $executeRaw: jest.fn(),
@@ -90,6 +102,20 @@ describe('OrganizationService', () => {
     sendMessage: jest.fn(),
   }
 
+  const mockContactService = {
+    createForOrganization: jest.fn(),
+  }
+
+  const mockBusinessUnitContext = {
+    getVisibleHubspotValues: jest.fn().mockResolvedValue([]),
+    isAllowedHubspotValue: jest.fn().mockResolvedValue(true),
+    resolveByHubspotValue: jest.fn().mockResolvedValue(null),
+    poolFor: jest.fn().mockResolvedValue(null),
+    displayToSlug: jest.fn(),
+    normalizeBusinessUnit: jest.fn(),
+    bustCache: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -104,6 +130,8 @@ describe('OrganizationService', () => {
         { provide: HandlerDealCreation , useValue: handlerDealCreationMock },
         { provide: NotificationsService, useValue: mockNotificationsService },
         { provide: SqsService, useValue: mockSqsService },
+        { provide: ContactService, useValue: mockContactService },
+        { provide: BusinessUnitContext, useValue: mockBusinessUnitContext },
       ],
     }).compile();
 
@@ -217,7 +245,8 @@ describe('OrganizationService', () => {
         name: 'Org 1', 
         phone: '123', 
         email: 'org1@example.com', 
-        owner_email: 'admin@admin.com' 
+        owner_email: 'admin@admin.com',
+        contact_email: 'contato@org1.com'
       }, userfake)).rejects.toThrow(BadRequestException);
     });
   });
@@ -266,6 +295,7 @@ describe('OrganizationService', () => {
       const rawSql = Array.from(rawStrings).join('');
       expect(rawSql).toContain('status_before_deactivation');
       expect(rawSql).toContain('inactive');
+      expect(rawSql).toContain('NOT IN');
     });
 
     it('should restore status from status_before_deactivation when status is active', async () => {
@@ -286,8 +316,9 @@ describe('OrganizationService', () => {
       expect(mockPrismaService.$executeRaw).toHaveBeenCalledTimes(1);
       const rawStrings: ReadonlyArray<string> = mockPrismaService.$executeRaw.mock.calls[0][0];
       const rawSql = Array.from(rawStrings).join('');
-      expect(rawSql).toContain('COALESCE');
+      expect(rawSql).not.toContain('COALESCE');
       expect(rawSql).toContain('status_before_deactivation');
+      expect(rawSql).toContain("= 'active'");
     });
   });
 
@@ -420,9 +451,312 @@ describe('OrganizationService', () => {
   
     it('should throw NotFoundException if transaction fails', async () => {
       mockPrismaService.$transaction.mockRejectedValue(new Error());
-  
+
       await expect(service.delete('invalid-id')).rejects.toThrow(NotFoundException);
     });
   });
-  
+
+  describe('getAllPaginated', () => {
+    const CONCIERGE_ID = 'concierge-1';
+
+    const buildRow = (overrides: Record<string, any> = {}) => ({
+      id: 'org-1',
+      hubspot_id: null,
+      name: 'Org 1',
+      email: 'org1@example.com',
+      phone: null,
+      website_url: null,
+      address: null,
+      city: null,
+      state: null,
+      postal_code: null,
+      location: null,
+      description: null,
+      industry: null,
+      business_unit: null,
+      organization_role: OrganizationRole.client,
+      number_of_employees: null,
+      date_founded: null,
+      date_joined: null,
+      date_became_client: null,
+      type: null,
+      status: OrganizationStatus.active,
+      signed_document_url: null,
+      signed_document_date: null,
+      specialties: null,
+      services: null,
+      owner_id: null,
+      admin_id: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      source: null,
+      owner: null,
+      admin: null,
+      users: [],
+      staff: [],
+      contacts: [],
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      mockPrismaService.organization.count.mockResolvedValue(1);
+      mockPrismaService.organization.findMany.mockResolvedValue([buildRow()]);
+      mockPrismaService.sync.findFirst.mockResolvedValue(null);
+    });
+
+    it('should apply admin_id filter for system_admin when admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+      expect(prisma.organization.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+    });
+
+    it('should apply admin_id filter for system_super_admin when admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_super_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      expect(prisma.organization.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+      expect(prisma.organization.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ admin_id: CONCIERGE_ID }),
+        }),
+      );
+    });
+
+    it('should NOT let organization_admin override scope via admin param', async () => {
+      const user = { ...userfake, role: 'organization_admin', id: 'user-1' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).not.toBe(CONCIERGE_ID);
+      expect(whereArg.AND).toEqual([
+        { OR: [{ admin_id: 'user-1' }, { owner_id: 'user-1' }] },
+      ]);
+    });
+
+    it('should NOT let organization_super_admin override scope via admin param', async () => {
+      const user = {
+        ...userfake,
+        role: 'organization_super_admin',
+        id: 'user-2',
+      };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).not.toBe(CONCIERGE_ID);
+      expect(whereArg.AND).toEqual([
+        { OR: [{ admin_id: 'user-2' }, { owner_id: 'user-2' }] },
+      ]);
+    });
+
+    it('should not scope system_admin when no admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).toBeUndefined();
+      expect(whereArg.OR).toBeUndefined();
+    });
+
+    it('should not scope system_super_admin when no admin param is provided', async () => {
+      const user = { ...userfake, role: 'system_super_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.admin_id).toBeUndefined();
+      expect(whereArg.OR).toBeUndefined();
+    });
+
+    it('should call count with the same where shape used for findMany', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        admin: CONCIERGE_ID,
+      } as any);
+
+      const findManyWhere =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+      const countWhere =
+        mockPrismaService.organization.count.mock.calls[0][0].where;
+
+      expect(countWhere).toEqual(findManyWhere);
+    });
+
+    const searchBranch = (token: string) => ({
+      OR: [
+        { name: { contains: token, mode: 'insensitive' } },
+        {
+          users: {
+            some: {
+              OR: [
+                { first_name: { contains: token, mode: 'insensitive' } },
+                { last_name: { contains: token, mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    it('should match organization name and member user names for a single token', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'acme',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.AND).toEqual([searchBranch('acme')]);
+    });
+
+    it('should AND each token so a full name spanning first_name and last_name matches', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'Paulo Isaque',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.AND).toEqual([
+        searchBranch('Paulo'),
+        searchBranch('Isaque'),
+      ]);
+    });
+
+    it('should intersect scope with search instead of widening it for organization_admin', async () => {
+      const user = { ...userfake, role: 'organization_admin', id: 'user-1' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'acme',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      // Scope and search must be separate AND branches. If they ever collapse
+      // back into a shared OR, an org_admin would see orgs they have no
+      // relationship to simply by searching for them.
+      expect(whereArg.OR).toBeUndefined();
+      expect(whereArg.AND).toEqual([
+        { OR: [{ admin_id: 'user-1' }, { owner_id: 'user-1' }] },
+        searchBranch('acme'),
+      ]);
+    });
+
+    it('should not emit a search branch for a whitespace-only search term', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: '   ',
+      } as any);
+
+      const whereArg =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+
+      expect(whereArg.AND).toBeUndefined();
+    });
+
+    it('should call count with the same where shape used for findMany when searching as organization_admin', async () => {
+      const user = { ...userfake, role: 'organization_admin', id: 'user-1' };
+
+      await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'acme',
+      } as any);
+
+      const findManyWhere =
+        mockPrismaService.organization.findMany.mock.calls[0][0].where;
+      const countWhere =
+        mockPrismaService.organization.count.mock.calls[0][0].where;
+
+      expect(countWhere).toEqual(findManyWhere);
+    });
+
+    it('should report every member in userCount even when search matches only one user', async () => {
+      const user = { ...userfake, role: 'system_admin' };
+
+      mockPrismaService.organization.findMany.mockResolvedValue([
+        buildRow({
+          users: [
+            { id: 'u1', status: 'active' },
+            { id: 'u2', status: 'active' },
+          ],
+        }),
+      ]);
+
+      const result = await service.getAllPaginated(user as any, {
+        page: 1,
+        limit: 10,
+        search: 'Paulo',
+      } as any);
+
+      expect(result.data[0].userCount).toBe(2);
+    });
+  });
+
 });

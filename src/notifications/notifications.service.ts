@@ -1,54 +1,118 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
-import { getUserEmailTheme } from '../common/utils/email-templates/theme-helper';
+import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import {
+  buildConfigMap,
+  computeCandidateRates,
+} from '../common/utils/salary.util';
+import { changeLabelAvailability } from '../common/utils/hubspot.util';
+import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
+import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
+import {
+  renderOfferPanelCandidateCards,
+  OfferPanelEmailCandidate,
+} from '../common/utils/email-templates/offer-panel-candidate-cards';
+import {
+  getUserEmailTheme,
+  getBusinessUnitEmailTheme,
+  orgBusinessUnitToSlug,
+} from '../common/utils/email-templates/theme-helper';
 import { ticketTypeReverseDictionary } from '../common/dictionaries/ticket-type';
-import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
+import {
+  getEmailThemeByBusinessUnit,
+  EmailTheme,
+} from '../common/utils/email-templates/theme';
+import {
+  getEmailLogoCss,
+  getEmailLogoImg,
+} from '../common/utils/email-templates/components';
+import { EmailTemplatesService } from '../email-templates/email-templates.service';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
-  ) { }
+    private readonly emailTemplates: EmailTemplatesService,
+    private readonly positionRateConfig: PositionRateConfigService,
+  ) {}
 
+  // ── EmailTemplatesService fallback helper ─────────────────────────────────
+  // Tries to load the template from the DB; returns { subject, html } if found,
+  // or null if not — allowing each method to fall back to buildEmail().
+  private async getTplContent(
+    key: string,
+    runtimeValues: Record<string, string>,
+    theme: ReturnType<typeof getEmailThemeByBusinessUnit> | null,
+    businessUnit?: string | null,
+  ): Promise<{ subject: string; html: string } | null> {
+    try {
+      if (!theme) return null;
+      // Callers pass the Organization/OfferPanel display value ("MedVirtual" /
+      // "Berry Virtual"), but EmailTemplate.business_unit is stored as a slug.
+      // Convert before the lookup so a BU-scoped template can actually match;
+      // getTemplateContent falls back to the global (null) row when none exists.
+      const businessUnitSlug = orgBusinessUnitToSlug(businessUnit ?? null);
+      return await this.emailTemplates.getTemplateContent(
+        key,
+        runtimeValues,
+        theme,
+        businessUnitSlug,
+      );
+    } catch {
+      return null;
+    }
+  }
 
   // Helper function to decode HTML entities
   private decodeHtmlEntities = (text: string): string => {
-  if (!text) return '';
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, '/')
-    .replace(/&#x2f;/g, '/')
-    .replace(/&#47;/g, '/');
-};
+    if (!text) return '';
+    return text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#x27;/g, "'")
+      .replace(/&#x2F;/g, '/')
+      .replace(/&#x2f;/g, '/')
+      .replace(/&#47;/g, '/');
+  };
 
   /**
-   * 
+   *
    * Builds the correct ticket detail URL based on user role
    * Clients (organization admins) use /profile?ticket=, system admins use /tickets?ticket=
    */
   private getTicketDetailUrl(ticketId: string, userRole?: string): string {
-    const isClient = userRole === 'organization_admin' || userRole === 'organization_super_admin';
+    const isClient =
+      userRole === 'organization_admin' ||
+      userRole === 'organization_super_admin';
     const path = isClient ? '/profile' : '/tickets';
     return `${process.env.FRONTEND_URL}${path}?ticket=${ticketId}`;
   }
 
-  private async sendMailWithPrefix(options: { from: string; to: string | string[]; subject: string; html: string }): Promise<boolean> {
-    const isProduction = process.env.ENVIRONMENT === 'PROD';
-    const from = isProduction ? options.from : `[DEV] ${options.from}`;
-    return this.mail.sendMail({ ...options, from });
-  }
-
-  private buildEmail(htmlInner: string, theme?: any): string {
+  private buildEmail(
+    htmlInner: string,
+    theme?: Partial<EmailTheme> | null,
+    greeting?: string,
+    closing?: string,
+  ): string {
     const primaryColor = theme?.primaryColor || '#01546B';
     const companyName = theme?.companyName || 'MedVirtual';
+    // Honor the saved custom design (EmailBranding) in the fallback too, so the
+    // CTA button matches what getTemplateContent/renderHtml would produce.
+    const buttonColor = theme?.buttonColor || primaryColor;
+    const buttonTextColor = theme?.buttonTextColor || '#ffffff';
 
     return `
 <!DOCTYPE html>
@@ -81,14 +145,7 @@ export class NotificationsService {
     .content {
       padding: 40px 30px;
     }
-    .logo {
-      text-align: left;
-      margin-bottom: 30px;
-    }
-    .logo img {
-      max-width: 200px;
-      height: auto;
-    }
+${getEmailLogoCss()}
     .greeting {
       color: #333333;
       font-size: 16px;
@@ -102,8 +159,8 @@ export class NotificationsService {
     }
     .cta-button {
       display: inline-block;
-      background-color: ${theme?.primaryColor || primaryColor};
-      color: #ffffff !important;
+      background-color: ${buttonColor};
+      color: ${buttonTextColor} !important;
       padding: 14px 28px;
       text-decoration: none;
       border-radius: 30px;
@@ -114,13 +171,13 @@ export class NotificationsService {
     }
     .cta-button:hover {
       background-color: ${theme?.primaryColorHover || '#013A4F'};
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:visited {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:link {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .closing {
       color: #333333;
@@ -165,16 +222,16 @@ export class NotificationsService {
     <div class="container">
       <div class="content">
         <div class="logo">
-              <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+              ${getEmailLogoImg(theme)}
         </div>
       
-      <div class="greeting">Hi,</div>
+      <div class="greeting">${greeting ?? 'Hi,'}</div>
       
       <div class="main-message">
         ${htmlInner}
       </div>
       
-      <div class="closing">Best,</div>
+      <div class="closing">${closing ?? 'Best,'}</div>
       <div class="sender">
         <strong>${companyName}</strong> team
       </div>
@@ -186,7 +243,9 @@ export class NotificationsService {
 </html>`;
   }
 
-  async notifyHireRequestPlacementCompleted(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestPlacementCompleted(
+    hireRequestId: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -230,41 +289,49 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
-   
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
       select: { email: true, first_name: true, last_name: true, id: true },
     });
-    
+
     if (!users || users.length === 0 || !users[0].email)
       throw new BadRequestException('Hire request has no assignee email');
-    
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
     // Get winner candidate name
-    const winners = hr.panels?.[0]?.panelCandidates.length > 0
-      ?
-      hr.panels?.[0].panelCandidates.map(pa =>
-        `<p><div style='margin-left:3px; border-radius:8px; background-color:#CCC; padding:3px;'>
+    const winners =
+      hr.panels?.[0]?.panelCandidates.length > 0
+        ? hr.panels?.[0].panelCandidates
+            .map(
+              (pa) =>
+                `<p><div style='margin-left:3px; border-radius:8px; background-color:#CCC; padding:3px;'>
         <strong>${pa.candidate.name || `${pa.candidate.first_name || ''} ${pa.candidate.last_name || ''}`.trim()}</strong><br/>
         Location: <strong>${pa.candidate.country || 'Location not specified'}</strong>
-        </div></p>`
-      )
-      .join('')
-    : '';
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+        </div></p>`,
+            )
+            .join('')
+        : '';
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
     const recipients = [
-      ...users.map(user => user.email),
+      ...users.map((user) => user.email),
       hr.assigned_sourcing?.email,
       hr.createdBy?.email,
     ].filter((email): email is string => Boolean(email));
@@ -273,15 +340,15 @@ export class NotificationsService {
       throw new BadRequestException('No valid recipient emails found');
     }
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<h2>Placement Completed</h2>
       <p>The hire request has been marked as <strong>placement completed</strong>.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
@@ -289,23 +356,44 @@ export class NotificationsService {
          <p><strong>Selected Candidates:</strong> </p>
          ${winners}
        </div>
-       
+
         <p>Please proceed with onboarding steps.</p>
         <div style="text-align: left; margin: 30px 0;">
           <a href="${detailUrl}" class="cta-button">
             View Hire Request Details
           </a>
         </div>`,
-      emailTheme
+      emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tpl = await this.getTplContent(
+      'hr-placement-completed',
+      {
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{salaryRange}}': salaryRange,
+        '{{startDate}}': startDate,
+        '{{selectedCandidates}}':
+          hr.panels?.[0]?.panelCandidates
+            ?.map(
+              (pc) =>
+                pc.candidate.name ||
+                `${pc.candidate.first_name || ''} ${pc.candidate.last_name || ''}`.trim(),
+            )
+            .join(', ') || '',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
+    );
+
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: recipients,
-      subject: `Placement completed: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Placement completed: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
-    
   }
 
   async notifyInterviewScheduled(hireRequestId: string): Promise<boolean> {
@@ -354,8 +442,11 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
-   
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
@@ -369,18 +460,32 @@ export class NotificationsService {
       : 'Not specified';
 
     // Get the link and date of the scheduled interview
-    const interviewDate = hr.panels?.[0]?.interviews?.[0]?.scheduled_date
+    const interviewDate = hr.panels?.[0]?.interviews?.[0]?.scheduled_date;
     const interviewLink = hr.panels?.[0]?.interviews?.[0]?.link || '#';
     const interviewDateFormatted = interviewDate
       ? new Date(interviewDate).toLocaleString()
       : 'Not specified';
 
-    const bodyLine = interviewLink !== '#' ? `<p><strong>Pairing Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>` : '';
-    const bodyLink = interviewLink !== '#' ? `<div style="text-align: left; margin: 30px 0;">
-          <a href="${interviewLink}" class="cta-button">
-            Join meeting
+    const bodyLine =
+      interviewLink !== '#'
+        ? `<p><strong>Pairing Link:</strong> <a href="${interviewLink}">${interviewLink}</a></p>`
+        : '';
+    // Plain-text line for the DB template body (rendered through renderHtml's
+    // \n→<br>). Empty when there is no link, so the line disappears entirely.
+    const pairingLinkLine =
+      interviewLink !== '#' ? `Pairing Link: ${interviewLink}` : '';
+    // CTA fallback: with a link → "Join meeting" to the pairing URL; without a
+    // link → send the user to the platform login so they still have a next step.
+    const hasLink = interviewLink !== '#';
+    const ctaLabel = hasLink ? 'Join meeting' : 'Go to platform';
+    const ctaUrl = hasLink
+      ? interviewLink
+      : `${process.env.FRONTEND_URL}/login`;
+    const bodyLink = `<div style="text-align: left; margin: 30px 0;">
+          <a href="${ctaUrl}" class="cta-button">
+            ${ctaLabel}
           </a>
-        </div>` : '';
+        </div>`;
 
     //get all users from organization for send emails to them
     const emailsUsers = await this.prisma.uSER.findMany({
@@ -393,12 +498,14 @@ export class NotificationsService {
       },
     });
 
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const emailTheme = await getEmailThemeByBusinessUnit(hr.organization.business_unit);
-
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<p>You have been invited to an <strong>Interview</strong>.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Position Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -407,19 +514,42 @@ export class NotificationsService {
          <p><strong>Pairing Date:</strong> ${interviewDateFormatted}</p>
          ${bodyLine}
        </div>
-       
+
        ${bodyLink}`,
-      emailTheme
+      emailTheme,
     );
-    return await this.sendMailWithPrefix({
+    const tpl = await this.getTplContent(
+      'hr-interview-scheduled',
+      {
+        '{{roleType}}': hr.hubspot_role_type || '',
+        '{{availability}}': hr.availability || '',
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{startDate}}': startDate,
+        '{{interviewDate}}': interviewDateFormatted,
+        '{{pairingLinkLine}}': pairingLinkLine,
+        // The button always renders now: pairing link when present, else the
+        // platform login as a fallback so the email is never a dead end.
+        '{{ctaLabel}}': ctaLabel,
+        '{{ctaUrl}}': ctaUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
+    );
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: emailsUsers.map(u => u.email),
-      subject: `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
-      html,
+      to: emailsUsers.map((u) => u.email),
+      subject:
+        tpl?.subject ??
+        `Interview Invite: ${hr.hubspot_role_type} - ${hr.availability}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
-  async notifyHireRequestClientChange(hireRequestId: string, action: 'edited' | 'canceled'): Promise<boolean> {
+  async notifyHireRequestClientChange(
+    hireRequestId: string,
+    action: 'edited' | 'canceled',
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -434,7 +564,10 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
@@ -447,38 +580,57 @@ export class NotificationsService {
     const verb = action === 'edited' ? 'edited' : 'canceled';
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<h2>Hire Request ${verb.toUpperCase()}</h2>
        <p>The hire request was ${verb} by the client.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
+    );
+    const tpl = await this.getTplContent(
+      'hr-client-change',
+      {
+        '{{action}}': verb,
+        '{{actionUpper}}': verb.toUpperCase(),
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: users.map(user => user.email),
-      subject: `Hire Request ${verb}: ${hr.title}`,
-      html,
+      to: users.map((user) => user.email),
+      subject: tpl?.subject ?? `Hire Request ${verb}: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
-  async notifyHireRequestSourcingAssignee(hireRequestId: string, action: 'sourcing'): Promise<boolean> {
+  async notifyHireRequestSourcingAssignee(
+    hireRequestId: string,
+    action: 'sourcing',
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -486,7 +638,9 @@ export class NotificationsService {
         title: true,
         description: true,
         priority: true,
-        assigned_sourcing: { select: { id: true, email: true, first_name: true, last_name: true } },
+        assigned_sourcing: {
+          select: { id: true, email: true, first_name: true, last_name: true },
+        },
         organization: {
           select: { name: true, business_unit: true },
         },
@@ -499,38 +653,58 @@ export class NotificationsService {
     const verb = action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
-      `<p>${hr.assigned_sourcing.first_name ?? hr.assigned_sourcing.first_name} ${hr.assigned_sourcing.last_name ?? hr.assigned_sourcing.last_name}</p>
+    const assigneeName =
+      `${hr.assigned_sourcing.first_name ?? ''} ${hr.assigned_sourcing.last_name ?? ''}`.trim();
+    const fallbackHtml = this.buildEmail(
+      `<p>${assigneeName}</p>
        <p>The hire request was updated to Start to sourcing stage.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
+    );
+    const tpl = await this.getTplContent(
+      'hr-sourcing-assigned',
+      {
+        '{{assigneeName}}': assigneeName,
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [hr.assigned_sourcing.email],
-      subject: `Hire Request ${verb}: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Hire Request ${verb}: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
-  async notifyHireRequestConciergeAssigned(hireRequestId: string, action: 'for_review'): Promise<boolean> {
+  async notifyHireRequestConciergeAssigned(
+    hireRequestId: string,
+    action: 'for_review',
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -545,7 +719,10 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
@@ -558,13 +735,17 @@ export class NotificationsService {
     const verb = action === 'for_review' ? 'For Review' : action;
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
-      `<p>${users[0].first_name ?? users[0].first_name}</p>
+    const conciergeAssigneeName = users[0].first_name ?? '';
+    const fallbackHtml = this.buildEmail(
+      `<p>${conciergeAssigneeName}</p>
        <p><strong>Hire Request Ready For Review</strong></p>
        <p>This request requires your attention:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -573,24 +754,40 @@ export class NotificationsService {
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
+    );
+    const tpl = await this.getTplContent(
+      'hr-concierge-assigned',
+      {
+        '{{assigneeName}}': conciergeAssigneeName,
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: users.map(user => user.email).filter(Boolean),
-      subject: `Hire Request ${verb}: ${hr.title}`,
-      html,
+      to: users.map((user) => user.email).filter(Boolean),
+      subject: tpl?.subject ?? `Hire Request ${verb}: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
-  async notifyHireRequestCreated(hireRequestId: string, type?: string, from?: string): Promise<boolean> {
+  async notifyHireRequestCreated(
+    hireRequestId: string,
+    type?: string,
+    from?: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -619,40 +816,52 @@ export class NotificationsService {
 
     let userIds: string[] = [];
     if (type === 'sourcing') {
-      if (!hr.assigned_sourcing?.email) throw new BadRequestException('Hire request has no assignee email');
+      if (!hr.assigned_sourcing?.email)
+        throw new BadRequestException('Hire request has no assignee email');
       userIds = [hr.assigned_sourcing.id];
     } else if (type === 'staffing_coordinator') {
-      if (!hr.assigned_staffing?.email) throw new BadRequestException('Hire request has no assignee email');
+      if (!hr.assigned_staffing?.email)
+        throw new BadRequestException('Hire request has no assignee email');
       userIds = [hr.assigned_staffing.id];
     } else {
-      if (!hr.assign_user_id) throw new BadRequestException('Hire request has no assignee');
-      userIds = hr.assign_user_id.split(',').map(id => id.trim()).filter(Boolean);
+      if (!hr.assign_user_id)
+        throw new BadRequestException('Hire request has no assignee');
+      userIds = hr.assign_user_id
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
     }
-    if (userIds.length === 0) throw new BadRequestException('No valid user IDs to notify');
+    if (userIds.length === 0)
+      throw new BadRequestException('No valid user IDs to notify');
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
       where: { id: { in: userIds } },
       select: { email: true, first_name: true, last_name: true, id: true },
     });
-    const emails = users.map(u => u.email).filter(Boolean);
-    if (emails.length === 0) throw new BadRequestException('No assignee emails found');
+    const emails = users.map((u) => u.email).filter(Boolean);
+    if (emails.length === 0)
+      throw new BadRequestException('No assignee emails found');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
-      `<p>${users.map(u => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
+    const fallbackHtml = this.buildEmail(
+      `<p>${users.map((u) => `${u.first_name || ''} ${u.last_name || ''}`).join(', ')}</p>
       ${type === 'sourcing' ? `<p><strong>Sourcing Assignment to a Hire Request</strong></p>` : type === 'staffing_coordinator' ? `<p><strong>Staffing Coordinator Assignment to a Hire Request</strong></p>` : `<p><strong>Assignment to a Hire Request</strong></p>`}
        <p>You have been assigned ${type === 'sourcing' ? `to source` : type === 'staffing_coordinator' ? `as a staffing coordinator` : `to`} this hire request:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -661,12 +870,11 @@ export class NotificationsService {
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
-
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
        </div>
-       
+
        <p>Please review the details and take appropriate action.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
@@ -674,18 +882,52 @@ export class NotificationsService {
          </a>
        </div>
        ${from === 'panel_request_flow' ? `<p>This hire request was created from Panel Request Flow.</p>` : ''}`,
-      emailTheme
+      emailTheme,
+    );
+    const assignmentType =
+      type === 'sourcing'
+        ? 'Sourcing Assignment to a Hire Request'
+        : type === 'staffing_coordinator'
+          ? 'Staffing Coordinator Assignment to a Hire Request'
+          : 'Assignment to a Hire Request';
+    const assignmentRole =
+      type === 'sourcing'
+        ? 'to source'
+        : type === 'staffing_coordinator'
+          ? 'as a staffing coordinator'
+          : 'to';
+    const tpl = await this.getTplContent(
+      'hr-created',
+      {
+        '{{assigneeName}}': users
+          .map((u) => `${u.first_name || ''} ${u.last_name || ''}`)
+          .join(', '),
+        '{{assignmentType}}': assignmentType,
+        '{{assignmentRole}}': assignmentRole,
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{availability}}': hr.availability || '',
+        '{{salaryRange}}': salaryRange,
+        '{{startDate}}': startDate,
+        '{{hrStatus}}': hr.status || '',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
-      subject: `Hire Request Assigned: ${hr.title}`,
-      html,
+      subject: tpl?.subject ?? `Hire Request Assigned: ${hr.title}`,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
-  async notifyHireRequestBackToSourcing(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestBackToSourcing(
+    hireRequestId: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -708,54 +950,75 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    let destin = hr.assigned_sourcing;
-    
+    const destin = hr.assigned_sourcing;
+
     if (!destin?.email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
+    const fallbackHtml = this.buildEmail(
       `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
        <p><strong>Back to sourcing</strong></p>
        <p>A hire request requires your attention since it has been put back to sourcing:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
          <p><strong>Availability:</strong> ${hr.availability}</p>
-
          <p><strong>Salary Range:</strong> ${salaryRange}</p>
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
        </div>
-       
+
        <p>Please review the details and take appropriate action.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
+    );
+    const backToSourcingName =
+      `${destin.first_name || ''} ${destin.last_name || ''}`.trim();
+    const tplBTS = await this.getTplContent(
+      'hr-back-to-sourcing',
+      {
+        '{{assigneeName}}': backToSourcingName,
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{availability}}': hr.availability || '',
+        '{{salaryRange}}': salaryRange,
+        '{{startDate}}': startDate,
+        '{{hrStatus}}': hr.status || '',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
-      subject: `Hire Request Assigned: ${hr.title}`,
-      html,
+      subject: tplBTS?.subject ?? `Hire Request Assigned: ${hr.title}`,
+      html: tplBTS?.html ?? fallbackHtml,
     });
   }
 
@@ -791,20 +1054,27 @@ export class NotificationsService {
       select: { email: true },
     });
 
-    const emails = orgUsers.map(u => u.email).filter(Boolean);
-    if (emails.length === 0) throw new BadRequestException('No active organization users found to notify');
+    const emails = orgUsers.map((u) => u.email).filter(Boolean);
+    if (emails.length === 0)
+      throw new BadRequestException(
+        'No active organization users found to notify',
+      );
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
+    const fallbackHtmlPanelClient = this.buildEmail(
       `<p><strong>Your candidate panel is ready for review!</strong></p>
        <p>The panel for the following hire request has been reviewed and is now ready for your follow-up:</p>
 
@@ -826,18 +1096,33 @@ export class NotificationsService {
            View Candidates
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
+    );
+    const tplPanelClient = await this.getTplContent(
+      'hr-panel-ready-client',
+      {
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{availability}}': hr.availability || '',
+        '{{salaryRange}}': salaryRange,
+        '{{startDate}}': startDate,
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: emails,
-      subject: `Your candidate panel is ready: ${hr.title}`,
-      html,
+      subject:
+        tplPanelClient?.subject ?? `Your candidate panel is ready: ${hr.title}`,
+      html: tplPanelClient?.html ?? fallbackHtmlPanelClient,
     });
   }
 
-  async notifyHireRequestPanelReady(hireRequestId: string,): Promise<boolean> {
+  async notifyHireRequestPanelReady(hireRequestId: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -855,35 +1140,41 @@ export class NotificationsService {
           select: { id: true, email: true, first_name: true, last_name: true },
         },
         organization: {
-          select: { 
+          select: {
             name: true,
             business_unit: true,
-           },
+          },
         },
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    let destin=hr.assigned_sourcing;
-    
+    const destin = hr.assigned_sourcing;
+
     if (!destin?.email)
       throw new BadRequestException('Hire request has no assignee email');
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
 
     // Get email theme by organization business unit
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
-      `<p>${destin.first_name && destin.first_name} ${destin.last_name && destin.last_name}</p>
+    const panelReadyName =
+      `${destin.first_name || ''} ${destin.last_name || ''}`.trim();
+    const fallbackHtmlPanelInternal = this.buildEmail(
+      `<p>${panelReadyName}</p>
        <p><strong>Panel Ready</strong></p>
        <p>The panel of the following hire request has been reviewed and now it is ready:</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -896,21 +1187,38 @@ export class NotificationsService {
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Status:</strong> ${hr.status}</p>
        </div>
-       
+
        <p>Please review the details and take appropriate action.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
+    );
+    const tplPanelInternal = await this.getTplContent(
+      'hr-panel-ready-internal',
+      {
+        '{{assigneeName}}': panelReadyName,
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{availability}}': hr.availability || '',
+        '{{salaryRange}}': salaryRange,
+        '{{startDate}}': startDate,
+        '{{hrStatus}}': hr.status || '',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization?.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [destin.email],
-      subject: `Panel Reviewed and Ready: ${hr.title}`,
-      html,
+      subject:
+        tplPanelInternal?.subject ?? `Panel Reviewed and Ready: ${hr.title}`,
+      html: tplPanelInternal?.html ?? fallbackHtmlPanelInternal,
     });
   }
 
@@ -929,7 +1237,10 @@ export class NotificationsService {
       },
     });
     if (!hr) throw new NotFoundException('Hire request not found');
-    const userIds = hr?.assign_user_id?.split(',').map(id => id.trim()).filter(Boolean);
+    const userIds = hr?.assign_user_id
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
 
     // get all users to notify
     const users = await this.prisma.uSER.findMany({
@@ -941,38 +1252,56 @@ export class NotificationsService {
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
-      `<p>${users[0].first_name ?? users[0].first_name} ${users[0].last_name ?? users[0].last_name}</p>
+    const endorseName =
+      `${users[0].first_name || ''} ${users[0].last_name || ''}`.trim();
+    const fallbackHtmlEndorse = this.buildEmail(
+      `<p>${endorseName}</p>
        <p>The hire request received new candidates.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
          <p><strong>Organization:</strong> ${hr.organization.name}</p>
-         <p><strong>Description:</strong> 
+         <p><strong>Description:</strong>
          <span style="font-size: 0.875rem; line-height: 1.625; white-space: pre-wrap;">${hr.description || 'No description provided'}</span>
          </p>
        </div>
-       
+
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            View Hire Request Details
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
+    );
+    const tplEndorse = await this.getTplContent(
+      'hr-candidates-endorsed',
+      {
+        '{{assigneeName}}': endorseName,
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
     );
 
-    return await this.sendMailWithPrefix({
+    return await this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: users.map(user => user.email),
-      subject: `New candidates in Hire Request: ${hr.title}`,
-      html,
+      to: users.map((user) => user.email),
+      subject:
+        tplEndorse?.subject ?? `New candidates in Hire Request: ${hr.title}`,
+      html: tplEndorse?.html ?? fallbackHtmlEndorse,
     });
   }
 
-    async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestSelectWinner(hireRequestId: string): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -992,11 +1321,21 @@ export class NotificationsService {
             name: true,
             business_unit: true,
             admin: {
-              select: { id: true, email: true, first_name: true, last_name: true }
+              select: {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+              },
             },
             owner: {
-              select: { id: true, email: true, first_name: true, last_name: true }
-            }
+              select: {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+              },
+            },
           },
         },
         panels: {
@@ -1049,8 +1388,9 @@ export class NotificationsService {
 
     // Combine all recipients and remove duplicates
     const allRecipients = [...organizationAdmins, ...additionalRecipients];
-    const uniqueRecipients = allRecipients.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
+    const uniqueRecipients = allRecipients.filter(
+      (recipient, index, self) =>
+        index === self.findIndex((r) => r.email === recipient.email),
     );
 
     if (uniqueRecipients.length === 0) {
@@ -1058,9 +1398,10 @@ export class NotificationsService {
     }
 
     const detailUrl = `${process.env.FRONTEND_URL}/hire-requests?request=${hr.id}`;
-    const salaryRange = hr.salary_range_from && hr.salary_range_to
-      ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
-      : 'Not specified';
+    const salaryRange =
+      hr.salary_range_from && hr.salary_range_to
+        ? `$${hr.salary_range_from} - $${hr.salary_range_to}`
+        : 'Not specified';
     const startDate = hr.expected_start_date
       ? new Date(hr.expected_start_date).toLocaleDateString()
       : 'Not specified';
@@ -1068,14 +1409,19 @@ export class NotificationsService {
     // Get winner candidate name
     const winnerCandidate = hr.panels?.[0]?.panelCandidates?.[0]?.candidate;
     const winnerName = winnerCandidate
-      ? (winnerCandidate.name || `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() || 'Unknown')
+      ? winnerCandidate.name ||
+        `${winnerCandidate.first_name || ''} ${winnerCandidate.last_name || ''}`.trim() ||
+        'Unknown'
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
+    const fallbackHtmlWinner = this.buildEmail(
       `<p>Your hire request has been completed.</p>
-       
+
        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
          <h3 style="margin-top: 0; color: #333;">Hire Request Details</h3>
          <p><strong>Title:</strong> ${hr.title}</p>
@@ -1087,27 +1433,47 @@ export class NotificationsService {
          <p><strong>Expected Start Date:</strong> ${startDate}</p>
          <p><strong>Selected Candidate:</strong> ${winnerName}</p>
        </div>
-       
+
        <p>Please review the details and proceed with the next steps.</p>
        <div style="text-align: left; margin: 30px 0;">
          <a href="${detailUrl}" class="cta-button">
            Review Hire Request
          </a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
-    const results = this.sendMailWithPrefix({
+    const tplWinner = await this.getTplContent(
+      'hr-winner-selected',
+      {
+        '{{roleType}}': hr.hubspot_role_type || '',
+        '{{availability}}': hr.availability || '',
+        '{{hrTitle}}': hr.title,
+        '{{orgName}}': hr.organization.name,
+        '{{hrDescription}}': hr.description || 'No description provided',
+        '{{salaryRange}}': salaryRange,
+        '{{startDate}}': startDate,
+        '{{winnerName}}': winnerName,
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
+    );
+    const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: uniqueRecipients.map(r => r.email),
-      subject: `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
-      html,
+      to: uniqueRecipients.map((r) => r.email),
+      subject:
+        tplWinner?.subject ??
+        `Hire Request Completed: ${hr.hubspot_role_type} - ${hr.availability}.`,
+      html: tplWinner?.html ?? fallbackHtmlWinner,
     });
 
     // Return true if at least one email was sent successfully
     return results;
   }
 
-  async notifyHireRequestAwaitingDecision(hireRequestId: string): Promise<boolean> {
+  async notifyHireRequestAwaitingDecision(
+    hireRequestId: string,
+  ): Promise<boolean> {
     const hr = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -1156,8 +1522,9 @@ export class NotificationsService {
     });
 
     // Remove duplicates by email
-    const uniqueRecipients = organizationAdmins.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
+    const uniqueRecipients = organizationAdmins.filter(
+      (recipient, index, self) =>
+        index === self.findIndex((r) => r.email === recipient.email),
     );
 
     if (uniqueRecipients.length === 0) {
@@ -1180,27 +1547,43 @@ export class NotificationsService {
         })
       : 'Not specified';
 
-    const emailTheme = getEmailThemeByBusinessUnit(hr.organization.business_unit);
+    const emailTheme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      hr.organization.business_unit,
+    );
 
-    const html = this.buildEmail(
+    const fallbackHtmlAwaiting = this.buildEmail(
       `<p>Your hire request has been marked as <strong>awaiting decision</strong>.</p>
-      
+
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
         <p><strong>Scheduled Date:</strong> ${scheduledDate}</p>
       </div>
-      
+
       <div style="text-align: left; margin: 30px 0;">
         <a href="${detailUrl}" class="cta-button">
           Review Hire Request
         </a>
       </div>`,
-      emailTheme
+      emailTheme,
     );
-    const results = this.sendMailWithPrefix({
+    const tplAwaiting = await this.getTplContent(
+      'hr-awaiting-decision',
+      {
+        '{{roleType}}': hr.hubspot_role_type || '',
+        '{{availability}}': hr.availability || '',
+        '{{scheduledDate}}': scheduledDate,
+        '{{hrLink}}': detailUrl,
+      },
+      emailTheme,
+      hr.organization.business_unit,
+    );
+    const results = this.mail.sendMail({
       from: `${hr.organization.business_unit || 'MedVirtual'} <noreply@medvirtual.ai>`,
-      to: uniqueRecipients.map(r => r.email),
-      subject: `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
-      html,
+      to: uniqueRecipients.map((r) => r.email),
+      subject:
+        tplAwaiting?.subject ??
+        `Your hire request has been marked as awaiting decision: ${hr.hubspot_role_type} - ${hr.availability}`,
+      html: tplAwaiting?.html ?? fallbackHtmlAwaiting,
     });
 
     // Return true if at least one email was sent successfully
@@ -1208,7 +1591,10 @@ export class NotificationsService {
   }
   // ======== Tickets ========
 
-  async notifyTicketStatusChangeToCreator(ticket: any, newStatus: 'in_progress' | 'resolved' | 'closed'): Promise<boolean> {
+  async notifyTicketStatusChangeToCreator(
+    ticket: any,
+    newStatus: 'in_progress' | 'resolved' | 'closed',
+  ): Promise<boolean> {
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     // Only notify the creator
@@ -1228,8 +1614,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1245,11 +1631,13 @@ export class NotificationsService {
       }
     }
 
-    if (!creatorEmail) throw new BadRequestException('Ticket creator has no email');
+    if (!creatorEmail)
+      throw new BadRequestException('Ticket creator has no email');
 
     // Filter: Only send to clients (organization admins) if ticket type is "Support"
     // System admins always receive notifications for all ticket types
-    const isSystemAdmin = creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
+    const isSystemAdmin =
+      creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
     const isClient = !isSystemAdmin; // Organization admins are considered clients
     const ticketType = ticket.type?.toLowerCase();
     const isSupportTicket = ticketType === 'support';
@@ -1263,14 +1651,18 @@ export class NotificationsService {
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme
-    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+    const emailTheme = emailThemeUserId
+      ? await getUserEmailTheme(this.prisma, emailThemeUserId)
+      : null;
 
     // Format status for display
     const statusDisplay = newStatus.replace('_', ' ').toUpperCase();
 
     // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
     const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
-    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+    const descriptionLabel = isReferralTicket
+      ? 'Candidate Details'
+      : 'Description';
 
     // Parse Referral ticket description format
     let descriptionContent = '';
@@ -1301,14 +1693,30 @@ export class NotificationsService {
          <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
          <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplTicketStatus = await this.getTplContent(
+      'ticket-status-changed',
+      {
+        '{{status}}': statusDisplay,
+        '{{ticketTitle}}': ticket.title,
+        '{{orgName}}': ticket.organization?.name || 'N/A',
+        '{{ticketType}}': ticket.type || '',
+        '{{createdDate}}': createdDate,
+        '{{ticketDescription}}': ticket.description || '',
+        '{{ticketLink}}': detailUrl,
+      },
+      emailTheme,
+    );
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
-      subject: `Your ticket changed to ${statusDisplay} status: ${ticket.title}`,
-      html,
+      subject:
+        tplTicketStatus?.subject ??
+        `Your ticket changed to ${statusDisplay} status: ${ticket.title}`,
+      html: tplTicketStatus?.html ?? html,
     });
   }
 
@@ -1332,8 +1740,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1349,11 +1757,13 @@ export class NotificationsService {
       }
     }
 
-    if (!creatorEmail) throw new BadRequestException('Ticket creator has no email');
+    if (!creatorEmail)
+      throw new BadRequestException('Ticket creator has no email');
 
     // Filter: Only send to clients (organization admins) if ticket type is "Support"
     // System admins always receive notifications for all ticket types
-    const isSystemAdmin = creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
+    const isSystemAdmin =
+      creatorRole === 'system_admin' || creatorRole === 'system_super_admin';
     const isClient = !isSystemAdmin; // Organization admins are considered clients
     const ticketType = ticket.type?.toLowerCase();
     const isSupportTicket = ticketType === 'support';
@@ -1367,11 +1777,15 @@ export class NotificationsService {
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme
-    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+    const emailTheme = emailThemeUserId
+      ? await getUserEmailTheme(this.prisma, emailThemeUserId)
+      : null;
 
     // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
     const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
-    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+    const descriptionLabel = isReferralTicket
+      ? 'Candidate Details'
+      : 'Description';
 
     // Parse Referral ticket description format
     let descriptionContent = '';
@@ -1402,19 +1816,36 @@ export class NotificationsService {
          <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
          <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
        </div>`,
-      emailTheme
+      emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplReopened = await this.getTplContent(
+      'ticket-reopened',
+      {
+        '{{ticketTitle}}': ticket.title,
+        '{{orgName}}': ticket.organization?.name || 'N/A',
+        '{{ticketType}}': ticket.type || '',
+        '{{createdDate}}': createdDate,
+        '{{ticketDescription}}': ticket.description || '',
+        '{{ticketLink}}': detailUrl,
+      },
+      emailTheme,
+    );
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creatorEmail],
-      subject: `Your ticket has been reopened: ${ticket.title}`,
-      html,
+      subject:
+        tplReopened?.subject ??
+        `Your ticket has been reopened: ${ticket.title}`,
+      html: tplReopened?.html ?? html,
     });
   }
 
-  async notifyTicketEvent(ticket: any, event: 'created' | 'assigned' | 'updated' | 'resolved' | 'closed'): Promise<boolean> {
-
+  async notifyTicketEvent(
+    ticket: any,
+    event: 'created' | 'assigned' | 'updated' | 'resolved' | 'closed',
+  ): Promise<boolean> {
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     // Get ticket type early to check if it's Support
@@ -1426,8 +1857,8 @@ export class NotificationsService {
     if (ticket.created_by) {
       createdById = ticket.created_by;
     } else if (ticket.id) {
-      const ticketData = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const ticketData = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true, user_id: true },
       });
       createdById = ticketData?.created_by || null;
@@ -1457,7 +1888,9 @@ export class NotificationsService {
         select: { id: true, email: true, role: true },
       });
       if (creator?.email) {
-        const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
+        const isSystemAdmin =
+          creator.role === 'system_admin' ||
+          creator.role === 'system_super_admin';
         // Only add creator if ticket is Support OR creator is system admin
         if (isSupportTicket || isSystemAdmin) {
           recipients.push({ email: creator.email, isSystemAdmin });
@@ -1466,8 +1899,8 @@ export class NotificationsService {
       }
     } else if (ticket.id) {
       // Fallback to fetch created_by
-      const withCreator = await this.prisma.ticket.findUnique({
-        where: { id: ticket.id },
+      const withCreator = await this.prisma.ticket.findFirst({
+        where: { id: ticket.id, deleted_at: null },
         select: { created_by: true },
       });
       if (withCreator?.created_by) {
@@ -1476,7 +1909,9 @@ export class NotificationsService {
           select: { id: true, email: true, role: true },
         });
         if (creator?.email) {
-          const isSystemAdmin = creator.role === 'system_admin' || creator.role === 'system_super_admin';
+          const isSystemAdmin =
+            creator.role === 'system_admin' ||
+            creator.role === 'system_super_admin';
           // Only add creator if ticket is Support OR creator is system admin
           if (isSupportTicket || isSystemAdmin) {
             recipients.push({ email: creator.email, isSystemAdmin });
@@ -1488,15 +1923,21 @@ export class NotificationsService {
 
     // Assignee (kept for backwards compatibility)
     // Only add assignee if it's different from creator
-    if (ticket.user?.email && (!createdById || ticket.user.id !== createdById)) {
-      const isSystemAdmin = ticket.user.role === 'system_admin' || ticket.user.role === 'system_super_admin';
+    if (
+      ticket.user?.email &&
+      (!createdById || ticket.user.id !== createdById)
+    ) {
+      const isSystemAdmin =
+        ticket.user.role === 'system_admin' ||
+        ticket.user.role === 'system_super_admin';
       recipients.push({ email: ticket.user.email, isSystemAdmin });
       emailThemeUserId = emailThemeUserId || ticket.user.id;
     }
 
     // Remove duplicates but keep system admin flag
-    const uniqueRecipients = recipients.filter((recipient, index, self) =>
-      index === self.findIndex(r => r.email === recipient.email)
+    const uniqueRecipients = recipients.filter(
+      (recipient, index, self) =>
+        index === self.findIndex((r) => r.email === recipient.email),
     );
 
     // Filter: For status change events (resolved, closed), only send to clients if ticket type is "Support"
@@ -1507,33 +1948,48 @@ export class NotificationsService {
     let filteredRecipients = uniqueRecipients;
     if (isStatusChangeEvent && !isSupportTicket) {
       // Filter out client recipients (non-system-admins) for non-Support ticket status changes
-      filteredRecipients = uniqueRecipients.filter(recipient => recipient.isSystemAdmin);
+      filteredRecipients = uniqueRecipients.filter(
+        (recipient) => recipient.isSystemAdmin,
+      );
     }
 
     // Always notify fixed email for Support tickets
-    if (isSupportTicket && !filteredRecipients.some(r => r.email === 'pauli@regenta.ai')) {
-      filteredRecipients = [...filteredRecipients, { email: 'pauli@regenta.ai', isSystemAdmin: true }];
+    if (
+      isSupportTicket &&
+      !filteredRecipients.some((r) => r.email === 'paulo@regenta.ai')
+    ) {
+      filteredRecipients = [
+        ...filteredRecipients,
+        { email: 'paulo@regenta.ai', isSystemAdmin: true },
+      ];
     }
 
-    if (filteredRecipients.length === 0) throw new BadRequestException('Ticket has no recipient email');
+    if (filteredRecipients.length === 0)
+      throw new BadRequestException('Ticket has no recipient email');
 
     const createdDate = new Date(ticket.createdAt).toLocaleDateString();
 
     // Get user email theme (based on creator or assignee, in that order)
-    const emailTheme = emailThemeUserId ? await getUserEmailTheme(this.prisma, emailThemeUserId) : null;
+    const emailTheme = emailThemeUserId
+      ? await getUserEmailTheme(this.prisma, emailThemeUserId)
+      : null;
 
     // Get ticket type display name
-    const ticketTypeDisplay = ticketTypeReverseDictionary[ticket.type] || ticket.type;
+    const ticketTypeDisplay =
+      ticketTypeReverseDictionary[ticket.type] || ticket.type;
 
     // Check if ticket type is Referral to use "Candidate Details" instead of "Description"
     const isReferralTicket = ticket.type?.toLowerCase() === 'referral';
-    const descriptionLabel = isReferralTicket ? 'Candidate Details' : 'Description';
+    const descriptionLabel = isReferralTicket
+      ? 'Candidate Details'
+      : 'Description';
 
     // Build staff member name (only name, no email)
     const staffName = ticket.staff?.candidate?.name?.trim() || null;
 
     // Build candidate name if available
-    const candidateName = ticket.candidate?.name?.trim() ||
+    const candidateName =
+      ticket.candidate?.name?.trim() ||
       (ticket.candidate?.first_name && ticket.candidate?.last_name
         ? `${ticket.candidate.first_name} ${ticket.candidate.last_name}`.trim()
         : null);
@@ -1541,7 +1997,7 @@ export class NotificationsService {
     // Send emails to each recipient with appropriate formatting
     const emailPromises = filteredRecipients.map(async (recipient) => {
       const isSystemAdmin = recipient.isSystemAdmin;
-      
+
       // Get recipient role to build correct URL
       const recipientUser = await this.prisma.uSER.findUnique({
         where: { email: recipient.email },
@@ -1562,7 +2018,11 @@ export class NotificationsService {
         let emailTitle = '';
         let emailSubject = '';
 
-        if (ticketTypeDisplay === 'Bonus' && staffName && ticket.organization?.name) {
+        if (
+          ticketTypeDisplay === 'Bonus' &&
+          staffName &&
+          ticket.organization?.name
+        ) {
           emailTitle = `Bonus Ticket Created for ${ticket.organization.name}`;
           emailSubject = `Bonus Ticket Created for ${ticket.organization.name}`;
         } else if (ticketTypeDisplay === 'Bonus' && staffName) {
@@ -1591,12 +2051,12 @@ export class NotificationsService {
           candidateInfo = `<p><strong>Candidate:</strong> ${candidateName}</p>`;
         }
 
-        const html = this.buildEmail(
+        const fallbackHtml = this.buildEmail(
           `<h2>${emailTitle}</h2>
            <div style="margin-bottom: 20px;">
              ${typeBadge}
            </div>
-           
+
            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
              <h3 style="margin-top: 0; color: #333;">Ticket Details</h3>
              <p><strong>Title:</strong> ${ticket.title}</p>
@@ -1606,7 +2066,7 @@ export class NotificationsService {
              ${candidateInfo}
            </div>
            ${isReferralTicket ? descriptionContent : ''}
-           
+
            <div style="text-align: left; margin: 30px 0;">
              <a href="${detailUrl}" class="cta-button">
                View Ticket Details
@@ -1616,14 +2076,39 @@ export class NotificationsService {
              <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
              <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
            </div>`,
-          emailTheme
+          emailTheme,
         );
 
-        return this.sendMailWithPrefix({
-          from: `${isSystemAdmin ? 'MedVirtual' : (emailTheme?.companyName || 'MedVirtual')} <noreply@medvirtual.ai>`,
+        // Pre-assemble the optional/conditional fragments so the DB template can
+        // stay a plain-substitution string (the engine has no {{#if}} support).
+        const staffLine = staffName ? `Staff Member: ${staffName}\n` : '';
+        const candidateLine = candidateName
+          ? `Candidate: ${candidateName}\n`
+          : '';
+        const descriptionBlock = isReferralTicket
+          ? ''
+          : `${descriptionLabel}: ${this.formatDescription(ticket.description)}`;
+
+        const tplCreatedAdmin = await this.getTplContent(
+          'ticket-created-admin',
+          {
+            '{{emailTitle}}': emailTitle,
+            '{{ticketType}}': ticketTypeDisplay,
+            '{{ticketTitle}}': ticket.title,
+            '{{orgName}}': ticket.organization?.name || 'N/A',
+            '{{staffLine}}': staffLine,
+            '{{candidateLine}}': candidateLine,
+            '{{descriptionBlock}}': descriptionBlock,
+            '{{ticketLink}}': detailUrl,
+          },
+          emailTheme,
+        );
+
+        return this.mail.sendMail({
+          from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
-          subject: emailSubject,
-          html,
+          subject: tplCreatedAdmin?.subject ?? emailSubject,
+          html: tplCreatedAdmin?.html ?? fallbackHtml,
         });
       } else {
         // Standard format for non-system admins or other events
@@ -1661,14 +2146,46 @@ export class NotificationsService {
              <p style="margin: 0 0 5px 0;"><strong>Or copy this link:</strong></p>
              <a href="${detailUrl}" style="color: #01546B; word-break: break-all; text-decoration: none;">${detailUrl}</a>
            </div>`,
-          emailTheme
+          emailTheme,
         );
 
-        return this.sendMailWithPrefix({
-          from: `${isSystemAdmin ? 'MedVirtual' : (emailTheme?.companyName || 'MedVirtual')} <noreply@medvirtual.ai>`,
+        // 'assigned' (the Reassign action) has its own dedicated template so it
+        // can be edited independently of updated/resolved/closed; every other
+        // event stays on the shared 'ticket-event' key.
+        const tplKey =
+          event === 'assigned' ? 'ticket-assigned' : 'ticket-event';
+
+        // Pre-assembled fragments consumed only by 'ticket-assigned'; harmless
+        // for 'ticket-event' (unknown placeholders are left untouched).
+        const staffLine = staffName ? `Staff Member: ${staffName}\n` : '';
+        const candidateLine = candidateName
+          ? `Candidate: ${candidateName}\n`
+          : '';
+        const descriptionBlock = isReferralTicket
+          ? ''
+          : `${descriptionLabel}: ${this.formatDescription(this.decodeHtmlEntities(ticket.description))}`;
+
+        const tplEvent = await this.getTplContent(
+          tplKey,
+          {
+            '{{event}}': event,
+            '{{ticketTitle}}': ticket.title,
+            '{{orgName}}': ticket.organization?.name || 'N/A',
+            '{{ticketType}}': ticketTypeDisplay,
+            '{{ticketDescription}}': ticket.description || '',
+            '{{staffLine}}': staffLine,
+            '{{candidateLine}}': candidateLine,
+            '{{descriptionBlock}}': descriptionBlock,
+            '{{ticketLink}}': detailUrl,
+          },
+          emailTheme,
+        );
+
+        return this.mail.sendMail({
+          from: `${isSystemAdmin ? 'MedVirtual' : emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
           to: [recipient.email],
-          subject: `Ticket ${event}: ${ticket.title}`,
-          html,
+          subject: tplEvent?.subject ?? `Ticket ${event}: ${ticket.title}`,
+          html: tplEvent?.html ?? html,
         });
       }
     });
@@ -1677,14 +2194,23 @@ export class NotificationsService {
     const results = await Promise.all(emailPromises);
 
     // Return true if at least one email was sent successfully
-    return results.some(result => result === true);
+    return results.some((result) => result === true);
   }
 
-
-
-  async notifyTicketNoteAddedToAssignee(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+  async notifyTicketNoteAddedToAssignee(
+    ticketId: string,
+    note: {
+      content: string;
+      author?: {
+        id?: string;
+        first_name?: string;
+        last_name?: string;
+        email?: string;
+      };
+    },
+  ): Promise<boolean> {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         title: true,
@@ -1715,7 +2241,9 @@ export class NotificationsService {
 
     const emailTheme = await getUserEmailTheme(this.prisma, ticket.user.id);
 
-    const authorName = `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() || 'A user';
+    const authorName =
+      `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() ||
+      'A user';
 
     const html = this.buildEmail(
       `<h2>You Received a Response on Your Ticket</h2>
@@ -1739,17 +2267,42 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplNoteAssignee = await this.getTplContent(
+      'ticket-note-added',
+      {
+        '{{ticketTitle}}': ticket.title,
+        '{{orgName}}': ticket.organization?.name || 'N/A',
+        '{{authorName}}': authorName,
+        '{{noteContent}}': note.content,
+        '{{ticketLink}}': detailUrl,
+      },
+      emailTheme,
+    );
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [ticket.user.email],
-      subject: `You received a response on your ticket: ${ticket.title}`,
-      html,
+      subject:
+        tplNoteAssignee?.subject ??
+        `You received a response on your ticket: ${ticket.title}`,
+      html: tplNoteAssignee?.html ?? html,
     });
   }
 
-  async notifyTicketNoteAddedToCreator(ticketId: string, note: { content: string; author?: { id?: string; first_name?: string; last_name?: string; email?: string } }): Promise<boolean> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
+  async notifyTicketNoteAddedToCreator(
+    ticketId: string,
+    note: {
+      content: string;
+      author?: {
+        id?: string;
+        first_name?: string;
+        last_name?: string;
+        email?: string;
+      };
+    },
+  ): Promise<boolean> {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: { id: ticketId, deleted_at: null },
       select: {
         id: true,
         title: true,
@@ -1759,19 +2312,29 @@ export class NotificationsService {
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    if (!ticket.created_by) throw new BadRequestException('Ticket has no creator');
+    if (!ticket.created_by)
+      throw new BadRequestException('Ticket has no creator');
 
     const creator = await this.prisma.uSER.findUnique({
       where: { id: ticket.created_by },
-      select: { id: true, email: true, first_name: true, last_name: true, role: true },
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+      },
     });
-    if (!creator?.email) throw new BadRequestException('Ticket creator has no email');
+    if (!creator?.email)
+      throw new BadRequestException('Ticket creator has no email');
 
     const detailUrl = this.getTicketDetailUrl(ticket.id, creator.role);
 
     const emailTheme = await getUserEmailTheme(this.prisma, creator.id);
 
-    const authorName = `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() || 'A user';
+    const authorName =
+      `${note.author?.first_name ?? ''} ${note.author?.last_name ?? ''}`.trim() ||
+      'A user';
 
     const html = this.buildEmail(
       `<h2>You Received a Response on Your Ticket</h2>
@@ -1795,11 +2358,25 @@ export class NotificationsService {
       emailTheme,
     );
 
-    return await this.sendMailWithPrefix({
+    const tplNoteCreator = await this.getTplContent(
+      'ticket-note-added',
+      {
+        '{{ticketTitle}}': ticket.title,
+        '{{orgName}}': ticket.organization?.name || 'N/A',
+        '{{authorName}}': authorName,
+        '{{noteContent}}': note.content,
+        '{{ticketLink}}': detailUrl,
+      },
+      emailTheme,
+    );
+
+    return await this.mail.sendMail({
       from: `${emailTheme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: [creator.email],
-      subject: `You received a response on your ticket: ${ticket.title}`,
-      html,
+      subject:
+        tplNoteCreator?.subject ??
+        `You received a response on your ticket: ${ticket.title}`,
+      html: tplNoteCreator?.html ?? html,
     });
   }
 
@@ -1833,7 +2410,7 @@ export class NotificationsService {
     let currentField: 'name' | 'email' | 'message' | null = null;
     let messageLines: string[] = [];
 
-    lines.forEach(line => {
+    lines.forEach((line) => {
       const trimmed = line.trim();
 
       if (trimmed.toLowerCase().startsWith('name:')) {
@@ -1873,7 +2450,8 @@ export class NotificationsService {
     }
 
     // Build simple formatted HTML
-    let html = '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">';
+    let html =
+      '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">';
     html += '<h3 style="margin-top: 0; color: #333;">Candidate Details</h3>';
 
     if (parsed.name) {
@@ -1893,6 +2471,494 @@ export class NotificationsService {
 
     return html;
   }
+
+  async notifyTalentPoolLeadNew(payload: {
+    ownerEmail: string;
+    leadName: string;
+    email: string;
+    organization: string;
+    websiteUrl: string;
+    languagePreference: string;
+    businessUnit: string;
+    hasCandidate: boolean;
+    mainNeed?: string;
+    additionalDetails?: string;
+  }): Promise<void> {
+    try {
+      const theme = await getBusinessUnitEmailTheme(
+        this.prisma,
+        payload.businessUnit,
+      );
+      const inquiryType = payload.hasCandidate
+        ? 'Viewed candidate'
+        : 'General inquiry';
+      const websiteDisplay = payload.websiteUrl.replace(/&#x2F;/g, '/');
+
+      const optionalRows = [
+        payload.mainNeed
+          ? `<tr>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666; width: 45%;">Main need</td>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.mainNeed}</td>
+             </tr>`
+          : '',
+        payload.additionalDetails
+          ? `<tr>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666; width: 45%;">Additional details</td>
+               <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.additionalDetails}</td>
+             </tr>`
+          : '',
+      ].join('');
+
+      const ctaLink = `${process.env.FRONTEND_URL}/tickets`;
+
+      const html = this.buildEmail(
+        `<h2>New Talent Pool Lead</h2>
+         <p>A new inquiry was submitted through the ${payload.businessUnit} talent pool page.</p>
+         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666; width: 45%;">Name</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.leadName}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Email</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.email}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Organization</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.organization}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Website</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${websiteDisplay}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Bilingual EN/ES</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${payload.languagePreference === 'yes' ? 'Yes' : 'No'}</td>
+           </tr>
+           <tr>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #666666;">Inquiry type</td>
+             <td style="padding: 10px 0; border-bottom: 1px solid #e9ecef; font-size: 15px; color: #333333; font-weight: 600;">${inquiryType}</td>
+           </tr>
+           ${optionalRows}
+         </table>
+         <div style="text-align: left; margin: 30px 0;">
+           <a href="${ctaLink}" class="cta-button">View Lead</a>
+         </div>`,
+        theme,
+      );
+
+      const tplLead = await this.getTplContent(
+        'talent-pool-lead-new',
+        {
+          '{{leadName}}': payload.leadName,
+          '{{leadEmail}}': payload.email,
+          '{{organization}}': payload.organization,
+          '{{websiteUrl}}': websiteDisplay,
+          '{{languagePreference}}':
+            payload.languagePreference === 'yes' ? 'Yes' : 'No',
+          '{{mainNeed}}': payload.mainNeed || 'N/A',
+          '{{additionalDetails}}': payload.additionalDetails || 'N/A',
+        },
+        theme,
+        payload.businessUnit,
+      );
+
+      await this.mail.sendMail({
+        from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+        to: [payload.ownerEmail],
+        subject:
+          tplLead?.subject ??
+          `New talent pool lead: ${payload.leadName} — ${payload.organization}`,
+        html: tplLead?.html ?? html,
+      });
+    } catch (err) {
+      console.warn(
+        `[talent-pool-lead] Failed to send new lead notification to ${payload.ownerEmail}:`,
+        err?.message || err,
+      );
+    }
+  }
+
+  /**
+   * CC the panel creator on the recipient-facing email, so the admin who sent the
+   * panel holds the exact copy the client received (same branding, same link).
+   *
+   * Returns undefined rather than an empty array when the CC would be redundant or
+   * invalid: Resend treats `cc: []` inconsistently across SDK versions, and CC'ing
+   * the recipient's own address would deliver the same mail twice.
+   */
+  private offerPanelCreatorCc(
+    creatorEmail: string | null | undefined,
+    recipientEmail: string,
+  ): string | undefined {
+    const cc = creatorEmail?.trim();
+    if (!cc) return undefined;
+    if (cc.toLowerCase() === recipientEmail.trim().toLowerCase()) {
+      return undefined;
+    }
+    return cc;
+  }
+
+  /**
+   * Loads the panel's candidates in the shape the email card needs.
+   *
+   * Deliberately does NOT go through `CandidatesService.getTalentPoolCandidatesByIds`,
+   * which returns the same payload: `CandidatesModule` already imports
+   * `NotificationsModule`, so injecting it here would be a circular dependency
+   * requiring forwardRef, and it would pull S3/OpenAI/HubSpot/Drive into the mail
+   * path. Instead this reads Prisma directly and reuses the two *pure* rate
+   * helpers, with `PositionRateConfigService` (a Prisma-only leaf module).
+   *
+   * Two queries total regardless of candidate count — the position-rate config is
+   * read once for the whole batch, not once per candidate.
+   *
+   * Returns [] on failure: a broken card block must never stop the email from
+   * being sent, and the surrounding copy still stands on its own.
+   */
+  private async loadOfferPanelEmailCandidates(
+    candidateIds: string[],
+  ): Promise<OfferPanelEmailCandidate[]> {
+    const ids = Array.from(new Set(candidateIds.filter(Boolean)));
+    if (ids.length === 0) return [];
+
+    try {
+      const [candidates, positionConfigs] = await Promise.all([
+        this.prisma.candidate.findMany({
+          where: { id: { in: ids } },
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            name: true,
+            country: true,
+            avatar_url: true,
+            gender: true,
+            employment_type: true,
+            hourly_pay_rate: true,
+            business_unit: true,
+            approved_positions_pairing: true,
+            languages: { select: { name: true } },
+            skills: { select: { skill_name: true } },
+          },
+        }),
+        this.positionRateConfig.findAllUnpaginated(),
+      ]);
+
+      const configMap = buildConfigMap(positionConfigs);
+      const avatarBase =
+        process.env.AVATAR_URL ??
+        'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
+
+      // Preserve the order the panel stores them in.
+      const byId = new Map(candidates.map((c) => [c.id, c]));
+
+      return ids
+        .map((id) => byId.get(id))
+        .filter((c): c is (typeof candidates)[number] => !!c)
+        .map((candidate) => {
+          // Rates first: computeCandidateRates reads the RAW employment_type and
+          // unlabelled positions, so normalizing either one before this point
+          // yields silently wrong billing.
+          const rates = computeCandidateRates(candidate, configMap);
+
+          return {
+            id: candidate.id,
+            first_name: candidate.first_name,
+            last_name: candidate.last_name,
+            name: candidate.name,
+            country: candidate.country,
+            // avatar_url is a bare S3 key in the DB; an inbox needs it absolute.
+            avatar_url: candidate.avatar_url
+              ? `${avatarBase}${candidate.avatar_url}`
+              : null,
+            employment_type:
+              changeLabelAvailability(
+                dbToStageDictionary[Number(candidate.employment_type)],
+              ) || null,
+            approved_positions_pairing: (
+              candidate.approved_positions_pairing ?? []
+            ).map(getApprovedPositionLabel),
+            skills: candidate.skills,
+            languages: candidate.languages,
+            bill_rate_monthly: rates.bill_rate_monthly,
+            bill_rate_hourly: rates.bill_rate_hourly,
+          };
+        });
+    } catch (err) {
+      this.logger.error(
+        `Failed to load offer-panel email candidates: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return [];
+    }
+  }
+
+  async notifyOfferPanelCreatedClient(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        promo_enabled: true,
+        recipientUser: { select: { first_name: true } },
+        createdBy: {
+          select: { first_name: true, last_name: true, email: true },
+        },
+        candidates: { select: { candidate_id: true } },
+        _count: { select: { candidates: true } },
+      },
+    });
+    if (!panel) return false;
+
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
+    const panelUrl = `${process.env.FRONTEND_URL}/modules/talent/client`;
+    const candidateCount = panel._count.candidates;
+    const candidateCards = renderOfferPanelCandidateCards(
+      await this.loadOfferPanelEmailCandidates(
+        panel.candidates.map((c) => c.candidate_id),
+      ),
+      theme,
+      panel.promo_enabled,
+      panelUrl,
+    );
+    const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
+    const greeting = panel.recipientUser?.first_name
+      ? `Hi ${panel.recipientUser.first_name},`
+      : `Hi ${panel.recipient_name},`;
+
+    const fallbackHtmlOfferClient = this.buildEmail(
+      `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
+      <p>Take a look at their profiles whenever you're ready.</p>
+      ${candidateCards}
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">View candidates</a>
+      </div>
+      <p style="color: #555555; font-size: 15px;">Like what you see? Let us know who you'd like to move forward with, right from the panel. Prefer to pass? You can decline there too.</p>`,
+      theme,
+      greeting,
+      'Cheers,',
+    );
+    const tplOfferClient = await this.getTplContent(
+      'offer-panel-created',
+      {
+        '{{candidateLabel}}': candidateLabel,
+        '{{companyName}}': theme.companyName,
+        '{{createdByName}}': panel.createdBy.first_name || '',
+        '{{candidateCount}}': String(candidateCount),
+        '{{panelLink}}': panelUrl,
+        '{{candidateCards}}': candidateCards,
+      },
+      theme,
+      panel.business_unit,
+    );
+
+    return this.mail.sendMail({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.recipient_email,
+      cc: this.offerPanelCreatorCc(
+        panel.createdBy.email,
+        panel.recipient_email,
+      ),
+      subject:
+        tplOfferClient?.subject ??
+        `${candidateLabel} picked for you — ${theme.companyName}`,
+      html: tplOfferClient?.html ?? fallbackHtmlOfferClient,
+    });
+  }
+
+  async notifyOfferPanelCreatedPublic(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        public_token: true,
+        promo_enabled: true,
+        createdBy: { select: { first_name: true, email: true } },
+        candidates: { select: { candidate_id: true } },
+        _count: { select: { candidates: true } },
+      },
+    });
+    if (!panel || !panel.public_token) return false;
+
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
+    const panelUrl = `${process.env.FRONTEND_URL}/modules/public/offer-panel/${panel.public_token}`;
+    const candidateCount = panel._count.candidates;
+    const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
+    const candidateCards = renderOfferPanelCandidateCards(
+      await this.loadOfferPanelEmailCandidates(
+        panel.candidates.map((c) => c.candidate_id),
+      ),
+      theme,
+      panel.promo_enabled,
+      panelUrl,
+    );
+
+    const html = this.buildEmail(
+      `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
+      <p>Take a look at their profiles whenever you're ready.</p>
+      ${candidateCards}
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">View candidates</a>
+      </div>
+      <p style="color: #555555; font-size: 15px;">Like what you see? Let us know who you'd like to move forward with, right from the panel. Prefer to pass? You can decline there too.</p>`,
+      theme,
+      'Hi there,',
+      'Cheers,',
+    );
+
+    const tplOfferPublic = await this.getTplContent(
+      'offer-panel-created',
+      {
+        '{{candidateLabel}}': candidateLabel,
+        '{{companyName}}': theme.companyName,
+        '{{createdByName}}': panel.createdBy.first_name || '',
+        '{{candidateCount}}': String(candidateCount),
+        '{{panelLink}}': panelUrl,
+        '{{candidateCards}}': candidateCards,
+      },
+      theme,
+      panel.business_unit,
+    );
+
+    return this.mail.sendMail({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.recipient_email,
+      // Also applies to the resend path, which reuses this method.
+      cc: this.offerPanelCreatorCc(
+        panel.createdBy.email,
+        panel.recipient_email,
+      ),
+      subject:
+        tplOfferPublic?.subject ??
+        `${candidateLabel} picked for you — ${theme.companyName}`,
+      html: tplOfferPublic?.html ?? html,
+    });
+  }
+
+  async notifyAdminOfferPanelAccepted(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        createdBy: { select: { email: true, first_name: true } },
+      },
+    });
+    if (!panel?.createdBy?.email) return false;
+
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
+    const panelUrl = `${process.env.FRONTEND_URL}/offer-panels?panel=${panel.id}`;
+    const orgLabel = panel.recipient_org_name
+      ? ` from ${panel.recipient_org_name}`
+      : '';
+
+    const fallbackHtmlAccepted = this.buildEmail(
+      `<p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>accepted</strong> the offer panel you sent.</p>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <p><strong>Panel:</strong> ${panel.title}</p>
+        <p><strong>Recipient:</strong> ${panel.recipient_name} (${panel.recipient_email})</p>
+      </div>
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">View Offer Panel</a>
+      </div>`,
+      theme,
+    );
+    const tplAccepted = await this.getTplContent(
+      'offer-panel-accepted',
+      {
+        '{{recipientName}}': panel.recipient_name || '',
+        '{{recipientOrg}}': panel.recipient_org_name || 'N/A',
+        '{{recipientEmail}}': panel.recipient_email || '',
+        '{{panelTitle}}': panel.title || '',
+      },
+      theme,
+      panel.business_unit,
+    );
+
+    return this.mail.sendMail({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.createdBy.email,
+      subject: tplAccepted?.subject ?? `Your offer was accepted`,
+      html: tplAccepted?.html ?? fallbackHtmlAccepted,
+    });
+  }
+
+  async notifyAdminOfferPanelDeclined(panelId: string): Promise<boolean> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id: panelId },
+      select: {
+        id: true,
+        title: true,
+        business_unit: true,
+        recipient_name: true,
+        recipient_email: true,
+        recipient_org_name: true,
+        createdBy: { select: { email: true, first_name: true } },
+      },
+    });
+    if (!panel?.createdBy?.email) return false;
+
+    const theme = await getBusinessUnitEmailTheme(
+      this.prisma,
+      panel.business_unit,
+    );
+    const panelUrl = `${process.env.FRONTEND_URL}/offer-panels?panel=${panel.id}`;
+    const orgLabel = panel.recipient_org_name
+      ? ` from ${panel.recipient_org_name}`
+      : '';
+
+    const html = this.buildEmail(
+      `<p><strong>${panel.recipient_name}</strong>${orgLabel} has <strong>declined</strong> the offer panel you sent.</p>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <p><strong>Panel:</strong> ${panel.title}</p>
+        <p><strong>Recipient:</strong> ${panel.recipient_name} (${panel.recipient_email})</p>
+      </div>
+      <div style="text-align: left; margin: 30px 0;">
+        <a href="${panelUrl}" class="cta-button">View Offer Panel</a>
+      </div>`,
+      theme,
+    );
+    const tplDeclined = await this.getTplContent(
+      'offer-panel-declined',
+      {
+        '{{recipientName}}': panel.recipient_name || '',
+        '{{recipientOrg}}': panel.recipient_org_name || 'N/A',
+        '{{recipientEmail}}': panel.recipient_email || '',
+        '{{panelTitle}}': panel.title || '',
+      },
+      theme,
+      panel.business_unit,
+    );
+
+    return this.mail.sendMail({
+      from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
+      to: panel.createdBy.email,
+      subject: tplDeclined?.subject ?? `Your offer was declined`,
+      html: tplDeclined?.html ?? html,
+    });
+  }
 }
-
-

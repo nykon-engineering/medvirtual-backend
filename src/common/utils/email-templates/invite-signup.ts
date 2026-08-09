@@ -1,10 +1,17 @@
-import { getEmailFooter, getEmailHeader } from './components';
+import {
+  getEmailFooter,
+  getEmailHeader,
+  getEmailLogoCss,
+  getEmailLogoImg,
+} from './components';
 import { EmailTheme } from './theme';
 
 export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
 
   return `
 <!DOCTYPE html>
@@ -38,14 +45,7 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
     .content {
       padding: 40px 30px;
     }
-    .logo {
-      text-align: left;
-      margin-bottom: 30px;
-    }
-    .logo img {
-      max-width: 200px;
-      height: auto;
-    }
+${getEmailLogoCss()}
     .greeting {
       color: #333333;
       font-size: 16px;
@@ -59,8 +59,8 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
     }
     .cta-button {
       display: inline-block;
-      background-color: ${primaryColor};
-      color: #ffffff !important;
+      background-color: ${buttonColor};
+      color: ${buttonTextColor} !important;
       padding: 14px 28px;
       text-decoration: none;
       border-radius: 30px;
@@ -71,13 +71,13 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
     }
     .cta-button:hover {
       background-color: ${primaryColorHover};
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:visited {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:link {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .closing {
       color: #333333;
@@ -131,19 +131,23 @@ export default function InviteSignup(inviteLink: string, theme?: EmailTheme) {
     <div class="container">
       <div class="content">
         <div class="logo">
-          <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+          ${getEmailLogoImg(theme)}
         </div>
       
       <div class="greeting">Hi,</div>
-      
+    
       <div class="main-message">
-        You have been invited to join our healthcare platform. Just click the button below to easily and securely create your account :)
+        You have been invited to join the MedVirtual platform. Please click the button below to easily and securely activate your account.
       </div>
 
       <div style="text-align: left; margin: 30px 0;">
         <a href="${inviteLink}" class="cta-button">
           Activate My Account
         </a>
+      </div>
+
+      <div class="main-message">
+        Once activated, you can manage your hired staff, submit new hire requests, and explore our candidate pool to source the right support for your team.
       </div>
 
       <strong>⏰ Important:</strong> This invitation will expire in 48 hours for security reasons.

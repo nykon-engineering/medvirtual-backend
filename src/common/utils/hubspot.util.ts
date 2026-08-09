@@ -1,22 +1,34 @@
-import { OrganizationRole, Prisma } from "@prisma/client";
-import { candidadeToDbDictionary, dbToCandidateDictionary } from "../dictionaries/candidate-dictionary";
-import { dbToOrganizationDictionary, organizationToDbDictionary } from "../dictionaries/organization-dictionary";
-import { CreateOrganizationDto } from "../../organization/dto/createOrganization.dto";
-import { ownerToDbDictionary } from "../dictionaries/owner-dictionary";
-import { dealToDbDictionary } from "../dictionaries/deal-dictionary";
-import { hrTicketToDbDictionary } from "../dictionaries/HRTicket-dicionary";
-import { invoiceToDbDictionary } from "../dictionaries/invoice-dictionary";
+import { OrganizationRole, Prisma } from '@prisma/client';
+import axios from 'axios';
+import {
+  candidadeToDbDictionary,
+  dbToCandidateDictionary,
+} from '../dictionaries/candidate-dictionary';
+import {
+  dbToOrganizationDictionary,
+  organizationToDbDictionary,
+} from '../dictionaries/organization-dictionary';
+import { CreateOrganizationDto } from '../../organization/dto/createOrganization.dto';
+import { ownerToDbDictionary } from '../dictionaries/owner-dictionary';
+import { dealToDbDictionary } from '../dictionaries/deal-dictionary';
+import { hrTicketToDbDictionary } from '../dictionaries/HRTicket-dicionary';
+import { invoiceToDbDictionary } from '../dictionaries/invoice-dictionary';
+import { contactToDbDictionary } from '../dictionaries/contact-dictionary';
 
 interface candidateData {
-    [key: string]: any;
+  [key: string]: any;
 }
 
 interface organizationData {
-    [key: string]: any;
+  [key: string]: any;
 }
 
 interface ownerData {
-    [key: string]: any;
+  [key: string]: any;
+}
+
+interface contactData {
+  [key: string]: any;
 }
 
 interface dealData {
@@ -31,112 +43,130 @@ interface invoiceData {
 }
 
 export function extractDriveFileId(url: string): string | null {
-    const match = url.match(/\/d\/([a-zA-Z0-9_-]{25,})/);
-    return match ? match[1] : null;
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]{25,})/);
+  return match ? match[1] : null;
 }
 
-export function mapHubspotToDb(hubspotData: candidateData): Prisma.CandidateCreateInput {
-    const result: Partial<Prisma.CandidateCreateInput> = {};
+export function mapHubspotToDb(
+  hubspotData: candidateData,
+): Prisma.CandidateCreateInput {
+  const result: Partial<Prisma.CandidateCreateInput> = {};
 
-    for (const [hubspotKey, dbKey] of Object.entries(candidadeToDbDictionary)) {
-      const value = hubspotData[hubspotKey];
-        
-      if (value !== undefined) {
-        if (Array.isArray(dbKey)) {
-          for (const key of dbKey) {
-            result[key] = value;
-          }
-        } else {
-          result[dbKey] = value;
+  for (const [hubspotKey, dbKey] of Object.entries(candidadeToDbDictionary)) {
+    const value = hubspotData[hubspotKey];
+
+    if (value !== undefined) {
+      if (Array.isArray(dbKey)) {
+        for (const key of dbKey) {
+          result[key] = value;
         }
-      }    
+      } else {
+        result[dbKey] = value;
+      }
     }
-    return result as Prisma.CandidateCreateInput;
+  }
+  return result as Prisma.CandidateCreateInput;
 }
 
 export function mapDbToHubspot(data: Record<string, any>): Record<string, any> {
-  
-    const mappedData: Record<string, any> = {};
-    for (const [key, value] of Object.entries(data)) {
-        const hubspotKey = dbToCandidateDictionary[key];
-        if (hubspotKey) {
-            mappedData[hubspotKey] = value;
-        }
+  const mappedData: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    const hubspotKey = dbToCandidateDictionary[key];
+    if (hubspotKey) {
+      mappedData[hubspotKey] = value;
     }
-    return mappedData;
+  }
+  return mappedData;
 }
 
-export function mapOrganizationToDb(hubspotData: organizationData): CreateOrganizationDto {
-    const result: Partial<CreateOrganizationDto> = {};
+export function mapOrganizationToDb(
+  hubspotData: organizationData,
+): CreateOrganizationDto {
+  const result: Partial<CreateOrganizationDto> = {};
 
-    for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
-      const value = hubspotData[hubspotKey];
-        if (value === undefined) continue;
+  for (const [hubspotKey, dbKey] of Object.entries(
+    organizationToDbDictionary,
+  )) {
+    const value = hubspotData[hubspotKey];
+    if (value === undefined) continue;
 
-        if (hubspotKey === "type") {
-          result[dbKey] = value === "PROSPECT" ? OrganizationRole.prospect : OrganizationRole.client;
-        } else {
-          result[dbKey] = value;
-        }
-        
-      }
-    return result as CreateOrganizationDto;
+    if (hubspotKey === 'type') {
+      result[dbKey] =
+        value === 'PROSPECT'
+          ? OrganizationRole.prospect
+          : OrganizationRole.client;
+    } else {
+      result[dbKey] = value;
+    }
+  }
+  return result as CreateOrganizationDto;
 }
 
-export function mapDbToOrganization(dbData: CreateOrganizationDto): organizationData {
+export function mapDbToOrganization(
+  dbData: CreateOrganizationDto,
+): organizationData {
   const result: Partial<organizationData> = {};
 
-  for (const [dbKey, hubspotKey] of Object.entries(dbToOrganizationDictionary)) {
+  for (const [dbKey, hubspotKey] of Object.entries(
+    dbToOrganizationDictionary,
+  )) {
     const value = dbData[dbKey];
-      if (value === undefined) continue;
+    if (value === undefined) continue;
 
-      if (dbKey === "organization_role") {
-        result[hubspotKey] = value === OrganizationRole.prospect ? "PROSPECT" : "Current Client";
-      } else {
-        result[hubspotKey] = value;
-      }
-      
+    if (dbKey === 'organization_role') {
+      result[hubspotKey] =
+        value === OrganizationRole.prospect ? 'PROSPECT' : 'Current Client';
+    } else {
+      result[hubspotKey] = value;
     }
+  }
   return result as CreateOrganizationDto;
 }
 
 export function mapOrganizationToDbHubspot(hubspotData: organizationData): any {
   const result: Partial<CreateOrganizationDto> = {};
 
-  for (const [hubspotKey, dbKey] of Object.entries(organizationToDbDictionary)) {
+  for (const [hubspotKey, dbKey] of Object.entries(
+    organizationToDbDictionary,
+  )) {
     const value = hubspotData[hubspotKey];
-      if (value === undefined) continue;
-        
-      result[dbKey] = value;
+    if (value === undefined) continue;
 
-    }
+    result[dbKey] = value;
+  }
   return result as any;
 }
 
-
 export function mapOwnerToDb(hubspotData: ownerData): any {
-    const result: Partial<any> = {};
+  const result: Partial<any> = {};
 
-    for (const [hubspotKey, dbKey] of Object.entries(ownerToDbDictionary)) {
-        
-        if (hubspotData[hubspotKey] !== undefined) {
-          result[dbKey] = hubspotData[hubspotKey];
-        }
-        
-      }
-    return result as any;
+  for (const [hubspotKey, dbKey] of Object.entries(ownerToDbDictionary)) {
+    if (hubspotData[hubspotKey] !== undefined) {
+      result[dbKey] = hubspotData[hubspotKey];
+    }
+  }
+  return result as any;
+}
+
+export function mapContactToDb(hubspotData: contactData): any {
+  const result: Partial<any> = {};
+
+  for (const [hubspotKey, dbKey] of Object.entries(contactToDbDictionary)) {
+    if (hubspotData[hubspotKey] !== undefined) {
+      result[dbKey] = hubspotData[hubspotKey];
+    }
+  }
+  return result as any;
 }
 
 export function mapDealToDb(hubspotData: dealData): any {
   const result: Partial<any> = {};
 
   for (const [hubspotKey, dbKey] of Object.entries(dealToDbDictionary)) {
-      
-      if (hubspotData[hubspotKey] !== undefined) {
-        result[dbKey] = hubspotData[hubspotKey];
-      }
-      
+    if (hubspotData[hubspotKey] !== undefined) {
+      result[dbKey] = hubspotData[hubspotKey];
     }
+  }
   return result as any;
 }
 
@@ -144,12 +174,10 @@ export function mapHRTicketToDb(hubspotData: HRTicketData): any {
   const result: Partial<any> = {};
 
   for (const [hubspotKey, dbKey] of Object.entries(hrTicketToDbDictionary)) {
-      
-      if (hubspotData[hubspotKey] !== undefined) {
-        result[dbKey] = hubspotData[hubspotKey];
-      }
-      
+    if (hubspotData[hubspotKey] !== undefined) {
+      result[dbKey] = hubspotData[hubspotKey];
     }
+  }
   return result as any;
 }
 
@@ -157,22 +185,49 @@ export function mapInvoiceToDb(hubspotData: invoiceData): any {
   const result: Partial<any> = {};
 
   for (const [hubspotKey, dbKey] of Object.entries(invoiceToDbDictionary)) {
-      
-      if (hubspotData[hubspotKey] !== undefined) {
-        result[dbKey] = hubspotData[hubspotKey];
-      }
-      
+    if (hubspotData[hubspotKey] !== undefined) {
+      result[dbKey] = hubspotData[hubspotKey];
     }
+  }
   return result as any;
 }
 
 export function changeLabelAvailability(label: string): string {
-    return label === "Available Candidates - Part Time" 
-    ? "Part Time" 
-    : label === "Available Candidates" 
-      ? "Full Time"
-      : "Full Time";
+  return label === 'Available Candidates - Part Time'
+    ? 'Part Time'
+    : label === 'Available Candidates'
+      ? 'Full Time'
+      : 'Full Time';
 }
 
-
-
+/**
+ * Resolves paid_at for a HubSpot invoice.
+ * Prefers hs_payment_date directly from the invoice; falls back to
+ * hs_initiated_date from the first associated payment object when absent.
+ */
+export async function resolvePaidAt(
+  hsPaymentDate: string | null | undefined,
+  paymentResults: Array<{ id: string }>,
+): Promise<Date | null> {
+  if (hsPaymentDate) {
+    return new Date(hsPaymentDate);
+  }
+  if (paymentResults.length === 0) {
+    return null;
+  }
+  try {
+    const paymentId = paymentResults[0].id;
+    const response = await axios.get(
+      `https://api.hubapi.com/crm/v3/objects/payments/${paymentId}?properties=hs_initiated_date`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.HUBSPOT_ACCESS_TOKEN}`,
+        },
+      },
+    );
+    const initiatedDate = response.data?.properties?.hs_initiated_date;
+    return initiatedDate ? new Date(initiatedDate) : null;
+  } catch {
+    return null;
+  }
+}

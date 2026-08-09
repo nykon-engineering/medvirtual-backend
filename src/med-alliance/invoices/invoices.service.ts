@@ -8,6 +8,18 @@ import { USER, HubspotInvoiceSnapshot } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 
+export interface EligibleInvoiceRow {
+  id: string;
+  hubspot_id: string;
+  organization_id: string;
+  organization_name: string;
+  invoice_amount: Decimal;
+  currency: string;
+  paid_at: Date | null;
+  hubspot_pdf_link: string | null;
+  invoice_number: string | null;
+}
+
 // Fields exposed to clients. raw_payload is intentionally excluded —
 // it is an internal debug/replay field and must never be sent to the frontend.
 const SNAPSHOT_SELECT = {
@@ -19,7 +31,9 @@ const SNAPSHOT_SELECT = {
   invoice_amount: true,
   currency: true,
   paid_at: true,
+  due_date: true,
   sync_hash: true,
+  invoice_number: true,
   createdAt: true,
   updatedAt: true,
   // raw_payload intentionally omitted
@@ -103,10 +117,7 @@ export class InvoicesService {
 
     // Primary sort is always paid_at DESC to ensure sync retries reflect the
     // latest consistent state (hubspot_id is unique — one snapshot per invoice).
-    const orderBy: any[] = [
-      { [sortBy]: sortOrder },
-      { createdAt: 'desc' },
-    ];
+    const orderBy: any[] = [{ [sortBy]: sortOrder }, { createdAt: 'desc' }];
 
     const [snapshots, total] = await this.prisma.$transaction([
       this.prisma.hubspotInvoiceSnapshot.findMany({
@@ -128,6 +139,85 @@ export class InvoicesService {
     }
 
     return { data, pagination: { page, limit, total } };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Admin: list paid invoices for all of an affiliate's referred companies that
+  // do not yet have a commission record for that affiliate.
+  // Used to populate the manual commission creation modal.
+  // ---------------------------------------------------------------------------
+  async getEligibleInvoicesForAffiliate(
+    affiliateProfileId: string,
+  ): Promise<EligibleInvoiceRow[]> {
+    const profile = await this.prisma.affiliateProfile.findUnique({
+      where: { id: affiliateProfileId },
+      select: { id: true, user_id: true, status: true },
+    });
+    if (!profile) throw new NotFoundException('Affiliate profile not found');
+    if (profile.status !== 'active')
+      throw new ForbiddenException('Affiliate profile is not active');
+    if (!profile.user_id)
+      throw new ForbiddenException('Affiliate has no connected user');
+
+    // Deployed orgs whose eligibility hasn't expired — decisions are available immediately once
+    // deployed, so there is no 30-day stabilization tier to filter on anymore. Expiry is enforced
+    // upstream by the status itself (commission-detection.service.ts / the expiry cron sweep).
+    const orgs = await this.prisma.organization.findMany({
+      where: {
+        referred_by_affiliate_id: profile.user_id,
+        referral_stage: 'deployed',
+        med_alliance_referral_status: { not: 'expired' },
+        status: { not: 'deleted' },
+      },
+      select: { id: true },
+    });
+
+    if (orgs.length === 0) return [];
+
+    const orgIds = orgs.map((o) => o.id);
+
+    const snapshots = await this.prisma.hubspotInvoiceSnapshot.findMany({
+      where: {
+        organization_id: { in: orgIds },
+        invoice_status: 'paid',
+        invoice_amount: { gt: 0 },
+        NOT: {
+          commissions: {
+            some: { affiliate_id: profile.user_id },
+          },
+        },
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+        organization_id: true,
+        invoice_amount: true,
+        payment_status: true,
+        currency: true,
+        paid_at: true,
+        hubspot_pdf_link: true,
+        invoice_number: true,
+        organization: { select: { name: true } },
+      },
+      orderBy: { paid_at: 'desc' },
+    });
+
+    // Post-filter: exclude invoices where payment_status is present but not 'succeeded'.
+    return snapshots
+      .filter(
+        (s) => s.payment_status === null || s.payment_status === 'succeeded',
+      )
+      .map((s) => ({
+        id: s.id,
+        hubspot_id: s.hubspot_id,
+        organization_id: s.organization_id,
+        organization_name: s.organization.name,
+        invoice_amount: s.invoice_amount,
+        currency: s.currency,
+        paid_at: s.paid_at,
+        hubspot_pdf_link: s.hubspot_pdf_link,
+        invoice_number: s.invoice_number,
+      }));
   }
 
   // ---------------------------------------------------------------------------

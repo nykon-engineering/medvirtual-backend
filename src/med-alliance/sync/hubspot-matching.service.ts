@@ -4,13 +4,15 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../../mail/mail.service';
 import { EligibilityCheckService } from '../referred-companies/eligibility-check.service';
 import { ReviewCasesService } from '../review-cases/review-cases.service';
+import { EmailTemplatesService } from '../../email-templates/email-templates.service';
+import { getBusinessUnitEmailTheme } from '../../common/utils/email-templates/theme-helper';
 
 export type MatchOutcome =
-  | 'already_matched'   // hubspot_id was already set — Phase A skipped
-  | 'synced'            // exactly 1 match found and stored
-  | 'no_match'          // 0 matches — Phase B will run without hubspot_id
-  | 'multiple_matches'  // 2+ matches — pipeline halted, admin review required
-  | 'error';            // HubSpot API failure
+  | 'already_matched' // hubspot_id was already set — Phase A skipped
+  | 'synced' // exactly 1 match found and stored
+  | 'no_match' // 0 matches — Phase B will run without hubspot_id
+  | 'multiple_matches' // 2+ matches — pipeline halted, admin review required
+  | 'error'; // HubSpot API failure
 
 export interface MatchResult {
   outcome: MatchOutcome;
@@ -28,6 +30,7 @@ export class HubspotMatchingService {
     private readonly mailService: MailService,
     private readonly eligibilityCheck: EligibilityCheckService,
     private readonly reviewCases: ReviewCasesService,
+    private readonly emailTemplates: EmailTemplatesService,
   ) {}
 
   /**
@@ -79,7 +82,11 @@ export class HubspotMatchingService {
       }
 
       if (results.length > 1) {
-        await this.handleMultipleMatches(organizationId, org);
+        await this.handleMultipleMatches(
+          organizationId,
+          org,
+          !!org.referred_by_affiliate_id,
+        );
         return { outcome: 'multiple_matches' };
       }
 
@@ -92,14 +99,22 @@ export class HubspotMatchingService {
         hubspot_synced_at: new Date(),
       });
 
-      // Re-run MA-004: now that hubspot_id is set, the eligibility check
-      // may find a match by hubspot_id that was missed earlier.
-      await this.eligibilityCheck.runAndPersist(organizationId, 'system', 'sync');
+      // MA-004: re-run eligibility check now that hubspot_id is set.
+      // Only applies to referred orgs — non-referred orgs have no Med Alliance eligibility.
+      if (org.referred_by_affiliate_id) {
+        await this.eligibilityCheck.runAndPersist(
+          organizationId,
+          'system',
+          'sync',
+        );
+      }
 
       return { outcome: 'synced', hubspotCompanyId };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`HubSpot matching failed for org ${organizationId}: ${message}`);
+      this.logger.error(
+        `HubSpot matching failed for org ${organizationId}: ${message}`,
+      );
 
       await this.persistSyncState(organizationId, {
         hubspot_sync_status: 'error',
@@ -143,7 +158,9 @@ export class HubspotMatchingService {
       const emailDomain = org.email.split('@')[1];
       if (emailDomain) {
         filters.push({
-          filters: [{ propertyName: 'domain', operator: 'EQ', value: emailDomain }],
+          filters: [
+            { propertyName: 'domain', operator: 'EQ', value: emailDomain },
+          ],
         });
       }
     }
@@ -178,34 +195,52 @@ export class HubspotMatchingService {
     organizationId: string,
     org: {
       name: string;
-      referredByAffiliate?: { first_name: string; last_name: string; email: string } | null;
+      referredByAffiliate?: {
+        first_name: string;
+        last_name: string;
+        email: string;
+      } | null;
     },
+    isReferred: boolean,
   ) {
+    const updateData: Record<string, any> = {
+      hubspot_sync_status: 'multiple_matches',
+      hubspot_sync_error:
+        'Multiple HubSpot company records matched. Manual review required.',
+      hubspot_synced_at: null,
+    };
+
+    // Only set Med Alliance eligibility fields for referred organizations
+    if (isReferred) {
+      updateData.med_alliance_referral_status = 'not_eligible';
+    }
+
     await this.prisma.organization.update({
       where: { id: organizationId },
-      data: {
-        med_alliance_referral_status: 'not_eligible',
-        hubspot_sync_status: 'multiple_matches',
-        hubspot_sync_error:
-          'Multiple HubSpot company records matched. Manual review required.',
-        hubspot_synced_at: null,
-      },
+      data: updateData,
     });
 
+    if (!isReferred) {
+      return;
+    }
+
     // MA-006: open an admin review case so it appears in the review queue
-    await this.reviewCases.openOrSkip(organizationId, 'multiple_hubspot_matches', {
-      company_name: org.name,
-    });
+    await this.reviewCases.openOrSkip(
+      organizationId,
+      'multiple_hubspot_matches',
+      {
+        company_name: org.name,
+      },
+    );
 
     const affiliateName = org.referredByAffiliate
       ? `${org.referredByAffiliate.first_name} ${org.referredByAffiliate.last_name} (${org.referredByAffiliate.email})`
       : 'Unknown affiliate';
 
-    await this.mailService.sendMail({
-      from: 'med-alliance@medvirtual.com',
-      to: 'paulo@regenta.ai',
-      subject: `[Med Alliance] Multiple HubSpot Matches — Review Required`,
-      html: `
+    const reviewLink = `${process.env.FRONTEND_URL ?? ''}/admin/med-alliance/referred-companies/${organizationId}`;
+
+    const fallbackSubject = `[Med Alliance] Multiple HubSpot Matches — Review Required`;
+    const fallbackHtml = `
         <h2>Med Alliance — Admin Review Required</h2>
         <p>A referral requires manual review because multiple HubSpot company records were found.</p>
         <table>
@@ -214,11 +249,33 @@ export class HubspotMatchingService {
           <tr><td><strong>Referred by:</strong></td><td>${affiliateName}</td></tr>
         </table>
         <p>
-          <a href="${process.env.FRONTEND_URL ?? ''}/admin/med-alliance/referred-companies/${organizationId}">
+          <a href="${reviewLink}">
             Review this referral
           </a>
         </p>
-      `,
+      `;
+
+    let tpl: { subject: string; html: string } | null = null;
+    try {
+      tpl = await this.emailTemplates.getTemplateContent(
+        'med-alliance-multiple-hubspot-matches',
+        {
+          '{{orgName}}': org.name ?? '',
+          '{{organizationId}}': organizationId,
+          '{{affiliateName}}': affiliateName,
+          '{{reviewLink}}': reviewLink,
+        },
+        await getBusinessUnitEmailTheme(this.prisma, 'MedVirtual'),
+      );
+    } catch {
+      tpl = null;
+    }
+
+    await this.mailService.sendMail({
+      from: 'med-alliance@medvirtual.com',
+      to: 'paulo@regenta.ai',
+      subject: tpl?.subject ?? fallbackSubject,
+      html: tpl?.html ?? fallbackHtml,
     });
   }
 
@@ -234,7 +291,10 @@ export class HubspotMatchingService {
   }
 
   /** Applies a partial update to Organization sync fields. */
-  private async persistSyncState(organizationId: string, data: Record<string, any>) {
+  private async persistSyncState(
+    organizationId: string,
+    data: Record<string, any>,
+  ) {
     await this.prisma.organization.update({
       where: { id: organizationId },
       data,

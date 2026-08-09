@@ -13,9 +13,16 @@ export class HandlerClient {
     private readonly hireRequestService: HireRequestService,
   ) {}
 
-  async execute(user: any, page: number = 1, perPage: number = 10): Promise<object> {
+  async execute(
+    user: any,
+    page: number = 1,
+    perPage: number = 10,
+  ): Promise<object> {
     const result: any = {};
-    if (!user || user.role.includes("organization") && !user.organization_id) {
+    if (
+      !user ||
+      (user.role.includes('organization') && !user.organization_id)
+    ) {
       throw new Error('User or organization not found!!');
     }
 
@@ -46,6 +53,8 @@ export class HandlerClient {
           { status: TicketStatus.new },
           { status: TicketStatus.in_progress },
         ],
+        // Sibling of OR, so Prisma ANDs it — soft-deleted tickets stay out of the KPI.
+        deleted_at: null,
         ...(user.role === 'system_admin' ? { user_id: user.id } : {}),
       },
     });

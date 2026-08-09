@@ -1,10 +1,15 @@
-import { getEmailFooter } from './components';
+import { getEmailFooter, getEmailLogoCss, getEmailLogoImg } from './components';
 import { EmailTheme } from './theme';
 
-export function MedAllianceInvitationForOrgUsers(firstName: string, theme?: EmailTheme): string {
+export function MedAllianceInvitationForOrgUsers(
+  firstName: string,
+  theme?: EmailTheme,
+): string {
   const primaryColor = theme?.primaryColor || '#01546B';
   const primaryColorHover = theme?.primaryColorHover || '#013A4F';
   const companyName = theme?.companyName || 'MedVirtual';
+  const buttonColor = theme?.buttonColor || primaryColor;
+  const buttonTextColor = theme?.buttonTextColor || '#ffffff';
   const ctaLink = `${process.env.FRONTEND_URL}/med-alliance`;
 
   return `
@@ -39,14 +44,7 @@ export function MedAllianceInvitationForOrgUsers(firstName: string, theme?: Emai
     .content {
       padding: 40px 30px;
     }
-      .logo {
-      text-align: left;
-      margin-bottom: 30px;
-    }
-    .logo img {
-      max-width: 200px;
-      height: auto;
-    }
+${getEmailLogoCss()}
     .greeting {
       color: #333333;
       font-size: 16px;
@@ -60,8 +58,8 @@ export function MedAllianceInvitationForOrgUsers(firstName: string, theme?: Emai
     }
     .cta-button {
       display: inline-block;
-      background-color: ${primaryColor};
-      color: #ffffff !important;
+      background-color: ${buttonColor};
+      color: ${buttonTextColor} !important;
       padding: 14px 28px;
       text-decoration: none;
       border-radius: 30px;
@@ -72,13 +70,13 @@ export function MedAllianceInvitationForOrgUsers(firstName: string, theme?: Emai
     }
     .cta-button:hover {
       background-color: ${primaryColorHover};
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:visited {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .cta-button:link {
-      color: #ffffff !important;
+      color: ${buttonTextColor} !important;
     }
     .closing {
       color: #333333;
@@ -104,18 +102,26 @@ export function MedAllianceInvitationForOrgUsers(firstName: string, theme?: Emai
 
       <div class="content">
         <div class="logo">
-          <img src="https://staging.medvirtual.ai/${theme?.companyName === 'Berry Virtual' ? 'logobv.png' : 'logo.png'}" alt="${companyName} Logo" />
+          ${getEmailLogoImg(theme)}
         </div>
 
         <div class="greeting">Hello, ${firstName}!</div>
 
         <div class="main-message">
-          Thank you for joining the Med Alliance Program with ${companyName}. We're excited to have you as a partner and offer you access to exclusive benefits and commission opportunities.
+          <p>Your Med Alliance Partner profile is now active.</p>
+          <p>By joining the Med Alliance Program with ${companyName}, you've unlocked a new revenue stream directly from your existing network. Here's what's available to you right now:</p>
+          <ul style="margin: 16px 0; padding-left: 20px; line-height: 2;">
+            <li>Commission earnings on every successful referral you make</li>
+            <li>A dedicated partner dashboard with real-time referral tracking</li>
+            <li>Transparent payout history and on-demand payout requests</li>
+            <li>Full visibility into the organizations you've referred</li>
+          </ul>
+          <p>Your dashboard is live — head over to review your partner profile and start sharing your referral link.</p>
         </div>
 
         <div style="text-align: left; margin: 30px 0;">
           <a href="${ctaLink}" class="cta-button">
-            Access Med Alliance
+            View My Partner Dashboard
           </a>
         </div>
 
