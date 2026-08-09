@@ -515,8 +515,13 @@ export class PayoutRequestsService {
     if (payment_method) where.payment_method = payment_method;
     if (amount_min !== undefined || amount_max !== undefined) {
       where.requested_amount = {};
-      if (amount_min !== undefined) where.requested_amount.gte = amount_min;
-      if (amount_max !== undefined) where.requested_amount.lte = amount_max;
+      // Guard against NaN reaching Prisma: `new Decimal(NaN)` builds silently
+      // instead of throwing, and Prisma's query engine rejects a NaN Decimal
+      // argument with an unhandled PrismaClientUnknownRequestError.
+      if (amount_min !== undefined && Number.isFinite(amount_min))
+        where.requested_amount.gte = amount_min;
+      if (amount_max !== undefined && Number.isFinite(amount_max))
+        where.requested_amount.lte = amount_max;
     }
     if (created_from || created_to) {
       where.createdAt = {};
@@ -584,9 +589,12 @@ export class PayoutRequestsService {
     // B6: amount range filter
     if (amount_min !== undefined || amount_max !== undefined) {
       where.requested_amount = {};
-      if (amount_min !== undefined)
+      // Guard against NaN reaching Prisma: `new Decimal(NaN)` builds silently
+      // instead of throwing, and Prisma's query engine rejects a NaN Decimal
+      // argument with an unhandled PrismaClientUnknownRequestError.
+      if (amount_min !== undefined && Number.isFinite(amount_min))
         where.requested_amount.gte = new Decimal(amount_min);
-      if (amount_max !== undefined)
+      if (amount_max !== undefined && Number.isFinite(amount_max))
         where.requested_amount.lte = new Decimal(amount_max);
     }
     // B6: full-text search on affiliate name/email, or by an included commission's id / invoice number
