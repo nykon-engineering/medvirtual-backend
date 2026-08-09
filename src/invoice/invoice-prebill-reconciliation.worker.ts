@@ -11,7 +11,9 @@ import { ConfigService } from '@nestjs/config';
 import { isLocalMode } from '../common/bull.utils';
 
 // ---------------------------------------------------------------------------
-// Lightweight computed line item (no DB ids, pure in-memory)
+// Lightweight computed line item (no DB ids, pure in-memory) — the "what SHOULD this
+// worker's line have cost, given real Hubstaff data" result of computeActualLineItems,
+// compared against what the prebill invoice actually charged (prebillByWorker below).
 // ---------------------------------------------------------------------------
 interface ComputedLineItem {
   worker_id: string;
@@ -127,7 +129,10 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
 
     // -----------------------------------------------------------------------
     // 3. Build a per-worker map of prebill primary-line final_totals
-    //    (sum all line items per worker_id in the prebill version)
+    //    (sum all line items per worker_id in the prebill version) — this sums ALL
+    //    of that worker's lines (primary + any overtime/bonus additional lines) into
+    //    one comparison total, since computeActualLineItems below also returns one
+    //    combined grand_total per worker rather than a separate primary/overtime split.
     // -----------------------------------------------------------------------
     const prebillByWorker = new Map<string, { lineItemId: string; estimatedTotal: Decimal }>();
     for (const li of prebillLineItems) {
@@ -145,8 +150,10 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
     }
 
     // -----------------------------------------------------------------------
-    // 4. Clear any existing reconciliation + ledger rows for this invoice
-    //    so reruns (manual or automated) are fully idempotent
+    // 4. Clear any existing reconciliation + ledger rows for this invoice so reruns
+    //    (manual re-trigger via InvoiceService.triggerPrebillReconciliation, or an
+    //    accidental duplicate BullMQ delivery) are fully idempotent — a rerun always
+    //    recomputes from scratch rather than layering a second set of deltas on top.
     // -----------------------------------------------------------------------
     const lineItemIds = prebillLineItems.map((li) => li.id);
 
@@ -258,7 +265,17 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
   }
 
   // ---------------------------------------------------------------------------
-  // Private: compute actual per-worker totals from Hubstaff (no DB writes)
+  // Private: compute actual per-worker totals from Hubstaff (no DB writes).
+  //
+  // This deliberately re-implements a slimmed-down version of InvoiceWorker's pricing
+  // rules (worked/PTO/holiday day classification, overtime detection, full-time salary
+  // proration) rather than calling into InvoiceWorker directly — the two differ in
+  // ways that make sharing the exact same code path impractical here: this only needs
+  // one *comparison* total per worker (no InvoiceLineItem rows, no bonus-ticket lines,
+  // no ledger-entry application — this method IS how ledger entries get created, so it
+  // can't also consume them), and it operates on already-known real Hubstaff data
+  // rather than InvoiceWorker's prebill-vs-actual branching. Keep the two in sync
+  // manually if the underlying billing rules change.
   // ---------------------------------------------------------------------------
 
   private async computeActualLineItems(params: {
@@ -354,7 +371,10 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
     // --- Compute per-worker line items ---
     const result: ComputedLineItem[] = [];
 
-    // Union of workers: those with actual activity + those in memberMap who had prebill entries
+    // Only workers who show up in real Hubstaff activity get an "actual" line computed —
+    // a prebilled worker with zero actual tracked hours simply won't appear here, and
+    // the main process() loop above already skips workers with no matching actual line
+    // (logging a warning) rather than assuming a $0 reconciliation for them.
     const workerIdsToProcess = new Set<number>([...userSummary.keys()]);
 
     for (const userId of workerIdsToProcess) {
@@ -414,6 +434,14 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
       const actualHours = totalPayableHours;
       const hasOvertime = actualHours > requiredHours + 4;
 
+      // NOTE(bug risk): this default/fallback rate is $25/hr, but InvoiceWorker's
+      // equivalent fallback (used when generating the original prebill estimate) is
+      // $12/hr — see invoice.worker.ts's `hourlyRate = new Decimal(12)`. For any worker
+      // with no salary and no candidate.hourly_pay_rate on file, this mismatch alone
+      // will manufacture a false debit here (actual computed at $25/hr vs. the $12/hr
+      // the client was originally prebilled), even if their real hours didn't change.
+      // Flagging rather than silently changing — worth confirming with whoever owns
+      // this logic whether $25 or $12 is the intended fallback for reconciliation.
       let primaryHours = actualHours;
       let overtimeHours = 0;
       let hourlyRate = new Decimal(25);
