@@ -399,10 +399,10 @@ export class AffiliatesController {
         : null,
       referred_companies_count: user?.referredOrganizations?.length ?? 0,
       pending_payout_amount: Number(
-        enriched.pendingAgg._sum.requested_amount ?? 0,
+        enriched.pendingAgg?._sum?.requested_amount ?? 0,
       ),
       lifetime_commissions: Number(
-        enriched.lifetimeAgg._sum.commission_amount ?? 0,
+        enriched.lifetimeAgg?._sum?.commission_amount ?? 0,
       ),
       hubspot_id: profile.hubspot_id ?? null,
       hubspot_pipeline: profile.hubspot_pipeline ?? null,

@@ -30,9 +30,11 @@ async function bootstrapServer(): Promise<any> {
       'https://staging.medvirtual.ai',
       'http://localhost:3001',
       'http://localhost:3000',
+      'http://localhost:9000',
       'https://med-alliance.d2odvfjc5yqdaj.amplifyapp.com',
       'https://med-alliance-improved.d2odvfjc5yqdaj.amplifyapp.com',
       'https://audit-logs.d2odvfjc5yqdaj.amplifyapp.com',
+      'https://mv.staging.nykon.cloud'
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,

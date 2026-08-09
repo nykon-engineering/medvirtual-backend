@@ -451,6 +451,7 @@ export class StaffService {
             country: true,
             about_me: true,
             avatar_url: true,
+            hubstaff_id: true,
             gender: true,
             languages: {
               select: {

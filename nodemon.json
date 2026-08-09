@@ -2,6 +2,6 @@
     "watch": ["src"],
     "ext": "ts,js,json,yml",
     "ignore": ["dist", "node_modules"],
-    "exec": "npm run build:webpack && npx serverless offline"
+    "exec": "nest start"
   }
   

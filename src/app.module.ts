@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -31,12 +31,42 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
 import { OfferPanelsModule } from './offer-panels/offer-panels.module';
 import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { BusinessUnitsModule } from './business-units/business-units.module';
+import { SecretsModule } from './secrets/secrets.module';
+import { HubstaffModule } from './hubstaff/hubstaff.module';
+import { BullModule } from '@nestjs/bullmq';
+import { RedisModule } from './redis/redis.module';
+import { PusherModule } from './pusher/pusher.module';
+import { InvoiceModule } from './invoice/invoice.module';
+import { StripeModule } from './stripe/stripe.module';
+import { isLocalModeSync } from './common/bull.utils';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ...(isLocalModeSync()
+      ? []
+      : [
+          BullModule.forRootAsync({
+            inject: [ConfigService],
+            useFactory: (configService: ConfigService) => {
+              const baseKey = configService.get<string>('REDIS_BASE_KEY', 'medvirtual');
+              const prefix = baseKey.endsWith(':') ? baseKey.slice(0, -1) : baseKey;
+              return {
+                connection: {
+                  host: configService.get<string>('REDIS_HOST', 'localhost'),
+                  port: configService.get<number>('REDIS_PORT', 6379),
+                  password: configService.get<string>('REDIS_PASSWORD'),
+                  username: configService.get<string>('REDIS_USERNAME', 'basic'),
+                  maxRetriesPerRequest: null, // required by BullMQ
+                  enableReadyCheck: false,    // recommended by BullMQ
+                },
+                prefix,
+              };
+            },
+          }),
+        ]),
     ThrottlerModule.forRoot([
       {
         ttl: 60000, // 1 minute
@@ -70,6 +100,12 @@ import { BusinessUnitsModule } from './business-units/business-units.module';
     OfferPanelsModule,
     EmailTemplatesModule,
     BusinessUnitsModule,
+    SecretsModule,
+    HubstaffModule,
+    RedisModule,
+    PusherModule,
+    InvoiceModule,
+    StripeModule,
   ],
   controllers: [AppController],
   providers: [

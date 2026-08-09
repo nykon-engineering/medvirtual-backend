@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { OrganizationRole, OrganizationStatus } from '@prisma/client';
+import {
+  OrganizationRole,
+  OrganizationStatus,
+  BillingMode,
+  BillingFrequency,
+} from '@prisma/client';
 
 export class PaginationMetaDto {
   @ApiProperty({ description: 'Current page number' })
@@ -21,12 +26,56 @@ export class PaginationMetaDto {
   hasPrev: boolean;
 }
 
+export class InvoiceConfigurationResponseDto {
+  @ApiProperty({ description: 'Configuration ID' })
+  id: string;
+
+  @ApiProperty({ description: 'Hubstaff ID', required: false, nullable: true })
+  hubstaff_id?: string | null;
+
+  @ApiProperty({ description: 'Hubspot ID', required: false, nullable: true })
+  hubspot_id?: string | null;
+
+  @ApiProperty({ description: 'Billing mode', enum: BillingMode })
+  billing_mode: BillingMode;
+
+  @ApiProperty({ description: 'Billing frequency', enum: BillingFrequency })
+  billing_frequency: BillingFrequency;
+
+  @ApiProperty({ description: 'Billing currency' })
+  billing_currency: string;
+
+  @ApiProperty({ description: 'Payment terms in days' })
+  payment_terms_days: number;
+
+  @ApiProperty({ description: 'Cycle anchor day', required: false, nullable: true })
+  cycle_anchor_day?: number | null;
+
+  @ApiProperty({ description: 'Auto-submit invoices' })
+  auto_submit_invoices: boolean;
+
+  @ApiProperty({ description: 'Auto-publish invoices' })
+  auto_publish_invoices: boolean;
+
+  @ApiProperty({ description: 'Auto-sync to Stripe' })
+  auto_sync_to_stripe: boolean;
+
+  @ApiProperty({ description: 'Stripe customer ID', required: false, nullable: true })
+  stripe_customer_id?: string | null;
+
+  @ApiProperty({ description: 'Creation date' })
+  createdAt: Date;
+
+  @ApiProperty({ description: 'Last update date' })
+  updatedAt: Date;
+}
+
 export class OrganizationResponseDto {
   @ApiProperty({ description: 'Organization ID' })
   id: string;
 
-  @ApiProperty({ description: 'ID from hubspot' })
-  hubspot_id?: string;
+  @ApiProperty({ description: 'ID from hubspot', required: false, nullable: true })
+  hubspot_id?: string | null;
 
   @ApiProperty({ description: 'Organization name' })
   name: string;
@@ -85,8 +134,41 @@ export class OrganizationResponseDto {
   @ApiProperty({ description: 'Owner ID', required: false })
   owner_id?: string;
 
-  @ApiProperty({ description: 'Admin ID', required: false })
-  admin_id?: string;
+  @ApiProperty({ description: 'Admin ID', required: false, nullable: true })
+  admin_id?: string | null;
+
+  @ApiProperty({ description: 'Organization address', required: false, nullable: true })
+  address?: string | null;
+
+  @ApiProperty({ description: 'Organization city', required: false, nullable: true })
+  city?: string | null;
+
+  @ApiProperty({ description: 'Organization state', required: false, nullable: true })
+  state?: string | null;
+
+  @ApiProperty({ description: 'Organization postal code', required: false, nullable: true })
+  postal_code?: string | null;
+
+  @ApiProperty({ description: 'Organization source', required: false, nullable: true })
+  source?: string | null;
+
+  @ApiProperty({ description: 'Organization type', required: false, nullable: true })
+  type?: string | null;
+
+  @ApiProperty({ description: 'Contact first name', required: false, nullable: true })
+  contact_first_name?: string | null;
+
+  @ApiProperty({ description: 'Contact last name', required: false, nullable: true })
+  contact_last_name?: string | null;
+
+  @ApiProperty({ description: 'Referred by affiliate ID', required: false, nullable: true })
+  referred_by_affiliate_id?: string | null;
+
+  @ApiProperty({ description: 'Refer to user ID', required: false, nullable: true })
+  refer_to_user_id?: string | null;
+
+  @ApiProperty({ description: 'Deletion date', required: false, nullable: true })
+  deletedAt?: Date | null;
 
   @ApiProperty({ description: 'Organization creation date' })
   createdAt: Date;
@@ -119,6 +201,9 @@ export class OrganizationResponseDto {
 
   @ApiProperty({ description: 'Number of active staff in organization' })
   staffCount: number;
+
+  @ApiProperty({ description: 'Invoice configuration', type: InvoiceConfigurationResponseDto, required: false })
+  invoiceConfiguration?: InvoiceConfigurationResponseDto;
 }
 
 export class PaginatedOrganizationsResponseDto {
