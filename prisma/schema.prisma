@@ -41,13 +41,11 @@ model USER {
   payoutCancellations          AffiliatePayoutRequest[]     @relation("PayoutCancelledBy")
   payoutReviews                AffiliatePayoutRequest[]     @relation("PayoutReviewedBy")
   affiliateProfile             AffiliateProfile?
-  Contact                      Contact?
   email_invitations            EmailInvitation[]
   email_verifications          EmailVerification[]
   hireRequestsSourcingAssigned HireRequest[]                @relation("AssignedSourcing")
   hireRequestsStaffingAssigned HireRequest[]                @relation("AssignedStaffing")
   hireRequestsCreated          HireRequest[]                @relation("HireRequestCreatedBy")
-  HubspotAuditLog              HubspotAuditLog[]
   resolvedReviewCases          MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
   medAllianceAuditActorLogs    MedAllianceAuditLog[]        @relation("MedAllianceAuditActor")
   adminOrganizations           Organization[]               @relation("OrganizationAdmin")
@@ -166,7 +164,6 @@ model Organization {
   first_paid_invoice_at        DateTime?
   referral_stage               ReferralStage?               @default(referred)
   affiliateCommissions         AffiliateCommission[]
-  Contact                      Contact[]
   hire_requests                HireRequest[]
   hubspotInvoiceSnapshots      HubspotInvoiceSnapshot[]
   adminReviewCases             MedAllianceAdminReviewCase[]
@@ -944,60 +941,6 @@ model InvoiceConfiguration {
   @@index([stripe_customer_id], map: "idx_invoice_configurations_stripe_id")
 }
 
-model Contact {
-  id               String        @id
-  user_id          String?       @unique
-  hubspot_id       String?       @unique
-  first_name       String?
-  last_name        String?
-  email            String?
-  phone            String?
-  job_title        String?
-  company_name     String?
-  business_unit    String?
-  account_type     String?
-  website_url      String?
-  type             String?
-  referral_source  String?
-  hubspot_owner_id String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime
-  organization_id  String?
-  Organization     Organization? @relation(fields: [organization_id], references: [id])
-  USER             USER?         @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([email], map: "idx_contacts_email")
-  @@index([hubspot_id], map: "idx_contacts_hubspot_id")
-  @@index([organization_id], map: "idx_contacts_organization_id")
-  @@index([user_id], map: "idx_contacts_user_id")
-}
-
-model HubspotAuditLog {
-  id                  String             @id
-  actor_user_id       String?
-  actor_label         String?
-  entity_type         HubspotEntityType
-  entity_id           String
-  hubspot_object_id   String?
-  hubspot_object_type String
-  action              HubspotAuditAction
-  source              HubspotAuditSource @default(user_action)
-  success             Boolean
-  payload             Json?
-  response            Json?
-  error_code          String?
-  error_message       String?
-  createdAt           DateTime           @default(now())
-  USER                USER?              @relation(fields: [actor_user_id], references: [id])
-
-  @@index([actor_user_id], map: "idx_hs_audit_actor")
-  @@index([actor_label], map: "idx_hs_audit_actor_label")
-  @@index([createdAt], map: "idx_hs_audit_created_at")
-  @@index([entity_type, entity_id, createdAt], map: "idx_hs_audit_entity_timeline")
-  @@index([source], map: "idx_hs_audit_source")
-  @@index([success], map: "idx_hs_audit_success")
-}
-
 enum Role {
   organization_admin
   organization_super_admin
@@ -1192,32 +1135,6 @@ enum BillingFrequency {
   biweekly
   monthly
   custom
-}
-
-enum HubspotAuditAction {
-  CREATE
-  UPDATE
-  DELETE
-  SYNC
-  BATCH_UPDATE
-}
-
-enum HubspotAuditSource {
-  user_action
-  cron
-  webhook
-  bulk_sync
-}
-
-enum HubspotEntityType {
-  candidate
-  hire_request
-  organization
-  contact
-  affiliate
-  deal
-  owner
-  invoice
 }
 
 enum ReferralStage {
