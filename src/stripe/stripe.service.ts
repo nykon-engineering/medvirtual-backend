@@ -12,6 +12,19 @@ import { isLocalMode } from '../common/bull.utils';
 import { PusherService } from '../pusher/pusher.service';
 import { InvoiceService } from '../invoice/invoice.service';
 
+/**
+ * All direct integration with the Stripe API for the invoicing feature. InvoiceService
+ * calls into this class to push an approved invoice through Stripe's own invoice
+ * lifecycle (create -> attach items -> finalize); this class also owns the inbound
+ * webhook handler that syncs Stripe-side payment events back onto our Invoice rows,
+ * and the self-service payment-method endpoints (setup intents, saved cards) used by
+ * the client billing portal.
+ *
+ * Environment-aware key loading: pulls from AWS Secrets Manager in prod, plain env vars
+ * elsewhere (see initializeStripe). Registers/rotates its own Stripe webhook endpoint on
+ * boot (see initiateWebhookHandler) rather than requiring one to be configured manually
+ * per environment.
+ */
 @Injectable()
 export class StripeService implements OnModuleInit {
   private stripe: StripeCore;
@@ -27,6 +40,8 @@ export class StripeService implements OnModuleInit {
     private readonly pusherService: PusherService,
     @Optional() @InjectQueue('invoice') private readonly invoiceQueue: Queue | null,
     @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
+    // forwardRef because InvoiceService also depends on StripeService (publish flow) —
+    // this breaks the circular DI dependency between the two modules.
     @Inject(forwardRef(() => InvoiceService)) private readonly invoiceService: InvoiceService,
   ) { }
 
@@ -35,10 +50,19 @@ export class StripeService implements OnModuleInit {
     try {
       await this.initiateWebhookHandler();
     } catch (err) {
+      // Don't crash app boot if webhook registration fails (e.g. missing WEBHOOK_URL in
+      // a local/dev environment) — Stripe features just won't receive live events.
       this.logger.error(`Failed to initiate webhook handler on startup: ${err.message}`);
     }
   }
 
+  /**
+   * Loads Stripe API keys appropriate to the running environment: AWS Secrets Manager
+   * in production (REDIS_BASE_KEY containing 'PROD' is the env-detection signal used
+   * throughout this service), plain env vars everywhere else. Leaves `this.stripe`
+   * unset if no key is found, rather than throwing — callers check for that via
+   * getStripeInstance()/the various "Stripe is not initialized" guards.
+   */
   private async initializeStripe(): Promise<void> {
     const redisBaseKey = this.configService.get<string>('REDIS_BASE_KEY', '');
     let secretKey = '';
@@ -78,6 +102,15 @@ export class StripeService implements OnModuleInit {
     return this.publicKey;
   }
 
+  /**
+   * Self-registers (or re-registers) this environment's Stripe webhook endpoint on
+   * every boot, rather than requiring a human to configure it once in the Stripe
+   * dashboard. Idempotent: if a correctly-configured endpoint for this exact URL and
+   * event set already exists (and its signing secret is cached in Redis), it's left
+   * alone; otherwise it's deleted and recreated to get a fresh signing secret. Also
+   * cleans up stale endpoints left behind by this same environment pointing at an old
+   * URL (e.g. after an ngrok/staging URL changes).
+   */
   public async initiateWebhookHandler() {
     if (!this.stripe) {
       this.logger.warn('Stripe is not initialized. Skipping webhook setup.');
@@ -85,6 +118,8 @@ export class StripeService implements OnModuleInit {
     }
 
     const redisBaseKey = this.configService.get<string>('REDIS_BASE_KEY', '');
+    // Signing secret is cached in Redis (not env vars) since it's generated dynamically
+    // by Stripe each time the webhook endpoint is (re)created below.
     const secretKey = `${redisBaseKey}:stripe_webhook_secret`;
     let server = 'dev';
 
@@ -105,6 +140,10 @@ export class StripeService implements OnModuleInit {
 
     this.logger.log(`initiateWebhookHandler: Target URL=${webhookUrl}, Server=${server}`);
 
+    // The full set of Stripe event types this environment's endpoint subscribes to —
+    // see webhookHandler's switch statement below for what each one does. Kept as an
+    // explicit allowlist (rather than "all events") to keep the webhook payload volume
+    // and the surface area of webhookHandler's switch statement bounded.
     const REQUIRED_EVENTS: StripeCore.WebhookEndpointCreateParams.EnabledEvent[] = [
       'customer.created',
       'invoice.paid',
@@ -175,6 +214,12 @@ export class StripeService implements OnModuleInit {
     }
   }
 
+  /**
+   * Entry point for the /webhooks/stripe controller route. Verifies the request really
+   * came from Stripe (constructEvent validates the signature against our stored
+   * secret — this is the only thing standing between this endpoint and anyone on the
+   * internet POSTing fake "invoice paid" events), then dispatches to webhookHandler.
+   */
   public async handleWebhook(rawBody: string | Buffer, signature: string) {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
@@ -209,6 +254,13 @@ export class StripeService implements OnModuleInit {
     return { received: true };
   }
 
+  /**
+   * Dispatches a verified Stripe event to the appropriate handling logic. This is
+   * where Stripe's state (an invoice got paid, a card was attached, a checkout
+   * completed) gets mirrored back onto our own Invoice/USER/InvoiceAuditLog rows —
+   * webhooks are the *only* path by which async, client-side-initiated Stripe actions
+   * (like the client paying an invoice on their own) become visible to our system.
+   */
   public async webhookHandler(event: StripeCore.Event) {
     this.logger.log(`Received Stripe event of type: ${event.type}`);
     if (event) {
@@ -217,6 +269,10 @@ export class StripeService implements OnModuleInit {
           // leave blank for now
           break;
         case 'payment_intent.succeeded': {
+          // Special case: a $1 PaymentIntent tagged with metadata.refund is a card
+          // verification charge (used when saving a new payment method / setup flow,
+          // not a real payment) — auto-refund it immediately rather than actually
+          // charging the client a dollar for adding a card.
           const paymentIntent = event.data.object as any;
           if (paymentIntent.metadata?.refund === 'true' && paymentIntent.amount === 100) {
             try {
@@ -233,6 +289,12 @@ export class StripeService implements OnModuleInit {
           break;
         }
         case 'invoice.paid': {
+          // The primary event this whole webhook system exists for: a client paid
+          // their Stripe invoice (via the hosted payment page or portal), and we need
+          // to mark our own Invoice as paid, log it, record the InvoicePayment, and
+          // kick off prebill reconciliation if applicable — none of which our own API
+          // would otherwise know to do, since the payment happened entirely on Stripe's
+          // side.
           this.logger.log(`Handling invoice.paid for Stripe ID: ${event.id}`);
           const paidInvoice = event.data.object as any;
           const internalInvoice = await this.prisma.invoice.findUnique({
@@ -272,11 +334,16 @@ export class StripeService implements OnModuleInit {
               ? paidInvoice.payment_intent
               : paidInvoice.id) || '';
 
+            // Stripe amounts are always integer cents — convert to dollars for storage.
             const amountDecimal = (paidInvoice.amount_paid ?? paidInvoice.total ?? 0) / 100;
             const paidAt = paidInvoice.status_transitions?.paid_at
               ? new Date(paidInvoice.status_transitions.paid_at * 1000)
               : new Date();
 
+            // Webhooks can be delivered more than once for the same event (Stripe's own
+            // at-least-once delivery guarantee) — upsert on provider_reference instead
+            // of always inserting, so a redelivered event updates the existing
+            // InvoicePayment row rather than creating a duplicate.
             const existingPayment = providerRef
               ? await this.prisma.invoicePayment.findFirst({
                   where: {
@@ -324,6 +391,10 @@ export class StripeService implements OnModuleInit {
           // leave blank for now
           break;
         case 'invoice.payment_failed': {
+          // Mirrors the invoice.paid handler's shape, but records a failed InvoicePayment
+          // and does NOT flip our Invoice.status — a failed payment attempt leaves the
+          // invoice exactly where it was (still owed), it just gives visibility into the
+          // attempt and re-notifies the client to try again.
           this.logger.log(`Handling invoice.payment_failed for Stripe ID: ${event.id}`);
           const failedInvoice = event.data.object as any;
           const internalInvoice = await this.prisma.invoice.findUnique({
@@ -407,6 +478,11 @@ export class StripeService implements OnModuleInit {
         case 'invoice.voided':
           break;
         case 'invoice.finalized': {
+          // Stripe finalizing an invoice is the trigger for OUR invoice to become
+          // `published` — note this is the async confirmation of the same finalize
+          // step that InvoiceService.updateStatus already triggered synchronously via
+          // finalizeStripeInvoice; this handler is what actually flips our status once
+          // Stripe confirms it (rather than assuming success from the API call alone).
           this.logger.log(`Handling invoice.finalized for Stripe ID: ${event.id}`);
           const finalizedInvoice = event.data.object as StripeCore.Invoice;
           const internalInvoice = await this.prisma.invoice.findUnique({
@@ -451,7 +527,12 @@ export class StripeService implements OnModuleInit {
               this.logger.error(`Failed to send invoice email to superadmin: ${err.message}`, err.stack);
             }
 
-            // 3. Collection attempt
+            // 3. Collection attempt: Stripe doesn't auto-charge saved payment methods on
+            // its own schedule for these invoices, so we schedule (or immediately fire)
+            // our own `payInvoice` call for the due date. If the due date is still in
+            // the future, delay a BullMQ job until exactly then (in the org's billing
+            // timezone, America/Los_Angeles); if it's already due (e.g. a same-day
+            // invoice), attempt collection immediately instead of scheduling.
             const now = Date.now();
             const dueDateMs = finalizedInvoice.due_date
               ? DateTime.fromSeconds(finalizedInvoice.due_date).setZone('America/Los_Angeles').startOf('day').toMillis()
@@ -463,6 +544,10 @@ export class StripeService implements OnModuleInit {
               if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
                 this.logger.warn('LOCAL mode — attempt-collection job NOT scheduled.');
               } else {
+                // Remove any previously-scheduled collection attempt for this invoice
+                // before scheduling a new one — e.g. if finalized fires twice, or the
+                // due date changed — so we never end up with two competing charge
+                // attempts for the same invoice.
                 const existingJob = await this.invoiceQueue!.getJob(jobId);
                 if (existingJob) {
                   try {
@@ -499,6 +584,9 @@ export class StripeService implements OnModuleInit {
           break;
       }
 
+      // For any invoice.* event (paid, finalized, payment_failed, etc.), push a
+      // real-time update over Pusher so a client with the invoice detail page open sees
+      // the new status immediately, without needing to poll or refresh.
       if (event.type.startsWith('invoice.')) {
         try {
           const stripeInvoice = event.data.object as any;
@@ -523,6 +611,9 @@ export class StripeService implements OnModuleInit {
     }
   }
 
+  /** Attempts to charge a Stripe invoice against a payment method (or the customer's
+   * default one if none is specified) — used both for the due-date collection attempt
+   * scheduled in the invoice.finalized handler and any manual "charge now" action. */
   public async payInvoice(stripeInvoiceId: string, paymentMethodId?: string): Promise<void> {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
@@ -532,6 +623,7 @@ export class StripeService implements OnModuleInit {
     );
   }
 
+  /** Lists Stripe customers for the admin UI's "link existing customer" picker. */
   public async listCustomers() {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
@@ -544,6 +636,8 @@ export class StripeService implements OnModuleInit {
     }));
   }
 
+  /** Creates a new Stripe customer — used when linking an org to Stripe for the first
+   * time (see InvoiceConfiguration.stripe_customer_id) rather than picking an existing one. */
   public async createCustomer(name: string, email: string) {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
@@ -563,6 +657,10 @@ export class StripeService implements OnModuleInit {
     }
   }
 
+  // Stripe's live-mode API rate limit is ~100 req/s; this stays well under that (25) to
+  // leave headroom for other services sharing the same Stripe account/key. Implemented
+  // as a fixed-window counter in Redis (not in-process memory) so the limit is shared
+  // correctly across multiple running instances of this service, not just per-process.
   private BUCKET_KEY = 'stripe_rate_limit';
   private MAX_REQUESTS_PER_SECOND = 25;
 
@@ -570,6 +668,11 @@ export class StripeService implements OnModuleInit {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Fixed-window rate limiter: buckets requests by wall-clock second (via a Redis key
+   * per second, auto-expiring after 2s) and blocks until the next second if the current
+   * window is full. Recurses (rather than looping) to retry once the wait is over.
+   */
   private async acquireToken(): Promise<void> {
     const now = Date.now();
     const currentSecond = Math.floor(now / 1000);
@@ -593,6 +696,13 @@ export class StripeService implements OnModuleInit {
     return;
   }
 
+  /**
+   * Wraps every outbound Stripe API call in this service — acquires a rate-limit token
+   * first (see acquireToken), and if Stripe itself still returns a 429 (e.g. a burst
+   * from another process sharing the same key), retries with a fixed 500ms backoff up
+   * to `retries` times before giving up. This is the reason nearly every Stripe SDK call
+   * in this file is wrapped in `safeStripeCall(() => ...)` rather than called directly.
+   */
   public async safeStripeCall<T>(fn: () => Promise<T>, retries = 10): Promise<T> {
     await this.acquireToken();
     try {
@@ -607,6 +717,9 @@ export class StripeService implements OnModuleInit {
     }
   }
 
+  /** Creates a one-time, single-use percentage-off Stripe coupon/promo code scoped to
+   * an organization's Stripe customer. Used for ad-hoc percentage discounts outside the
+   * per-invoice discount flow (see createStripeInvoiceOnly's own discount handling). */
   public async createInvoiceDiscount(
     discount: number,
     clientId: string,
@@ -633,6 +746,7 @@ export class StripeService implements OnModuleInit {
     return null;
   }
 
+  /** Same as createInvoiceDiscount but for a flat dollar-amount-off coupon. */
   public async createInvoiceDiscountDollar(
     discount: number,
     clientId: string,
@@ -660,6 +774,14 @@ export class StripeService implements OnModuleInit {
     return null;
   }
 
+  /**
+   * Step 1 of the publish-to-Stripe flow (see InvoiceService.updateStatus): creates an
+   * empty Stripe invoice shell — customer, due date, discounts, and metadata only, no
+   * line items yet (those are attached separately in attachStripeInvoiceItems). Deliberately
+   * sets `auto_advance: false` so Stripe never auto-finalizes this invoice on its own;
+   * finalization only happens when finalizeStripeInvoice explicitly calls for it, once
+   * we're sure all line items were attached successfully.
+   */
   public async createStripeInvoiceOnly(params: {
     clientId: string;
     reference: string;
@@ -693,6 +815,10 @@ export class StripeService implements OnModuleInit {
 
     let default_payment_method: any = null;
 
+    // Opportunistically backfill missing customer data on Stripe's side (email, default
+    // payment method) rather than requiring it to have been set up perfectly when the
+    // customer was first linked — self-healing so invoice creation doesn't hard-fail on
+    // a customer record that's slightly incomplete.
     if (!customer.deleted) {
       const updatePayload: any = {};
 
@@ -726,14 +852,19 @@ export class StripeService implements OnModuleInit {
       }
     }
 
-    // Normalize due date
+    // Stripe rejects a due_date in the past — if our own due date has already elapsed
+    // (e.g. invoice was approved/published late), push it forward 2 hours so Stripe
+    // accepts the invoice rather than failing the whole publish flow.
     let effectiveDueDate = new Date(dueDate);
     const diffNowMinutes = (effectiveDueDate.getTime() - Date.now()) / (1000 * 60);
     if (diffNowMinutes < 0) {
       effectiveDueDate = new Date(Date.now() + 2 * 60 * 60 * 1000);
     }
 
-    // Process discounts if invoice is provided
+    // Each discount type our invoice supports (version-level discount, med-alliance
+    // referral credit, flat dollar discount) becomes its own single-use Stripe coupon —
+    // Stripe invoices accept a list of discounts, so these stack rather than requiring
+    // one combined coupon.
     const discounts: any[] = [];
     if (invoice) {
       const version = invoice.currentVersion;
@@ -807,6 +938,9 @@ export class StripeService implements OnModuleInit {
       invoiceCreateParams.discounts = discounts;
     }
 
+    // idempotencyKey ties this creation to our own invoice reference — if this method
+    // is somehow called twice for the same invoice (e.g. a retried request), Stripe
+    // returns the *same* invoice object instead of creating a duplicate.
     const stripeInvoice = await this.safeStripeCall(() =>
       this.stripe.invoices.create(
         invoiceCreateParams,
@@ -816,7 +950,8 @@ export class StripeService implements OnModuleInit {
       ),
     );
 
-    // Persist Stripe linkage ONLY
+    // Persist Stripe linkage ONLY — no other Invoice fields are touched here, since this
+    // is just step 1 of the multi-step publish flow (see class-level method comment).
     await this.prisma.invoice.update({
       where: { reference },
       data: {
@@ -833,11 +968,21 @@ export class StripeService implements OnModuleInit {
     };
   }
 
+  /** Stripe invoice item descriptions are plain text — strip any HTML that made it into
+   * a line item's description (e.g. from a rich-text notes field) before sending it. */
   private stripHtml(html: string): string {
     if (!html) return '';
     return html.replace(/<[^>]*>/g, '');
   }
 
+  /**
+   * Converts our InvoiceLineItem rows into the flat list of Stripe invoice items to
+   * create. "Deterministic" refers to internalItemId being derived purely from
+   * `${reference}:${lineItemId}` rather than randomly generated — this is what lets
+   * attachStripeInvoiceItems below tell "already attached" items apart from new ones
+   * on a retry, without needing to track attachment state separately. Zero-amount lines
+   * are skipped since Stripe doesn't accept $0 invoice items.
+   */
   private async buildDeterministicInvoiceItems(
     invoice: any,
   ): Promise<
@@ -876,6 +1021,12 @@ export class StripeService implements OnModuleInit {
     return result;
   }
 
+  /**
+   * Step 2 of the publish flow: pushes each of our line items onto the Stripe invoice
+   * created in createStripeInvoiceOnly, as individual Stripe InvoiceItems. Safe to call
+   * more than once for the same invoice (e.g. after a partial failure) — see the
+   * idempotency comment inline below.
+   */
   public async attachStripeInvoiceItems(
     invoice: any,
     stripeCustomerId: string,
@@ -901,6 +1052,11 @@ export class StripeService implements OnModuleInit {
       return;
     }
 
+    // The actual idempotency mechanism: read back what's already on the Stripe invoice
+    // (by our own internal_item_id metadata, not Stripe's own item id) and skip
+    // re-creating anything already present. Combined with buildDeterministicInvoiceItems'
+    // stable IDs, this means re-running attach after a partial failure only creates the
+    // items that are still missing.
     const existingItemIds = new Set(
       existingLines.data
         .map((line) => line.metadata?.internal_item_id)
@@ -942,6 +1098,13 @@ export class StripeService implements OnModuleInit {
     });
   }
 
+  /**
+   * Step 3 of the publish flow: locks the Stripe invoice (no further line items can be
+   * added/changed after this) and assigns it Stripe's own invoice number. Guards on
+   * Stripe's own status being `draft` — if it's already been finalized (e.g. a retry
+   * after the DB update below failed but the Stripe call succeeded), this is a safe
+   * no-op rather than erroring or double-finalizing.
+   */
   public async finalizeStripeInvoice(invoice: any): Promise<void> {
     if (!invoice.stripe_invoice_id) {
       throw new Error('Stripe invoice not initialized');
@@ -978,6 +1141,12 @@ export class StripeService implements OnModuleInit {
     });
   }
 
+  /**
+   * Step 4 (final) of the publish flow: re-fetches the Stripe invoice and sanity-checks
+   * it actually finalized into a coherent, billable state — not just that the finalize
+   * API call didn't throw. InvoiceService.updateStatus only lets our own status advance
+   * to `published` if this method returns without throwing.
+   */
   public async verifyFinalizedStripeInvoice(
     invoice: any,
   ): Promise<void> {
@@ -1018,7 +1187,9 @@ export class StripeService implements OnModuleInit {
       throw new Error('Stripe invoice still in draft');
     }
 
-    // 4. Structural verification
+    // 4. Structural verification — catches the case where finalize "succeeded" but the
+    // invoice is nonsensical (e.g. attachStripeInvoiceItems silently attached nothing),
+    // which we'd rather fail loudly on than publish a $0 or empty invoice to a client.
     const lineCount = stripeInvoice.lines?.data?.length ?? 0;
     const total = stripeInvoice.total ?? 0;
 
@@ -1031,6 +1202,8 @@ export class StripeService implements OnModuleInit {
     }
   }
 
+  /** Returns Stripe's hosted payment page URL for an invoice — what "View on Stripe" /
+   * the client-facing payment link in the invoice email points at. */
   public async getInvoiceUrl(stripeInvoiceId: string): Promise<{ url: string | null }> {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
@@ -1041,6 +1214,8 @@ export class StripeService implements OnModuleInit {
     return { url: invoice.hosted_invoice_url || null };
   }
 
+  /** Lists an org's saved Stripe payment methods for the billing portal, flagging which
+   * one is the customer's default (used for automatic collection — see payInvoice). */
   public async getCustomerPaymentMethods(organizationId: string) {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
@@ -1077,6 +1252,8 @@ export class StripeService implements OnModuleInit {
     }));
   }
 
+  /** Sets which saved payment method Stripe should charge automatically (e.g. on the
+   * due-date collection attempt scheduled from the invoice.finalized webhook). */
   public async setDefaultCustomerPaymentMethod(organizationId: string, paymentMethodId: string) {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
@@ -1097,12 +1274,15 @@ export class StripeService implements OnModuleInit {
     );
   }
 
+  /** Detaches (removes) a saved payment method from an org's Stripe customer. */
   public async deleteCustomerPaymentMethod(organizationId: string, paymentMethodId: string) {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
     }
 
-    // Verify it belongs to the org
+    // Verify the payment method actually belongs to THIS org's Stripe customer before
+    // detaching — without this check, any org could pass another org's paymentMethodId
+    // and delete a stranger's saved card.
     const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
       where: { organization_id: organizationId },
     });
@@ -1119,6 +1299,14 @@ export class StripeService implements OnModuleInit {
     await this.safeStripeCall(() => this.stripe.paymentMethods.detach(paymentMethodId));
   }
 
+  /**
+   * Starts the "add a payment method" flow for the client billing portal. Rather than
+   * using Stripe's dedicated (free) SetupIntent API, this deliberately creates a real
+   * $1.00 PaymentIntent with setup_future_usage — charging a trivial real amount is a
+   * stronger verification that the card/bank account actually works than a $0 setup
+   * would be, and the metadata.refund flag here is what the payment_intent.succeeded
+   * webhook handler (above) matches on to auto-refund this $1 once it clears.
+   */
   public async createSetupIntent(organizationId: string, method: string = 'card') {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
