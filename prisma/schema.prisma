@@ -1036,12 +1036,19 @@ model MedAllianceAdminReviewCase {
   @@index([reason_code], map: "idx_review_cases_reason_code")
 }
 
+// Per-organization billing settings. One row per Organization (1:1). Everything the
+// invoice generation worker (InvoiceWorker) needs to know about *how* to bill a given
+// org lives here — cycle timing, pricing fallbacks, automation flags, and Stripe/Hubstaff
+// linkage. Organizations without a row here are not eligible for automated invoicing.
 model InvoiceConfiguration {
   id                               String             @id @default(uuid())
   organization_id                  String             @unique
+
+  // Hubstaff org/team id — source of tracked-hours data for hourly billing lines.
   hubstaff_id                      String?
+  // HubSpot company id — used to keep this configuration's billing fields in sync with CRM.
   hubspot_id                       String?
-  
+
   // Determines whether invoices are issued before or after actual cycle close.
   billing_mode                     BillingMode        @default(arrears)
 
@@ -1702,11 +1709,16 @@ model EmailBrandingHistory {
   @@index([changed_at], map: "idx_email_branding_history_changed_at")
 }
 
+// arrears  = invoice issued AFTER the billing cycle closes, for work already performed.
+// prebill  = invoice issued BEFORE the cycle starts, billing in advance; requires
+//            reconciliation afterward to true-up against actual hours/adjustments.
 enum BillingMode {
   arrears
   prebill
 }
 
+// How often a new billing cycle (and therefore a new Invoice) is generated for an org.
+// custom = cycle boundaries are set manually per-invoice rather than on a fixed cadence.
 enum BillingFrequency {
   weekly
   biweekly
@@ -1737,30 +1749,46 @@ enum BillingFrequency {
 // - Full auditability
 // ============================================================================
 
+// The stable, long-lived "envelope" for a billing cycle. An Invoice itself carries almost
+// no billable data — it just identifies *which organization* and *which cycle* this is,
+// and points at whichever InvoiceVersion is currently the source of truth. All of the
+// actual money (line items, totals, discounts) lives on InvoiceVersion, because an
+// invoice can be edited (as a new draft version) after its first version was reviewed,
+// without losing the history of prior versions. Once status reaches `published`, the
+// current version is expected to stay immutable (see InvoiceVersion below).
 model Invoice {
   id                    String        @id @default(uuid())
 
   // owning organization
   organization_id       String
 
-  // active version shown in UI
+  // FK to whichever InvoiceVersion is authoritative right now (usually the latest one
+  // that's been through review). The UI and Stripe sync always read from this version.
   current_version_id    String?       @unique
 
-  // public invoice chain status
+  // Lifecycle status of the invoice as a whole (draft -> under_review -> approved ->
+  // published -> paid/voided/cancelled). See InvoiceStatus enum for the full list.
   status                InvoiceStatus @default(draft)
 
-  // cycle identification for idempotency
+  // Defines which billing cycle this invoice covers. Combined with organization_id,
+  // this is the idempotency key the invoice-generation worker uses to avoid creating
+  // two invoices for the same org+period.
   billing_start_date    DateTime
   billing_end_date      DateTime
+  // True when billing_start_date/billing_end_date don't match the org's normal
+  // recurring cycle (e.g. a one-off custom-range invoice requested manually).
   is_custom             Boolean       @default(false)
 
-  // unique reference for tracking
+  // Internal, system-generated tracking reference — assigned at creation time,
+  // independent of the client-facing invoice_number (see below).
   reference             String?       @unique
 
-  // numbering assigned only on publish
+  // Client-facing sequential invoice number. Deliberately left null until the invoice
+  // is actually published, so draft/rejected invoices never burn a number in the
+  // sequence (see scripts/backfill-invoice-references.ts for the backfill story).
   invoice_number        String?       @unique
 
-  // ownership
+  // Who created the invoice, and — if it was voided — who voided it.
   created_by            String
   voided_by             String?
 
@@ -1768,7 +1796,8 @@ model Invoice {
   updatedAt             DateTime      @updatedAt
   voidedAt              DateTime?
 
-  // Stripe integration
+  // Denormalized mirror of the linked Stripe invoice (see StripeService), refreshed by
+  // webhook. Lets read paths show payment status without an extra Stripe API call.
   stripe_invoice_id     String?       @unique
   stripe_invoice_number String?
   stripe_status         String?
@@ -1793,36 +1822,59 @@ model Invoice {
   @@index([organization_id, billing_start_date, billing_end_date], map: "idx_invoice_cycle")
 }
 
+// A single draft/reviewed/published snapshot of an Invoice's actual billable content.
+// This is where line items, totals, and the review/approve/publish audit trail live.
+// Editing a published invoice never mutates this row — it creates a new InvoiceVersion
+// with an incremented version_number, and Invoice.current_version_id is repointed to it.
+// This keeps every historical version (and its line items) permanently intact for audit.
 model InvoiceVersion {
   id                    String               @id @default(uuid())
   invoice_id            String
 
+  // 1-based, increments per Invoice — see @@unique below for the idempotency guarantee.
   version_number        Int
 
+  // Per-version lifecycle, independent of (but usually mirrored up to) Invoice.status.
   status                InvoiceVersionStatus @default(draft)
 
   currency              String               @default("USD")
 
+  // issue_date: when this version was actually published/sent.
+  // due_date: internal payment-due date used for aging/collections logic.
+  // public_due_date: the (possibly different, friendlier) due date shown to the client.
   issue_date            DateTime?
   due_date              DateTime?
   public_due_date       DateTime?
 
+  // Usually copied from the parent Invoice at creation time, but stored per-version so a
+  // corrected/re-issued version can (rarely) cover a different range than the original.
   billing_start_date    DateTime?
   billing_end_date      DateTime?
 
+  // True if this version was generated ahead of the cycle (see BillingMode.prebill) and
+  // therefore still needs a reconciliation pass once actual hours are known.
   is_prebill            Boolean              @default(false)
+  // Whether fee line items (setup/software/penalty, etc.) are permitted on this version —
+  // some orgs are configured to never see fee breakdowns (see show_fee_breakdown_on_invoice).
   allow_fees            Boolean              @default(false)
 
+  // Denormalized rollups computed from line_items — kept in sync by InvoiceService
+  // whenever line items change, so reads don't need to re-sum on every request.
   subtotal              Decimal              @db.Decimal(14,2) @default(0)
-  tax_total             Decimal              @db.Decimal(14,2) @default(0)
+  tax_total              Decimal              @db.Decimal(14,2) @default(0)
   total                 Decimal              @db.Decimal(14,2) @default(0)
 
+  // Invoice-level discount applied on top of the line-item subtotal.
+  // discountType: 'dollar' | 'percent'.
   discountType          String               @default("dollar")
   discountValue         Decimal              @db.Decimal(14,2) @default(0)
 
+  // Client-visible notes vs. internal-only notes (never rendered on the invoice PDF/email).
   notes                 String?
   internal_notes        String?
 
+  // Who moved this version through review -> approval -> publish, and when. All optional
+  // since a version may still be sitting in an earlier stage of the workflow.
   reviewed_by           String?
   approved_by           String?
   published_by          String?
@@ -1851,18 +1903,28 @@ model InvoiceVersion {
   @@index([status], map: "idx_invoice_version_status")
 }
 
+// The source of truth for what's actually being billed. Per the philosophy note above
+// the Invoice model, this — not InvoiceVersion.total — is where the real numbers live;
+// version-level totals are just a cached sum of these rows. Two shapes of row exist:
+// "primary" lines (one per worker per billing cycle, carrying the hours snapshot) and
+// "additional" lines (nested under a primary via parent_line_item_id — one-off charges,
+// credits, fees tied to that worker/ticket).
 model InvoiceLineItem {
   id                          String              @id @default(uuid())
 
   invoice_version_id          String
 
-  // hierarchy for rendering nested additional rows
+  // Set for "additional" rows nested under a primary worker line — see model comment.
   parent_line_item_id         String?
 
+  // Support/ops ticket this charge originated from, if any (e.g. a billable one-off task).
   ticket_id                   String?
 
-  // nullable for account-wide fees
+  // Which worker this line bills for. Nullable because account-wide fees (setup fees,
+  // software fees) aren't attributable to a single worker.
   worker_id                   String?
+  // Worker's name at billing time, snapshotted so historical invoices don't change
+  // if the worker is later renamed/reassigned/deleted.
   worker_name_snapshot        String?
 
   is_full_time                Boolean             @default(false)
@@ -1876,13 +1938,17 @@ model InvoiceLineItem {
   // HOURS SNAPSHOT (primary rows mainly)
   // --------------------------------------------------------------------------
 
-  // raw imported/system hours
+  // Raw hours pulled from Hubstaff (or whichever tracking source) at generation time —
+  // never edited directly, so there's always a record of what was actually tracked.
   source_worked_hours         Decimal?            @db.Decimal(10,2)
 
-  // admin override in draft/review
+  // Admin-entered override, settable only while the invoice is in draft/review. Used to
+  // correct tracking-tool errors without losing the original source_worked_hours value.
   manual_override_worked_hours Decimal?           @db.Decimal(10,2)
 
-  // effective = override if set else source
+  // The hours actually billed: manual_override_worked_hours if set, else
+  // source_worked_hours. Every downstream calculation (service_amount, etc.) uses this,
+  // never the raw source directly.
   effective_worked_hours      Decimal?            @db.Decimal(10,2)
 
   // totals (can also be broken into child table)
@@ -1897,20 +1963,32 @@ model InvoiceLineItem {
   // MONEY
   // --------------------------------------------------------------------------
 
+  // Base amount for the line: effective_worked_hours * hourly_rate for hourly lines,
+  // or the flat monthly rate for salaried/full-time lines.
   service_amount              Decimal             @db.Decimal(14,2) @default(0)
 
+  // Internal cost components, tracked alongside the client-facing amount for margin
+  // reporting (see OrganizationBillingStats/WorkerBillingStats) — not shown to the client
+  // unless InvoiceConfiguration.show_fee_breakdown_on_invoice is enabled.
   operations_cost             Decimal             @db.Decimal(14,2) @default(0)
   medvirtual_fees            Decimal             @db.Decimal(14,2) @default(0)
 
+  // service_amount + fees, before adjustment_amount is applied.
   subtotal_before_adjustment Decimal             @db.Decimal(14,2) @default(0)
 
-  // one active overwritable adjustment only
+  // A single manual adjustment (discount/surcharge) can be applied per line — only one
+  // active at a time; changing it overwrites in place, with the prior value preserved in
+  // InvoiceLineAdjustmentHistory. adjustment_amount is the resolved dollar effect,
+  // computed from adjustment_type/adjustment_value at write time.
   adjustment_type             AdjustmentType?
   adjustment_value            Decimal?            @db.Decimal(14,2)
   adjustment_amount           Decimal             @db.Decimal(14,2) @default(0)
 
+  // subtotal_before_adjustment + adjustment_amount. What actually rolls up into the
+  // InvoiceVersion subtotal.
   final_total                 Decimal             @db.Decimal(14,2) @default(0)
 
+  // Explicit display order on the rendered invoice (children are grouped under parent).
   sort_order                  Int                 @default(0)
 
   created_by                  String
@@ -1939,6 +2017,9 @@ model InvoiceLineItem {
   @@index([category], map: "idx_line_category")
 }
 
+// Optional finer-grained split of a line item's total_hours_payable into worked/pto/holiday
+// buckets — one row per hour_type per line. Exists mainly for reporting/audit; the line
+// item's own total_* columns already carry the aggregate values used for billing math.
 model InvoiceLineHourBreakdown {
   id                String            @id @default(uuid())
   line_item_id      String
@@ -1954,6 +2035,9 @@ model InvoiceLineHourBreakdown {
   @@index([line_item_id], map: "idx_line_hour_line")
 }
 
+// Append-only audit trail of every change to a line item's single adjustment slot.
+// Since InvoiceLineItem only ever stores the *current* adjustment, this is the only
+// place the "why did this line's price change" history is recoverable from.
 model InvoiceLineAdjustmentHistory {
   id                String            @id @default(uuid())
   line_item_id      String
@@ -1965,6 +2049,8 @@ model InvoiceLineAdjustmentHistory {
   new_value         Decimal?          @db.Decimal(14,2)
 
   changed_by        String
+  // Free-text justification entered by the admin making the change (e.g. "client
+  // reported outage, 4hr credit approved").
   reason            String?
 
   createdAt         DateTime         @default(now())
@@ -1975,6 +2061,11 @@ model InvoiceLineAdjustmentHistory {
   @@index([line_item_id], map: "idx_adj_history_line")
 }
 
+// True-up record for prebilled lines (see BillingMode.prebill / InvoiceVersion.is_prebill).
+// When actual hours/amounts become known after the cycle closes, the InvoicePrebillReconciliationWorker
+// compares them against what was originally estimated and writes one row per affected
+// line item, then posts the delta as a BillingLedgerEntry credit/debit to be applied to
+// a future invoice — the original prebilled invoice itself is never retroactively edited.
 model InvoiceLineReconciliation {
   id                        String            @id @default(uuid())
 
@@ -1983,8 +2074,11 @@ model InvoiceLineReconciliation {
   organization_id           String
   worker_id                 String?
 
+  // What the line was originally billed for (prebill estimate).
   estimated_amount          Decimal           @db.Decimal(14,2)
+  // What it should have been, based on actual tracked hours/adjustments.
   actual_amount             Decimal           @db.Decimal(14,2)
+  // actual_amount - estimated_amount. Positive = org owes more, negative = credit owed.
   delta_amount              Decimal           @db.Decimal(14,2)
 
   status                    ReconciliationStatus @default(pending)
@@ -2004,20 +2098,31 @@ model InvoiceLineReconciliation {
   @@index([status], map: "idx_recon_status")
 }
 
+// The org's running credit/debit balance ledger — every credit or debit event (a
+// reconciliation delta, a manual adjustment, a carried-forward balance) is one row here.
+// This is what InvoiceConfiguration.credit_balance/debit_balance and
+// auto_apply_credits actually draw from/add to when generating the next invoice.
 model BillingLedgerEntry {
   id                        String            @id @default(uuid())
 
   organization_id           String
   worker_id                 String?
 
+  // Where this entry came from, if applicable: the line item that generated it, and/or
+  // the reconciliation run that produced it (see InvoiceLineReconciliation).
   line_item_id              String?
   reconciliation_id         String?
 
+  // credit = reduces what the org owes; debit = increases it.
   direction                 LedgerDirection
 
   amount                    Decimal           @db.Decimal(14,2)
+  // Tracks partial consumption — e.g. a $500 credit entry can be applied across several
+  // future invoices; this ticks down toward zero as it's used, rather than the row being
+  // deleted or split.
   remaining_amount          Decimal           @db.Decimal(14,2)
 
+  // Once (fully or partially) applied, points at the line item it was applied to.
   applied_to_line_item_id   String?
 
   createdAt                 DateTime          @default(now())
@@ -2032,6 +2137,9 @@ model BillingLedgerEntry {
   @@index([worker_id], map: "idx_ledger_worker")
 }
 
+// One row per submit-for-review action on an invoice — a lightweight approval-workflow
+// log, separate from InvoiceVersion's own reviewed_by/approved_by fields (those track
+// the *outcome*; this tracks the *request*, including who was asked and any notes).
 model InvoiceReview {
   id                  String      @id @default(uuid())
   invoice_id          String
@@ -2054,12 +2162,15 @@ model InvoiceReview {
   @@index([invoice_id], map: "idx_review_invoice")
 }
 
+// Free-form discussion thread attached to an invoice — used both for internal
+// back-and-forth during review and (when is_internal is false) for client-visible notes.
 model InvoiceComment {
   id                  String      @id @default(uuid())
   invoice_id          String
   author_id           String
 
   content             String
+  // true = staff-only, never shown to the client; false = visible on the client portal.
   is_internal         Boolean     @default(true)
 
   createdAt           DateTime    @default(now())
@@ -2070,11 +2181,15 @@ model InvoiceComment {
   @@index([invoice_id], map: "idx_comment_invoice")
 }
 
+// A record of money actually received against an invoice. Distinct from
+// Invoice.stripe_status (which mirrors Stripe's own invoice state) — this table can also
+// carry non-Stripe/manual payments in the future (see PaymentProvider enum).
 model InvoicePayment {
   id                  String      @id @default(uuid())
   invoice_id          String
 
   provider            PaymentProvider @default(stripe)
+  // Provider-side identifier for this payment (e.g. Stripe PaymentIntent/charge id).
   provider_reference  String?
 
   amount              Decimal     @db.Decimal(14,2)
@@ -2090,6 +2205,9 @@ model InvoicePayment {
   @@index([status], map: "idx_payment_status")
 }
 
+// Log of every attempt to push an invoice to an external payment provider (Stripe).
+// Kept separate from InvoicePayment because a sync can fail before any payment exists —
+// this is the debugging trail for "why didn't this invoice show up in Stripe."
 model InvoiceExternalSync {
   id                  String      @id @default(uuid())
   invoice_id          String
@@ -2097,6 +2215,8 @@ model InvoiceExternalSync {
   provider            PaymentProvider @default(stripe)
   status              SyncStatus
 
+  // Raw request/response bodies, kept for debugging failed syncs without needing to
+  // reproduce the call against the live Stripe API.
   request_payload     Json?
   response_payload    Json?
   error_message       String?
@@ -2109,15 +2229,25 @@ model InvoiceExternalSync {
   @@index([invoice_id], map: "idx_sync_invoice")
 }
 
+// Generic append-only audit trail for the entire invoicing system — every meaningful
+// mutation (status change, line edit, adjustment, publish, void...) writes one row here
+// with a free-text `event` name and before/after JSON snapshots. This is the "what
+// happened and when" system of record independent of the more specific history tables
+// above (InvoiceLineAdjustmentHistory, InvoiceExternalSync, etc).
 model InvoiceAuditLog {
   id                  String      @id @default(uuid())
 
+  // All three are nullable because a single audit event may only be scoped to one level
+  // (e.g. an invoice-level status change has no line_item_id).
   invoice_id          String?
   invoice_version_id  String?
   line_item_id        String?
 
+  // Null when the action was system-initiated (e.g. by the invoice generation worker)
+  // rather than a human user.
   actor_id            String?
 
+  // Short machine-readable event name, e.g. "status_changed", "line_item_adjusted".
   event               String
   old_value           Json?
   new_value           Json?
@@ -2137,6 +2267,9 @@ model InvoiceAuditLog {
 // ENUMS
 // ============================================================================
 
+// Top-level lifecycle of an Invoice. draft/under_review/approved/published mirror the
+// current version's own workflow; partially_paid/paid/voided/cancelled are terminal-ish
+// states driven by InvoicePayment records and manual void/cancel actions.
 enum InvoiceStatus {
   draft
   under_review
@@ -2148,6 +2281,8 @@ enum InvoiceStatus {
   cancelled
 }
 
+// Per-version workflow state — see InvoiceVersion model comment for how versions relate
+// to their parent Invoice. published is the terminal, immutable state for a version.
 enum InvoiceVersionStatus {
   draft
   under_review
@@ -2156,11 +2291,16 @@ enum InvoiceVersionStatus {
   voided
 }
 
+// primary = one per worker per cycle (the hours-driven base charge).
+// additional = a nested one-off row under a primary line (credit, fee, manual charge).
 enum InvoiceLineType {
   primary
   additional
 }
 
+// What kind of charge/credit a line item represents. Drives both display grouping and
+// which fields are expected to be populated (e.g. hourly_service lines carry hours data,
+// setup_fee lines don't).
 enum InvoiceLineCategory {
   monthly_service
   hourly_service
@@ -2178,6 +2318,8 @@ enum InvoiceLineCategory {
   tax
 }
 
+// fixed = adjustment_value is a flat dollar amount; percent = adjustment_value is a
+// percentage applied to subtotal_before_adjustment.
 enum AdjustmentType {
   fixed
   percent
@@ -2189,6 +2331,9 @@ enum HourBreakdownType {
   holiday
 }
 
+// Lifecycle of an InvoiceLineReconciliation row, from creation through to the ledger
+// entry being posted (completed), or exception paths (disputed by the client, reversed
+// by an admin).
 enum ReconciliationStatus {
   pending
   processing
@@ -2197,6 +2342,7 @@ enum ReconciliationStatus {
   reversed
 }
 
+// credit = reduces the org's balance (money owed to them); debit = increases it.
 enum LedgerDirection {
   credit
   debit
@@ -2209,6 +2355,8 @@ enum ReviewStatus {
   changes_requested
 }
 
+// Only Stripe is implemented today; the enum exists so a second provider can be added
+// without a breaking schema change to InvoicePayment/InvoiceExternalSync.
 enum PaymentProvider {
   stripe
 }
@@ -2221,6 +2369,7 @@ enum PaymentStatus {
   refunded
 }
 
+// Status of a single attempt to push/sync an invoice to the external payment provider.
 enum SyncStatus {
   queued
   processing
@@ -2229,6 +2378,10 @@ enum SyncStatus {
 }
 
 
+// Global, cross-organization rollup for a single billing cycle — one row per
+// (billing_start_date, billing_end_date, currency). Computed and upserted by
+// InvoiceStatsWorker after a cycle's invoices are generated/updated, so admin dashboards
+// don't need to aggregate across every Invoice/InvoiceVersion row on every page load.
 model BillingCycleStats {
   id                      String   @id @default(uuid())
 
@@ -2265,6 +2418,8 @@ model BillingCycleStats {
 }
 
 
+// Same idea as BillingCycleStats but scoped to a single organization per cycle — the
+// numbers behind that org's billing dashboard/history view.
 model OrganizationBillingStats {
   id                    String   @id @default(uuid())
 
@@ -2287,6 +2442,8 @@ model OrganizationBillingStats {
 }
 
 
+// Per-worker rollup for a cycle — powers "revenue per worker" / margin reporting without
+// scanning every InvoiceLineItem for that worker on every request.
 model WorkerBillingStats {
   id                  String   @id @default(uuid())
 
@@ -2305,24 +2462,32 @@ model WorkerBillingStats {
   generated_at          DateTime @default(now())
 }
 
+// Tracks a single run of a bulk background invoicing job (e.g. "generate invoices for
+// all orgs in this cycle") — one row per run, with per-task progress counters so the
+// admin UI can show "37/50 orgs processed" and surface which ones failed without
+// re-running the whole batch.
 model InvoiceJob {
   id                String           @id @default(uuid())
   status            InvoiceJobStatus @default(queued)
-  
+
   total_tasks       Int              @default(0)
   completed_tasks   Int              @default(0)
   failed_tasks      Int              @default(0)
-  
+
+  // Input parameters for the job (e.g. cycle dates, org filter) and its final output
+  // summary, kept as JSON since the shape varies by job type.
   payload           Json?
   result            Json?
   error_message     String?
-  
+
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
   @@index([status])
 }
 
+// partial_success = some tasks in the batch failed but the job as a whole completed —
+// distinct from `failed`, which means the job itself aborted.
 enum InvoiceJobStatus {
   queued
   processing

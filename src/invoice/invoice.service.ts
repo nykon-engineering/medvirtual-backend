@@ -21,12 +21,31 @@ import * as jwt from 'jsonwebtoken';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import * as path from 'path';
 
+/**
+ * Core service for the invoicing feature — everything except the actual bulk generation
+ * math (that lives in InvoiceWorker, which this service enqueues jobs for) and Stripe
+ * payment-provider calls (StripeService). Responsibilities here:
+ *
+ * - Kicking off invoice generation (createInvoice/createBulkInvoices) via BullMQ, with
+ *   idempotency guards so double-clicking "generate" doesn't create duplicate jobs.
+ * - CRUD/listing/search over Invoice + InvoiceVersion + InvoiceLineItem.
+ * - The status state machine (updateStatus) — draft/review/publish transitions, invoice
+ *   numbering on approval, Stripe sync on publish, ticket closing, audit logging.
+ * - Editing: createVersion clones the current version into a new draft so published
+ *   invoices stay immutable (see the philosophy note on the Invoice/InvoiceVersion
+ *   models in schema.prisma).
+ * - Rendering: PDF generation (via headless Chromium against the frontend's invoice
+ *   template page) and emailing invoices to clients/superadmins.
+ * - Reporting: CSV export and the org-level billing ledger view.
+ */
 @Injectable()
 export class InvoiceService {
   private readonly logger = new Logger(InvoiceService.name);
 
   constructor(
     private readonly prisma: PrismaService,
+    // Optional: these queues aren't wired up in local/test environments (see
+    // sendToQueue's isLocalMode check), so they may be null there.
     @Optional() @InjectQueue('invoice') private readonly invoiceQueue: Queue | null,
     @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
     private readonly configService: ConfigService,
@@ -34,8 +53,15 @@ export class InvoiceService {
     private readonly mailService: MailService,
   ) { }
 
+  /**
+   * Kicks off invoice generation for a single organization/cycle. This doesn't create
+   * the Invoice itself — it creates an InvoiceJob record (for progress tracking) and
+   * enqueues a BullMQ job that InvoiceWorker picks up to do the actual generation.
+   */
   async createInvoice(dto: CreateInvoiceDto, userId: string) {
-    // 1. Idempotency Check: Prevent duplicate jobs within 60 seconds
+    // 1. Idempotency Check: Prevent duplicate jobs within 60 seconds. Guards against a
+    // user double-clicking "Generate" (or a slow UI causing a duplicate request) from
+    // enqueuing two generation jobs for the same org+cycle.
     const sixtySecondsAgo = new Date(Date.now() - 60000);
     const recentJobs = await this.prisma.invoiceJob.findMany({
       where: {
@@ -95,6 +121,11 @@ export class InvoiceService {
     };
   }
 
+  /**
+   * Same as createInvoice, but fans out one queue message per organization under a
+   * single parent InvoiceJob (total_tasks = number of orgs), so the UI can show
+   * aggregate progress ("12/40 organizations invoiced") for a bulk billing run.
+   */
   async createBulkInvoices(dto: BulkCreateInvoiceDto, userId: string) {
     const { organization_ids, ...dates } = dto;
 
@@ -169,6 +200,7 @@ export class InvoiceService {
     };
   }
 
+  /** Filtered/searchable invoice list for the admin invoicing dashboard. */
   async findAll(query: ListInvoicesDto) {
     const { status, search, organizationIds, billingMode, startDate, endDate } = query;
     const where: Prisma.InvoiceWhereInput = {};
@@ -183,6 +215,9 @@ export class InvoiceService {
       where.organization_id = { in: organizationIds };
     }
 
+    // billingMode filters on the *version's* is_prebill flag rather than the org's
+    // configured billing_mode — an org configured for prebill can still have arrears-style
+    // versions (e.g. reconciliation invoices), so this filters what was actually issued.
     if (billingMode) {
       where.currentVersion = {
         is_prebill: billingMode === 'prebill',
@@ -219,6 +254,12 @@ export class InvoiceService {
     });
   }
 
+  /**
+   * Powers the dashboard summary cards: invoice count by status, plus total realized
+   * revenue (paid + partially_paid) for the current filter set. Computed on the fly
+   * from live rows rather than the BillingCycleStats rollup table, since filters here
+   * are ad-hoc (search/org/billingMode) rather than fixed to a single cycle.
+   */
   async getStats(query: ListInvoicesDto) {
     const { search, organizationIds, billingMode } = query;
     const where: Prisma.InvoiceWhereInput = {};
@@ -227,6 +268,9 @@ export class InvoiceService {
       where.organization_id = { in: organizationIds };
     }
 
+    // billingMode filters on the *version's* is_prebill flag rather than the org's
+    // configured billing_mode — an org configured for prebill can still have arrears-style
+    // versions (e.g. reconciliation invoices), so this filters what was actually issued.
     if (billingMode) {
       where.currentVersion = {
         is_prebill: billingMode === 'prebill',
@@ -283,6 +327,12 @@ export class InvoiceService {
     };
   }
 
+  /**
+   * The invoice status state machine. A single entry point for every transition
+   * (approve, publish, void, cancel, mark paid, etc.) so that every status change gets
+   * consistent side effects: invoice numbering, Stripe sync, ticket closing, superadmin
+   * notification, and an audit log row — regardless of which UI action triggered it.
+   */
   async updateStatus(id: string, status: InvoiceStatus, userId: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
@@ -297,12 +347,17 @@ export class InvoiceService {
       status,
     };
 
-    // Generate invoice number on approval if not already set
+    // Generate invoice number on approval if not already set. Numbers are only burned
+    // here (not at creation) so draft/rejected invoices never consume one — see the
+    // invoice_number field comment on the Invoice model.
     if (status === InvoiceStatus.approved && !invoice.invoice_number) {
       const invoiceNumber = await this.generateNextInvoiceNumber();
       dataToUpdate.invoice_number = invoiceNumber;
 
-      // Replace the 5 random characters at the end of the reference with the invoice number
+      // The reference was generated at creation time with a random 5-char suffix as a
+      // placeholder (see scripts/backfill-invoice-references.ts) — now that a real
+      // invoice number exists, swap the placeholder suffix for it so the reference and
+      // invoice number stay visually consistent.
       if (invoice.reference && invoice.reference.length > 5) {
         const baseRef = invoice.reference.substring(0, invoice.reference.length - 5);
         dataToUpdate.reference = `${baseRef}${invoiceNumber}`;
@@ -315,8 +370,9 @@ export class InvoiceService {
     }
 
     if (status === InvoiceStatus.voided || status === InvoiceStatus.cancelled) {
-      // Release any BillingLedgerEntry rows that were applied to this invoice's
-      // line items so they can be picked up by a future invoice.
+      // Voiding/cancelling shouldn't permanently consume a credit/debit — release any
+      // BillingLedgerEntry rows that were applied to this invoice's line items so they
+      // can be picked up by a future invoice.
       const versionId = invoice.current_version_id;
       if (versionId) {
         const lineItems = await this.prisma.invoiceLineItem.findMany({
@@ -335,7 +391,12 @@ export class InvoiceService {
     }
 
 
-    // Placeholder for extra actions when publishing
+    // On publish, walk the invoice through Stripe's own multi-step invoice lifecycle
+    // synchronously (create -> attach line items -> finalize -> verify) before allowing
+    // our own status to move to `published`. Each step is guarded by re-reading
+    // stripe_status from the DB so that if this method is called again after a partial
+    // failure (e.g. line items attached but finalize failed), it resumes from wherever
+    // it left off instead of re-doing completed steps or erroring out.
     if (status === InvoiceStatus.published) {
       const fullInvoice = await this.findOne(id);
       if (!fullInvoice) {
@@ -351,6 +412,7 @@ export class InvoiceService {
           throw new BadRequestException('Stripe customer ID is not configured for this organization');
         }
 
+        // Step 1: create the (empty) Stripe invoice shell if one doesn't exist yet.
         if (!stripeInvId) {
           const createRes = await this.stripeService.createStripeInvoiceOnly({
             clientId: fullInvoice.organization_id,
@@ -370,6 +432,7 @@ export class InvoiceService {
           throw new BadRequestException('Invoice not found after creation on Stripe');
         }
 
+        // Step 2: push our line items onto the Stripe invoice.
         if (freshInvoice.stripe_status === 'invoice_created') {
           await this.stripeService.attachStripeInvoiceItems(freshInvoice, stripeCustId);
           freshInvoice = await this.findOne(id);
@@ -378,6 +441,7 @@ export class InvoiceService {
           }
         }
 
+        // Step 3: finalize — locks the Stripe invoice and assigns its Stripe-side number.
         if (freshInvoice.stripe_status === 'all_line_items_added') {
           await this.stripeService.finalizeStripeInvoice(freshInvoice);
           freshInvoice = await this.findOne(id);
@@ -386,6 +450,9 @@ export class InvoiceService {
           }
         }
 
+        // Step 4: verify finalization succeeded before we let our own status flip to
+        // published — if Stripe never reached `finalized`, refuse to publish rather than
+        // leaving our records and Stripe's out of sync.
         if (freshInvoice.stripe_status === 'finalized') {
           await this.stripeService.verifyFinalizedStripeInvoice(freshInvoice);
         } else {
@@ -405,7 +472,9 @@ export class InvoiceService {
       },
     });
 
-    // If approved, close any associated tickets for bonus line items
+    // Approving an invoice implicitly resolves the support tickets that generated its
+    // ticket-linked line items (e.g. a billable one-off task) — closes the loop so
+    // nobody has to manually close the ticket after billing for it.
     if (status === InvoiceStatus.approved && updatedInvoice.current_version_id) {
       const lineItems = await this.prisma.invoiceLineItem.findMany({
         where: {
@@ -455,6 +524,13 @@ export class InvoiceService {
     return updatedInvoice;
   }
 
+  /**
+   * Atomically allocates the next sequential invoice number using a raw Postgres
+   * sequence (rather than e.g. `count()+1`) so concurrent approvals can never collide
+   * on the same number — nextval() is safe under concurrent transactions by design.
+   * Zero-padded to 5 digits (e.g. "00042") to match the placeholder format used in
+   * reference generation (see updateStatus / scripts/backfill-invoice-references.ts).
+   */
   private async generateNextInvoiceNumber(): Promise<string> {
     try {
       const result = await this.prisma.$queryRawUnsafe<{ nextval: bigint }[]>(
@@ -462,7 +538,8 @@ export class InvoiceService {
       );
       return result[0].nextval.toString().padStart(5, '0');
     } catch (error) {
-      // If sequence doesn't exist, create it and retry
+      // Lazily create the sequence on first use rather than requiring a migration —
+      // if it doesn't exist yet, create it (starting at 1) and retry once.
       if (error.message.includes('does not exist')) {
         await this.prisma.$executeRawUnsafe(
           `CREATE SEQUENCE invoice_number_seq START 1`,
@@ -476,6 +553,12 @@ export class InvoiceService {
     }
   }
 
+  /**
+   * Applies updateStatus to many invoices at once (e.g. "approve all" from the
+   * dashboard). Each invoice is processed independently and failures are caught
+   * per-item rather than aborting the whole batch, so one bad invoice (e.g. missing
+   * Stripe config) doesn't block the rest from being approved.
+   */
   async bulkUpdateStatus(ids: string[], status: InvoiceStatus, userId: string) {
     const results = await Promise.all(
       ids.map((id) =>
@@ -495,6 +578,14 @@ export class InvoiceService {
     };
   }
 
+  /**
+   * Saves an edited invoice (from the admin line-item editor) as a brand new
+   * InvoiceVersion rather than mutating the current one — see the immutability
+   * philosophy on the Invoice model. The client sends its own (temporary, client-side)
+   * line item IDs so it can express parent/child relationships between rows that don't
+   * exist in the DB yet; this method creates the real rows in two passes and remaps
+   * those client-side IDs to real database IDs as it goes.
+   */
   async createVersion(id: string, dto: UpdateInvoiceVersionDto, userId: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
@@ -540,12 +631,16 @@ export class InvoiceService {
       },
     });
 
-    // Handle line items with parent mapping
-    // We use a mapping to translate the IDs sent from the client to the new database IDs
+    // Handle line items with parent mapping.
+    // idMapping: client-side line item id -> real created row id.
+    // workerMapping: worker_id -> the real id of that worker's newly-created primary
+    // line, so a child line can be attached to "whichever line belongs to worker X"
+    // even if the client only knows the worker id and not that line's (new) real id.
     const idMapping = new Map<string, string>();
     const workerMapping = new Map<string, string>();
 
-    // Pass 1: Create all parent line items first (where parent_line_item_id is null/undefined)
+    // Pass 1: Create all parent (primary) line items first, since a child row's
+    // parent_line_item_id foreign key can only be satisfied once the parent row exists.
     for (const itemDto of dto.line_items) {
       if (!itemDto.parent_line_item_id) {
         const { id: clientSideId, parent_line_item_id, adjustment_sign, ...itemData } = itemDto;
@@ -568,7 +663,10 @@ export class InvoiceService {
       }
     }
 
-    // Pass 2: Create child line items, resolving parent_line_item_id to the new database IDs
+    // Pass 2: Create child (additional) line items, resolving parent_line_item_id from
+    // whatever the client sent — it may be a client-side temp id (idMapping), a worker
+    // id referring to that worker's primary line (workerMapping), or (as a last resort)
+    // the raw value passed through unresolved, in case it's already a real DB id.
     for (const itemDto of dto.line_items) {
       if (itemDto.parent_line_item_id) {
         const { id: clientSideId, parent_line_item_id, adjustment_sign, ...itemData } = itemDto;
@@ -624,6 +722,11 @@ export class InvoiceService {
     return updatedInvoice;
   }
 
+  /**
+   * Single-invoice detail fetch, with the current version's line items (ordered for
+   * display) and the org's invoice configuration — used by nearly every other method
+   * in this service that needs the "full" invoice, not just the bare Invoice row.
+   */
   async findOne(id: string) {
     return await this.prisma.invoice.findUnique({
       where: { id },
@@ -647,6 +750,7 @@ export class InvoiceService {
     });
   }
 
+  /** Full version history for an invoice (newest first) — the "revision history" view. */
   async findVersions(invoiceId: string) {
     return await this.prisma.invoiceVersion.findMany({
       where: { invoice_id: invoiceId },
@@ -659,8 +763,16 @@ export class InvoiceService {
     });
   }
 
+  /**
+   * Enqueues a generate-invoice job on the BullMQ 'invoice' queue for InvoiceWorker to
+   * pick up. Uses the caller-supplied idempotency_key as the BullMQ job ID itself, which
+   * makes BullMQ reject/dedupe a second enqueue with the same key at the queue level —
+   * a second layer of idempotency below the 60-second DB check in createInvoice.
+   */
   private async sendToQueue(message: any) {
     if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+      // No Redis/BullMQ available in local dev — log and no-op rather than failing,
+      // since invoice generation isn't required for most local development work.
       this.logger.warn('LOCAL mode — invoice generation job NOT enqueued.');
       return;
     }
@@ -677,18 +789,37 @@ export class InvoiceService {
     }
   }
 
+  /**
+   * Renders an invoice to PDF by driving a real headless browser against the frontend's
+   * own invoice template page and printing it — rather than building a PDF layout
+   * server-side. This guarantees the PDF always looks exactly like what the invoice
+   * template renders in-app, at the cost of needing a full authenticated browser session
+   * per PDF (see the synthetic-user/JWT dance below).
+   *
+   * truncatePage1: when true, drops the first printed page (used when the invoice
+   * template renders a throwaway/blank cover page in certain layouts — see
+   * checkEmptyFirstPage for a more general version of this problem).
+   */
   public async generateInvoicePdf(
     invoiceId: string,
     truncatePage1?: boolean,
   ): Promise<string> {
     let browser: PlaywrightBrowser | null = null;
     try {
+      // The invoice template page is behind auth, but this method runs from a background
+      // job/worker with no real logged-in user. Rather than teach the frontend an
+      // unauthenticated "render mode", we authenticate as a dedicated system service
+      // account so the page renders through the exact same auth-gated code path a real
+      // user would hit. Find-or-create it lazily on first use.
       let user = await this.prisma.uSER.findFirst({
         where: {
           email: "pdf.generator@legalsoft.com",
         },
       });
       if (!user) {
+        // Clone an existing admin's role/profile fields as a template for the new
+        // service account, preferring a known admin email, falling back to any
+        // system_super_admin.
         let baseUser = await this.prisma.uSER.findFirst({
           where: {
             email: "admin@medvirtual.ai",
@@ -722,6 +853,10 @@ export class InvoiceService {
         }
       }
 
+      // Mint a fresh session/JWT for the service account and revoke any previous one —
+      // there's only ever one "live" PDF-generator session at a time, since PDF
+      // generation runs serially (see sendInvoiceToSuperadmin's sequential loop) and
+      // reusing a single rotating session avoids piling up stale Session rows.
       let token: string | null = null;
       if (user) {
         const jwtToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'secret', {
@@ -752,6 +887,8 @@ export class InvoiceService {
 
       const frontendUrl = this.configService.get<string>('FRONTEND_URL') || process.env.FRONTEND_URL || 'https://staging.medvirtual.ai';
 
+      // Seed the auth cookie the frontend expects, so navigating to the template URL
+      // lands on an already-authenticated page rather than a login redirect.
       if (token) {
         await context.addCookies([
           {
@@ -768,6 +905,8 @@ export class InvoiceService {
       // page.on('response', res => this.logger.log(`[Playwright Response] ${res.url()} -> Status ${res.status()}`));
       // page.on('requestfailed', req => this.logger.log(`[Playwright Request Failed] ${req.url()} - Error: ${req.failure()?.errorText}`));
 
+      // token is also passed as a query param (belt-and-suspenders alongside the cookie)
+      // since the frontend's invoice template route reads it from either source.
       let url = `${frontendUrl}/templates/invoices?invoiceId=${invoiceId}`;
       if (token) {
         url += `&token=${token}`;
@@ -775,6 +914,9 @@ export class InvoiceService {
 
       await page.goto(url, { waitUntil: "domcontentloaded" });
 
+      // domcontentloaded fires before the page's own data fetch completes, so wait for
+      // the specific invoice API call the template page makes client-side before
+      // trying to screenshot/print — otherwise we'd capture a loading skeleton.
       await page.waitForResponse(
         (response) =>
           response.url().includes(`invoice/${invoiceId}`) &&
@@ -784,6 +926,9 @@ export class InvoiceService {
 
       const divSelector = ".invoice-template";
 
+      // Print-specific CSS injected at render time (not baked into the frontend's own
+      // stylesheet) so this PDF path can control pagination independently of how the
+      // page looks on-screen.
       await page.addStyleTag({
         content: `
           @page {
@@ -816,6 +961,9 @@ export class InvoiceService {
       }
 
       if (divHandle) {
+        // Resize the viewport to exactly match the rendered content's height before
+        // printing — without this, Chromium's print layout can clip or add extra blank
+        // pages depending on the invoice's actual line-item count.
         const fullHeight = await page.evaluate(() => {
           return Math.max(
             document.body.scrollHeight,
@@ -865,6 +1013,14 @@ export class InvoiceService {
     }
   }
 
+  /**
+   * Post-processes an already-generated PDF and strips any entirely blank pages (text
+   * content length 0) — a defensive cleanup for cases where the print layout produces
+   * stray empty pages that truncatePage1's simpler "always drop page 1" heuristic
+   * doesn't catch. Not currently wired into generateInvoicePdf's main path (see the
+   * commented-out call there) — kept available for callers that want the stronger
+   * per-page check at the cost of re-parsing the PDF page by page.
+   */
   public async checkEmptyFirstPage(filePath: string) {
     try {
       const existingPdfBytes = readFileSync(filePath);
@@ -908,6 +1064,7 @@ export class InvoiceService {
     }
   }
 
+  /** The "activity" tab on an invoice's detail page — every InvoiceAuditLog row for it. */
   async findAuditLogs(invoiceId: string) {
     return await this.prisma.invoiceAuditLog.findMany({
       where: { invoice_id: invoiceId },
@@ -920,6 +1077,11 @@ export class InvoiceService {
     });
   }
 
+  /**
+   * Paginated view of an organization's BillingLedgerEntry rows — the "credits & debits"
+   * tab an admin uses to see outstanding reconciliation adjustments and whether they've
+   * been applied to an invoice yet.
+   */
   async getOrgBillingLedger(
     organizationId: string,
     opts: {
@@ -1076,6 +1238,12 @@ export class InvoiceService {
     return { status: 'queued', invoiceId };
   }
 
+  /**
+   * Emails a single recipient a rendered PDF of the invoice, using a status-appropriate
+   * email template (see getInvoiceEmail) and business-unit-appropriate sender identity.
+   * Generates the PDF fresh on every call and deletes the temp file afterward — invoices
+   * aren't cached/stored as files outside of this transient send flow.
+   */
   async sendInvoiceEmail(invoiceId: string, email: string, fullName: string) {
     const invoice = await this.findOne(invoiceId);
     if (!invoice) {
@@ -1083,6 +1251,8 @@ export class InvoiceService {
     }
 
     const businessUnit = invoice.organization?.business_unit || 'MedVirtual';
+    // Same placeholder-suffix-swap logic as updateStatus: once a real invoice_number
+    // exists, show it in place of the original 5-char random placeholder suffix.
     const invoiceReference = (invoice.invoice_number
       ? invoice.reference?.replace(/[A-Z]{5}$/, invoice.invoice_number)
       : invoice.reference || invoice.id) || invoice.id;
@@ -1114,6 +1284,9 @@ export class InvoiceService {
         invoiceId,
       });
 
+      // MedVirtual operates two client-facing brands (see business_unit on Organization);
+      // billing emails need to come from the matching domain/name or they'd look wrong
+      // (or land in spam) for Berry Virtual clients.
       const isProduction = process.env.ENVIRONMENT === 'PROD';
       const fromDomain = businessUnit === 'Berry Virtual' ? 'berryvirtual.com' : 'medvirtual.ai';
       const fromName = businessUnit === 'Berry Virtual' ? 'Berry Virtual Billing' : 'MedVirtual Billing';
@@ -1148,6 +1321,12 @@ export class InvoiceService {
     return { success: true };
   }
 
+  /**
+   * Notifies the client side once an invoice is approved (called from updateStatus).
+   * Resolves recipients through a fallback chain — organization_super_admin, then
+   * organization_admin, then the org's designated owner/admin user — so an invoice
+   * still gets sent even if the org has no one in the "ideal" super-admin role.
+   */
   async sendInvoiceToSuperadmin(invoiceId: string) {
     const invoice = await this.findOne(invoiceId);
     if (!invoice) {
@@ -1210,6 +1389,7 @@ export class InvoiceService {
     return { success: true };
   }
 
+  /** Wraps a CSV cell in quotes (and escapes embedded quotes) only when actually needed. */
   private escapeCsv(val: any): string {
     if (val === null || val === undefined) {
       return '';
@@ -1222,6 +1402,7 @@ export class InvoiceService {
     return str;
   }
 
+  /** Human-readable "3 Jan 2026" date format for CSV export, deliberately not ISO. */
   private formatDate(date?: Date | null): string {
     if (!date) return '';
     const d = new Date(date);
@@ -1233,6 +1414,7 @@ export class InvoiceService {
     return `${day} ${month} ${year}`;
   }
 
+  /** Converts a snake_case/kebab-case enum value into "Title Case" for CSV display. */
   private formatStatus(status?: string | null): string {
     if (!status) return '';
     return status
@@ -1241,6 +1423,11 @@ export class InvoiceService {
       .join(' ');
   }
 
+  /**
+   * Zero-padded invoice numbers ("00042") get mangled by Excel/Sheets, which silently
+   * strip leading zeros when they open a CSV. Wrapping the value in an `="..."` formula
+   * forces spreadsheet apps to treat it as literal text instead of a number.
+   */
   private formatInvoiceNumber(num?: string | null): string {
     if (!num) return '';
     if (/^0+\d+$/.test(num)) {
@@ -1249,6 +1436,12 @@ export class InvoiceService {
     return num;
   }
 
+  /**
+   * Exports invoices to CSV in one of two shapes:
+   * - 'summary': one row per invoice (for a quick financial overview).
+   * - 'verbose': one row per line item, invoice fields repeated on each row (for
+   *   detailed reconciliation/accounting work where every line needs to be visible).
+   */
   async generateInvoicesCsv(type: 'summary' | 'verbose', startDate?: string, endDate?: string): Promise<string> {
     const where: Prisma.InvoiceWhereInput = {};
 
