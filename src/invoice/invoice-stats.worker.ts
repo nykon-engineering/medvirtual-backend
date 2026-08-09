@@ -7,6 +7,13 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { ConfigService } from '@nestjs/config';
 import { isLocalMode } from '../common/bull.utils';
 
+/**
+ * Recomputes the three billing-rollup tables (BillingCycleStats, OrganizationBillingStats,
+ * WorkerBillingStats) on a schedule, so dashboards reading those tables never need to
+ * aggregate across raw Invoice/InvoiceLineItem rows on every page load. Self-schedules
+ * its own recurring BullMQ job on boot (see onModuleInit) rather than relying on an
+ * external cron trigger.
+ */
 @Processor('invoice-stats')
 @Injectable()
 export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
@@ -25,7 +32,8 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
       this.logger.warn('LOCAL mode — invoice stats recurring job NOT scheduled.');
       return;
     }
-    // Schedule the stats computation to run every 2 hours
+    // Schedule the stats computation to run every 2 hours. jobId pins this to a single
+    // repeatable job so re-registering on every app restart doesn't stack up duplicates.
     await this.statsQueue.add(
       'compute-billing-stats',
       {},
@@ -49,7 +57,10 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
     this.logger.log('Starting invoice stats computation...');
 
     try {
-      // 1. Identify all unique billing cycles
+      // 1. Identify all unique billing cycles — recomputes every cycle's stats on every
+      // run (not just recently-changed ones) since this is a periodic full refresh, not
+      // an incremental update. Fine at current scale; would need to scope by date if the
+      // number of historical cycles grows large enough to make full recompute slow.
       const cycles = await this.prisma.invoice.groupBy({
         by: ['billing_start_date', 'billing_end_date'],
       });
@@ -68,6 +79,8 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
     }
   }
 
+  /** Loads every invoice for one (start, end) billing cycle and fans out to
+   * computeCycleStats once per currency present in that cycle (see below). */
   private async processCycle(start: Date, end: Date) {
     this.logger.log(`Processing stats for cycle ${start.toISOString()} - ${end.toISOString()}`);
 
@@ -99,6 +112,14 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
     }
   }
 
+  /**
+   * Aggregates one cycle+currency's worth of invoices into the three rollup tables.
+   * BillingCycleStats is a single global row per (cycle, currency) — upserted since it
+   * has a real unique constraint. OrganizationBillingStats/WorkerBillingStats don't have
+   * a DB-level unique constraint on (entity, cycle), so those are handled with an
+   * explicit delete-then-create per entity instead of a true upsert (see the
+   * "Refactored" loops below).
+   */
   private async computeCycleStats(start: Date, end: Date, currency: string, invoices: any[]) {
     // 1. BillingCycleStats Aggregations
     let invoice_count = invoices.length;
