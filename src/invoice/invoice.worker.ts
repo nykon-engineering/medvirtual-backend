@@ -11,6 +11,17 @@ import { StripeService } from '../stripe/stripe.service';
 import { ConfigService } from '@nestjs/config';
 import { isLocalMode } from '../common/bull.utils';
 
+/**
+ * BullMQ worker that does the actual heavy lifting of invoice generation — everything
+ * InvoiceService.createInvoice/createBulkInvoices does is just enqueuing a job for this
+ * class to process. This is where Hubstaff time-tracking data, staff pay
+ * rates/salaries, PTO requests, and a hardcoded US holiday calendar all get combined
+ * into the worked/PTO/holiday hour breakdown and dollar amounts on each
+ * InvoiceLineItem — the single most business-logic-dense file in the invoicing feature.
+ *
+ * Also handles the 'attempt-collection' job type (queued by StripeService when an
+ * invoice's due date arrives) since it shares the same BullMQ 'invoice' queue.
+ */
 @Processor('invoice')
 @Injectable()
 export class InvoiceWorker extends WorkerHost {
@@ -26,6 +37,9 @@ export class InvoiceWorker extends WorkerHost {
     super();
   }
 
+  /** Builds a human-scannable invoice reference like "20260305-02-30-XKQPZ" — date/time
+   * of generation plus a random 5-char suffix. See InvoiceService.updateStatus for how
+   * that suffix later gets swapped for the real invoice_number once one is assigned. */
   private generateReference(date: Date = new Date(), customSuffix?: string): string {
     const suffix = customSuffix || this.generateRandomString(5);
     const dateVal = DateTime.fromJSDate(date).toFormat("yyyyLLdd-hh-mm");
@@ -41,6 +55,8 @@ export class InvoiceWorker extends WorkerHost {
     return result;
   }
 
+  /** Counts Mon-Fri days (inclusive) in a date range — the baseline "how many days
+   * should this worker have been billed for" denominator used in overtime detection. */
   public getWorkdaysCount(startDate: Date, endDate: Date): number {
     let count = 0;
     let curDate = DateTime.fromJSDate(startDate, { zone: 'utc' }).startOf('day');
@@ -55,6 +71,15 @@ export class InvoiceWorker extends WorkerHost {
     return count;
   }
 
+  /**
+   * Computes the 6 US federal holidays this billing system pays out on, for a given
+   * year. Deliberately hardcoded/computed rather than stored in the DB or fetched from
+   * an external calendar — these dates are simple enough to derive algorithmically
+   * (nth weekday of a month) and this avoids needing yearly manual data entry. Only the
+   * fixed-date and floating-Monday/Thursday holidays MedVirtual observes are included
+   * here — this is NOT a general-purpose US holiday calendar (e.g. no MLK Day, no
+   * Veterans Day).
+   */
   public getHolidaysForYear(year: number): string[] {
     const holidays: string[] = [];
 
@@ -93,6 +118,12 @@ export class InvoiceWorker extends WorkerHost {
   }
 
 
+  /**
+   * BullMQ's single entry point — dispatches by job.name since this worker handles two
+   * unrelated job types sharing the 'invoice' queue: 'generate-invoice' (the main
+   * event) and 'attempt-collection' (scheduled by StripeService.webhookHandler when an
+   * invoice's due date arrives, to trigger an automatic charge attempt).
+   */
   async process(job: Job<any, any, string>): Promise<any> {
     if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
       this.logger.warn(`LOCAL mode — invoice job '${job.name}' skipped.`);
@@ -110,7 +141,7 @@ export class InvoiceWorker extends WorkerHost {
           this.logger.log(`Successfully collected payment for invoice ${invoiceId}`);
         } catch (err) {
           this.logger.error(`Failed to collect payment for invoice ${invoiceId}: ${err.message}`);
-          throw err; // retry job
+          throw err; // retry job — BullMQ will retry a thrown error per the job's retry config
         }
       }
       return;
@@ -177,6 +208,22 @@ export class InvoiceWorker extends WorkerHost {
     }
   }
 
+  /**
+   * The core generation algorithm. Two very different paths depending on `isCustom`:
+   *
+   * - isCustom=true: creates a bare draft Invoice + InvoiceVersion with zero line
+   *   items — used when an admin wants to hand-build a one-off invoice from scratch
+   *   rather than auto-generating from tracked hours.
+   * - isCustom=false (the normal path): pulls Hubstaff time-tracking data (or, for
+   *   prebill invoices, assumes a standard 8hr/day baseline since actual hours aren't
+   *   known yet), combines it with approved PTO and the US holiday calendar, and
+   *   builds one primary InvoiceLineItem per worker plus nested overtime/bonus/
+   *   reconciliation lines — see the inline comments through the day-by-day loop below
+   *   for the actual billing rules.
+   *
+   * Everything is written inside a single Prisma transaction so a partially-generated
+   * invoice (e.g. failure halfway through creating line items) never gets persisted.
+   */
   private async generateInvoiceRecord(org: any, payload: any) {
     const {
       organization_id,
@@ -242,7 +289,9 @@ export class InvoiceWorker extends WorkerHost {
 
     const hubstaffId = org.invoiceConfiguration.hubstaff_id;
 
-    // Fetch project members to get names for snapshots
+    // Fetch project members to get names for snapshots — worker_name_snapshot on each
+    // line item is populated from this map so historical invoices keep showing the
+    // worker's name as of generation time even if they're later renamed in Hubstaff.
     const members = await this.hubstaff.getProjectMembers(hubstaffId);
 
     const memberMap = new Map<number, string>();
@@ -259,7 +308,11 @@ export class InvoiceWorker extends WorkerHost {
     const startOfPeriod = DateTime.fromISO(billing_start_date, { zone: 'utc' }).startOf('day').toJSDate();
     const endOfPeriod = DateTime.fromISO(billing_end_date, { zone: 'utc' }).endOf('day').toJSDate();
 
-    // Fetch all staff by candidate's hubstaff_id, matching this organization
+    // Fetch all staff by candidate's hubstaff_id, matching this organization. The OR
+    // matches by either our own organization_id or the org's HubSpot company id, since
+    // staff assignment records may be linked via either identifier depending on how
+    // they were created. Also sideloads resolved 'bonus'-type tickets from this exact
+    // billing period, which get turned into bonus line items further down.
     const staffRecords = (hubstaffUserIds.length > 0) ? await this.prisma.staff.findMany({
       where: {
         candidate: {
@@ -291,12 +344,20 @@ export class InvoiceWorker extends WorkerHost {
       },
     }) : [];
 
-    // Aggregate by user
+    // Aggregate per-worker total tracked seconds for the period — tracked/overall are
+    // fed into userSummary either from a flat prebill assumption or real Hubstaff
+    // activity records, depending on billing mode (see branches below). The day-by-day
+    // breakdown into worked/pto/holiday buckets happens later in the main loop; this is
+    // just the first pass to know which workers to build line items for at all.
     const userSummary = new Map<number, { tracked: number; overall: number }>();
     let activities: any[] = [];
 
     if (is_prebill) {
-      // Pre-bill logic: Assume 8hrs per day for all project members
+      // Pre-bill logic: actual hours aren't known yet (billing happens BEFORE the cycle
+      // starts — see BillingMode.prebill), so assume every project member works a
+      // standard 8hrs/day baseline for the full period. The real numbers get
+      // reconciled afterward via InvoicePrebillReconciliationWorker, which compares
+      // this assumption against what Hubstaff actually recorded once the cycle closes.
       const startDate = DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate();
       const endDate = DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate();
       const days = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24)) + 1;
@@ -338,13 +399,17 @@ export class InvoiceWorker extends WorkerHost {
       });
     }
 
-    // Now collect all unique user IDs for fetching PTOs
+    // Now collect all unique user IDs for fetching PTOs — union of project members and
+    // anyone who logged activity, in case someone tracked time without being a
+    // "current" project member (e.g. removed from the project mid-cycle).
     const uniqueUserIdsForPto = Array.from(new Set([
       ...hubstaffUserIds,
       ...activities.map((act: any) => String(act.user_id))
     ]));
 
-    // Fetch and filter approved PTOs
+    // Fetch and filter approved PTOs. Only `approved` requests count toward billing —
+    // pending/denied PTO requests are ignored entirely (the worker is just treated as
+    // not having worked those hours, same as any other untracked time).
     const startDateISO = DateTime.fromISO(billing_start_date, { zone: 'utc' }).startOf('day').toISO() || undefined;
     const endDateISO = DateTime.fromISO(billing_end_date, { zone: 'utc' }).plus({ days: 1 }).startOf('day').toISO() || undefined;
 
@@ -354,7 +419,9 @@ export class InvoiceWorker extends WorkerHost {
 
     const approvedPtos = ptoRequests.filter(pto => pto.status === 'approved');
 
-    // Define the list of all days in the billing period
+    // Precompute the list of every calendar day in the billing period, and the set of
+    // US holiday dates falling within it — both are walked once per worker in the main
+    // loop below rather than recomputed per-worker.
     const startJSDate = DateTime.fromISO(billing_start_date, { zone: 'utc' }).toJSDate();
     const endJSDate = DateTime.fromISO(billing_end_date, { zone: 'utc' }).toJSDate();
     let curDate = DateTime.fromJSDate(startJSDate, { zone: 'utc' }).startOf('day');
@@ -410,12 +477,16 @@ export class InvoiceWorker extends WorkerHost {
 
       let subtotal = new Decimal(0);
 
-      // 3. Create Line Items
+      // 3. Create Line Items — one primary InvoiceLineItem per worker who tracked time
+      // or was assumed to (prebill), plus nested overtime/bonus/reconciliation lines.
       for (const [userId, stats] of userSummary.entries()) {
         // Find Staff & Candidate
         const staff = staffRecords.find(s => s.candidate?.hubstaff_id === String(userId)) || null;
         const candidate = staff?.candidate || null;
 
+        // Full-time workers have an 8hr/day baseline (salaried expectation); part-time
+        // workers have a 4hr/day baseline. This baseline drives both holiday pay
+        // (below) and overtime detection (requiredHours further down).
         let isFullTime = true;
         if (staff) {
           const deploymentType = (staff.hubspot_deployment_type || '').trim().toLowerCase().replace('-', ' ');
@@ -423,7 +494,9 @@ export class InvoiceWorker extends WorkerHost {
         }
         const dailyBaseline = isFullTime ? 8 : 4;
 
-        // Loop through all days in the billing period to calculate daily worked, PTO, and holiday hours
+        // Walk every day in the billing period once per worker, classifying each day as
+        // worked/PTO/holiday and accumulating payable hours into the three buckets
+        // below. This is the actual implementation of the org's holiday/PTO pay policy.
         let totalWorkedHours = 0;
         let totalPtoHours = 0;
         let totalHolidayHours = 0;
@@ -479,9 +552,15 @@ export class InvoiceWorker extends WorkerHost {
           }
         }
 
+        // totalPayableHours subtracts actualWorkedHoursOnHolidays from totalWorkedHours
+        // because those hours were already folded into totalHolidayHours above (at the
+        // 150% holiday rate) — without the subtraction they'd be double-counted.
         const totalPayableHours = (totalWorkedHours - actualWorkedHoursOnHolidays) + totalPtoHours + totalHolidayHours;
         const hours = new Decimal(totalPayableHours);
 
+        // Overtime is only recognized once payable hours exceed the expected baseline
+        // by more than 4 hours — a small buffer so minor day-to-day variance doesn't
+        // trigger overtime billing.
         const workdaysInPeriod = this.getWorkdaysCount(startJSDate, endJSDate);
         const requiredHours = workdaysInPeriod * dailyBaseline;
         const actualHours = totalPayableHours;
@@ -496,15 +575,27 @@ export class InvoiceWorker extends WorkerHost {
         let overtimeTotal = new Decimal(0);
 
         if (hasOvertime) {
+          // Split into a primary line capped at requiredHours (billed at the normal/
+          // salaried rate) plus a separate overtime line for the excess — this is why
+          // primaryHours is reset to requiredHours rather than staying at actualHours.
           overtimeHours = actualHours - requiredHours;
           primaryHours = requiredHours;
 
           if (staff && staff.salary) {
+            // Salaried worker: derive an hourly-equivalent rate from their monthly
+            // salary (annualized, then divided across a standard 52-week/40hr year)
+            // purely to price the overtime hours — their primary/base pay is still the
+            // flat salary amount computed in the full/half-month branches below.
             const monthlySalary = Number(staff.salary);
             const prorationRate = (monthlySalary * 12) / 52 / 40;
             overtimeHourlyRate = new Decimal(prorationRate);
             overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
 
+            // Detect whether this billing cycle is a calendar full-month, a half-month
+            // (1st-15th or 16th-end), or an irregular custom range — full-time salaried
+            // workers are billed a flat monthly/half-monthly salary for the standard
+            // cycle shapes, and only fall back to hourly proration for anything else
+            // (e.g. a short custom-range invoice).
             if (isFullTime) {
               const startDT = DateTime.fromJSDate(startJSDate, { zone: 'utc' });
               const endDT = DateTime.fromJSDate(endJSDate, { zone: 'utc' });
@@ -514,6 +605,9 @@ export class InvoiceWorker extends WorkerHost {
               const endDay = endDT.day;
               const daysInMonth = startDT.daysInMonth;
 
+              // >=27 days is treated as "close enough" to a full month even if the
+              // range doesn't land exactly on the 1st/last day (e.g. a 28-day February
+              // cycle, or a cycle shifted by a day or two).
               const isFullMonth = (startDay === 1 && endDay === daysInMonth) || (diffInDays >= 27);
               const isHalfMonth = !isFullMonth && (
                 (startDay === 1 && endDay === 15) ||
@@ -537,18 +631,27 @@ export class InvoiceWorker extends WorkerHost {
               lineTotal = new Decimal(primaryHours).mul(hourlyRate);
             }
           } else if (candidate && candidate.hourly_pay_rate) {
+            // No salary on file — fall back to the candidate's own hourly rate.
             const rate = Number(candidate.hourly_pay_rate);
             hourlyRate = new Decimal(rate);
             lineTotal = new Decimal(primaryHours).mul(hourlyRate);
             overtimeHourlyRate = new Decimal(rate);
             overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
           } else {
+            // No salary AND no candidate hourly rate on file — last-resort hardcoded
+            // fallback rates ($12/hr base, $25/hr overtime) rather than failing invoice
+            // generation entirely for a worker with incomplete pay-rate data.
             hourlyRate = new Decimal(12);
             lineTotal = new Decimal(primaryHours).mul(hourlyRate);
             overtimeHourlyRate = new Decimal(25);
             overtimeTotal = new Decimal(overtimeHours).mul(overtimeHourlyRate);
           }
         } else {
+          // No-overtime path: same salaried full/half-month billing shape as above, but
+          // with one extra rule — a salaried worker who fell noticeably short of their
+          // expected hours (deficit > 10) gets billed hourly for what they actually
+          // worked instead of the flat salary, rather than being paid in full for time
+          // not worked.
           if (staff && staff.salary) {
             const monthlySalary = Number(staff.salary);
             const prorationRate = (monthlySalary * 12) / 52 / 40;
@@ -606,6 +709,10 @@ export class InvoiceWorker extends WorkerHost {
 
         const memberName = memberMap.get(userId) || `Hubstaff User ${userId}`;
 
+        // The primary line item for this worker — hours breakdown, computed rate, and
+        // service_amount from all the branching logic above. operations_cost/
+        // medvirtual_fees are only populated when allowFees is set (see
+        // InvoiceVersion.allow_fees) — some orgs never see the internal cost breakdown.
         const primaryLineItem = await tx.invoiceLineItem.create({
           data: {
             invoice_version_id: version.id,
@@ -657,6 +764,12 @@ export class InvoiceWorker extends WorkerHost {
           subtotal = subtotal.add(overtimeTotal);
         }
 
+        // Bonus tickets: resolved support tickets of type 'bonus' created during this
+        // billing period (fetched in staffRecords above) get turned into their own
+        // bonus line items. The dollar amount isn't a structured field on the ticket —
+        // it's parsed out of the ticket title via regex (e.g. a title like "Approved:
+        // $150 retention bonus" yields $150), since bonus tickets are created through
+        // the general support-ticket flow rather than a dedicated bonus-entry form.
         if (staff) {
           this.logger.log('Staff found for user_id:', userId);
           const bonusTickets = staff.tickets || [];
@@ -699,6 +812,9 @@ export class InvoiceWorker extends WorkerHost {
       // 4. Apply any pending BillingLedgerEntry adjustments for this org/period
       //    These are reconciliation deltas from previous pre-billed invoices that
       //    have not yet been applied to a subsequent invoice line item.
+      //    Scoped to workers who already have a primary line item on THIS invoice
+      //    (workerIds, from userSummary) — a pending credit/debit for a worker who
+      //    isn't being billed this cycle simply stays pending until they are again.
       const workerIds = Array.from(userSummary.keys()).map(String);
 
       if (workerIds.length > 0) {
@@ -779,6 +895,8 @@ export class InvoiceWorker extends WorkerHost {
     });
   }
 
+  /** Marks the InvoiceJob completed and notifies the requesting user over Pusher — the
+   * "your invoice is ready" real-time signal the frontend listens for after generation. */
   private async completeJob(job_id: string, userId: string, invoiceIds: string[]) {
     await this.prisma.invoiceJob.update({
       where: { id: job_id },
