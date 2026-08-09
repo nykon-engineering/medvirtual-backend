@@ -42,6 +42,9 @@ export class InvoiceLineItemDto {
   @IsOptional()
   is_full_time?: boolean;
 
+  // Accepted from the client for UI display purposes (e.g. rendering a +/-
+  // toggle) but not persisted — invoice.service.ts destructures and discards
+  // it before saving; adjustment_amount already carries the actual sign.
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()

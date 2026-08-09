@@ -230,12 +230,17 @@ export class InvoiceReconciliationWorker extends WorkerHost implements OnModuleI
       data: dataToUpdate,
     });
 
-    // Upsert InvoicePayment record
+    // Upsert InvoicePayment record, keyed on provider_reference so re-running
+    // reconciliation is idempotent. Prefer the payment_intent id (it's expanded
+    // as an object on some API versions/webhook payloads, hence the typeof
+    // check); fall back to the Stripe invoice id itself if no payment intent
+    // is present (e.g. invoices paid out-of-band).
     const providerRef =
       (typeof stripeInvoice.payment_intent === 'string'
         ? stripeInvoice.payment_intent
         : stripeInvoice.id) || '';
 
+    // Stripe amounts are in cents; convert to a decimal currency amount.
     const amountDecimal = (stripeInvoice.amount_paid ?? stripeInvoice.total ?? 0) / 100;
 
     const paidAt = stripeInvoice.status_transitions?.paid_at

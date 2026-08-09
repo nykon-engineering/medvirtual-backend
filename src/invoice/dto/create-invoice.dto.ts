@@ -2,6 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsDateString, IsOptional, IsArray, ValidateNested, IsBoolean, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
+// isCustom/is_custom and allowFees/allow_fees each accept both casings because
+// different frontend call sites send one or the other; invoice.service.ts reads
+// whichever is set (`dto.isCustom || dto.is_custom`). Keep both until the
+// frontend is standardized on one casing.
 export class CreateInvoiceDto {
   @ApiProperty({ example: 'uuid-of-organization' })
   @IsUUID()
@@ -66,6 +70,8 @@ export class CreateInvoiceDto {
   fee?: number;
 }
 
+// Same dual-casing fields as CreateInvoiceDto (see comment above) — one
+// invoice per organization_id is created with these shared settings.
 export class BulkCreateInvoiceDto {
   @ApiProperty({ type: [String], example: ['uuid1', 'uuid2'] })
   @IsArray()

@@ -15,6 +15,13 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { USER } from '@prisma/client';
 
+/**
+ * Invoice creation, listing, status/version updates, and document export
+ * (PDF/CSV/email) for the invoicing feature. Invoice creation and version
+ * updates are queued onto BullMQ workers (see invoice.worker.ts) rather than
+ * computed synchronously, since line-item computation can involve Hubstaff
+ * time-tracking lookups per worker.
+ */
 @ApiTags('Invoices')
 @Controller('invoice')
 @UseGuards(AuthGuard, RolesGuard)
@@ -115,17 +122,23 @@ export class InvoiceController {
     }
 
     const filePath = await this.invoiceService.generateInvoicePdf(id);
-    
+
     if (!filePath || !existsSync(filePath)) {
       throw new BadRequestException('Failed to generate PDF');
     }
 
+    // `reference` is allocated before the invoice has an official invoice_number
+    // (see invoice.service.ts) and ends in a 5-letter placeholder suffix; once a
+    // real invoice_number exists, swap it in for the download filename so admins
+    // never see the placeholder on a finalized invoice.
     let ref = invoice.invoice_number
       ? invoice.reference?.replace(/[A-Z]{5}$/, invoice.invoice_number)
       : invoice.reference || invoice.id;
     let name = `${ref}.pdf`;
 
     res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    // generateInvoicePdf writes to a temp file per-request; clean it up once the
+    // stream finishes (success or failure) so temp PDFs don't accumulate on disk.
     return res.download(filePath, name, (err) => {
       if (existsSync(filePath)) {
         try {

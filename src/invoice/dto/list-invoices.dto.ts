@@ -14,6 +14,9 @@ export class ListInvoicesDto {
   @IsOptional()
   search?: string;
 
+  // Express's query parser only produces an array when the client repeats the
+  // key (?organizationIds=a&organizationIds=b); a single value arrives as a
+  // plain string. Normalize both shapes to an array before @IsUUID validates.
   @ApiProperty({ required: false, type: [String] })
   @IsUUID(undefined, { each: true })
   @IsOptional()

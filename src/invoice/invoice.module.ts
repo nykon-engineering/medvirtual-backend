@@ -12,6 +12,10 @@ import { HubstaffModule } from '../hubstaff/hubstaff.module';
 import { MailModule } from '../mail/mail.module';
 import { isLocalModeSync } from '../common/bull.utils';
 
+// Local dev doesn't run Redis/BullMQ, so both the queue registrations and the
+// worker providers that consume them are skipped entirely in LOCAL mode rather
+// than registered-but-idle — registering a BullMQ queue without Redis available
+// would fail module bootstrap, not just leave the queue empty.
 const LOCAL = isLocalModeSync();
 
 const workerProviders = LOCAL
