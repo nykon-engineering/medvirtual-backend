@@ -1,11 +1,12 @@
 import {
   formatDuration,
-  getEtWeekWindow,
+  getRollingReportWindow,
   getZonedDateParts,
   zonedWallClockToUtc,
 } from './formatDate';
 
 const ET = 'America/New_York';
+const PT = 'America/Los_Angeles';
 
 describe('getZonedDateParts', () => {
   it('maps every weekday correctly in ET', () => {
@@ -41,102 +42,98 @@ describe('zonedWallClockToUtc', () => {
   });
 });
 
-describe('getEtWeekWindow', () => {
-  it('returns Sat 00:00 ET to Fri 23:59:59.999 ET for an EDT Friday', () => {
-    const { start, end } = getEtWeekWindow(
-      new Date('2026-07-31T13:00:00Z'),
-      ET,
+describe('getRollingReportWindow', () => {
+  // 2026-07-31T17:00:00Z === Fri 2026-07-31 10:00 PDT, the scheduled run time.
+  const PDT_FRIDAY_RUN = new Date('2026-07-31T17:00:00Z');
+
+  it('spans last Friday 00:00 PT through the run instant on a PDT Friday', () => {
+    const { start, end } = getRollingReportWindow(PDT_FRIDAY_RUN, PT);
+    expect(start.toISOString()).toBe('2026-07-24T07:00:00.000Z');
+    expect(end.toISOString()).toBe(PDT_FRIDAY_RUN.toISOString());
+  });
+
+  it('uses the PST offset for a January Friday', () => {
+    // Fri 2026-01-30 10:00 PST === 18:00Z.
+    const { start, end } = getRollingReportWindow(
+      new Date('2026-01-30T18:00:00Z'),
+      PT,
     );
-    expect(start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
-    expect(end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
+    expect(start.toISOString()).toBe('2026-01-23T08:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-01-30T18:00:00.000Z');
   });
 
-  it('returns the EST-offset window for a January Friday', () => {
-    const { start, end } = getEtWeekWindow(
-      new Date('2026-01-30T14:00:00Z'),
-      ET,
+  it('covers exactly 8 civil days, so the previous run day is included', () => {
+    const { start, end } = getRollingReportWindow(PDT_FRIDAY_RUN, PT);
+    // A panel created just after the previous Friday run would be dropped by a
+    // 7-day window; the 8th day is what makes consecutive reports overlap.
+    const lastFridayMorning = new Date('2026-07-24T17:30:00Z');
+    const lastSaturday = new Date('2026-07-25T18:00:00Z');
+
+    expect(lastFridayMorning >= start && lastFridayMorning <= end).toBe(true);
+    expect(lastSaturday >= start && lastSaturday <= end).toBe(true);
+  });
+
+  it('excludes the instant before the window opens', () => {
+    const { start } = getRollingReportWindow(PDT_FRIDAY_RUN, PT);
+    const justBefore = new Date(start.getTime() - 1);
+    expect(justBefore >= start).toBe(false);
+  });
+
+  it('resolves the start with the offset in effect during the spring-forward week', () => {
+    // DST starts Sun 2026-03-08: the start (Fri 03-06) is still PST (-08:00)
+    // while the run instant (Fri 03-13 10:00) is already PDT (-07:00).
+    const { start, end } = getRollingReportWindow(
+      new Date('2026-03-13T17:00:00Z'),
+      PT,
     );
-    expect(start.toISOString()).toBe('2026-01-24T05:00:00.000Z');
-    expect(end.toISOString()).toBe('2026-01-31T04:59:59.999Z');
+    expect(start.toISOString()).toBe('2026-03-06T08:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-03-13T17:00:00.000Z');
   });
 
-  it('includes panels created on the leading Saturday and Sunday', () => {
-    // The whole point of the 7-day window: a panel created over the weekend
-    // used to fall between two reports and never appear in either.
-    const { start, end } = getEtWeekWindow(
-      new Date('2026-07-31T13:00:00Z'),
-      ET,
+  it('resolves the start with the offset in effect during the fall-back week', () => {
+    // DST ends Sun 2026-11-01: the start (Fri 10-30) is still PDT (-07:00)
+    // while the run instant (Fri 11-06 10:00) is already PST (-08:00).
+    const { start, end } = getRollingReportWindow(
+      new Date('2026-11-06T18:00:00Z'),
+      PT,
     );
-    const saturdayPanel = new Date('2026-07-25T18:00:00Z');
-    const sundayPanel = new Date('2026-07-26T18:00:00Z');
-
-    expect(saturdayPanel >= start && saturdayPanel <= end).toBe(true);
-    expect(sundayPanel >= start && sundayPanel <= end).toBe(true);
+    expect(start.toISOString()).toBe('2026-10-30T07:00:00.000Z');
+    expect(end.toISOString()).toBe('2026-11-06T18:00:00.000Z');
   });
 
-  it('keeps the same week when run at 23:30 ET Friday (already Saturday in UTC)', () => {
-    // 2026-07-31T23:30:00-04:00 === 2026-08-01T03:30:00Z
-    const { start, end } = getEtWeekWindow(
-      new Date('2026-08-01T03:30:00Z'),
-      ET,
+  it('crosses the year boundary when the run day is Jan 1', () => {
+    // Fri 2027-01-01 10:00 PST; the window opens on Fri 2026-12-25.
+    const { start } = getRollingReportWindow(
+      new Date('2027-01-01T18:00:00Z'),
+      PT,
     );
-    expect(start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
-    expect(end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
+    expect(start.toISOString()).toBe('2026-12-25T08:00:00.000Z');
   });
 
-  it('computes each boundary with the offset in effect during the spring-forward week', () => {
-    // DST starts Sun 2026-03-08, so this window straddles it: Sat 03-07 is
-    // still EST (-05:00) while Fri 03-13 is already EDT (-04:00).
-    const { start, end } = getEtWeekWindow(
-      new Date('2026-03-13T14:00:00Z'),
-      ET,
+  it('anchors on the PT civil day, not the UTC one, for a late-evening run', () => {
+    // 2026-08-01T04:00:00Z is already Saturday in UTC but still Fri 21:00 PT,
+    // so the window must open on Fri 2026-07-24.
+    const { start } = getRollingReportWindow(
+      new Date('2026-08-01T04:00:00Z'),
+      PT,
     );
-    expect(start.toISOString()).toBe('2026-03-07T05:00:00.000Z');
-    expect(end.toISOString()).toBe('2026-03-14T03:59:59.999Z');
+    expect(start.toISOString()).toBe('2026-07-24T07:00:00.000Z');
   });
 
-  it('computes each boundary with the offset in effect during the fall-back week', () => {
-    // DST ends Sun 2026-11-01, so this window straddles it: Sat 10-31 is still
-    // EDT (-04:00) while Fri 11-06 is already EST (-05:00).
-    const { start, end } = getEtWeekWindow(
-      new Date('2026-11-06T15:00:00Z'),
-      ET,
+  it('exposes human-readable PT labels for the boundaries', () => {
+    const { weekStartLabel, weekEndLabel } = getRollingReportWindow(
+      PDT_FRIDAY_RUN,
+      PT,
     );
-    expect(start.toISOString()).toBe('2026-10-31T04:00:00.000Z');
-    expect(end.toISOString()).toBe('2026-11-07T04:59:59.999Z');
-  });
-
-  it('crosses the year boundary when Friday is Jan 1', () => {
-    // Fri 2027-01-01; its window opens on Sat 2026-12-26.
-    const { start, end } = getEtWeekWindow(
-      new Date('2027-01-01T15:00:00Z'),
-      ET,
-    );
-    expect(start.toISOString()).toBe('2026-12-26T05:00:00.000Z');
-    expect(end.toISOString()).toBe('2027-01-02T04:59:59.999Z');
-  });
-
-  it('reports the week that just ended when run on Saturday or Sunday', () => {
-    const sat = getEtWeekWindow(new Date('2026-08-01T16:00:00Z'), ET);
-    const sun = getEtWeekWindow(new Date('2026-08-02T16:00:00Z'), ET);
-    expect(sat.start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
-    expect(sat.end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
-    expect(sun.start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
-  });
-
-  it('reports the current, incomplete week when run Monday through Thursday', () => {
-    const wed = getEtWeekWindow(new Date('2026-07-29T14:00:00Z'), ET);
-    expect(wed.start.toISOString()).toBe('2026-07-25T04:00:00.000Z');
-    expect(wed.end.toISOString()).toBe('2026-08-01T03:59:59.999Z');
-  });
-
-  it('exposes human-readable ET labels for the boundaries', () => {
-    const { weekStartLabel, weekEndLabel } = getEtWeekWindow(
-      new Date('2026-07-31T13:00:00Z'),
-      ET,
-    );
-    expect(weekStartLabel).toBe('Jul 25, 2026');
+    expect(weekStartLabel).toBe('Jul 24, 2026');
     expect(weekEndLabel).toBe('Jul 31, 2026');
+  });
+
+  it('honours a non-default time zone for the day boundary', () => {
+    // Same instant, ET: 13:00 ET on Fri 07-31, so the window opens at
+    // Fri 2026-07-24 00:00 EDT (-04:00) instead of PT's -07:00.
+    const { start } = getRollingReportWindow(PDT_FRIDAY_RUN, ET);
+    expect(start.toISOString()).toBe('2026-07-24T04:00:00.000Z');
   });
 });
 

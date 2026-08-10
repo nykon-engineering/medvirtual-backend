@@ -201,7 +201,7 @@ ${getEmailLogoCss()}
         </div>
         ${offScheduleBlock}
         <div class="main-message">
-          <p>Offer panel activity for <strong>${esc(payload.weekStartLabel)}</strong> through <strong>${esc(payload.weekEndLabel)}</strong> (America/New_York).</p>
+          <p>Offer panel activity for <strong>${esc(payload.weekStartLabel)}</strong> through <strong>${esc(payload.weekEndLabel)}</strong> (America/Los_Angeles).</p>
         </div>
         <div class="highlight-box">
           <div class="amount">${payload.totalPanels}</div>

@@ -31,7 +31,7 @@ function buildPayload(
   return {
     weekStartLabel: 'Jul 27, 2026',
     weekEndLabel: 'Jul 31, 2026',
-    generatedAtLabel: 'Jul 31, 2026, 6:00 PM EDT',
+    generatedAtLabel: 'Jul 31, 2026, 10:00 AM PDT',
     totalPanels: 2,
     totalCreators: 1,
     statusTotals: { sent: 1, viewed: 1, accepted: 0, declined: 0 },

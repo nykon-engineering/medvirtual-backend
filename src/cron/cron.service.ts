@@ -22,7 +22,7 @@ import offerPanelWeeklyReport, {
 } from '../common/utils/email-templates/offer-panel-weekly-report';
 import {
   formatDuration,
-  getEtWeekWindow,
+  getRollingReportWindow,
   getZonedDateParts,
   zonedWallClockToUtc,
 } from '../common/utils/formatDate';
@@ -48,7 +48,9 @@ type Event = {
   objectId?: string;
 };
 
-const REPORT_TIMEZONE = 'America/New_York';
+// The report is scheduled for 10:00 Pacific, so the window boundaries and every
+// timestamp in the email are expressed in the same zone the schedule uses.
+const REPORT_TIMEZONE = 'America/Los_Angeles';
 
 // Narrowed outside PROD so staging deploys cannot mail stakeholders every week.
 // MailService's [DEV] subject prefix alone would not prevent that. Read at call
@@ -1332,11 +1334,11 @@ export class CronService {
     totalCreators: number;
     weekStart: string;
     weekEnd: string;
-    ranOnFridayEt: boolean;
+    ranOnFridayPt: boolean;
     error?: string;
   }> {
-    // Anchor a backfill date at noon ET so it lands unambiguously inside its own
-    // civil day regardless of the UTC offset.
+    // Anchor a backfill date at 10:00 PT — the scheduled dispatch time — so the
+    // replayed window closes where the real run would have closed it.
     let now = new Date();
     if (weekOf) {
       const [year, month, day] = weekOf.split('-').map(Number);
@@ -1345,14 +1347,14 @@ export class CronService {
           `Invalid week_of value "${weekOf}". Expected format YYYY-MM-DD.`,
         );
       }
-      now = zonedWallClockToUtc(year, month, day, 12, 0, 0, 0, REPORT_TIMEZONE);
+      now = zonedWallClockToUtc(year, month, day, 10, 0, 0, 0, REPORT_TIMEZONE);
     }
 
-    const { start, end, weekStartLabel, weekEndLabel } = getEtWeekWindow(
+    const { start, end, weekStartLabel, weekEndLabel } = getRollingReportWindow(
       now,
       REPORT_TIMEZONE,
     );
-    const ranOnFridayEt = getZonedDateParts(now, REPORT_TIMEZONE).weekday === 5;
+    const ranOnFridayPt = getZonedDateParts(now, REPORT_TIMEZONE).weekday === 5;
 
     const panels = await this.prisma.offerPanel.findMany({
       where: { createdAt: { gte: start, lte: end } },
@@ -1462,9 +1464,9 @@ export class CronService {
         totalCreators: sections.length,
         statusTotals,
         sections,
-        offScheduleNote: ranOnFridayEt
+        offScheduleNote: ranOnFridayPt
           ? null
-          : 'This report ran outside the usual Friday schedule, so the week it covers may still be in progress.',
+          : 'This report ran outside the usual Friday schedule, so the 8-day window it covers is not aligned with the regular Friday-to-Friday period.',
       },
       theme,
     );
@@ -1474,7 +1476,7 @@ export class CronService {
       totalCreators: sections.length,
       weekStart: start.toISOString(),
       weekEnd: end.toISOString(),
-      ranOnFridayEt,
+      ranOnFridayPt,
     };
 
     try {

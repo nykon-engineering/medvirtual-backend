@@ -149,45 +149,34 @@ export function zonedWallClockToUtc(
     : new Date(naive + secondOffset * 60000);
 }
 
-// Saturday 00:00:00.000 through Friday 23:59:59.999 of the week containing
-// `now`, in `timeZone` — the leading weekend is included so panels created on a
-// Saturday or Sunday are not dropped between consecutive reports. The window is
-// still Monday-anchored, so a Saturday or Sunday run reports the week that just
-// ended — which makes a weekend retry of a failed Friday cron return the
-// intended window rather than an empty one.
-export function getEtWeekWindow(
+// Rolling 8-day window: 00:00:00.000 of the civil day 7 days before `now`
+// through `now` itself, in `timeZone`. Run on a Friday it spans last Friday to
+// this Friday, and the 8th day makes consecutive reports overlap by one day
+// rather than dropping panels created after the previous run.
+//
+// The window closes at `now`, not at the end of the civil day, because the
+// report is dispatched mid-morning — an end-of-day boundary would advertise
+// hours that have not happened yet.
+export function getRollingReportWindow(
   now: Date = new Date(),
-  timeZone = 'America/New_York',
+  timeZone = 'America/Los_Angeles',
 ): { start: Date; end: Date; weekStartLabel: string; weekEndLabel: string } {
-  const { year, month, day, weekday } = getZonedDateParts(now, timeZone);
-  const daysSinceMonday = (weekday + 6) % 7;
+  const { year, month, day } = getZonedDateParts(now, timeZone);
 
   // Shift the civil date from a UTC-noon anchor: UTC has no DST, so whole-day
   // millisecond arithmetic can never roll the calendar date by accident.
-  const anchor = Date.UTC(year, month - 1, day, 12);
-  const saturday = new Date(anchor - (daysSinceMonday + 2) * 86400000);
-  const friday = new Date(anchor + (4 - daysSinceMonday) * 86400000);
+  const startDay = new Date(Date.UTC(year, month - 1, day, 12) - 7 * 86400000);
 
-  // Each boundary is resolved independently: a window spanning a DST change has
-  // a different UTC offset on its Saturday than on its Friday.
+  // Resolved against its own civil date: a window spanning a DST change has a
+  // different UTC offset at its start than at its end.
   const start = zonedWallClockToUtc(
-    saturday.getUTCFullYear(),
-    saturday.getUTCMonth() + 1,
-    saturday.getUTCDate(),
+    startDay.getUTCFullYear(),
+    startDay.getUTCMonth() + 1,
+    startDay.getUTCDate(),
     0,
     0,
     0,
     0,
-    timeZone,
-  );
-  const end = zonedWallClockToUtc(
-    friday.getUTCFullYear(),
-    friday.getUTCMonth() + 1,
-    friday.getUTCDate(),
-    23,
-    59,
-    59,
-    999,
     timeZone,
   );
 
@@ -201,9 +190,9 @@ export function getEtWeekWindow(
 
   return {
     start,
-    end,
+    end: now,
     weekStartLabel: label(start),
-    weekEndLabel: label(end),
+    weekEndLabel: label(now),
   };
 }
 

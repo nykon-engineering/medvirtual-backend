@@ -1620,10 +1620,11 @@ describe('CronService', () => {
   });
 
   describe('weeklyOfferPanelReport', () => {
-    // Fri 2026-07-31 13:00Z = 09:00 EDT. Window: Sat Jul 25 → Fri Jul 31 ET.
-    const FRIDAY = new Date('2026-07-31T13:00:00Z');
-    const EXPECTED_START = '2026-07-25T04:00:00.000Z';
-    const EXPECTED_END = '2026-08-01T03:59:59.999Z';
+    // Fri 2026-07-31 17:00Z = 10:00 PDT, the scheduled run time.
+    // Window: Fri Jul 24 00:00 PT → the run instant.
+    const FRIDAY = new Date('2026-07-31T17:00:00Z');
+    const EXPECTED_START = '2026-07-24T07:00:00.000Z';
+    const EXPECTED_END = '2026-07-31T17:00:00.000Z';
     const originalEnvironment = process.env.ENVIRONMENT;
     const originalFrontendUrl = process.env.FRONTEND_URL;
 
@@ -1685,7 +1686,7 @@ describe('CronService', () => {
       });
     });
 
-    it('queries the exact Saturday–Friday ET window', async () => {
+    it('queries the exact rolling 8-day PT window ending at the run instant', async () => {
       prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
 
       await service.weeklyOfferPanelReport();
@@ -1831,7 +1832,7 @@ describe('CronService', () => {
       await service.weeklyOfferPanelReport();
 
       expect(mailServiceMock.sendMail.mock.calls[0][0].subject).toBe(
-        'Offer Panel Report — Jul 25, 2026 to Jul 31, 2026',
+        'Offer Panel Report — Jul 24, 2026 to Jul 31, 2026',
       );
       expect(
         emailTemplatesServiceMock.getTemplateContent,
@@ -1847,32 +1848,58 @@ describe('CronService', () => {
       expect(html).not.toMatch(/\{\{|\[\[/);
     });
 
-    it('flags an off-schedule run and still reports the current week', async () => {
-      jest.setSystemTime(new Date('2026-07-29T14:00:00Z')); // Wednesday
+    it('flags an off-schedule run and still reports the trailing 8 days', async () => {
+      // Wed 2026-07-29 07:00 PDT.
+      jest.setSystemTime(new Date('2026-07-29T14:00:00Z'));
       prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
 
       const result = await service.weeklyOfferPanelReport();
 
-      expect(result.ranOnFridayEt).toBe(false);
+      expect(result.ranOnFridayPt).toBe(false);
+      expect(result.weekStart).toBe('2026-07-22T07:00:00.000Z');
+      expect(result.weekEnd).toBe('2026-07-29T14:00:00.000Z');
       expect(mailServiceMock.sendMail.mock.calls[0][0].html).toContain(
         'outside the usual Friday schedule',
       );
     });
 
-    it('reports the requested week when week_of is supplied', async () => {
+    it('closes the window at the run instant rather than the end of the day', async () => {
       prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
 
+      const result = await service.weeklyOfferPanelReport();
+
+      // 10:00 PT Friday — the remaining ~14h of the day have not happened yet
+      // and must not be advertised as covered.
+      expect(result.weekEnd).toBe(FRIDAY.toISOString());
+    });
+
+    it('replays a past window at the scheduled 10:00 PT dispatch time when week_of is supplied', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      // Wed 2026-01-28 10:00 PST === 18:00Z; window opens Wed 2026-01-21.
       const result = await service.weeklyOfferPanelReport('2026-01-28');
 
       const where =
         prismaServiceMock.offerPanel.findMany.mock.calls[0][0].where;
       expect(where.createdAt.gte.toISOString()).toBe(
-        '2026-01-24T05:00:00.000Z',
+        '2026-01-21T08:00:00.000Z',
       );
       expect(where.createdAt.lte.toISOString()).toBe(
-        '2026-01-31T04:59:59.999Z',
+        '2026-01-28T18:00:00.000Z',
       );
-      expect(result.ranOnFridayEt).toBe(false);
+      expect(result.ranOnFridayPt).toBe(false);
+    });
+
+    it('marks a Friday backfill as on-schedule', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([]);
+
+      const result = await service.weeklyOfferPanelReport('2026-01-30');
+
+      expect(result.ranOnFridayPt).toBe(true);
+      expect(result.weekStart).toBe('2026-01-23T08:00:00.000Z');
+      expect(mailServiceMock.sendMail.mock.calls[0][0].html).not.toContain(
+        'outside the usual Friday schedule',
+      );
     });
 
     it('rejects a malformed week_of value', async () => {
