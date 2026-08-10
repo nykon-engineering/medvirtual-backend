@@ -15,7 +15,7 @@ import {
   getEmailLogoImg,
   getLogoUrl,
 } from '../common/utils/email-templates/components';
-import { renderOfferPanelCandidateCards } from '../common/utils/email-templates/offer-panel-candidate-cards';
+import { renderOfferPanelCandidateCardsShowcase } from '../common/utils/email-templates/offer-panel-candidate-cards-showcase';
 
 // Sample data used when filling placeholders for preview / test-send
 const SAMPLE_DATA: Record<string, string> = {
@@ -468,7 +468,7 @@ export class EmailTemplatesService {
     if (key !== 'offer-panel-created') return undefined;
 
     return {
-      '{{candidateCards}}': renderOfferPanelCandidateCards(
+      '{{candidateCards}}': renderOfferPanelCandidateCardsShowcase(
         SAMPLE_OFFER_PANEL_CANDIDATES,
         {
           primaryColor: branding.primaryColor,

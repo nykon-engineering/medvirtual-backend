@@ -14,10 +14,8 @@ import {
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
-import {
-  renderOfferPanelCandidateCards,
-  OfferPanelEmailCandidate,
-} from '../common/utils/email-templates/offer-panel-candidate-cards';
+import { OfferPanelEmailCandidate } from '../common/utils/email-templates/offer-panel-candidate-cards';
+import { renderOfferPanelCandidateCardsShowcase } from '../common/utils/email-templates/offer-panel-candidate-cards-showcase';
 import {
   getUserEmailTheme,
   getBusinessUnitEmailTheme,
@@ -2722,7 +2720,7 @@ ${getEmailLogoCss()}
     );
     const panelUrl = `${process.env.FRONTEND_URL}/modules/talent/client`;
     const candidateCount = panel._count.candidates;
-    const candidateCards = renderOfferPanelCandidateCards(
+    const candidateCards = renderOfferPanelCandidateCardsShowcase(
       await this.loadOfferPanelEmailCandidates(
         panel.candidates.map((c) => c.candidate_id),
       ),
@@ -2801,7 +2799,7 @@ ${getEmailLogoCss()}
     const panelUrl = `${process.env.FRONTEND_URL}/modules/public/offer-panel/${panel.public_token}`;
     const candidateCount = panel._count.candidates;
     const candidateLabel = `${candidateCount} candidate${candidateCount !== 1 ? 's' : ''}`;
-    const candidateCards = renderOfferPanelCandidateCards(
+    const candidateCards = renderOfferPanelCandidateCardsShowcase(
       await this.loadOfferPanelEmailCandidates(
         panel.candidates.map((c) => c.candidate_id),
       ),
