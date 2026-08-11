@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsOptional,
@@ -46,6 +47,20 @@ export class CreateOfferPanelDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Activate the $1,760/mo promo for this panel. Stored as a flag only — the ' +
+      'price and copy come from the brand config at render time, and the ' +
+      'struck-through original is recomputed live from each candidate’s bill rate. ' +
+      'Deliberately absent from UpdateOfferPanelDto: the panel has already been ' +
+      'emailed with a price, so flipping the promo post-send would be a ' +
+      'bait-and-switch.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  promo_enabled?: boolean;
 
   @ApiProperty({
     example: 'MedVirtual',

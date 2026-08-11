@@ -15,12 +15,28 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { HireRequestService } from '../hire-request/hire-request.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
-import { USER, TicketAuditSource, OfferPanelStatus } from '@prisma/client';
+import {
+  USER,
+  TicketAuditSource,
+  OfferPanelStatus,
+  OfferPanelAuditSource,
+} from '@prisma/client';
 import {
   TicketAuditService,
   TICKET_AUDIT_EVENTS,
   TICKET_AUDIT_ORIGINS,
+  buildActorLabel,
 } from '../ticket/ticket-audit.service';
+import {
+  OfferPanelsAuditService,
+  OFFER_PANEL_AUDIT_EVENTS,
+  OFFER_PANEL_AUDIT_ORIGINS,
+  recipientActorLabel,
+} from './offer-panels-audit.service';
+import {
+  OFFER_PANEL_PROMO_PRICE_LABEL,
+  offerPanelPromoMetadata,
+} from '../common/constant/offer-panel-promo.constant';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
 import {
   CreateOfferPanelDto,
@@ -154,15 +170,35 @@ export class OfferPanelsService {
     private readonly hireRequestService: HireRequestService,
     private readonly businessUnitContext: BusinessUnitContext,
     private readonly ticketAudit: TicketAuditService,
+    private readonly panelAudit: OfferPanelsAuditService,
   ) {}
 
-  // Maps the flat recipient_* columns onto the nested `recipient` shape the
-  // frontend expects (OfferPanelRecipient in lib/offer-panels/types.ts).
+  /**
+   * Maps the flat recipient_* columns onto the nested `recipient` shape the
+   * frontend expects (OfferPanelRecipient in lib/offer-panels/types.ts).
+   *
+   * Also the single choke point for `public_token` exposure. The token is the panel's
+   * ONLY access credential — anyone holding it can view, accept or decline without
+   * authenticating. Every read path spreads the whole Prisma row through here (the
+   * queries use `include`, not `select`), so the token is stripped unless the viewer
+   * holds a system role.
+   *
+   * Public/unauthenticated reads (findByToken) pass `viewerRole: null`: the caller
+   * already has the token, so echoing it back only puts a live credential into browser
+   * logs and screenshots for no benefit.
+   */
   private withRecipient<T extends Record<string, any>>(
     panel: T,
+    viewerRole?: string | null,
   ): T & { recipient: Record<string, any> } {
+    const isSystemRole =
+      viewerRole === 'system_admin' || viewerRole === 'system_super_admin';
+    const { public_token: _public_token, ...withoutToken } = panel as T & {
+      public_token?: string | null;
+    };
+
     return {
-      ...panel,
+      ...((isSystemRole ? panel : withoutToken) as T),
       recipient: {
         recipient_type: panel.recipient_type,
         id: panel.recipient_user_id ?? null,
@@ -252,7 +288,11 @@ export class OfferPanelsService {
   async searchContacts(q: string, businessUnit: string): Promise<any[]> {
     const term = q.trim();
     businessUnit =
-      businessUnit === 'BerryVirtual' ? 'Berry Virtual' : businessUnit;
+      businessUnit === 'BerryVirtual' 
+      ? 'Berry Virtual' 
+      : businessUnit === 'Med Virtual'
+        ? 'MedVirtual'
+        : businessUnit;
     const tokens = term.split(/\s+/).filter(Boolean);
     const makeTokenFilter = (extra: string[] = []) =>
       tokens.map((t) => ({
@@ -467,6 +507,7 @@ export class OfferPanelsService {
             recipient_org_name: orgName,
             is_public: isPublic,
             public_token: isPublic ? randomUUID() : null,
+            promo_enabled: dto.promo_enabled ?? false,
             created_by_user_id: adminUser.id,
             candidates: {
               create: dto.candidateIds.map((cid) => ({ candidate_id: cid })),
@@ -513,10 +554,47 @@ export class OfferPanelsService {
       }
     });
 
+    // Audited AFTER the transaction commits: `log()` swallows its own failures, and a
+    // swallowed failure inside a Postgres transaction leaves it aborted. Awaited for
+    // the same reason the notifications above are — under Lambda a floating promise
+    // can be frozen before it reaches the database.
+    const creatorLabel = buildActorLabel(adminUser);
+    await Promise.all(
+      createdPanels.map((panel) =>
+        this.panelAudit.log({
+          offerPanelId: panel.id,
+          actorUserId: adminUser.id,
+          actorLabel: creatorLabel,
+          event: OFFER_PANEL_AUDIT_EVENTS.CREATED,
+          source: OfferPanelAuditSource.user,
+          newStatus: panel.status,
+          after: {
+            status: panel.status,
+            title: panel.title,
+            business_unit: panel.business_unit,
+            is_public: panel.is_public,
+            recipient_type: panel.recipient_type,
+            promo_enabled: panel.promo_enabled,
+            candidate_count: dto.candidateIds.length,
+          },
+          metadata: {
+            origin: OFFER_PANEL_AUDIT_ORIGINS.ADMIN_CREATE,
+            recipientEmail: panel.recipient_email,
+            recipientName: panel.recipient_name,
+            candidateIds: dto.candidateIds,
+            ...offerPanelPromoMetadata(panel.promo_enabled),
+          },
+        }),
+      ),
+    );
+
     const enrichedCandidates = await this.enrichCandidates(dto.candidateIds);
 
     return createdPanels.map((panel) =>
-      this.withRecipient({ ...panel, candidates: enrichedCandidates }),
+      this.withRecipient(
+        { ...panel, candidates: enrichedCandidates },
+        adminUser.role,
+      ),
     );
   }
 
@@ -553,11 +631,16 @@ export class OfferPanelsService {
       panel.business_unit,
     );
 
-    return this.withRecipient({
-      ...panel,
-      candidates: enrichedCandidates,
-      branding,
-    });
+    // No authenticated viewer: the caller already holds the token, so it is not
+    // echoed back into the response.
+    return this.withRecipient(
+      {
+        ...panel,
+        candidates: enrichedCandidates,
+        branding,
+      },
+      null,
+    );
   }
 
   async findOne(id: string, user: USER): Promise<any> {
@@ -586,10 +669,13 @@ export class OfferPanelsService {
       }),
     );
 
-    return this.withRecipient({
-      ...panel,
-      candidates: enrichedCandidates,
-    });
+    return this.withRecipient(
+      {
+        ...panel,
+        candidates: enrichedCandidates,
+      },
+      user.role,
+    );
   }
 
   async findForClientUser(clientUser: USER): Promise<any[]> {
@@ -627,21 +713,25 @@ export class OfferPanelsService {
     ]);
 
     return panels.map((panel) =>
-      this.withRecipient({
-        ...panel,
-        candidates: panel.candidates
-          .map((pc) => {
-            const candidate = candidatesById.get(pc.candidate_id);
-            if (!candidate) return null;
-            // Exclude the panel being rendered, matching countOtherPanels.
-            const activePanels =
-              activePanelsByCandidate.get(pc.candidate_id) ?? new Set<string>();
-            const howManyClientsAreViewing =
-              activePanels.size - (activePanels.has(panel.id) ? 1 : 0);
-            return { ...candidate, howManyClientsAreViewing };
-          })
-          .filter((candidate) => !!candidate),
-      }),
+      this.withRecipient(
+        {
+          ...panel,
+          candidates: panel.candidates
+            .map((pc) => {
+              const candidate = candidatesById.get(pc.candidate_id);
+              if (!candidate) return null;
+              // Exclude the panel being rendered, matching countOtherPanels.
+              const activePanels =
+                activePanelsByCandidate.get(pc.candidate_id) ??
+                new Set<string>();
+              const howManyClientsAreViewing =
+                activePanels.size - (activePanels.has(panel.id) ? 1 : 0);
+              return { ...candidate, howManyClientsAreViewing };
+            })
+            .filter((candidate) => !!candidate),
+        },
+        clientUser.role,
+      ),
     );
   }
 
@@ -689,6 +779,12 @@ export class OfferPanelsService {
       throw new ForbiddenException('Access denied to this offer panel');
     }
 
+    // Only the sent -> viewed transition is audited, not every view. `view_count`
+    // above already answers "how many times", this endpoint is called on every page
+    // mount, and the public variant is throttled at 60/min per IP — a row per view
+    // would bury `accepted`/`declined` under refresh noise for no added information.
+    const wasFirstView = panel.status === 'sent';
+
     const now = new Date();
     await this.prisma.offerPanel.update({
       where: { id: panelId },
@@ -700,14 +796,32 @@ export class OfferPanelsService {
           : {}),
       },
     });
+
+    if (wasFirstView) {
+      await this.panelAudit.log({
+        offerPanelId: panelId,
+        actorUserId: user?.id ?? null,
+        actorLabel: user ? buildActorLabel(user) : null,
+        event: OFFER_PANEL_AUDIT_EVENTS.VIEWED,
+        source: user
+          ? OfferPanelAuditSource.user
+          : OfferPanelAuditSource.system,
+        oldStatus: 'sent',
+        newStatus: 'viewed',
+        metadata: { origin: OFFER_PANEL_AUDIT_ORIGINS.CLIENT_DASHBOARD },
+      });
+    }
   }
 
   async trackViewByToken(token: string): Promise<void> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { public_token: token },
-      select: { id: true, status: true },
+      select: { id: true, status: true, recipient_name: true },
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
+
+    // First view only — see the note in trackView.
+    const wasFirstView = panel.status === 'sent';
 
     const now = new Date();
     await this.prisma.offerPanel.update({
@@ -720,6 +834,19 @@ export class OfferPanelsService {
           : {}),
       },
     });
+
+    if (wasFirstView) {
+      await this.panelAudit.log({
+        offerPanelId: panel.id,
+        actorUserId: null,
+        actorLabel: recipientActorLabel(panel.recipient_name),
+        event: OFFER_PANEL_AUDIT_EVENTS.VIEWED,
+        source: OfferPanelAuditSource.system,
+        oldStatus: 'sent',
+        newStatus: 'viewed',
+        metadata: { origin: OFFER_PANEL_AUDIT_ORIGINS.PUBLIC_TOKEN },
+      });
+    }
   }
 
   async removeCandidate(
@@ -729,7 +856,7 @@ export class OfferPanelsService {
   ): Promise<{ deleted: boolean; panel?: any }> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { id: panelId },
-      select: { status: true, recipient_user_id: true },
+      select: { status: true, recipient_user_id: true, title: true },
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
 
@@ -752,9 +879,44 @@ export class OfferPanelsService {
     });
 
     if (remaining === 0) {
-      await this.prisma.offerPanel.delete({ where: { id: panelId } });
+      // Removing the last candidate hard-deletes the panel. That is a compliance
+      // event: logOrThrow inside the transaction, before the delete, so the record
+      // of why the panel vanished commits with the deletion or not at all.
+      await this.prisma.$transaction(async (tx) => {
+        await this.panelAudit.logOrThrow(
+          {
+            offerPanelId: panelId,
+            actorUserId: clientUser.id,
+            actorLabel: buildActorLabel(clientUser),
+            event: OFFER_PANEL_AUDIT_EVENTS.DELETED,
+            source: OfferPanelAuditSource.user,
+            oldStatus: panel.status,
+            reason: 'Last candidate removed by the recipient',
+            before: { status: panel.status, title: panel.title },
+            metadata: {
+              origin: OFFER_PANEL_AUDIT_ORIGINS.CLIENT_DASHBOARD,
+              removedCandidateId: candidateId,
+            },
+          },
+          tx,
+        );
+        await tx.offerPanel.delete({ where: { id: panelId } });
+      });
       return { deleted: true };
     }
+
+    await this.panelAudit.log({
+      offerPanelId: panelId,
+      actorUserId: clientUser.id,
+      actorLabel: buildActorLabel(clientUser),
+      event: OFFER_PANEL_AUDIT_EVENTS.CANDIDATE_REMOVED,
+      source: OfferPanelAuditSource.user,
+      metadata: {
+        origin: OFFER_PANEL_AUDIT_ORIGINS.CLIENT_DASHBOARD,
+        candidateId,
+        remainingCount: remaining,
+      },
+    });
 
     const updated = await this.prisma.offerPanel.findUnique({
       where: { id: panelId },
@@ -777,17 +939,26 @@ export class OfferPanelsService {
 
     return {
       deleted: false,
-      panel: this.withRecipient({ ...updated, candidates: enrichedCandidates }),
+      panel: this.withRecipient(
+        { ...updated, candidates: enrichedCandidates },
+        clientUser.role,
+      ),
     };
   }
 
   async removeCandidateFromAllPanels(candidateId: string): Promise<void> {
+    // The panel columns are selected alongside the link so that emptied panels can be
+    // audited before they are deleted — otherwise a candidate deletion would make
+    // panels disappear with no trace of why.
     const panelLinks = await this.prisma.offerPanelCandidate.findMany({
       where: { candidate_id: candidateId },
-      select: { offer_panel_id: true },
+      select: {
+        offer_panel_id: true,
+        offerPanel: { select: { status: true, title: true } },
+      },
     });
 
-    for (const { offer_panel_id } of panelLinks) {
+    for (const { offer_panel_id, offerPanel } of panelLinks) {
       await this.prisma.offerPanelCandidate.deleteMany({
         where: { offer_panel_id, candidate_id: candidateId },
       });
@@ -797,7 +968,31 @@ export class OfferPanelsService {
       });
 
       if (remaining === 0) {
-        await this.prisma.offerPanel.delete({ where: { id: offer_panel_id } });
+        // Cascade from a candidate deletion — no acting user. Compliance event, so
+        // the tombstone and the delete commit together.
+        await this.prisma.$transaction(async (tx) => {
+          await this.panelAudit.logOrThrow(
+            {
+              offerPanelId: offer_panel_id,
+              actorUserId: null,
+              actorLabel: null,
+              event: OFFER_PANEL_AUDIT_EVENTS.DELETED,
+              source: OfferPanelAuditSource.system,
+              oldStatus: offerPanel?.status ?? null,
+              reason: 'Candidate removed from the system',
+              before: {
+                status: offerPanel?.status ?? null,
+                title: offerPanel?.title ?? null,
+              },
+              metadata: {
+                origin: OFFER_PANEL_AUDIT_ORIGINS.CANDIDATE_CASCADE,
+                removedCandidateId: candidateId,
+              },
+            },
+            tx,
+          );
+          await tx.offerPanel.delete({ where: { id: offer_panel_id } });
+        });
       }
     }
   }
@@ -824,6 +1019,18 @@ export class OfferPanelsService {
       data: { status: 'declined', decided_at: new Date() },
     });
 
+    // The early return above makes decline idempotent, so this never double-writes.
+    await this.panelAudit.log({
+      offerPanelId: panelId,
+      actorUserId: clientUser.id,
+      actorLabel: buildActorLabel(clientUser),
+      event: OFFER_PANEL_AUDIT_EVENTS.DECLINED,
+      source: OfferPanelAuditSource.user,
+      oldStatus: panel.status,
+      newStatus: 'declined',
+      metadata: { origin: OFFER_PANEL_AUDIT_ORIGINS.CLIENT_DASHBOARD },
+    });
+
     setImmediate(() => {
       this.notificationsService
         .notifyAdminOfferPanelDeclined(panelId)
@@ -834,7 +1041,7 @@ export class OfferPanelsService {
   async declineByToken(token: string): Promise<void> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { public_token: token },
-      select: { id: true, status: true },
+      select: { id: true, status: true, recipient_name: true },
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
 
@@ -848,6 +1055,19 @@ export class OfferPanelsService {
     await this.prisma.offerPanel.update({
       where: { id: panel.id },
       data: { status: 'declined', decided_at: new Date() },
+    });
+
+    // Declined through a public token, so there is no authenticated user — the
+    // recipient named on the panel is the actor.
+    await this.panelAudit.log({
+      offerPanelId: panel.id,
+      actorUserId: null,
+      actorLabel: recipientActorLabel(panel.recipient_name),
+      event: OFFER_PANEL_AUDIT_EVENTS.DECLINED,
+      source: OfferPanelAuditSource.system,
+      oldStatus: panel.status,
+      newStatus: 'declined',
+      metadata: { origin: OFFER_PANEL_AUDIT_ORIGINS.PUBLIC_TOKEN },
     });
 
     setImmediate(() => {
@@ -920,6 +1140,7 @@ export class OfferPanelsService {
         title: true,
         description: true,
         created_by_user_id: true,
+        promo_enabled: true,
       },
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
@@ -1018,6 +1239,22 @@ export class OfferPanelsService {
       return hr;
     });
 
+    await this.panelAudit.log({
+      offerPanelId: panelId,
+      actorUserId: clientUser.id,
+      actorLabel: buildActorLabel(clientUser),
+      event: OFFER_PANEL_AUDIT_EVENTS.ACCEPTED,
+      source: OfferPanelAuditSource.user,
+      oldStatus: panel.status,
+      newStatus: 'accepted',
+      metadata: {
+        origin: OFFER_PANEL_AUDIT_ORIGINS.CLIENT_DASHBOARD,
+        hireRequestId: hireRequest.id,
+        candidateCount: candidateRows.length,
+        ...offerPanelPromoMetadata(panel.promo_enabled),
+      },
+    });
+
     setImmediate(() => {
       this.notificationsService
         .notifyAdminOfferPanelAccepted(panelId)
@@ -1082,6 +1319,7 @@ export class OfferPanelsService {
         recipient_email: true,
         recipient_company_id: true,
         created_by_user_id: true,
+        promo_enabled: true,
       },
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
@@ -1104,7 +1342,14 @@ export class OfferPanelsService {
         data: {
           type: 'offer_panel',
           title: 'Offer panel accepted',
-          description: `The offer panel ${panel.title} was accepted by ${panel.recipient_name}`,
+          // The promotional rate is named in the description because the ticket
+          // carries no price columns — this is what makes the discount visible to
+          // whoever picks the ticket up.
+          description:
+            `The offer panel ${panel.title} was accepted by ${panel.recipient_name}` +
+            (panel.promo_enabled
+              ? ` — ${OFFER_PANEL_PROMO_PRICE_LABEL}/month promotional rate applied.`
+              : ''),
           priority: 'medium',
           offer_panel_id: panel.id,
           org_id: panel.recipient_company_id ?? null,
@@ -1123,12 +1368,14 @@ export class OfferPanelsService {
 
     // Accepted through a public token, so there is no authenticated user — the recipient
     // named on the panel is the actor.
-    void this.ticketAudit.log({
+    //
+    // Awaited rather than fire-and-forget: under Lambda the container is frozen once
+    // the handler resolves, so a floating promise here may never reach the database.
+    // `log()` swallows its own failures, so awaiting cannot fail the accept.
+    await this.ticketAudit.log({
       ticketId: ticket.id,
       actorUserId: null,
-      actorLabel: panel.recipient_name
-        ? `${panel.recipient_name} (offer panel recipient)`
-        : 'Offer panel recipient',
+      actorLabel: recipientActorLabel(panel.recipient_name),
       event: TICKET_AUDIT_EVENTS.CREATED,
       source: TicketAuditSource.system,
       newStatus: ticket.status,
@@ -1146,6 +1393,25 @@ export class OfferPanelsService {
         offerPanelId: panel.id,
         recipientEmail: panel.recipient_email ?? null,
         panelCreatedBy: panel.created_by_user_id ?? null,
+        // Promo state is persisted on the ticket's audit trail rather than as a
+        // ticket column — see the requirements' "audit metadata + description" decision.
+        ...offerPanelPromoMetadata(panel.promo_enabled),
+      },
+    });
+
+    await this.panelAudit.log({
+      offerPanelId: panel.id,
+      actorUserId: null,
+      actorLabel: recipientActorLabel(panel.recipient_name),
+      event: OFFER_PANEL_AUDIT_EVENTS.ACCEPTED,
+      source: OfferPanelAuditSource.system,
+      oldStatus: panel.status,
+      newStatus: 'accepted',
+      metadata: {
+        origin: OFFER_PANEL_AUDIT_ORIGINS.PUBLIC_TOKEN,
+        ticketId: ticket.id,
+        recipientEmail: panel.recipient_email ?? null,
+        ...offerPanelPromoMetadata(panel.promo_enabled),
       },
     });
 
@@ -1161,10 +1427,11 @@ export class OfferPanelsService {
   async update(
     id: string,
     dto: { title?: string; description?: string },
+    adminUser: USER,
   ): Promise<any> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, title: true, description: true, status: true },
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
 
@@ -1176,31 +1443,169 @@ export class OfferPanelsService {
       },
     });
 
+    // Only record the fields that actually moved — an "Updated" entry whose
+    // before and after are identical is noise in the timeline.
+    const changedFields: string[] = [];
+    if (dto.title !== undefined && dto.title !== panel.title) {
+      changedFields.push('title');
+    }
+    if (
+      dto.description !== undefined &&
+      dto.description !== panel.description
+    ) {
+      changedFields.push('description');
+    }
+
+    if (changedFields.length > 0) {
+      await this.panelAudit.log({
+        offerPanelId: id,
+        actorUserId: adminUser.id,
+        actorLabel: buildActorLabel(adminUser),
+        event: OFFER_PANEL_AUDIT_EVENTS.UPDATED,
+        source: OfferPanelAuditSource.user,
+        before: { title: panel.title, description: panel.description },
+        after: { title: updated.title, description: updated.description },
+        metadata: {
+          origin: OFFER_PANEL_AUDIT_ORIGINS.ADMIN_CONSOLE,
+          changedFields,
+        },
+      });
+    }
+
     const enrichedCandidates = await this.enrichCandidates(
       updated.candidates.map((pc) => pc.candidate_id),
     );
 
-    return this.withRecipient({ ...updated, candidates: enrichedCandidates });
+    return this.withRecipient(
+      { ...updated, candidates: enrichedCandidates },
+      adminUser.role,
+    );
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, adminUser: USER): Promise<void> {
     const panel = await this.prisma.offerPanel.findUnique({
       where: { id },
-      select: { id: true },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        business_unit: true,
+        is_public: true,
+        promo_enabled: true,
+        recipient_email: true,
+        recipient_name: true,
+        created_by_user_id: true,
+      },
     });
     if (!panel) throw new NotFoundException('Offer panel not found');
 
-    await this.prisma.offerPanel.delete({ where: { id } });
+    // Compliance event: the panel row is HARD deleted, so this audit entry is the
+    // only surviving evidence it ever existed. logOrThrow inside the transaction,
+    // written BEFORE the delete, so a failing audit aborts before the destructive
+    // statement rather than losing the record silently.
+    await this.prisma.$transaction(async (tx) => {
+      await this.panelAudit.logOrThrow(
+        {
+          offerPanelId: id,
+          actorUserId: adminUser.id,
+          actorLabel: buildActorLabel(adminUser),
+          event: OFFER_PANEL_AUDIT_EVENTS.DELETED,
+          source: OfferPanelAuditSource.user,
+          oldStatus: panel.status,
+          before: {
+            title: panel.title,
+            status: panel.status,
+            business_unit: panel.business_unit,
+            is_public: panel.is_public,
+            promo_enabled: panel.promo_enabled,
+          },
+          metadata: {
+            origin: OFFER_PANEL_AUDIT_ORIGINS.ADMIN_CONSOLE,
+            recipientEmail: panel.recipient_email,
+            recipientName: panel.recipient_name,
+            createdByUserId: panel.created_by_user_id,
+          },
+        },
+        tx,
+      );
+      await tx.offerPanel.delete({ where: { id } });
+    });
+  }
+
+  /**
+   * Re-sends the tokenized panel link to a public recipient.
+   *
+   * Client-user panels have no token and no public page — their recipient sees the
+   * panel on the authenticated dashboard, so there is nothing to re-send. That is a
+   * 400 rather than a silent no-op.
+   *
+   * The existing token is reused, not rotated, so any link already shared keeps working.
+   */
+  async resendPublicLink(
+    id: string,
+    adminUser: USER,
+  ): Promise<{ sentTo: string }> {
+    const panel = await this.prisma.offerPanel.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        is_public: true,
+        public_token: true,
+        recipient_email: true,
+        recipient_name: true,
+      },
+    });
+    if (!panel) throw new NotFoundException('Offer panel not found');
+
+    if (!panel.is_public || !panel.public_token) {
+      throw new BadRequestException(
+        'Only public offer panels have a shareable link to resend',
+      );
+    }
+
+    // Deliberately NOT blocked on accepted/declined. Recipients routinely ask for
+    // the link again after deciding — to re-read the shortlist, or to forward it to
+    // a colleague — and the public page already renders a read-only "already
+    // decided" state, so a resend cannot produce a second accept. Blocking here
+    // would create a support path with no safety benefit.
+
+    const sent =
+      await this.notificationsService.notifyOfferPanelCreatedPublic(id);
+    // Surface a real failure rather than reporting a false success to the admin.
+    if (!sent) {
+      throw new BadRequestException('Failed to resend the offer panel email');
+    }
+
+    await this.panelAudit.log({
+      offerPanelId: id,
+      actorUserId: adminUser.id,
+      actorLabel: buildActorLabel(adminUser),
+      event: OFFER_PANEL_AUDIT_EVENTS.RESENT,
+      source: OfferPanelAuditSource.user,
+      metadata: {
+        origin: OFFER_PANEL_AUDIT_ORIGINS.ADMIN_RESEND,
+        recipientEmail: panel.recipient_email,
+        panelStatus: panel.status,
+      },
+    });
+
+    return { sentTo: panel.recipient_email };
   }
 
   async findAll(
     query: QueryOfferPanelsDto,
+    // The endpoint is @Roles('system_admin','system_super_admin'), but the viewer is
+    // threaded through rather than assumed so `public_token` stays correctly gated if
+    // those roles are ever widened.
+    viewer?: USER,
   ): Promise<{ data: any[]; counts: OfferPanelStatusCounts; pagination: any }> {
     const {
       search,
       status,
       recipient_type,
       client,
+      created_by,
       business_unit,
       page = 1,
       limit = 20,
@@ -1217,6 +1622,14 @@ export class OfferPanelsService {
     if (client)
       baseConditions.push({
         recipient_org_name: { contains: client, mode: 'insensitive' },
+      });
+
+    // `createdBy` is the USER relation; the filterable scalar is the FK
+    // `created_by_user_id`. Filtering on the relation with a raw id string
+    // makes Prisma reject the query (expects USERWhereInput).
+    if (created_by)
+      baseConditions.push({
+        created_by_user_id: created_by,
       });
 
     if (business_unit) {
@@ -1336,14 +1749,17 @@ export class OfferPanelsService {
       );
 
     const enhancedData = data.map((panel) =>
-      this.withRecipient({
-        ...panel,
-        candidates: panel.candidates
-          .map((pc) => candidatesById.get(pc.candidate_id))
-          // A panel row may reference a since-deleted candidate; skip it rather
-          // than failing the whole list.
-          .filter((candidate) => !!candidate),
-      }),
+      this.withRecipient(
+        {
+          ...panel,
+          candidates: panel.candidates
+            .map((pc) => candidatesById.get(pc.candidate_id))
+            // A panel row may reference a since-deleted candidate; skip it rather
+            // than failing the whole list.
+            .filter((candidate) => !!candidate),
+        },
+        viewer?.role,
+      ),
     );
 
     return {

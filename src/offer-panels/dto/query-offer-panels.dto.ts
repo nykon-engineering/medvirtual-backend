@@ -19,6 +19,14 @@ export class QueryOfferPanelsDto {
   search?: string;
 
   @ApiProperty({
+    description: 'Filter by the user who created the offer panel',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  created_by?: string;
+
+  @ApiProperty({
     description: 'Filter by panel status',
     enum: OfferPanelStatus,
     required: false,

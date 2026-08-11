@@ -616,6 +616,7 @@ describe('CandidatesService', () => {
             where: { panel: { hireRequest: { org_id: 'org-1' } } },
             select: {
               id: true,
+              status: true,
               panel: {
                 select: {
                   hire_request_id: true,

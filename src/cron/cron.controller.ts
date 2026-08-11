@@ -236,11 +236,15 @@ export class CronController {
   @Get('weekly-offer-panel-report')
   @ApiOperation({
     summary:
-      'Send the weekly Offer Panel Report — panels created Mon 00:00 through Fri 23:59:59 (America/New_York), grouped by creating user',
+      'Send the weekly Offer Panel Report — panels created over the rolling 8-day window ending at run time (America/Los_Angeles), grouped by creating user',
     description:
-      'Triggered every Friday by the external scheduler (same mechanism as the ' +
-      'other `/cron/*` endpoints — this backend runs on Lambda, so there is no ' +
-      'in-process cron). Filters on `OfferPanel.createdAt` only; the viewed and ' +
+      'Triggered every Friday at 10:00 PT by the external scheduler (same mechanism ' +
+      'as the other `/cron/*` endpoints — this backend runs on Lambda, so there is ' +
+      'no in-process cron). The window opens at 00:00 PT on the day 7 days earlier ' +
+      'and closes at the moment of the run, so a Friday run covers last Friday ' +
+      'through this Friday morning; the extra day makes consecutive reports overlap ' +
+      'rather than drop panels created after the previous run. ' +
+      'Filters on `OfferPanel.createdAt` only; the viewed and ' +
       'decided columns show their real timestamps even when those occurred after ' +
       'the window closed. All business units are included in a single email with ' +
       'a business unit column, and sections are ordered by panel count descending. ' +
@@ -254,16 +258,17 @@ export class CronController {
     required: false,
     type: String,
     description:
-      'Optional YYYY-MM-DD date used to backfill a prior week. The Mon–Fri window ' +
-      'containing this date (in America/New_York) is reported. Defaults to today.',
+      'Optional YYYY-MM-DD date used to backfill a prior week. The rolling 8-day ' +
+      'window ending at 10:00 on this date (in America/Los_Angeles) is reported. ' +
+      'Defaults to now.',
   })
   @ApiResponse({
     status: 200,
     description:
       'Report processed. `data.sent` — whether the email was dispatched. ' +
       '`data.totalPanels` / `data.totalCreators` — report size. ' +
-      '`data.weekStart` / `data.weekEnd` — the ISO boundaries of the ET window covered. ' +
-      '`data.ranOnFridayEt` — false when triggered off-schedule. ' +
+      '`data.weekStart` / `data.weekEnd` — the ISO boundaries of the 8-day window covered. ' +
+      '`data.ranOnFridayPt` — false when triggered off-schedule. ' +
       '`data.error` — present only when the email failed to send.',
   })
   @ApiResponse({

@@ -15,6 +15,7 @@ import {
   getEmailLogoImg,
   getLogoUrl,
 } from '../common/utils/email-templates/components';
+import { renderOfferPanelCandidateCardsShowcase } from '../common/utils/email-templates/offer-panel-candidate-cards-showcase';
 
 // Sample data used when filling placeholders for preview / test-send
 const SAMPLE_DATA: Record<string, string> = {
@@ -45,7 +46,54 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{accountEmail}}': 'integration@medvirtual.ai',
   '{{currentUsage}}': '95%',
   '{{quotaLimit}}': '100%',
+  // ── Offer panel ───────────────────────────────────────────────────────────
+  '{{candidateLabel}}': '3 candidates',
+  '{{createdByName}}': 'Paulo',
+  '{{candidateCount}}': '3',
+  '{{panelLink}}': 'https://app.medvirtual.ai/modules/public/offer-panel/sample-token',
+  // Filled in at preview time by `sampleCandidateCards()` so the grid picks up
+  // the previewed business unit's own branding instead of a fixed brand.
+  '{{candidateCards}}': '',
 };
+
+/**
+ * Stand-in candidates for previewing / test-sending `offer-panel-created`.
+ * Deliberately covers the three cases that look different: a rate above the
+ * promo threshold (struck), a rate below it (never struck), and a candidate
+ * with no photo (initials tile instead of a broken image).
+ */
+const SAMPLE_OFFER_PANEL_CANDIDATES = [
+  {
+    first_name: 'Ana',
+    last_name: 'Silva',
+    country: 'Brazil',
+    avatar_url: null,
+    employment_type: 'Full Time',
+    approved_positions_pairing: ['Medical Assistant', 'Front Desk'],
+    skills: [{ skill_name: 'EMR / EHR' }, { skill_name: 'Scheduling' }],
+    bill_rate_monthly: 2500,
+  },
+  {
+    first_name: 'Carlos',
+    last_name: 'Mendes',
+    country: 'Philippines',
+    avatar_url: null,
+    employment_type: 'Full Time',
+    approved_positions_pairing: ['Medical Scribe'],
+    skills: [{ skill_name: 'Athena' }, { skill_name: 'Documentation' }],
+    bill_rate_monthly: 2200,
+  },
+  {
+    first_name: 'Joana',
+    last_name: 'Pereira',
+    country: 'Colombia',
+    avatar_url: null,
+    employment_type: 'Full Time',
+    approved_positions_pairing: ['Patient Coordinator'],
+    skills: [{ skill_name: 'Kareo' }],
+    bill_rate_monthly: 1650,
+  },
+];
 
 // Per-variable defaults applied when a caller's runtimeValues map omits a
 // placeholder the template declares — keeps the copy readable (e.g. "Hello,
@@ -390,13 +438,55 @@ export class EmailTemplatesService {
       body,
       template.headline ?? '',
       branding,
-      undefined,
+      this.sampleOverridesFor(key, branding),
       template.button_label,
       template.button_url,
     );
     const renderedSubject = this.applyPlaceholders(subject);
 
     return { status: 200, data: { subject: renderedSubject, html } };
+  }
+
+  /**
+   * Per-template sample values that depend on the branding being previewed.
+   *
+   * `SAMPLE_DATA` is a flat static map, but the offer-panel candidate cards have
+   * to be rendered with the previewed business unit's own colour and logo —
+   * otherwise "preview as <BU>" would show another brand's cards.
+   */
+  private sampleOverridesFor(
+    key: string,
+    branding: {
+      primaryColor: string;
+      primaryColorHover: string;
+      companyName: string;
+      logoUrl?: string;
+      buttonColor?: string;
+      buttonTextColor?: string;
+    },
+  ): Record<string, string> | undefined {
+    if (key !== 'offer-panel-created') return undefined;
+
+    return {
+      '{{candidateCards}}': renderOfferPanelCandidateCardsShowcase(
+        SAMPLE_OFFER_PANEL_CANDIDATES,
+        {
+          primaryColor: branding.primaryColor,
+          primaryColorHover: branding.primaryColorHover,
+          secondaryColor: '#F8F9FA',
+          accentColor: branding.primaryColor,
+          companyName: branding.companyName,
+          logoUrl: branding.logoUrl,
+          // The card's filled footer takes the Button Color, so the preview
+          // must carry it or it would show a different colour than the send.
+          buttonColor: branding.buttonColor,
+          buttonTextColor: branding.buttonTextColor,
+        },
+        // Preview the promo treatment — it is the variant worth eyeballing,
+        // and the sample rates deliberately straddle the threshold.
+        true,
+      ),
+    };
   }
 
   // ── Test Send ─────────────────────────────────────────────────────────────
@@ -418,7 +508,7 @@ export class EmailTemplatesService {
       template.body,
       template.headline ?? '',
       branding,
-      undefined,
+      this.sampleOverridesFor(key, branding),
       template.button_label,
       template.button_url,
     );

@@ -17,6 +17,7 @@ import {
 import * as path from 'path';
 import * as fs from 'fs';
 
+import { isInClientOpenPanel } from '../common/constant/panel-availability.constant';
 import {
   dbToStageDictionary,
   stageToDbDictionary,
@@ -782,10 +783,9 @@ export class CandidatesService {
                 status: 'test',
               }))
             : [],
-          existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
-            (pc) =>
-              pc.panel.hireRequest.organization.id === organization_id &&
-              pc.panel.hireRequest.status === 'interview_scheduled',
+          existingInOtherClientPanel: isInClientOpenPanel(
+            candidate.panelCandidates,
+            organization_id,
           ),
         };
       });
@@ -1383,10 +1383,9 @@ export class CandidatesService {
                 status: 'test',
               }))
             : [],
-          existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
-            (pc) =>
-              pc.panel.hireRequest.organization.id === organization_id &&
-              pc.panel.hireRequest.status === 'interview_scheduled',
+          existingInOtherClientPanel: isInClientOpenPanel(
+            candidate.panelCandidates,
+            organization_id,
           ),
         };
       });
@@ -1510,6 +1509,9 @@ export class CandidatesService {
           : undefined,
         select: {
           id: true,
+          // Needed by `isInClientOpenPanel` to ignore candidates already
+          // released back to the pool (`returned_to_pool`).
+          status: true,
           panel: {
             select: {
               hire_request_id: true,
@@ -1567,10 +1569,9 @@ export class CandidatesService {
                 pc.panel?.hireRequest?.organization?.name || '',
             }))
           : [],
-      existingInOtherClientPanel: (candidate.panelCandidates ?? []).some(
-        (pc) =>
-          pc.panel?.hireRequest?.organization?.id === organization_id &&
-          pc.panel?.hireRequest?.status === 'interview_scheduled',
+      existingInOtherClientPanel: isInClientOpenPanel(
+        candidate.panelCandidates,
+        organization_id,
       ),
     };
     return formattedCandidate;
@@ -3343,13 +3344,10 @@ export class CandidatesService {
         candidate.approved_positions_pairing?.map(getApprovedPositionLabel) ||
         [],
       ...rates3,
-      existingInOtherClientPanel: organizationId
-        ? (candidate.panelCandidates ?? []).some(
-            (pc) =>
-              pc.panel.hireRequest.organization.id === organizationId &&
-              pc.panel.hireRequest.status === 'interview_scheduled',
-          )
-        : false,
+      existingInOtherClientPanel: isInClientOpenPanel(
+        candidate.panelCandidates,
+        organizationId,
+      ),
     };
 
     return candidateWithFullAvatarUrl;

@@ -576,7 +576,9 @@ async function main() {
         'Sent to the client when candidates are pre-selected in an offer panel.',
       subject: '{{candidateLabel}} picked for you — {{companyName}}',
       headline: 'Candidates selected for you',
-      body: 'Hi,\n\n{{createdByName}} from {{companyName}} has handpicked {{candidateCount}} candidate(s) specifically for you.\n\nReview them at your convenience and let us know your thoughts.',
+      // {{candidateCards}} expands to the pre-rendered candidate grid. Remove it
+      // and the email still sends — just without the cards.
+      body: 'Hi,\n\n{{createdByName}} from {{companyName}} has handpicked {{candidateCount}} candidate(s) specifically for you.\n\n{{candidateCards}}\nReview them at your convenience and let us know your thoughts.',
       button_label: 'View Candidates',
       button_url: '{{panelLink}}',
       placeholders: [
@@ -585,6 +587,7 @@ async function main() {
         '{{createdByName}}',
         '{{candidateCount}}',
         '{{panelLink}}',
+        '{{candidateCards}}',
       ],
     },
     {

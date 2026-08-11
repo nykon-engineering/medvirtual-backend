@@ -82,6 +82,8 @@ model USER {
   hubspotAuditLogs          HubspotAuditLog[]            @relation("HubspotAuditActor")
   // Ticket audit log entries where this user was the acting subject
   ticketAuditActorLogs      TicketAuditLog[]             @relation("TicketAuditActor")
+  // Offer panel audit log entries where this user was the acting subject
+  offerPanelAuditLogs       OfferPanelAuditLog[]         @relation("OfferPanelAuditActor")
   // Tickets this user soft-deleted
   ticketsDeleted            Ticket[]                     @relation("TicketDeletedBy")
   // MA-006 review cases resolved by this admin user
@@ -1403,6 +1405,19 @@ model OfferPanel {
   business_unit        String
   status               OfferPanelStatus        @default(sent)
   is_public            Boolean                 @default(false)
+  // $1,760/mo promo. Deliberately a FLAG ONLY — no price snapshot.
+  //
+  // The promo price and copy live in the frontend brand config
+  // (`TALENT_POOL_PROMO_PRICE` / `PublicTalentPoolBrand.promo`); the struck-through
+  // "original" is recomputed live from the candidate's current bill rate.
+  //
+  // Accepted tradeoff: if PositionRateConfig changes after the panel is sent, the
+  // struck original moves with it. The promo price itself never drifts.
+  //
+  // Never editable after creation — the panel has already been emailed with a
+  // price, so flipping this post-send would be a bait-and-switch. Absent from
+  // UpdateOfferPanelDto by design.
+  promo_enabled        Boolean                 @default(false)
   recipient_type       OfferPanelRecipientType
   recipient_user_id    String?
   recipient_company_id String?
@@ -1452,6 +1467,55 @@ model OfferPanelCandidate {
   @@unique([offer_panel_id, candidate_id], name: "idx_offer_panel_candidates_unique")
   @@index([offer_panel_id], map: "idx_offer_panel_candidates_panel_id")
   @@index([candidate_id], map: "idx_offer_panel_candidates_candidate_id")
+}
+
+// Append-only audit trail for the OfferPanel lifecycle. Never soft-delete or mutate
+// records. Mirrors TicketAuditLog field for field.
+//
+// offer_panel_id is deliberately NOT a foreign key. OfferPanel rows are HARD deleted
+// in three places (`remove`, the last-candidate-removed path in `removeCandidate`, and
+// the candidate-deletion cascade in `removeCandidateFromAllPanels`), and the `deleted`
+// audit entry must outlive the row it describes. A FK with onDelete: Cascade would
+// erase the very evidence of the deletion.
+//
+// `event` is a plain String rather than an enum because panel lifecycle events are an
+// open, business-defined set; each new enum value would cost a migration. Compile-time
+// safety comes from the OFFER_PANEL_AUDIT_EVENTS union in offer-panels-audit.service.ts.
+// `source` stays an enum — that set genuinely is closed.
+//
+// PII: `before`/`after` hold panel-column state only (title/description/status/flags).
+// Recipient email appears solely in `metadata`, and only on paths where it is
+// operationally necessary — matching the TicketAuditLog precedent.
+model OfferPanelAuditLog {
+  id             String                @id @default(uuid())
+  offer_panel_id String
+  actor_user_id  String?
+  // Denormalized actor display name, so the log stays readable after a user is hard-deleted.
+  // Public/token paths have no authenticated user and store "<name> (offer panel recipient)".
+  actor_label    String?
+  event          String
+  old_status     String?
+  new_status     String?
+  reason         String?
+  source         OfferPanelAuditSource @default(user)
+  before         Json?
+  after          Json?
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  actorUser USER? @relation("OfferPanelAuditActor", fields: [actor_user_id], references: [id])
+
+  @@index([offer_panel_id, createdAt], map: "idx_offer_panel_audit_timeline")
+  @@index([actor_user_id], map: "idx_offer_panel_audit_actor")
+  @@index([event], map: "idx_offer_panel_audit_event")
+  @@index([createdAt], map: "idx_offer_panel_audit_created_at")
+}
+
+enum OfferPanelAuditSource {
+  user
+  system
+  cron
+  webhook
 }
 
 // ─── Editable Emails ─────────────────────────────────────────────────────────

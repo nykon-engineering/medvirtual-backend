@@ -1,4 +1,5 @@
 import { getEmailFooter, getEmailLogoCss, getEmailLogoImg } from './components';
+import { escapeEmailHtml } from './escape';
 import { EmailTheme } from './theme';
 
 export interface OfferPanelReportRow {
@@ -51,13 +52,7 @@ const STATUS_COLORS: Record<string, string> = {
 // This report renders more free-text, user-controlled data (org names, panel
 // titles, recipient names) than any other email in the codebase, so every
 // interpolated DB string is escaped before it reaches the markup.
-function esc(value: string): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
+const esc = escapeEmailHtml;
 
 const EMPTY_CELL = '<span style="color:#999999;">&mdash;</span>';
 
@@ -206,7 +201,7 @@ ${getEmailLogoCss()}
         </div>
         ${offScheduleBlock}
         <div class="main-message">
-          <p>Offer panel activity for <strong>${esc(payload.weekStartLabel)}</strong> through <strong>${esc(payload.weekEndLabel)}</strong> (America/New_York).</p>
+          <p>Offer panel activity for <strong>${esc(payload.weekStartLabel)}</strong> through <strong>${esc(payload.weekEndLabel)}</strong> (America/Los_Angeles).</p>
         </div>
         <div class="highlight-box">
           <div class="amount">${payload.totalPanels}</div>
