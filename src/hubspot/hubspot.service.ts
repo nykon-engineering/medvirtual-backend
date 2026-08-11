@@ -24,6 +24,7 @@ import {
 } from '../common/utils/hubspot.util';
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 import { contactToDbDictionary } from '../common/dictionaries/contact-dictionary';
+import { pace } from '../common/utils/pacing.util';
 
 import { CandidatesService } from '../candidate/candidates.service';
 
@@ -844,8 +845,12 @@ export class HubspotService {
         }
         console.log('Candidate created:', result.properties.name);
       }
+
+      // Pace the loop to avoid rate limiting
+      await pace(200);
     }
     return 'Candidates created successfully';
+
   }
 
   ////=> this service is just a example to read candidates on our database and UPDATE it with the data from hubspot
@@ -975,8 +980,12 @@ export class HubspotService {
         }
       }
       console.log('Candidate updated:', candidate.first_name);
+
+      // Pace the loop to avoid rate limiting
+      await pace(500);
     }
   }
+
 
   //// => This service is just a example to read organizations on our database and UPDATE it with the data from hubspot
   async updateOrganizations(): Promise<any> {
@@ -1071,6 +1080,9 @@ export class HubspotService {
       });
 
       console.log('Organization updated:', org.name, ':=>', organizationData);
+
+      // Pace the loop to avoid rate limiting
+      await pace(500);
     }
   }
 
@@ -1146,9 +1158,11 @@ export class HubspotService {
             );
           }
         }
+        await pace(300);
       }
 
       return response;
+
     } catch (error) {
       throw new BadRequestException(
         `Error fetching candidates: ${error.message}`,
@@ -1285,7 +1299,81 @@ export class HubspotService {
       }
 
       console.log('-------------------------');
+            // Pace the loop
+            await pace(100);
     }
     return true;
   }
+
+    async fetchPropertiesAndCandidates(vaIds?: string[]): Promise<{ candidates: any[] }> {
+        const customObject = process.env.HUBSPOT_CUSTOM_OBJECT;
+        if (!customObject) {
+            throw new NotFoundException('Custom Object is not defined on the environment variables');
+        }
+
+        try {
+            const requestedProperties = [...Object.keys(candidadeToDbDictionary), 'vaid'];
+            let allCandidates: any[] = [];
+
+            if (vaIds && vaIds.length > 0) {
+                // Chunk the vaIds list into batches of 100 to respect HubSpot limit
+                const chunkSize = 100;
+                for (let i = 0; i < vaIds.length; i += chunkSize) {
+                    const chunk = vaIds.slice(i, i + chunkSize);
+                    let after: string | undefined = undefined;
+
+                    do {
+                        const apiResponse = await this.hubspotClient.crm.objects.searchApi.doSearch(
+                            customObject,
+                            {
+                                limit: 100,
+                                after: after,
+                                properties: requestedProperties,
+                                filterGroups: [
+                                    {
+                                        filters: [
+                                            {
+                                                propertyName: 'vaid',
+                                                operator: FilterOperatorEnum.In,
+                                                values: chunk,
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        );
+
+                        allCandidates.push(...apiResponse.results);
+                        after = apiResponse.paging?.next?.after;
+                    } while (after);
+                }
+            } else {
+                // Fetch all candidate records using the properties list
+                let after: string | undefined = undefined;
+
+                do {
+                    const apiResponse = await this.hubspotClient.crm.objects.searchApi.doSearch(
+                        customObject,
+                        {
+                            limit: 100,
+                            after: after,
+                            properties: requestedProperties,
+                            filterGroups: [],
+                        }
+                    );
+
+                    allCandidates.push(...apiResponse.results);
+                    after = apiResponse.paging?.next?.after;
+                } while (after);
+            }
+
+            console.log(`Successfully fetched ${allCandidates.length} candidates from HubSpot`);
+            return {
+                candidates: allCandidates,
+            };
+        } catch (error: any) {
+            console.error('Error fetching candidates from HubSpot:', error.message);
+            throw new BadRequestException(`Failed to fetch candidates from HubSpot: ${error.message}`);
+        }
+    }
 }

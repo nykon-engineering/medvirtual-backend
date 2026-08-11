@@ -19,6 +19,7 @@ import {
 import { CreateOrganizationDto } from './dto/createOrganization.dto';
 import { UpdateOrganizationDto } from './dto/updateOrganization.dto';
 import { ConvertToClientDto } from './dto/convertToClient.dto';
+import { UpdateInvoiceConfigurationDto } from './dto/updateInvoiceConfiguration.dto';
 import { GetOrganizationsDto } from './dto/getOrganizations.dto';
 import {
   PaginatedOrganizationsResponseDto,
@@ -332,10 +333,12 @@ export class OrganizationService {
       industry,
       location,
       admin,
+      billing_mode,
       business_unit,
       hasUser,
       hasStaff,
       without_referral,
+      hubstaffConnected,
       sortBy = 'createdAt',
       sortOrder = 'desc',
     } = query;
@@ -483,6 +486,31 @@ export class OrganizationService {
       whereClause.referred_by_affiliate_id = null;
     }
 
+    // Combined filter for Hubstaff connection and Billing Mode
+    if (hubstaffConnected === 'true' || billing_mode) {
+      whereClause.invoiceConfiguration = {
+        ...(hubstaffConnected === 'true' ? { hubstaff_id: { not: null } } : {}),
+        ...(billing_mode ? { billing_mode: { equals: billing_mode } } : {}),
+      };
+    }
+
+    if (hubstaffConnected === 'false') {
+      if (billing_mode) {
+        // If billing mode is specified, configuration must exist, so we just check for null hubstaff_id
+        whereClause.invoiceConfiguration = {
+          ...whereClause.invoiceConfiguration,
+          hubstaff_id: null,
+        };
+      } else {
+        // No billing mode, so allow null configuration OR configuration with null hubstaff_id
+        whereClause.OR = [
+          ...(whereClause.OR || []),
+          { invoiceConfiguration: null },
+          { invoiceConfiguration: { hubstaff_id: null } },
+        ];
+      }
+    }
+
     // Check if sorting by calculated fields (userCount or activeStaffCount)
     const isCalculatedFieldSort =
       sortBy === 'userCount' || sortBy === 'activeStaffCount';
@@ -548,6 +576,7 @@ export class OrganizationService {
             hubspot_id: true,
           },
         },
+        invoiceConfiguration: true
       },
     });
 
@@ -696,6 +725,7 @@ export class OrganizationService {
                 user_id: contact.user_id || undefined,
               }))
             : undefined,
+        invoiceConfiguration: org.invoiceConfiguration || undefined,
       }),
     );
 
@@ -748,6 +778,7 @@ export class OrganizationService {
           admin: true,
           users: true,
           contacts: true,
+          invoiceConfiguration: true,
         },
       });
 
@@ -756,7 +787,10 @@ export class OrganizationService {
       }
 
       return organization;
-    } catch {
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new NotFoundException('Organization not found');
     }
   }
@@ -965,6 +999,14 @@ export class OrganizationService {
         await this.auth.inviteUser(inviteData);
       }
 
+      // Create initial InvoiceConfiguration record
+      await this.prisma.invoiceConfiguration.create({
+        data: {
+          organization_id: organization.id,
+          hubspot_id: organization.hubspot_id,
+        },
+      });
+
       const newOrganization = await this.getById(organization.id);
 
       if (user) {
@@ -1102,7 +1144,56 @@ export class OrganizationService {
     }
   }
 
-  async convertToClient(id: string, data: ConvertToClientDto): Promise<any> {
+  async updateInvoiceConfiguration(
+    organizationId: string,
+    data: UpdateInvoiceConfigurationDto,
+  ): Promise<any> {
+    try {
+      // Check if organization exists
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+
+      if (!organization) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      // Filter out undefined fields to only update what's provided
+      const filteredData = Object.entries(data).reduce((acc, [key, value]) => {
+        if (value !== undefined) {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
+
+      // Upsert the invoice configuration
+      const updatedConfig = await this.prisma.invoiceConfiguration.upsert({
+        where: { organization_id: organizationId },
+        update: filteredData,
+        create: {
+          ...filteredData,
+          organization_id: organizationId,
+        },
+      });
+
+      return {
+        status: 200,
+        message: 'Invoice configuration updated successfully',
+        data: updatedConfig,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Failed to update invoice configuration:', error);
+      throw new BadRequestException('Failed to update invoice configuration');
+    }
+  }
+
+  async convertToClient(
+    id: string,
+    data: ConvertToClientDto,
+  ): Promise<any> {
     try {
       const organization = await this.prisma.organization.findUnique({
         where: { id },

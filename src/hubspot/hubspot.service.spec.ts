@@ -1683,3 +1683,52 @@ describe('HubspotService => changeDataFromHubspot sort edge cases', () => {
     await expect(service.changeDataFromHubspot(data)).resolves.toBeUndefined();
   });
 });
+// ─── fetchPropertiesAndCandidates ─────────────────────────────────────────────
+
+describe('HubspotService => fetchPropertiesAndCandidates', () => {
+  let service: HubspotService;
+  const originalEnv = process.env.HUBSPOT_CUSTOM_OBJECT;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: buildProviders(),
+    }).compile();
+    service = module.get<HubspotService>(HubspotService);
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    process.env.HUBSPOT_CUSTOM_OBJECT = originalEnv;
+  });
+
+  it('should throw NotFoundException if HUBSPOT_CUSTOM_OBJECT is not defined', async () => {
+    delete process.env.HUBSPOT_CUSTOM_OBJECT;
+    await expect(service.fetchPropertiesAndCandidates()).rejects.toThrow(
+      'Custom Object is not defined on the environment variables',
+    );
+  });
+
+  it('should fetch candidates successfully with vaid in properties', async () => {
+    process.env.HUBSPOT_CUSTOM_OBJECT = 'custom_obj';
+    doSearchMock.mockResolvedValueOnce({
+      results: [{ id: '1', properties: {} }],
+      paging: { next: { after: 'next_page' } },
+    }).mockResolvedValueOnce({
+      results: [{ id: '2', properties: {} }],
+      paging: undefined,
+    });
+
+    const result = await service.fetchPropertiesAndCandidates();
+    expect(result).toEqual({
+      candidates: [
+        { id: '1', properties: {} },
+        { id: '2', properties: {} },
+      ],
+    });
+
+    expect(doSearchMock).toHaveBeenCalledTimes(2);
+    expect(doSearchMock).toHaveBeenNthCalledWith(1, 'custom_obj', expect.objectContaining({
+      properties: expect.arrayContaining(['vaid']),
+    }));
+  });
+});
