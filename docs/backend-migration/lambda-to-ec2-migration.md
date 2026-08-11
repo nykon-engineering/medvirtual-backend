@@ -16,7 +16,7 @@ Este documento tem duas partes:
 | Recurso | ID / Valor |
 |---|---|
 | Perfil AWS local | `medvirtual` (conta `920372998442`, us-east-1) |
-| Instância EC2 | `i-063760d997e14f60a` — t4g.small, arm64 (Graviton) |
+| Instância EC2 | `i-063760d997e14f60a` — t4g.medium, arm64 (Graviton) |
 | Elastic IP (fixo) | `54.235.130.27` |
 | Key pair | `medvirtual-ec2` — `key-0cb30950ca4dca318` |
 | Security group | `sg-050d000502f1c4b3a` (`SG-DEV-BACKEND-EC2`) |
@@ -38,9 +38,11 @@ Disco: 30 GB gp3 criptografado (26 GB livres). IMDSv2 obrigatório.
 | git | instalado |
 | fail2ban | ativo |
 
-**2 vCPU, 2 GB RAM + 2 GB de swap.**
+**2 vCPU, 4 GB RAM (3,7 GB utilizáveis) + 4 GB de swap.**
 
-> ⚠️ O swap é necessário: o build roda com `--max-old-space-size=4096` e não cabe só na RAM. `npm run build` falha por out-of-memory sem ele. **Não remover.**
+> A instância subiu como `t4g.small` (2 GB) e foi redimensionada para `t4g.medium` em 11/08/2026. O Elastic IP e todos os demais recursos permaneceram inalterados.
+
+> ⚠️ Manter o swap: o build roda com `--max-old-space-size=4096`, ou seja, o heap do Node sozinho pode encostar no total da RAM. O swap é a margem que evita o out-of-memory durante `npm run build`. **Não remover.**
 
 > Node 22 (e não o 18 do `.nvmrc`): o `.nvmrc` reflete o runtime antigo do Lambda; o `Dockerfile` do projeto já usa `node:22-alpine`.
 
