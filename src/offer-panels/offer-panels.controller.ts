@@ -30,6 +30,7 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { OfferPanelsService } from './offer-panels.service';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
+import { OfferPanelStatsQueryDto } from './dto/offer-panel-stats.dto';
 import { CreateOfferPanelDto } from './dto/create-offer-panel.dto';
 import { UpdateOfferPanelDto } from './dto/update-offer-panel.dto';
 import { OfferPanelsAuditService } from './offer-panels-audit.service';
@@ -140,6 +141,38 @@ export class OfferPanelsController {
   }
 
   // Static segments declared BEFORE :id to avoid route conflicts
+  @Get('offer-panels/stats')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_admin', 'system_super_admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Offer panel analytics aggregated by sender, for the Operational Dashboard',
+  })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: false,
+    type: String,
+    description: 'Inclusive start of the window (YYYY-MM-DD), on creation date',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    type: String,
+    description: 'Inclusive end of the window (YYYY-MM-DD), on creation date',
+  })
+  @ApiQuery({ name: 'business_unit', required: false, type: String })
+  @ApiResponse({
+    status: 200,
+    description: 'Statistics retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async getStats(@Query() query: OfferPanelStatsQueryDto) {
+    const data = await this.offerPanelsService.getStats(query);
+    return { status: 200, data };
+  }
+
   @Get('offer-panels/mine')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('organization_admin', 'organization_super_admin')
