@@ -120,6 +120,18 @@ export class OfferPanelsController {
   })
   @ApiQuery({ name: 'client', required: false, type: String })
   @ApiQuery({ name: 'business_unit', required: false, type: String })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: false,
+    type: String,
+    description: 'Inclusive start of the window (YYYY-MM-DD), on creation date',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    type: String,
+    description: 'Inclusive end of the window (YYYY-MM-DD), on creation date',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Panels retrieved successfully' })

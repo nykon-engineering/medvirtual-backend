@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { OfferPanelRecipientType, OfferPanelStatus } from '@prisma/client';
 
 /** Parses a query-string number without turning an absent value into NaN. */
@@ -61,6 +68,27 @@ export class QueryOfferPanelsDto {
   @IsOptional()
   @IsString()
   business_unit?: string;
+
+  // A panel is created at the moment it is sent (there is no separate
+  // `sent_at`), so this window filters on `createdAt` — the same field and the
+  // same param names as /offer-panels/stats, keeping both endpoints consistent.
+  @ApiProperty({
+    description:
+      'Inclusive start of the window (YYYY-MM-DD), on the creation/sent date',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @ApiProperty({
+    description:
+      'Inclusive end of the window (YYYY-MM-DD), on the creation/sent date',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
 
   @ApiProperty({ description: 'Page number', required: false, default: 1 })
   @IsOptional()

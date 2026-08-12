@@ -693,6 +693,63 @@ describe('OfferPanelsService', () => {
     // Search and the business-unit filter each need their own OR group. Before
     // the conditions were collected in an array, assigning both onto `where.OR`
     // meant the second silently dropped the first.
+    // A panel is created at the moment it is sent, so the period filter is a
+    // window on `createdAt`.
+    it('filters by a created/sent date range, with dateTo covering the whole day', async () => {
+      mockFindAll();
+
+      await service.findAll({ dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+
+      expect(pageWhere().AND).toContainEqual({
+        createdAt: {
+          gte: new Date('2026-01-01T00:00:00.000Z'),
+          // End-of-day, so a panel sent on the 31st is not excluded.
+          lte: new Date('2026-01-31T23:59:59.999Z'),
+        },
+      });
+    });
+
+    it('leaves the range open-ended when only one bound is given', async () => {
+      mockFindAll();
+
+      await service.findAll({ dateFrom: '2026-01-01' });
+
+      expect(pageWhere().AND).toContainEqual({
+        createdAt: { gte: new Date('2026-01-01T00:00:00.000Z') },
+      });
+    });
+
+    it('adds no date condition when neither bound is given', async () => {
+      mockFindAll();
+
+      await service.findAll({});
+
+      expect(pageWhere().AND).not.toContainEqual(
+        expect.objectContaining({ createdAt: expect.anything() }),
+      );
+    });
+
+    // The tabs would otherwise show global totals contradicting the filtered
+    // list, so the window must reach the tallies too.
+    it('applies the date range to the status tallies as well', async () => {
+      mockFindAll();
+
+      await service.findAll({
+        dateFrom: '2026-01-01',
+        dateTo: '2026-01-31',
+        status: 'sent' as any,
+      });
+
+      expect(countsWhere().AND).toContainEqual({
+        createdAt: {
+          gte: new Date('2026-01-01T00:00:00.000Z'),
+          lte: new Date('2026-01-31T23:59:59.999Z'),
+        },
+      });
+      // …while status stays out of the tallies, so each tab keeps its own size.
+      expect(countsWhere().AND).not.toContainEqual({ status: 'sent' });
+    });
+
     it('keeps search and business_unit as independent conditions', async () => {
       mockFindAll();
       businessUnitContextMock.resolveByHubspotValue.mockResolvedValue({

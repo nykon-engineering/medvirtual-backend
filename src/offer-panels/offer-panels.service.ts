@@ -1729,6 +1729,8 @@ export class OfferPanelsService {
       client,
       created_by,
       business_unit,
+      dateFrom,
+      dateTo,
       page = 1,
       limit = 20,
     } = query;
@@ -1779,6 +1781,15 @@ export class OfferPanelsService {
         })),
       });
     }
+
+    // Period filter. A panel is created at the moment it is sent, so the
+    // creation date is also the sent date. `dateTo` covers the whole day (not
+    // midnight) so an end date the user picked is inclusive — same UTC bounds
+    // as getStats(), so the list and the dashboard stats agree.
+    const createdAt: { gte?: Date; lte?: Date } = {};
+    if (dateFrom) createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+    if (dateTo) createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
+    if (dateFrom || dateTo) baseConditions.push({ createdAt });
 
     if (search) {
       baseConditions.push({
