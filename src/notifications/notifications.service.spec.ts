@@ -3276,5 +3276,95 @@ describe('NotificationsService', () => {
         mockEmailTemplatesService.getTemplateContent.mock.calls[0];
       expect(runtimeValues['{{candidateCards}}']).toBe('');
     });
+
+    describe('HubSpot BCC logging', () => {
+      const HUBSPOT_BCC = '20630393@bcc.hubspot.com';
+      const originalEnvironment = process.env.ENVIRONMENT;
+      const originalBccEmail = process.env.HUBSPOT_BCC_EMAIL;
+
+      beforeEach(() => {
+        (mockPrismaService as any).offerPanel.findUnique.mockResolvedValue(
+          basePanel,
+        );
+      });
+
+      // Both vars are read by other suites in this file, so they are restored
+      // rather than deleted.
+      afterEach(() => {
+        process.env.ENVIRONMENT = originalEnvironment;
+        process.env.HUBSPOT_BCC_EMAIL = originalBccEmail;
+      });
+
+      it.each([
+        ['public', 'notifyOfferPanelCreatedPublic'],
+        ['client', 'notifyOfferPanelCreatedClient'],
+      ] as const)(
+        'bccs the HubSpot address on the %s variant in PROD',
+        async (_label, method) => {
+          process.env.ENVIRONMENT = 'PROD';
+          process.env.HUBSPOT_BCC_EMAIL = HUBSPOT_BCC;
+
+          await (service as any)[method]('p1');
+
+          expect(mockMailService.sendMail).toHaveBeenCalledWith(
+            expect.objectContaining({ bcc: HUBSPOT_BCC }),
+          );
+        },
+      );
+
+      // The address lives in local .env too, so the environment gate — not the
+      // presence of the var — is what keeps test sends off a real CRM timeline.
+      it('omits the bcc outside PROD even when the address is configured', async () => {
+        process.env.ENVIRONMENT = 'DEV';
+        process.env.HUBSPOT_BCC_EMAIL = HUBSPOT_BCC;
+
+        await service.notifyOfferPanelCreatedPublic('p1');
+
+        expect(mockMailService.sendMail).toHaveBeenCalledWith(
+          expect.objectContaining({ bcc: undefined }),
+        );
+      });
+
+      it('omits the bcc in PROD when the address is not configured', async () => {
+        process.env.ENVIRONMENT = 'PROD';
+        delete process.env.HUBSPOT_BCC_EMAIL;
+
+        await service.notifyOfferPanelCreatedPublic('p1');
+
+        expect(mockMailService.sendMail).toHaveBeenCalledWith(
+          expect.objectContaining({ bcc: undefined }),
+        );
+      });
+
+      // A whitespace-only value must disable the BCC, not reach Resend as an
+      // invalid recipient.
+      it('omits the bcc when the configured address is blank', async () => {
+        process.env.ENVIRONMENT = 'PROD';
+        process.env.HUBSPOT_BCC_EMAIL = '   ';
+
+        await service.notifyOfferPanelCreatedPublic('p1');
+
+        expect(mockMailService.sendMail).toHaveBeenCalledWith(
+          expect.objectContaining({ bcc: undefined }),
+        );
+      });
+
+      it.each([
+        ['PROD', 'PROD'],
+        ['DEV', 'DEV'],
+      ] as const)(
+        'still ccs the panel creator in %s',
+        async (_label, environment) => {
+          process.env.ENVIRONMENT = environment;
+          process.env.HUBSPOT_BCC_EMAIL = HUBSPOT_BCC;
+
+          await service.notifyOfferPanelCreatedPublic('p1');
+
+          expect(mockMailService.sendMail).toHaveBeenCalledWith(
+            expect.objectContaining({ cc: 'paulo@medvirtual.ai' }),
+          );
+        },
+      );
+    });
   });
 });

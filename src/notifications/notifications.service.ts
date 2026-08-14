@@ -2598,6 +2598,27 @@ ${getEmailLogoCss()}
   }
 
   /**
+   * BCC the HubSpot logging address on the recipient-facing offer-panel email so
+   * the send is recorded on the contact's CRM timeline.
+   *
+   * Requires BOTH the address (HUBSPOT_BCC_EMAIL) and PROD. The address alone is
+   * not the switch: it is present in local .env too, and logging a staging or
+   * local test send onto a real customer's timeline pollutes the CRM with
+   * records that are tedious to remove.
+   *
+   * Read at call time, not module load, so the environment is never captured too
+   * early — same reason as getOfferPanelReportRecipients in CronService.
+   *
+   * Returns undefined rather than an empty string when disabled, matching
+   * offerPanelCreatorCc: Resend treats empty recipient values inconsistently
+   * across SDK versions. The trim also covers a blank or whitespace-only var.
+   */
+  private hubspotLoggingBcc(): string | undefined {
+    if (process.env.ENVIRONMENT !== 'PROD') return undefined;
+    return process.env.HUBSPOT_BCC_EMAIL?.trim() || undefined;
+  }
+
+  /**
    * Loads the panel's candidates in the shape the email card needs.
    *
    * Deliberately does NOT go through `CandidatesService.getTalentPoolCandidatesByIds`,
@@ -2766,6 +2787,7 @@ ${getEmailLogoCss()}
         panel.createdBy.email,
         panel.recipient_email,
       ),
+      bcc: this.hubspotLoggingBcc(),
       subject:
         tplOfferClient?.subject ??
         `${candidateLabel} picked for you — ${theme.companyName}`,
@@ -2838,11 +2860,14 @@ ${getEmailLogoCss()}
     return this.mail.sendMail({
       from: `${theme?.companyName || 'MedVirtual'} <noreply@medvirtual.ai>`,
       to: panel.recipient_email,
-      // Also applies to the resend path, which reuses this method.
+      // Both the cc and the bcc also apply to the resend path, which reuses this
+      // method: a resend is the same email reaching the client, so it belongs on
+      // the CRM timeline too.
       cc: this.offerPanelCreatorCc(
         panel.createdBy.email,
         panel.recipient_email,
       ),
+      bcc: this.hubspotLoggingBcc(),
       subject:
         tplOfferPublic?.subject ??
         `${candidateLabel} picked for you — ${theme.companyName}`,
