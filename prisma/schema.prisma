@@ -44,6 +44,7 @@ model USER {
   adminOrganizations           Organization[]       @relation("OrganizationAdmin")
   ownedOrganizations           Organization[]       @relation("OrganizationOwner")
   sessions                     Session[]
+  sessionActivityPings         SessionActivity[]
   tickets                      Ticket[]
   ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
   TicketNotes                  TicketNotes[]
@@ -115,13 +116,27 @@ model USER {
 }
 
 model Session {
+  id               String            @id @default(uuid())
+  userId           String
+  token            String
+  createdAt        DateTime          @default(now())
+  expiresAt        DateTime
+  isRevoked        Boolean           @default(false)
+  user             USER              @relation(fields: [userId], references: [id])
+  activityPings    SessionActivity[]
+}
+
+model SessionActivity {
   id        String   @id @default(uuid())
+  sessionId String
   userId    String
-  token     String
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-  isRevoked Boolean  @default(false)
+  scope     String // "talent_pool" | "platform" — route bucket active at ping time
+  pingedAt  DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id])
   user      USER     @relation(fields: [userId], references: [id])
+
+  @@index([userId, pingedAt])
+  @@index([sessionId])
 }
 
 model EmailVerification {
