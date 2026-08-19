@@ -469,6 +469,21 @@ export class PanelService {
         },
       });
 
+      const talentsSelectedAsWinner = await this.prisma.panelCandidate.count({
+        where: {
+          status: PanelCandidateStatus.selected_by_client,
+          updatedAt: { gte: monthStart, lt: monthEnd },
+        },
+      });
+
+      // Dedupe by candidate_id in case a webhook retry logged the same removal twice.
+      const removalRows = await this.prisma.candidateRemovalLog.findMany({
+        where: { removed_at: { gte: monthStart, lt: monthEnd } },
+        select: { candidate_id: true },
+        distinct: ['candidate_id'],
+      });
+      const talentsRemoved = removalRows.length;
+
       if (!result.monthlyData) result.monthlyData = [];
 
       result.monthlyData.push({
@@ -480,6 +495,8 @@ export class PanelService {
         hireRequests_created: hireRequestsCreated,
         hireRequests_endorsed: hireRequestsEndorsed,
         interviews: interviewsScheduled,
+        talentsSelectedAsWinner,
+        talentsRemoved,
       });
     }
 

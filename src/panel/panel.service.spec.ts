@@ -35,6 +35,12 @@ describe('PanelService', () => {
         count: jest.fn(),
         findMany: jest.fn(),
       },
+      panelCandidate: {
+        count: jest.fn(),
+      },
+      candidateRemovalLog: {
+        findMany: jest.fn(),
+      },
     };
 
     const positionRateConfigMock = {
@@ -145,6 +151,10 @@ describe('PanelService', () => {
         (prisma.hireRequest.count as jest.Mock).mockResolvedValueOnce(i + 2); // hireRequestsCreated
         (prisma.hireRequest.count as jest.Mock).mockResolvedValueOnce(i); // hireRequestsEndorsed
         (prisma.interview.count as jest.Mock).mockResolvedValueOnce(i + 3); // interviewsScheduled
+        (prisma.panelCandidate.count as jest.Mock).mockResolvedValueOnce(i + 6); // talentsSelectedAsWinner
+        (prisma.candidateRemovalLog.findMany as jest.Mock).mockResolvedValueOnce(
+          Array.from({ length: i + 1 }, (_, j) => ({ candidate_id: `c-${i}-${j}` })),
+        ); // talentsRemoved
     }
     
     for(let i=0; i<12; i++) {
@@ -204,6 +214,15 @@ describe('PanelService', () => {
     expect(result.userAccess).toHaveLength(12);
     expect(result.clientEngagement).toHaveLength(12);
     expect(result.adminUsage).toHaveLength(12);
+    expect(result.monthlyData[0]).toEqual({
+      month: expect.any(String),
+      candidates: 1,
+      hireRequests_created: 2,
+      hireRequests_endorsed: 0,
+      interviews: 3,
+      talentsSelectedAsWinner: 6,
+      talentsRemoved: 1,
+    });
     expect(result.clientEngagement[0]).toEqual({
       month: expect.any(String),
       clientLogins: 1,
@@ -241,6 +260,8 @@ describe('PanelService', () => {
     (prisma.interview.count as jest.Mock).mockResolvedValue(0);
     (prisma.session.count as jest.Mock).mockResolvedValue(0);
     (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.panelCandidate.count as jest.Mock).mockResolvedValue(0);
+    (prisma.candidateRemovalLog.findMany as jest.Mock).mockResolvedValue([]);
 
     await service.getPanelData(dateFrom, dateTo);
 
