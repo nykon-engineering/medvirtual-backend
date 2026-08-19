@@ -18,6 +18,7 @@ import { activePipelines } from '../common/constant/activeDealPipelines';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
 import {
   CANDIDATE_AUDIT_EVENTS,
+  CANDIDATE_LOST_STAGE_ID,
   ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
 } from '../candidate/candidate-audit.service';
 
@@ -482,8 +483,18 @@ export class PanelService {
       });
 
       // Dedupe by candidate_id in case a webhook retry logged the same removal twice.
-      const removalRows = await this.prisma.candidateRemovalLog.findMany({
-        where: { removed_at: { gte: monthStart, lt: monthEnd } },
+      // "Removed" covers both a move to the Lost pipeline stage and a hard delete.
+      const removalRows = await this.prisma.candidateAuditLog.findMany({
+        where: {
+          createdAt: { gte: monthStart, lt: monthEnd },
+          OR: [
+            {
+              event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+              pipeline_status_new: CANDIDATE_LOST_STAGE_ID,
+            },
+            { event: CANDIDATE_AUDIT_EVENTS.CANDIDATE_DELETED },
+          ],
+        },
         select: { candidate_id: true },
         distinct: ['candidate_id'],
       });

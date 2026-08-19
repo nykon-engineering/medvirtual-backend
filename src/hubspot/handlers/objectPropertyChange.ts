@@ -151,16 +151,6 @@ export class HandlerObjectPropertyChange {
         event.propertyName === 'hs_pipeline_stage' &&
         event.propertyValue === '261173428' /*Lost*/
       ) {
-        await this.prisma.candidateRemovalLog.create({
-          data: {
-            candidate_id: candidate.id,
-            hubspot_id: candidate.hubspot_id,
-            email: candidate.email,
-            name: candidate.name,
-            reason: 'lost',
-          },
-        });
-
         const candidatesToRemove = await this.prisma.panelCandidate.findMany({
           where: {
             candidate_id: candidate.id,

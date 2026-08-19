@@ -14,7 +14,6 @@ const prismaMock = {
   candidateEducation: { deleteMany: jest.fn() },
   candidateExperience: { deleteMany: jest.fn() },
   panelCandidate: { deleteMany: jest.fn() },
-  candidateRemovalLog: { create: jest.fn() },
   $transaction: jest.fn(),
 };
 
@@ -48,11 +47,11 @@ describe('HandlerObjectDeletion', () => {
 
     await handler.execute({ objectId: 'hs-1' });
 
-    expect(prismaMock.candidateRemovalLog.create).not.toHaveBeenCalled();
+    expect(candidateAuditMock.logOrThrow).not.toHaveBeenCalled();
     expect(prismaMock.candidate.delete).not.toHaveBeenCalled();
   });
 
-  it('should record a removal log with reason "deleted" before hard-deleting the candidate', async () => {
+  it('should write a candidate_deleted audit log before hard-deleting the candidate', async () => {
     prismaMock.candidate.findUnique.mockResolvedValue({
       id: 'candidate-1',
       hubspot_id: 'hs-1',
@@ -61,9 +60,8 @@ describe('HandlerObjectDeletion', () => {
     });
 
     const callOrder: string[] = [];
-    prismaMock.candidateRemovalLog.create.mockImplementation(async () => {
-      callOrder.push('create');
-      return {};
+    candidateAuditMock.logOrThrow.mockImplementation(async () => {
+      callOrder.push('logOrThrow');
     });
     prismaMock.candidate.delete.mockImplementation(async () => {
       callOrder.push('delete');
@@ -72,19 +70,18 @@ describe('HandlerObjectDeletion', () => {
 
     await handler.execute({ objectId: 'hs-1' });
 
-    expect(prismaMock.candidateRemovalLog.create).toHaveBeenCalledWith({
-      data: {
-        candidate_id: 'candidate-1',
-        hubspot_id: 'hs-1',
-        email: 'jane@example.com',
-        name: 'Jane Doe',
-        reason: 'deleted',
-      },
-    });
+    expect(candidateAuditMock.logOrThrow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidateId: 'candidate-1',
+        hubspotId: 'hs-1',
+        event: 'candidate_deleted',
+      }),
+      prismaMock,
+    );
     expect(prismaMock.candidate.delete).toHaveBeenCalledWith({
       where: { id: 'candidate-1' },
     });
-    expect(callOrder).toEqual(['create', 'delete']);
+    expect(callOrder).toEqual(['delete', 'logOrThrow']);
   });
 
   it('should wrap unexpected errors in a BadRequestException', async () => {

@@ -31,6 +31,9 @@ export type CandidateAuditEvent =
 /** DB code for the "Endorsed via Platform" pipeline stage — see stage-dictionary.ts. */
 export const ENDORSED_VIA_PLATFORM_PIPELINE_STATUS = '1172847191';
 
+/** DB code for the "Lost" pipeline stage — see stage-dictionary.ts. */
+export const CANDIDATE_LOST_STAGE_ID = '261173428';
+
 export interface CandidateAuditLogParams {
   candidateId: string;
   hubspotId?: string | null;

@@ -12,7 +12,6 @@ const prismaMock = {
   },
   candidateLanguage: { deleteMany: jest.fn(), create: jest.fn() },
   candidateSkill: { deleteMany: jest.fn(), create: jest.fn() },
-  candidateRemovalLog: { create: jest.fn() },
   panelCandidate: { findMany: jest.fn(), delete: jest.fn(), count: jest.fn() },
   candidatePanel: { findUnique: jest.fn(), update: jest.fn() },
   hireRequest: { update: jest.fn() },
@@ -53,7 +52,7 @@ describe('HandlerObjectPropertyChange', () => {
     prismaMock.panelCandidate.findMany.mockResolvedValue([]);
   });
 
-  it('should record a removal log with reason "lost" when moved to the Lost pipeline stage', async () => {
+  it('should record a pipeline_status_changed audit log with the Lost stage id when moved to the Lost pipeline stage', async () => {
     prismaMock.candidate.findUnique.mockResolvedValue({
       id: 'candidate-1',
       hubspot_id: 'hs-1',
@@ -67,35 +66,16 @@ describe('HandlerObjectPropertyChange', () => {
       propertyValue: '261173428',
     });
 
-    expect(prismaMock.candidateRemovalLog.create).toHaveBeenCalledWith({
-      data: {
-        candidate_id: 'candidate-1',
-        hubspot_id: 'hs-1',
-        email: 'jane@example.com',
-        name: 'Jane Doe',
-        reason: 'lost',
-      },
-    });
+    expect(candidateAuditMock.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidateId: 'candidate-1',
+        event: 'pipeline_status_changed',
+        after: expect.objectContaining({ pipeline_status: '261173428' }),
+      }),
+    );
   });
 
-  it('should NOT record a removal log for other pipeline stage transitions', async () => {
-    prismaMock.candidate.findUnique.mockResolvedValue({
-      id: 'candidate-1',
-      hubspot_id: 'hs-1',
-      email: 'jane@example.com',
-      name: 'Jane Doe',
-    });
-
-    await handler.execute({
-      objectId: 'hs-1',
-      propertyName: 'hs_pipeline_stage',
-      propertyValue: '261075105' /* some other, active stage */,
-    });
-
-    expect(prismaMock.candidateRemovalLog.create).not.toHaveBeenCalled();
-  });
-
-  it('should NOT record a removal log for unrelated property changes', async () => {
+  it('should NOT record a pipeline_status_changed audit log for unrelated property changes', async () => {
     prismaMock.candidate.findUnique.mockResolvedValue({
       id: 'candidate-1',
       hubspot_id: 'hs-1',
@@ -109,6 +89,6 @@ describe('HandlerObjectPropertyChange', () => {
       propertyValue: 'English',
     });
 
-    expect(prismaMock.candidateRemovalLog.create).not.toHaveBeenCalled();
+    expect(candidateAuditMock.log).not.toHaveBeenCalled();
   });
 });

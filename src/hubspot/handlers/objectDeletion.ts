@@ -50,21 +50,9 @@ export class HandlerObjectDeletion {
         },
       });
 
-      // Record the removal before the hard delete cascades away the row, and write the
-      // audit log entry, all atomically: either the tombstone, the delete, and the audit
-      // log all commit, or none of them do.
+      // Delete the candidate and write the audit log entry atomically: either both
+      // commit, or neither does.
       await this.prisma.$transaction(async (tx) => {
-        await tx.candidateRemovalLog.create({
-          data: {
-            candidate_id: candidateExists.id,
-            hubspot_id: candidateExists.hubspot_id,
-            email: candidateExists.email,
-            name: candidateExists.name,
-            reason: 'deleted',
-          },
-        });
-
-        //Then, delete the candidate
         await tx.candidate.delete({
           where: {
             id: candidateExists.id,
