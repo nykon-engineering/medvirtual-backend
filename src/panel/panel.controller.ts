@@ -11,6 +11,7 @@ import {
 import { AuthGuard } from '../auth/auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
 
 @ApiTags('Panel')
 @ApiBearerAuth()
@@ -52,5 +53,26 @@ export class PanelController {
     @Query('dateTo') dateTo?: string,
   ): Promise<any> {
     return await this.panelService.getPanelData(dateFrom, dateTo);
+  }
+
+  @Get('talent-availability')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Get the count of currently available candidates grouped by approved position/role',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Talent availability by role retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getTalentAvailabilityByRole(): Promise<TalentAvailabilityByRoleDto[]> {
+    return this.panelService.getTalentAvailabilityByRole();
   }
 }

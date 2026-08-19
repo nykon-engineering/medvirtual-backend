@@ -297,6 +297,61 @@ describe('PanelService', () => {
     }));
   });
 
+  describe('getTalentAvailabilityByRole', () => {
+    it('aggregates counts by position, splitting full-time and part-time', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { pipeline_status: '261075105', approved_positions_pairing: ['Sr Bookkeeper'] },
+        { pipeline_status: '261075105', approved_positions_pairing: ['Sr Bookkeeper'] },
+        { pipeline_status: '1087596819', approved_positions_pairing: ['Sr Bookkeeper'] },
+      ]);
+
+      const result = await service.getTalentAvailabilityByRole();
+
+      expect(result).toEqual([
+        expect.objectContaining({ fullTime: 2, partTime: 1, total: 3 }),
+      ]);
+      expect(prisma.candidate.findMany).toHaveBeenCalledWith({
+        where: { pipeline_status: { in: ['261075105', '1087596819'] } },
+        select: { pipeline_status: true, approved_positions_pairing: true },
+      });
+    });
+
+    it('counts a candidate once per position when approved for multiple roles', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { pipeline_status: '261075105', approved_positions_pairing: ['Sr Bookkeeper', 'Jr Medical Admin'] },
+      ]);
+
+      const result = await service.getTalentAvailabilityByRole();
+
+      expect(result).toHaveLength(2);
+      expect(result.every((r) => r.fullTime === 1 && r.total === 1)).toBe(true);
+    });
+
+    it('falls back to "(Unspecified)" when a candidate has no approved positions', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { pipeline_status: '261075105', approved_positions_pairing: [] },
+      ]);
+
+      const result = await service.getTalentAvailabilityByRole();
+
+      expect(result).toEqual([
+        expect.objectContaining({ position: '(Unspecified)', fullTime: 1, total: 1 }),
+      ]);
+    });
+
+    it('sorts results by total descending', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { pipeline_status: '261075105', approved_positions_pairing: ['Jr Medical Admin'] },
+        { pipeline_status: '261075105', approved_positions_pairing: ['Sr Bookkeeper'] },
+        { pipeline_status: '261075105', approved_positions_pairing: ['Sr Bookkeeper'] },
+      ]);
+
+      const result = await service.getTalentAvailabilityByRole();
+
+      expect(result[0].total).toBeGreaterThanOrEqual(result[1].total);
+    });
+  });
+
   describe('getScopedDurationMinutes', () => {
     const monthStart = new Date('2026-01-01');
     const monthEnd = new Date('2026-02-01');

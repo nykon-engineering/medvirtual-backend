@@ -15,6 +15,7 @@ import { getApprovedPositionLabel } from '../common/dictionaries/approved-positi
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
 
 @Injectable()
 export class PanelService {
@@ -647,6 +648,40 @@ export class PanelService {
     result.moreThan5Interviews = processed.filter((c) => c.interviewCount > 5);
 
     return result;
+  }
+
+  async getTalentAvailabilityByRole(): Promise<TalentAvailabilityByRoleDto[]> {
+    const candidates = await this.prisma.candidate.findMany({
+      where: { pipeline_status: { in: ['261075105', '1087596819'] } },
+      select: { pipeline_status: true, approved_positions_pairing: true },
+    });
+
+    const counts = new Map<string, { fullTime: number; partTime: number }>();
+    for (const candidate of candidates) {
+      const isFullTime = candidate.pipeline_status === '261075105';
+      const positions = candidate.approved_positions_pairing?.length
+        ? candidate.approved_positions_pairing
+        : ['(Unspecified)'];
+      for (const raw of positions) {
+        const label = getApprovedPositionLabel(raw);
+        const entry = counts.get(label) ?? { fullTime: 0, partTime: 0 };
+        if (isFullTime) {
+          entry.fullTime += 1;
+        } else {
+          entry.partTime += 1;
+        }
+        counts.set(label, entry);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([position, { fullTime, partTime }]) => ({
+        position,
+        fullTime,
+        partTime,
+        total: fullTime + partTime,
+      }))
+      .sort((a, b) => b.total - a.total);
   }
 
   /**
