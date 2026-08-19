@@ -4,13 +4,18 @@ import axios from 'axios';
 import { candidadeToDbDictionary } from '../../common/dictionaries/candidate-dictionary';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CandidatesService } from '../../candidate/candidates.service';
-import { Prisma } from '@prisma/client';
+import { Prisma, CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../../candidate/candidate-audit.service';
 
 @Injectable()
 export class HandlerObjectCreation {
   constructor(
     private readonly prisma: PrismaService,
     private readonly candidateService: CandidatesService,
+    private readonly candidateAudit: CandidateAuditService,
   ) {}
 
   async execute(event) {
@@ -86,6 +91,16 @@ export class HandlerObjectCreation {
           'Error creating candidate in the database',
         );
       }
+
+      void this.candidateAudit.log({
+        candidateId: createCandidate.id,
+        hubspotId: createCandidate.hubspot_id,
+        actorUserId: null,
+        event: CANDIDATE_AUDIT_EVENTS.CANDIDATE_CREATED,
+        fieldGroup: CandidateAuditFieldGroup.profile,
+        after: candidateData,
+        source: CandidateAuditSource.webhook,
+      });
 
       //Here, I start to work with the skills
       if (rawProperties.career_highlights_relevant_job_experiences) {

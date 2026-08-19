@@ -41,6 +41,9 @@ describe('PanelService', () => {
       candidateRemovalLog: {
         findMany: jest.fn(),
       },
+      candidateAuditLog: {
+        findMany: jest.fn(),
+      },
     };
 
     const positionRateConfigMock = {
@@ -155,6 +158,9 @@ describe('PanelService', () => {
         (prisma.candidateRemovalLog.findMany as jest.Mock).mockResolvedValueOnce(
           Array.from({ length: i + 1 }, (_, j) => ({ candidate_id: `c-${i}-${j}` })),
         ); // talentsRemoved
+        (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce(
+          Array.from({ length: i + 2 }, (_, j) => ({ candidate_id: `e-${i}-${j}` })),
+        ); // talentsEndorsed
     }
     
     for(let i=0; i<12; i++) {
@@ -222,6 +228,7 @@ describe('PanelService', () => {
       interviews: 3,
       talentsSelectedAsWinner: 6,
       talentsRemoved: 1,
+      talentsEndorsed: 2,
     });
     expect(result.clientEngagement[0]).toEqual({
       month: expect.any(String),
@@ -262,6 +269,7 @@ describe('PanelService', () => {
     (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.panelCandidate.count as jest.Mock).mockResolvedValue(0);
     (prisma.candidateRemovalLog.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValue([]);
 
     await service.getPanelData(dateFrom, dateTo);
 

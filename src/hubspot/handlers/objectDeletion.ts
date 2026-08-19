@@ -1,9 +1,17 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../../candidate/candidate-audit.service';
 
 @Injectable()
 export class HandlerObjectDeletion {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly candidateAudit: CandidateAuditService,
+  ) {}
 
   async execute(event) {
     try {
@@ -42,22 +50,39 @@ export class HandlerObjectDeletion {
         },
       });
 
-      // Record the removal before the hard delete cascades away the row.
-      await this.prisma.candidateRemovalLog.create({
-        data: {
-          candidate_id: candidateExists.id,
-          hubspot_id: candidateExists.hubspot_id,
-          email: candidateExists.email,
-          name: candidateExists.name,
-          reason: 'deleted',
-        },
-      });
+      // Record the removal before the hard delete cascades away the row, and write the
+      // audit log entry, all atomically: either the tombstone, the delete, and the audit
+      // log all commit, or none of them do.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.candidateRemovalLog.create({
+          data: {
+            candidate_id: candidateExists.id,
+            hubspot_id: candidateExists.hubspot_id,
+            email: candidateExists.email,
+            name: candidateExists.name,
+            reason: 'deleted',
+          },
+        });
 
-      //Then, delete the candidate
-      await this.prisma.candidate.delete({
-        where: {
-          id: candidateExists.id,
-        },
+        //Then, delete the candidate
+        await tx.candidate.delete({
+          where: {
+            id: candidateExists.id,
+          },
+        });
+
+        await this.candidateAudit.logOrThrow(
+          {
+            candidateId: candidateExists.id,
+            hubspotId: candidateExists.hubspot_id,
+            actorUserId: null,
+            event: CANDIDATE_AUDIT_EVENTS.CANDIDATE_DELETED,
+            fieldGroup: CandidateAuditFieldGroup.lifecycle,
+            before: candidateExists as unknown as Record<string, any>,
+            source: CandidateAuditSource.webhook,
+          },
+          tx,
+        );
       });
     } catch (error) {
       throw new BadRequestException('Error deleting candidate', error);

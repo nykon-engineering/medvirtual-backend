@@ -13,6 +13,7 @@ import { HubspotService } from '../hubspot/hubspot.service';
 import { OpenaiService } from '../openai/openai.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { OfferPanelsService } from '../offer-panels/offer-panels.service';
+import { CandidateAuditService } from '../candidate/candidate-audit.service';
 
 jest.mock('axios', () => {
   const mockAxios = jest.requireActual('axios');
@@ -111,6 +112,12 @@ const offerPanelsServiceMock = {
   removeCandidateFromAllPanels: jest.fn(),
 };
 
+const candidateAuditServiceMock = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  logMany: jest.fn(),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
@@ -127,6 +134,7 @@ describe('HireRequestService', () => {
         { provide: OpenaiService, useValue: openAIServiceMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigMock },
         { provide: OfferPanelsService, useValue: offerPanelsServiceMock },
+        { provide: CandidateAuditService, useValue: candidateAuditServiceMock },
       ],
     }).compile();
 
@@ -1038,6 +1046,9 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1', panelCandidates: [] });
       prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
+      prismaMock.candidate.findMany.mockResolvedValue([
+        { id: 'cand1', hubspot_id: 'hub1', pipeline_status: 'available' },
+      ]);
       prismaMock.candidate.updateMany.mockResolvedValue(null);
 
       await expect(service.confirmPanel(panelData, user))
@@ -1048,7 +1059,6 @@ describe('HireRequestService', () => {
       prismaMock.candidatePanel.findFirst.mockResolvedValue({ id: 'panel1', panelCandidates: [] });
       prismaMock.panelCandidate.createMany.mockResolvedValue({ count: 5 });
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
-      prismaMock.candidate.updateMany.mockResolvedValue({ count: 5 });
       prismaMock.candidate.findMany.mockResolvedValue(null);
 
       await expect(service.confirmPanel(panelData, user))
@@ -1061,8 +1071,8 @@ describe('HireRequestService', () => {
       prismaMock.hireRequest.update.mockResolvedValue({ id: 'hr1', status: 'sourcing' });
       prismaMock.candidate.updateMany.mockResolvedValue({ count: 5 });
       prismaMock.candidate.findMany.mockResolvedValue([
-        { id: 'cand1', hubspot_id: 'hub1' },
-        { id: 'cand2', hubspot_id: 'hub2' },
+        { id: 'cand1', hubspot_id: 'hub1', pipeline_status: 'available' },
+        { id: 'cand2', hubspot_id: 'hub2', pipeline_status: 'available' },
       ]);
 
       jest.spyOn(service['hubspot'], 'updateManyCandidatesFromHireRequest').mockResolvedValue(true);
@@ -1082,6 +1092,20 @@ describe('HireRequestService', () => {
         expect.anything(),
         expect.anything(),
         expect.any(String),
+      );
+      expect(candidateAuditServiceMock.logMany).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            candidateId: 'cand1',
+            event: 'pipeline_status_changed',
+            before: { pipeline_status: 'available' },
+          }),
+          expect.objectContaining({
+            candidateId: 'cand2',
+            event: 'pipeline_status_changed',
+            before: { pipeline_status: 'available' },
+          }),
+        ]),
       );
     });
 
@@ -1994,9 +2018,22 @@ describe('HireRequestService', () => {
         expect.objectContaining({ data: expect.objectContaining({ status: 'placement_completed' }) }),
       );
       expect(offerPanelsServiceMock.removeCandidateFromAllPanels).toHaveBeenCalledWith('cand1');
+      expect(candidateAuditServiceMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidateId: 'cand1',
+          event: 'pipeline_status_changed',
+          before: { pipeline_status: null },
+        }),
+      );
+      expect(candidateAuditServiceMock.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          candidateId: 'cand2',
+          event: 'pipeline_status_changed',
+        }),
+      );
     });
   });
-  
+
 
   describe('showMatchHireRequests', () => {
     it('should throw NotFoundException if candidate does not exist', async () => {

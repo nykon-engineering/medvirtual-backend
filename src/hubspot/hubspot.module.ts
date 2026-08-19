@@ -68,6 +68,7 @@ import { AllianceNotificationsModule } from '../med-alliance/notifications/notif
 import { ContactFromCompanyCreationService } from './create/contactFromCompany';
 import { HubspotAuditService } from './hubspot-audit.service';
 import { BusinessUnitsModule } from '../business-units/business-units.module';
+import { CandidateAuditModule } from '../candidate/candidate-audit.module';
 
 @Module({
   controllers: [HubspotController],
@@ -128,6 +129,7 @@ import { BusinessUnitsModule } from '../business-units/business-units.module';
     OrgDeletionModule,
     AllianceNotificationsModule,
     BusinessUnitsModule,
+    CandidateAuditModule,
     forwardRef(() => CandidatesModule),
     forwardRef(() => OrganizationModule),
     forwardRef(() => HireRequestModule),

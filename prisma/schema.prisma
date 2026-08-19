@@ -83,6 +83,8 @@ model USER {
   hubspotAuditLogs          HubspotAuditLog[]            @relation("HubspotAuditActor")
   // Ticket audit log entries where this user was the acting subject
   ticketAuditActorLogs      TicketAuditLog[]             @relation("TicketAuditActor")
+  // Candidate audit log entries where this user was the acting subject
+  candidateAuditActorLogs   CandidateAuditLog[]          @relation("CandidateAuditActor")
   // Offer panel audit log entries where this user was the acting subject
   offerPanelAuditLogs       OfferPanelAuditLog[]         @relation("OfferPanelAuditActor")
   // Tickets this user soft-deleted
@@ -116,14 +118,14 @@ model USER {
 }
 
 model Session {
-  id               String            @id @default(uuid())
-  userId           String
-  token            String
-  createdAt        DateTime          @default(now())
-  expiresAt        DateTime
-  isRevoked        Boolean           @default(false)
-  user             USER              @relation(fields: [userId], references: [id])
-  activityPings    SessionActivity[]
+  id            String            @id @default(uuid())
+  userId        String
+  token         String
+  createdAt     DateTime          @default(now())
+  expiresAt     DateTime
+  isRevoked     Boolean           @default(false)
+  user          USER              @relation(fields: [userId], references: [id])
+  activityPings SessionActivity[]
 }
 
 model SessionActivity {
@@ -588,35 +590,35 @@ model Interview {
 }
 
 model Ticket {
-  id             String        @id @default(uuid())
-  user_id        String?
-  title          String
-  description    String
-  status         TicketStatus  @default(new)
-  createdAt      DateTime      @default(now())
-  type           String
-  org_id         String?
-  priority       Priority
-  staff_id       String?
-  candidate_id   String?
-  hireRequest_id String?
-  offer_panel_id String?
-  updatedAt      DateTime      @updatedAt
-  created_by     String?
+  id              String        @id @default(uuid())
+  user_id         String?
+  title           String
+  description     String
+  status          TicketStatus  @default(new)
+  createdAt       DateTime      @default(now())
+  type            String
+  org_id          String?
+  priority        Priority
+  staff_id        String?
+  candidate_id    String?
+  hireRequest_id  String?
+  offer_panel_id  String?
+  updatedAt       DateTime      @updatedAt
+  created_by      String?
   // Soft delete. deleted_by/deletion_reason are denormalized here (the full history lives in
   // TicketAuditLog) so tombstone listings render "deleted by X" without a correlated subquery.
   deleted_at      DateTime?
   deleted_by      String?
   deletion_reason String?
-  candidate      Candidate?    @relation(fields: [candidate_id], references: [id])
-  organization   Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  staff          Staff?        @relation(fields: [staff_id], references: [id])
-  hireRequest    HireRequest?  @relation(fields: [hireRequest_id], references: [id])
-  offerPanel     OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
-  user           USER?         @relation(fields: [user_id], references: [id])
-  createdBy      USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
-  deletedBy      USER?         @relation("TicketDeletedBy", fields: [deleted_by], references: [id])
-  TicketNotes    TicketNotes[]
+  candidate       Candidate?    @relation(fields: [candidate_id], references: [id])
+  organization    Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  staff           Staff?        @relation(fields: [staff_id], references: [id])
+  hireRequest     HireRequest?  @relation(fields: [hireRequest_id], references: [id])
+  offerPanel      OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
+  user            USER?         @relation(fields: [user_id], references: [id])
+  createdBy       USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
+  deletedBy       USER?         @relation("TicketDeletedBy", fields: [deleted_by], references: [id])
+  TicketNotes     TicketNotes[]
 
   @@index([deleted_at], map: "idx_tickets_deleted_at")
   @@index([deleted_at, status], map: "idx_tickets_deleted_at_status")
@@ -1409,6 +1411,52 @@ model CandidateRemovalLog {
   @@index([reason, removed_at], map: "idx_candidate_removal_reason_removed_at")
   @@index([hubspot_id], map: "idx_candidate_removal_hubspot_id")
   @@index([candidate_id], map: "idx_candidate_removal_candidate_id")
+}
+
+// Append-only audit trail for every write to Candidate across the system.
+// candidate_id is deliberately NOT a foreign key — the Candidate row may be hard-deleted.
+model CandidateAuditLog {
+  id                  String                   @id @default(uuid())
+  candidate_id        String
+  hubspot_id          String?
+  actor_user_id       String?
+  // Denormalized actor display name, so the log stays readable after a user is hard-deleted.
+  actor_label         String?
+  event               String
+  field_group         CandidateAuditFieldGroup
+  // Denormalized fast-path for the most common/critical event, so monthly
+  // aggregate queries (e.g. talents endorsed) never need to inspect the JSON blobs.
+  pipeline_status_new String?
+  source              CandidateAuditSource     @default(system)
+  before              Json?
+  after               Json?
+  metadata            Json?
+  createdAt           DateTime                 @default(now())
+
+  actorUser USER? @relation("CandidateAuditActor", fields: [actor_user_id], references: [id])
+
+  @@index([candidate_id, createdAt], map: "idx_candidate_audit_timeline")
+  @@index([event, createdAt], map: "idx_candidate_audit_event_created_at")
+  @@index([field_group, createdAt], map: "idx_candidate_audit_field_group")
+  @@index([actor_user_id], map: "idx_candidate_audit_actor")
+  @@index([createdAt], map: "idx_candidate_audit_created_at")
+}
+
+enum CandidateAuditFieldGroup {
+  pipeline_status
+  processing
+  profile
+  business_unit
+  va_scorecard
+  hubspot_sync
+  lifecycle
+}
+
+enum CandidateAuditSource {
+  user
+  system
+  cron
+  webhook
 }
 
 // @deprecated Superseded by per-user billcom_* fields on USER. Safe to drop

@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HubspotAuditService } from './hubspot-audit.service';
 import { HubspotAuditAction, HubspotAuditSource, HubspotEntityType } from '@prisma/client';
 import { CandidatesService } from '../candidate/candidates.service';
+import { CandidateAuditService } from '../candidate/candidate-audit.service';
 
 import { HandlerObjectCreation } from './handlers/objectCreation';
 import { HandlerObjectPropertyChange } from './handlers/objectPropertyChange';
@@ -81,6 +82,11 @@ const makeMock = () => ({ execute: jest.fn() });
 const auditMock = { log: jest.fn() };
 const prismaMock = { candidate: { findUnique: jest.fn() } };
 const candidateMock = { processData: jest.fn() };
+const candidateAuditMock = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  logMany: jest.fn(),
+};
 
 const handlers = {
   objectCreation: makeMock(),
@@ -137,6 +143,7 @@ async function buildModule(): Promise<HubspotService> {
       { provide: PrismaService, useValue: prismaMock },
       { provide: HubspotAuditService, useValue: auditMock },
       { provide: CandidatesService, useValue: candidateMock },
+      { provide: CandidateAuditService, useValue: candidateAuditMock },
       { provide: HandlerObjectCreation, useValue: handlers.objectCreation },
       { provide: HandlerObjectPropertyChange, useValue: handlers.objectPropertyChange },
       { provide: HandlerObjectDeletion, useValue: handlers.objectDeletion },

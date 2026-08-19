@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { HandlerObjectDeletion } from './objectDeletion';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CandidateAuditService } from '../../candidate/candidate-audit.service';
 
 const prismaMock = {
   candidate: {
@@ -14,6 +15,13 @@ const prismaMock = {
   candidateExperience: { deleteMany: jest.fn() },
   panelCandidate: { deleteMany: jest.fn() },
   candidateRemovalLog: { create: jest.fn() },
+  $transaction: jest.fn(),
+};
+
+const candidateAuditMock = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  logMany: jest.fn(),
 };
 
 describe('HandlerObjectDeletion', () => {
@@ -24,12 +32,15 @@ describe('HandlerObjectDeletion', () => {
       providers: [
         HandlerObjectDeletion,
         { provide: PrismaService, useValue: prismaMock },
+        { provide: CandidateAuditService, useValue: candidateAuditMock },
       ],
     }).compile();
 
     handler = module.get<HandlerObjectDeletion>(HandlerObjectDeletion);
 
     jest.clearAllMocks();
+
+    prismaMock.$transaction.mockImplementation((callback) => callback(prismaMock));
   });
 
   it('should no-op when the candidate no longer exists locally', async () => {

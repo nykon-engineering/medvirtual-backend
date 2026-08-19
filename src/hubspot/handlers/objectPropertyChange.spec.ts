@@ -3,6 +3,7 @@ import { HandlerObjectPropertyChange } from './objectPropertyChange';
 import { PrismaService } from '../../prisma/prisma.service';
 import { HandlerObjectCreation } from './objectCreation';
 import { CandidatesService } from '../../candidate/candidates.service';
+import { CandidateAuditService } from '../../candidate/candidate-audit.service';
 
 const prismaMock = {
   candidate: {
@@ -23,6 +24,11 @@ const candidateServiceMock = {
   processData: jest.fn(),
   processAvatar: jest.fn(),
 };
+const candidateAuditMock = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  logMany: jest.fn(),
+};
 
 describe('HandlerObjectPropertyChange', () => {
   let handler: HandlerObjectPropertyChange;
@@ -34,6 +40,7 @@ describe('HandlerObjectPropertyChange', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: HandlerObjectCreation, useValue: objectCreationMock },
         { provide: CandidatesService, useValue: candidateServiceMock },
+        { provide: CandidateAuditService, useValue: candidateAuditMock },
       ],
     }).compile();
 

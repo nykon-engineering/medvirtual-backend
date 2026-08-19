@@ -16,6 +16,7 @@ import { AllianceNotificationsService } from '../med-alliance/notifications/noti
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { BusinessUnitsService } from '../business-units/business-units.service';
+import { CandidateAuditService } from '../candidate/candidate-audit.service';
 import axios from 'axios';
 
 jest.mock('axios');
@@ -36,6 +37,7 @@ describe('CronService', () => {
   let businessUnitContextMock: Record<string, jest.Mock>;
   let businessUnitsServiceMock: Record<string, jest.Mock>;
   let emailTemplatesServiceMock: { getTemplateContent: jest.Mock };
+  let candidateAuditServiceMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
     emailTemplatesServiceMock = {
@@ -150,6 +152,12 @@ describe('CronService', () => {
       notifyAdminCommissionPendingSummary: jest.fn(),
     };
 
+    candidateAuditServiceMock = {
+      log: jest.fn(),
+      logOrThrow: jest.fn(),
+      logMany: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CronService,
@@ -176,6 +184,7 @@ describe('CronService', () => {
         { provide: EmailTemplatesService, useValue: emailTemplatesServiceMock },
         { provide: BusinessUnitContext, useValue: businessUnitContextMock },
         { provide: BusinessUnitsService, useValue: businessUnitsServiceMock },
+        { provide: CandidateAuditService, useValue: candidateAuditServiceMock },
       ],
     }).compile();
 

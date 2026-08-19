@@ -13,6 +13,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SqsService } from '../sqs/sqs.service';
 import { ContactService } from '../contacts/contacts.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { CandidateAuditService } from '../candidate/candidate-audit.service';
 
 
 const userfake = { 
@@ -116,6 +117,12 @@ describe('OrganizationService', () => {
     bustCache: jest.fn(),
   }
 
+  const mockCandidateAuditService = {
+    log: jest.fn(),
+    logOrThrow: jest.fn(),
+    logMany: jest.fn(),
+  }
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -132,6 +139,7 @@ describe('OrganizationService', () => {
         { provide: SqsService, useValue: mockSqsService },
         { provide: ContactService, useValue: mockContactService },
         { provide: BusinessUnitContext, useValue: mockBusinessUnitContext },
+        { provide: CandidateAuditService, useValue: mockCandidateAuditService },
       ],
     }).compile();
 

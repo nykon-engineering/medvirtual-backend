@@ -16,6 +16,10 @@ import { PositionRateConfigService } from '../position-rate-config/position-rate
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+} from '../candidate/candidate-audit.service';
 
 @Injectable()
 export class PanelService {
@@ -485,6 +489,19 @@ export class PanelService {
       });
       const talentsRemoved = removalRows.length;
 
+      // Dedupe by candidate_id: a candidate may flip to Endorsed multiple times in a
+      // month (e.g. re-endorsed after a hire request reopen) — count the talent once.
+      const endorsementRows = await this.prisma.candidateAuditLog.findMany({
+        where: {
+          event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+          pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+          createdAt: { gte: monthStart, lt: monthEnd },
+        },
+        select: { candidate_id: true },
+        distinct: ['candidate_id'],
+      });
+      const talentsEndorsed = endorsementRows.length;
+
       if (!result.monthlyData) result.monthlyData = [];
 
       result.monthlyData.push({
@@ -498,6 +515,7 @@ export class PanelService {
         interviews: interviewsScheduled,
         talentsSelectedAsWinner,
         talentsRemoved,
+        talentsEndorsed,
       });
     }
 
