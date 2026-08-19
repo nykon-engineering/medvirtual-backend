@@ -44,6 +44,7 @@ model USER {
   adminOrganizations           Organization[]       @relation("OrganizationAdmin")
   ownedOrganizations           Organization[]       @relation("OrganizationOwner")
   sessions                     Session[]
+  sessionActivityPings         SessionActivity[]
   tickets                      Ticket[]
   ticketsCreated               Ticket[]             @relation("TicketCreatedBy")
   TicketNotes                  TicketNotes[]
@@ -115,13 +116,27 @@ model USER {
 }
 
 model Session {
+  id               String            @id @default(uuid())
+  userId           String
+  token            String
+  createdAt        DateTime          @default(now())
+  expiresAt        DateTime
+  isRevoked        Boolean           @default(false)
+  user             USER              @relation(fields: [userId], references: [id])
+  activityPings    SessionActivity[]
+}
+
+model SessionActivity {
   id        String   @id @default(uuid())
+  sessionId String
   userId    String
-  token     String
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-  isRevoked Boolean  @default(false)
+  scope     String // "talent_pool" | "platform" — route bucket active at ping time
+  pingedAt  DateTime @default(now())
+  session   Session  @relation(fields: [sessionId], references: [id])
   user      USER     @relation(fields: [userId], references: [id])
+
+  @@index([userId, pingedAt])
+  @@index([sessionId])
 }
 
 model EmailVerification {
@@ -1371,6 +1386,29 @@ enum TicketAuditSource {
   system
   cron
   webhook
+}
+
+enum CandidateRemovalReason {
+  deleted // hard-deleted via HubSpot webhook (objectDeletion.ts)
+  lost // moved to "Lost" pipeline stage (objectPropertyChange.ts)
+}
+
+// Append-only log of candidates removed from the active pool (HubSpot delete or
+// moved to "Lost"). Candidate rows are hard-deleted on `deleted`, so this table is
+// NOT a foreign key to Candidate — it must survive the row's disappearance, same
+// pattern as TicketAuditLog for Ticket purges.
+model CandidateRemovalLog {
+  id           String                 @id @default(uuid())
+  candidate_id String // not a FK — Candidate row may already be gone
+  hubspot_id   String
+  email        String?
+  name         String?
+  reason       CandidateRemovalReason
+  removed_at   DateTime               @default(now())
+
+  @@index([reason, removed_at], map: "idx_candidate_removal_reason_removed_at")
+  @@index([hubspot_id], map: "idx_candidate_removal_hubspot_id")
+  @@index([candidate_id], map: "idx_candidate_removal_candidate_id")
 }
 
 // @deprecated Superseded by per-user billcom_* fields on USER. Safe to drop

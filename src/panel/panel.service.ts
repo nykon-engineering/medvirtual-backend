@@ -469,6 +469,21 @@ export class PanelService {
         },
       });
 
+      const talentsSelectedAsWinner = await this.prisma.panelCandidate.count({
+        where: {
+          status: PanelCandidateStatus.selected_by_client,
+          updatedAt: { gte: monthStart, lt: monthEnd },
+        },
+      });
+
+      // Dedupe by candidate_id in case a webhook retry logged the same removal twice.
+      const removalRows = await this.prisma.candidateRemovalLog.findMany({
+        where: { removed_at: { gte: monthStart, lt: monthEnd } },
+        select: { candidate_id: true },
+        distinct: ['candidate_id'],
+      });
+      const talentsRemoved = removalRows.length;
+
       if (!result.monthlyData) result.monthlyData = [];
 
       result.monthlyData.push({
@@ -480,6 +495,8 @@ export class PanelService {
         hireRequests_created: hireRequestsCreated,
         hireRequests_endorsed: hireRequestsEndorsed,
         interviews: interviewsScheduled,
+        talentsSelectedAsWinner,
+        talentsRemoved,
       });
     }
 
@@ -521,6 +538,64 @@ export class PanelService {
           year: '2-digit',
         }),
         accessUsers: accessUsers,
+      });
+    }
+
+    const CLIENT_ROLES = [
+      'organization_super_admin',
+      'organization_admin',
+      'affiliate',
+    ];
+    const ADMIN_ROLES = ['system_admin', 'system_super_admin'];
+
+    for (const date of monthsToIterate) {
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      const monthLabel = date.toLocaleString('default', {
+        month: 'short',
+        year: '2-digit',
+      });
+
+      const clientLogins = await this.prisma.session.count({
+        where: {
+          createdAt: { gte: monthStart, lt: monthEnd },
+          user: { role: { in: CLIENT_ROLES } },
+        },
+      });
+
+      const talentPoolDurationMinutes = await this.getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'talent_pool',
+        CLIENT_ROLES,
+      );
+
+      if (!result.clientEngagement) result.clientEngagement = [];
+      result.clientEngagement.push({
+        month: monthLabel,
+        clientLogins,
+        talentPoolDurationMinutes,
+      });
+
+      const adminLogins = await this.prisma.session.count({
+        where: {
+          createdAt: { gte: monthStart, lt: monthEnd },
+          user: { role: { in: ADMIN_ROLES } },
+        },
+      });
+
+      const platformDurationMinutes = await this.getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'platform',
+        ADMIN_ROLES,
+      );
+
+      if (!result.adminUsage) result.adminUsage = [];
+      result.adminUsage.push({
+        month: monthLabel,
+        adminLogins,
+        platformDurationMinutes,
       });
     }
 
@@ -572,5 +647,52 @@ export class PanelService {
     result.moreThan5Interviews = processed.filter((c) => c.interviewCount > 5);
 
     return result;
+  }
+
+  /**
+   * Heartbeat pings land roughly every 60s while a tab is visible. Consecutive
+   * pings for the same user within IDLE_GAP_MS are treated as one continuous
+   * active stretch; a larger gap means the tab was hidden/closed, so that gap
+   * is excluded from the total. This avoids needing an explicit session-end
+   * signal, which browsers can't reliably send on tab close.
+   */
+  private async getScopedDurationMinutes(
+    monthStart: Date,
+    monthEnd: Date,
+    scope: 'talent_pool' | 'platform',
+    roles: string[],
+  ): Promise<number> {
+    const HEARTBEAT_INTERVAL_MS = 60_000;
+    const IDLE_GAP_MS = HEARTBEAT_INTERVAL_MS * 2;
+
+    const pings = await this.prisma.sessionActivity.findMany({
+      where: {
+        scope,
+        pingedAt: { gte: monthStart, lt: monthEnd },
+        user: { role: { in: roles } },
+      },
+      select: { userId: true, pingedAt: true },
+      orderBy: { pingedAt: 'asc' },
+    });
+
+    const pingsByUser = new Map<string, Date[]>();
+    for (const ping of pings) {
+      const existing = pingsByUser.get(ping.userId);
+      if (existing) {
+        existing.push(ping.pingedAt);
+      } else {
+        pingsByUser.set(ping.userId, [ping.pingedAt]);
+      }
+    }
+
+    let totalMs = 0;
+    for (const timestamps of pingsByUser.values()) {
+      for (let i = 1; i < timestamps.length; i++) {
+        const gap = timestamps[i].getTime() - timestamps[i - 1].getTime();
+        if (gap <= IDLE_GAP_MS) totalMs += gap;
+      }
+    }
+
+    return Math.round(totalMs / 60_000);
   }
 }

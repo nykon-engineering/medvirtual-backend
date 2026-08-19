@@ -42,6 +42,17 @@ export class HandlerObjectDeletion {
         },
       });
 
+      // Record the removal before the hard delete cascades away the row.
+      await this.prisma.candidateRemovalLog.create({
+        data: {
+          candidate_id: candidateExists.id,
+          hubspot_id: candidateExists.hubspot_id,
+          email: candidateExists.email,
+          name: candidateExists.name,
+          reason: 'deleted',
+        },
+      });
+
       //Then, delete the candidate
       await this.prisma.candidate.delete({
         where: {

@@ -28,8 +28,17 @@ describe('PanelService', () => {
       session: {
         count: jest.fn(),
       },
+      sessionActivity: {
+        findMany: jest.fn(),
+      },
       candidate: {
         count: jest.fn(),
+        findMany: jest.fn(),
+      },
+      panelCandidate: {
+        count: jest.fn(),
+      },
+      candidateRemovalLog: {
         findMany: jest.fn(),
       },
     };
@@ -142,6 +151,10 @@ describe('PanelService', () => {
         (prisma.hireRequest.count as jest.Mock).mockResolvedValueOnce(i + 2); // hireRequestsCreated
         (prisma.hireRequest.count as jest.Mock).mockResolvedValueOnce(i); // hireRequestsEndorsed
         (prisma.interview.count as jest.Mock).mockResolvedValueOnce(i + 3); // interviewsScheduled
+        (prisma.panelCandidate.count as jest.Mock).mockResolvedValueOnce(i + 6); // talentsSelectedAsWinner
+        (prisma.candidateRemovalLog.findMany as jest.Mock).mockResolvedValueOnce(
+          Array.from({ length: i + 1 }, (_, j) => ({ candidate_id: `c-${i}-${j}` })),
+        ); // talentsRemoved
     }
     
     for(let i=0; i<12; i++) {
@@ -151,6 +164,12 @@ describe('PanelService', () => {
     for(let i=0; i<12; i++) {
         (prisma.session.count as jest.Mock).mockResolvedValueOnce(i + 5); // accessUsers
    }
+
+    // Client engagement / admin usage loop (12 months):
+    // session.count (client logins), sessionActivity.findMany (talent pool pings),
+    // session.count (admin logins), sessionActivity.findMany (platform pings)
+    (prisma.session.count as jest.Mock).mockResolvedValue(1);
+    (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValue([]);
 
     // 14. candidatesWithInterviews (candidate.findMany)
     const mockCandidateWithInterviews = {
@@ -193,6 +212,27 @@ describe('PanelService', () => {
     expect(result.monthlyData).toHaveLength(12);
     expect(result.newClients).toHaveLength(12);
     expect(result.userAccess).toHaveLength(12);
+    expect(result.clientEngagement).toHaveLength(12);
+    expect(result.adminUsage).toHaveLength(12);
+    expect(result.monthlyData[0]).toEqual({
+      month: expect.any(String),
+      candidates: 1,
+      hireRequests_created: 2,
+      hireRequests_endorsed: 0,
+      interviews: 3,
+      talentsSelectedAsWinner: 6,
+      talentsRemoved: 1,
+    });
+    expect(result.clientEngagement[0]).toEqual({
+      month: expect.any(String),
+      clientLogins: 1,
+      talentPoolDurationMinutes: 0,
+    });
+    expect(result.adminUsage[0]).toEqual({
+      month: expect.any(String),
+      adminLogins: 1,
+      platformDurationMinutes: 0,
+    });
 
     // more than 5 interviews
     expect(result.moreThan5Interviews).toHaveLength(1);
@@ -219,6 +259,9 @@ describe('PanelService', () => {
     (prisma.candidate.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.interview.count as jest.Mock).mockResolvedValue(0);
     (prisma.session.count as jest.Mock).mockResolvedValue(0);
+    (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.panelCandidate.count as jest.Mock).mockResolvedValue(0);
+    (prisma.candidateRemovalLog.findMany as jest.Mock).mockResolvedValue([]);
 
     await service.getPanelData(dateFrom, dateTo);
 
@@ -252,5 +295,81 @@ describe('PanelService', () => {
              }
         })
     }));
+  });
+
+  describe('getScopedDurationMinutes', () => {
+    const monthStart = new Date('2026-01-01');
+    const monthEnd = new Date('2026-02-01');
+    const minute = (n: number) => new Date(monthStart.getTime() + n * 60_000);
+
+    it('sums consecutive pings within the idle-gap tolerance', async () => {
+      // Pings 1 minute apart, 5 in a row => 4 gaps of 1 minute each = 4 minutes.
+      (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValueOnce([
+        { userId: 'u1', pingedAt: minute(0) },
+        { userId: 'u1', pingedAt: minute(1) },
+        { userId: 'u1', pingedAt: minute(2) },
+        { userId: 'u1', pingedAt: minute(3) },
+        { userId: 'u1', pingedAt: minute(4) },
+      ]);
+
+      const result = await (service as any).getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'platform',
+        ['system_admin'],
+      );
+
+      expect(result).toBe(4);
+    });
+
+    it('excludes gaps larger than 2x the heartbeat interval (idle/closed tab)', async () => {
+      // 0 -> 1 counts (1 min gap), 1 -> 30 does not (29 min gap, tab went idle/closed).
+      (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValueOnce([
+        { userId: 'u1', pingedAt: minute(0) },
+        { userId: 'u1', pingedAt: minute(1) },
+        { userId: 'u1', pingedAt: minute(30) },
+      ]);
+
+      const result = await (service as any).getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'platform',
+        ['system_admin'],
+      );
+
+      expect(result).toBe(1);
+    });
+
+    it('sums durations independently per user', async () => {
+      (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValueOnce([
+        { userId: 'u1', pingedAt: minute(0) },
+        { userId: 'u1', pingedAt: minute(2) },
+        { userId: 'u2', pingedAt: minute(0) },
+        { userId: 'u2', pingedAt: minute(1) },
+      ]);
+
+      const result = await (service as any).getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'talent_pool',
+        ['organization_admin'],
+      );
+
+      // u1: 2 minutes, u2: 1 minute => 3 total
+      expect(result).toBe(3);
+    });
+
+    it('returns 0 when there are no pings', async () => {
+      (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const result = await (service as any).getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'platform',
+        ['system_admin'],
+      );
+
+      expect(result).toBe(0);
+    });
   });
 });
