@@ -15,6 +15,12 @@ import { getApprovedPositionLabel } from '../common/dictionaries/approved-positi
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CANDIDATE_LOST_STAGE_ID,
+  ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+} from '../candidate/candidate-audit.service';
 
 @Injectable()
 export class PanelService {
@@ -477,12 +483,35 @@ export class PanelService {
       });
 
       // Dedupe by candidate_id in case a webhook retry logged the same removal twice.
-      const removalRows = await this.prisma.candidateRemovalLog.findMany({
-        where: { removed_at: { gte: monthStart, lt: monthEnd } },
+      // "Removed" covers both a move to the Lost pipeline stage and a hard delete.
+      const removalRows = await this.prisma.candidateAuditLog.findMany({
+        where: {
+          createdAt: { gte: monthStart, lt: monthEnd },
+          OR: [
+            {
+              event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+              pipeline_status_new: CANDIDATE_LOST_STAGE_ID,
+            },
+            { event: CANDIDATE_AUDIT_EVENTS.CANDIDATE_DELETED },
+          ],
+        },
         select: { candidate_id: true },
         distinct: ['candidate_id'],
       });
       const talentsRemoved = removalRows.length;
+
+      // Dedupe by candidate_id: a candidate may flip to Endorsed multiple times in a
+      // month (e.g. re-endorsed after a hire request reopen) — count the talent once.
+      const endorsementRows = await this.prisma.candidateAuditLog.findMany({
+        where: {
+          event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+          pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+          createdAt: { gte: monthStart, lt: monthEnd },
+        },
+        select: { candidate_id: true },
+        distinct: ['candidate_id'],
+      });
+      const talentsEndorsed = endorsementRows.length;
 
       if (!result.monthlyData) result.monthlyData = [];
 
@@ -497,6 +526,7 @@ export class PanelService {
         interviews: interviewsScheduled,
         talentsSelectedAsWinner,
         talentsRemoved,
+        talentsEndorsed,
       });
     }
 
@@ -647,6 +677,40 @@ export class PanelService {
     result.moreThan5Interviews = processed.filter((c) => c.interviewCount > 5);
 
     return result;
+  }
+
+  async getTalentAvailabilityByRole(): Promise<TalentAvailabilityByRoleDto[]> {
+    const candidates = await this.prisma.candidate.findMany({
+      where: { pipeline_status: { in: ['261075105', '1087596819'] } },
+      select: { pipeline_status: true, approved_positions_pairing: true },
+    });
+
+    const counts = new Map<string, { fullTime: number; partTime: number }>();
+    for (const candidate of candidates) {
+      const isFullTime = candidate.pipeline_status === '261075105';
+      const positions = candidate.approved_positions_pairing?.length
+        ? candidate.approved_positions_pairing
+        : ['(Unspecified)'];
+      for (const raw of positions) {
+        const label = getApprovedPositionLabel(raw);
+        const entry = counts.get(label) ?? { fullTime: 0, partTime: 0 };
+        if (isFullTime) {
+          entry.fullTime += 1;
+        } else {
+          entry.partTime += 1;
+        }
+        counts.set(label, entry);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([position, { fullTime, partTime }]) => ({
+        position,
+        fullTime,
+        partTime,
+        total: fullTime + partTime,
+      }))
+      .sort((a, b) => b.total - a.total);
   }
 
   /**

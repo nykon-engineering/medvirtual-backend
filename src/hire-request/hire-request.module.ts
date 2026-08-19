@@ -7,6 +7,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { OpenaiModule } from '../openai/openai.module';
 import { PositionRateConfigModule } from '../position-rate-config/position-rate-config.module';
 import { OfferPanelsModule } from '../offer-panels/offer-panels.module';
+import { CandidateAuditModule } from '../candidate/candidate-audit.module';
 
 @Module({
   controllers: [HireRequestController],
@@ -18,6 +19,7 @@ import { OfferPanelsModule } from '../offer-panels/offer-panels.module';
     OpenaiModule,
     PositionRateConfigModule,
     forwardRef(() => OfferPanelsModule),
+    CandidateAuditModule,
   ],
   exports: [HireRequestService],
 })

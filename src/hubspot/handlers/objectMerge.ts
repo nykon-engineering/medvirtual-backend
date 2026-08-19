@@ -5,10 +5,18 @@ import {
   mapHubspotToDb,
 } from '../../common/utils/hubspot.util';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../../candidate/candidate-audit.service';
 
 @Injectable()
 export class HandlerObjectMerge {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly candidateAudit: CandidateAuditService,
+  ) {}
 
   private mergeCandidateData(primary: any, merged: any): Partial<any> {
     const mergedAsHubspot = mapDbToHubspot(merged);
@@ -75,6 +83,22 @@ export class HandlerObjectMerge {
           where: { hubspot_id: String(event.primaryObjectId) },
           data: dataToUpdate,
         });
+
+        void this.candidateAudit.log({
+          candidateId: primaryCandidate.id,
+          hubspotId: primaryCandidate.hubspot_id,
+          actorUserId: null,
+          event: CANDIDATE_AUDIT_EVENTS.PROFILE_UPDATED,
+          fieldGroup: CandidateAuditFieldGroup.hubspot_sync,
+          before: Object.fromEntries(
+            Object.keys(dataToUpdate).map((key) => [
+              key,
+              (primaryCandidate as Record<string, any>)[key],
+            ]),
+          ),
+          after: dataToUpdate,
+          source: CandidateAuditSource.webhook,
+        });
       }
 
       await this.prisma.candidate.update({
@@ -84,11 +108,35 @@ export class HandlerObjectMerge {
         },
       });
 
+      void this.candidateAudit.log({
+        candidateId: primaryCandidate.id,
+        hubspotId: String(event.newObjectId),
+        actorUserId: null,
+        event: CANDIDATE_AUDIT_EVENTS.HUBSPOT_ID_MERGED,
+        fieldGroup: CandidateAuditFieldGroup.hubspot_sync,
+        before: { hubspot_id: primaryCandidate.hubspot_id },
+        after: { hubspot_id: String(event.newObjectId) },
+        source: CandidateAuditSource.webhook,
+      });
+
       await this.prisma.candidate.deleteMany({
         where: {
           hubspot_id: { in: otherMergedIds },
         },
       });
+
+      void this.candidateAudit.logMany(
+        mergedCandidates.map((merged) => ({
+          candidateId: merged.id,
+          hubspotId: merged.hubspot_id,
+          actorUserId: null,
+          event: CANDIDATE_AUDIT_EVENTS.CANDIDATE_MERGED_AWAY,
+          fieldGroup: CandidateAuditFieldGroup.lifecycle,
+          before: merged as unknown as Record<string, any>,
+          metadata: { merged_into_hubspot_id: String(event.newObjectId) },
+          source: CandidateAuditSource.webhook,
+        })),
+      );
     } catch (error) {
       throw new BadRequestException(`HandlerObjectMerge: ${error.message}`);
     }

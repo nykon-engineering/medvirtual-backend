@@ -11,6 +11,7 @@ import { HireRequestModule } from '../hire-request/hire-request.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PositionRateConfigModule } from '../position-rate-config/position-rate-config.module';
 import { BusinessUnitsModule } from '../business-units/business-units.module';
+import { CandidateAuditModule } from './candidate-audit.module';
 
 @Module({
   controllers: [CandidatesController],
@@ -26,6 +27,7 @@ import { BusinessUnitsModule } from '../business-units/business-units.module';
     NotificationsModule,
     PositionRateConfigModule,
     BusinessUnitsModule,
+    CandidateAuditModule,
   ],
   exports: [CandidatesService],
 })

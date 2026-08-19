@@ -25,7 +25,16 @@ import { organizationToDbDictionary } from '../common/dictionaries/organization-
 import { contactToDbDictionary } from '../common/dictionaries/contact-dictionary';
 import { candidadeToDbDictionary } from '../common/dictionaries/candidate-dictionary';
 import { affiliateToDbDictionary } from '../common/dictionaries/affiliate-dictionary';
-import { OrganizationStatus, AffiliateStatus } from '@prisma/client';
+import {
+  OrganizationStatus,
+  AffiliateStatus,
+  CandidateAuditFieldGroup,
+  CandidateAuditSource,
+} from '@prisma/client';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../candidate/candidate-audit.service';
 
 /**
  * Normalizes an arbitrary value into a `string[]` suitable for a Prisma
@@ -61,6 +70,7 @@ export class BusinessUnitsService {
     private readonly prisma: PrismaService,
     private readonly hubspotAudit: HubspotAuditService,
     private readonly businessUnitContext: BusinessUnitContext,
+    private readonly candidateAudit: CandidateAuditService,
   ) {}
 
   // ── List ──────────────────────────────────────────────────────────────────
@@ -737,7 +747,15 @@ export class BusinessUnitsService {
         }
       }
 
-      await this.prisma.candidate.upsert({
+      // Lightweight pre-lookup: tells the audit log whether this iteration is a
+      // create or an update (upsert alone doesn't say which branch fired) and
+      // supplies the "before" diff for the update case.
+      const existingCandidate = await this.prisma.candidate.findUnique({
+        where: { hubspot_id: hubspotId },
+        select: { id: true },
+      });
+
+      const upsertedCandidate = await this.prisma.candidate.upsert({
         where: { hubspot_id: hubspotId },
         create: {
           ...candidateData,
@@ -750,6 +768,21 @@ export class BusinessUnitsService {
         } as Prisma.CandidateCreateInput,
         update: { ...candidateData },
       });
+
+      await this.candidateAudit.log({
+        candidateId: upsertedCandidate.id,
+        hubspotId,
+        event: existingCandidate
+          ? CANDIDATE_AUDIT_EVENTS.PROFILE_UPDATED
+          : CANDIDATE_AUDIT_EVENTS.CANDIDATE_CREATED,
+        fieldGroup: existingCandidate
+          ? CandidateAuditFieldGroup.hubspot_sync
+          : CandidateAuditFieldGroup.lifecycle,
+        before: existingCandidate ? null : undefined,
+        after: candidateData,
+        source: CandidateAuditSource.webhook,
+      });
+
       count++;
     }
     return count;
@@ -848,10 +881,31 @@ export class BusinessUnitsService {
       });
     }
 
+    // updateMany only returns a count — fetch the affected rows first so the
+    // audit log can capture per-candidate before/after state.
+    const candidatesBeforeDeactivation = await this.prisma.candidate.findMany(
+      {
+        where: { business_unit: businessUnitValue },
+        select: { id: true, hubspot_id: true, deactivated_by_bu: true },
+      },
+    );
+
     await this.prisma.candidate.updateMany({
       where: { business_unit: businessUnitValue },
       data: { deactivated_by_bu: slug },
     });
+
+    await this.candidateAudit.logMany(
+      candidatesBeforeDeactivation.map((c) => ({
+        candidateId: c.id,
+        hubspotId: c.hubspot_id,
+        event: CANDIDATE_AUDIT_EVENTS.DEACTIVATED_BY_BU,
+        fieldGroup: CandidateAuditFieldGroup.business_unit,
+        before: { deactivated_by_bu: c.deactivated_by_bu },
+        after: { deactivated_by_bu: slug },
+        source: CandidateAuditSource.system,
+      })),
+    );
 
     await this.prisma.affiliateProfile.updateMany({
       where: { business_unit: businessUnitValue },
@@ -928,10 +982,31 @@ export class BusinessUnitsService {
       data: { status: 'inactive', deactivated_by_bu: null },
     });
 
+    // updateMany only returns a count — fetch the affected rows first so the
+    // audit log can capture per-candidate before/after state.
+    const candidatesBeforeReactivation = await this.prisma.candidate.findMany(
+      {
+        where: { deactivated_by_bu: slug },
+        select: { id: true, hubspot_id: true, deactivated_by_bu: true },
+      },
+    );
+
     await this.prisma.candidate.updateMany({
       where: { deactivated_by_bu: slug },
       data: { deactivated_by_bu: null },
     });
+
+    await this.candidateAudit.logMany(
+      candidatesBeforeReactivation.map((c) => ({
+        candidateId: c.id,
+        hubspotId: c.hubspot_id,
+        event: CANDIDATE_AUDIT_EVENTS.REACTIVATED_BY_BU,
+        fieldGroup: CandidateAuditFieldGroup.business_unit,
+        before: { deactivated_by_bu: c.deactivated_by_bu },
+        after: { deactivated_by_bu: null },
+        source: CandidateAuditSource.system,
+      })),
+    );
 
     // Affiliates: marker-based only. The cron decommission set these to
     // `inactive` and tagged them; restoring to `active` returns them to their

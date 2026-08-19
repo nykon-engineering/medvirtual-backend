@@ -75,6 +75,32 @@ import { HandlerContactCreation } from './handlers/contactCreation';
 import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
 import { HandlerContactDeletion } from './handlers/contactDeletion';
 import { HandlerContactMerge } from './handlers/contactMerge';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../candidate/candidate-audit.service';
+import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
+
+/**
+ * Picks the event/fieldGroup pair for a dynamic HubSpot-sync write: pipeline_status
+ * changes get their own dedicated event, everything else falls back to a generic
+ * profile update tagged under the hubspot_sync field group.
+ */
+function resolveCandidateAuditEvent(after: Record<string, any>): {
+  event: (typeof CANDIDATE_AUDIT_EVENTS)[keyof typeof CANDIDATE_AUDIT_EVENTS];
+  fieldGroup: CandidateAuditFieldGroup;
+} {
+  if (after && Object.prototype.hasOwnProperty.call(after, 'pipeline_status')) {
+    return {
+      event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+      fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+    };
+  }
+  return {
+    event: CANDIDATE_AUDIT_EVENTS.PROFILE_UPDATED,
+    fieldGroup: CandidateAuditFieldGroup.hubspot_sync,
+  };
+}
 
 @Injectable()
 export class HubspotService {
@@ -133,6 +159,7 @@ export class HubspotService {
     private readonly contactMerge: HandlerContactMerge,
 
     private readonly audit: HubspotAuditService,
+    private readonly candidateAudit: CandidateAuditService,
 
     @Inject(forwardRef(() => CandidatesService))
     private readonly candidate: CandidatesService,
@@ -809,6 +836,16 @@ export class HubspotService {
           data: candidateData,
         });
 
+        void this.candidateAudit.log({
+          candidateId: newCandidate.id,
+          hubspotId: newCandidate.hubspot_id,
+          actorUserId: null,
+          event: CANDIDATE_AUDIT_EVENTS.CANDIDATE_CREATED,
+          fieldGroup: CandidateAuditFieldGroup.profile,
+          after: candidateData as Record<string, any>,
+          source: CandidateAuditSource.webhook,
+        });
+
         //Here, I start to work with the skills
         if (result.properties.career_highlights_relevant_job_experiences) {
           const candidadeSkills =
@@ -918,6 +955,12 @@ export class HubspotService {
         candidateData.approved_positions_pairing = [];
       }
 
+      const changedKeys = Object.keys(candidateData);
+      const beforeCandidate = await this.prisma.candidate.findUnique({
+        where: { id: candidate.id },
+        select: Object.fromEntries(changedKeys.map((key) => [key, true])),
+      });
+
       await this.prisma.candidate.update({
         where: {
           id: candidate.id,
@@ -927,6 +970,22 @@ export class HubspotService {
         //    video_link: candidateData.video_link,
         //}
       });
+
+      {
+        const { event, fieldGroup } = resolveCandidateAuditEvent(
+          candidateData as Record<string, any>,
+        );
+        void this.candidateAudit.log({
+          candidateId: candidate.id,
+          hubspotId: candidate.hubspot_id,
+          actorUserId: null,
+          event,
+          fieldGroup,
+          before: beforeCandidate as Record<string, any> | null,
+          after: candidateData as Record<string, any>,
+          source: CandidateAuditSource.webhook,
+        });
+      }
 
       console.log('Candidate updated:', response.results[0]);
       //Here, I start to work with the skills
@@ -1129,12 +1188,35 @@ export class HubspotService {
           candidate.processing_status !== 'completed' &&
           candidate.resume_url?.includes('http')
         ) {
+          const changedKeys = Object.keys(candidateData);
+          const beforeCandidate = await this.prisma.candidate.findUnique({
+            where: { id: candidate.id },
+            select: Object.fromEntries(changedKeys.map((key) => [key, true])),
+          });
+
           await this.prisma.candidate.update({
             where: {
               id: candidate.id,
             },
             data: candidateData,
           });
+
+          {
+            const { event, fieldGroup } = resolveCandidateAuditEvent(
+              candidateData as Record<string, any>,
+            );
+            void this.candidateAudit.log({
+              candidateId: candidate.id,
+              hubspotId: String(response.results[i].properties.hs_object_id),
+              actorUserId: null,
+              event,
+              fieldGroup,
+              before: beforeCandidate as Record<string, any> | null,
+              after: candidateData as Record<string, any>,
+              source: CandidateAuditSource.webhook,
+            });
+          }
+
           console.log('Candidate updated:', candidate.first_name);
           if (process.env.ENVIRONMENT === 'PROD') {
             await this.candidate.processData(candidate.id);

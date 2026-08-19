@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SqsService } from '../sqs/sqs.service';
 import { ContactService } from '../contacts/contacts.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { CandidateAuditService } from '../candidate/candidate-audit.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -35,6 +36,12 @@ const businessUnitContextMock = {
   getVisibleHubspotValues: jest.fn(),
 };
 
+const candidateAuditMock = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  logMany: jest.fn(),
+};
+
 function emptySearchResponse() {
   return { data: { results: [], paging: {} } };
 }
@@ -58,6 +65,7 @@ describe('OrganizationService — HubSpot BU-driven filterGroups', () => {
         { provide: SqsService, useValue: mockSqsService },
         { provide: ContactService, useValue: mockContactService },
         { provide: BusinessUnitContext, useValue: businessUnitContextMock },
+        { provide: CandidateAuditService, useValue: candidateAuditMock },
       ],
     }).compile();
 
