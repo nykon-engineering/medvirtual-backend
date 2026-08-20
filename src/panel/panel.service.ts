@@ -395,36 +395,25 @@ export class PanelService {
     });
     result.candidatesAvailable = candidatesAvailable;
 
-    const candidatesEndorsed = await this.prisma.candidate.count({
+    // Candidates actually endorsed (moved to the "Endorsed via platform" pipeline
+    // stage) within the searched date range. Deduped by candidate_id in case a
+    // webhook retry logged the same transition twice.
+    const endorsedRows = await this.prisma.candidateAuditLog.findMany({
       where: {
-        panelCandidates: {
-          some: {
-            panel: {
-              hireRequest: {
-                status: HireRequestStatus.awaiting_decision,
-                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
-              },
-            },
-          },
-        },
+        event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+        pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+        ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
       },
+      select: { candidate_id: true },
+      distinct: ['candidate_id'],
     });
+    result.candidatesEndorsed = endorsedRows.length;
 
-    result.candidatesEndorsed = candidatesEndorsed;
-
-    const candidatesHired = await this.prisma.candidate.count({
+    // Candidates actually selected as winner within the searched date range.
+    const candidatesHired = await this.prisma.panelCandidate.count({
       where: {
-        panelCandidates: {
-          some: {
-            status: PanelCandidateStatus.selected_by_client,
-            panel: {
-              hireRequest: {
-                status: { not: HireRequestStatus.deleted },
-                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
-              },
-            },
-          },
-        },
+        status: PanelCandidateStatus.selected_by_client,
+        ...(hasDateFilter ? { updatedAt: dateFilterCreated } : {}),
       },
     });
 
