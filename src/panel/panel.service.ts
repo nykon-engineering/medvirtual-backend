@@ -16,11 +16,37 @@ import { PositionRateConfigService } from '../position-rate-config/position-rate
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
+import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
+import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
 import {
   CANDIDATE_AUDIT_EVENTS,
   CANDIDATE_LOST_STAGE_ID,
   ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
 } from '../candidate/candidate-audit.service';
+
+// Bound how far back an unfiltered client-selected-candidates query can scan, matching
+// the default window getPanelData() uses when no date range is provided.
+const DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS = 12;
+
+const CLIENT_ROLES = ['organization_super_admin', 'organization_admin', 'affiliate'];
+const ADMIN_ROLES = ['system_admin', 'system_super_admin'];
+
+// Same-request writes in changeWinner() land well under a second apart in practice;
+// widened to 5 minutes to tolerate slow requests without risking cross-candidate matches.
+const DEPLOYMENT_CORRELATION_WINDOW_MS = 5 * 60 * 1000;
+
+interface DeploymentAuditRow {
+  candidate_id: string;
+  createdAt: Date;
+  actorUser: { id: string; role: string; first_name: string | null; last_name: string | null } | null;
+  actor_label: string | null;
+}
+
+interface DeploymentActor {
+  role: string | null;
+  actorUserId: string | null;
+  actorLabel: string | null;
+}
 
 @Injectable()
 export class PanelService {
@@ -28,6 +54,84 @@ export class PanelService {
     private readonly prisma: PrismaService,
     private readonly positionRateConfigService: PositionRateConfigService,
   ) {}
+
+  /**
+   * PanelCandidate has no field recording who moved it to `selected_by_client` — the
+   * only signal is the CandidateAuditLog row `changeWinner()` writes in the same
+   * request (event=pipeline_status_changed, pipeline_status_new=Endorsed via Platform).
+   * This correlates a PanelCandidate row to that audit row by candidate_id + closest
+   * timestamp within DEPLOYMENT_CORRELATION_WINDOW_MS. No match (e.g. candidates
+   * deployed via the admin-only createStaffWithOptionalHireRequest tool, which writes
+   * no audit row) defaults to 'admin' — see plan risks for why that default is safe.
+   */
+  private async buildDeploymentActorIndex(
+    rangeStart: Date,
+    rangeEndExclusive: Date,
+  ): Promise<Map<string, DeploymentAuditRow[]>> {
+    const auditRows = await this.prisma.candidateAuditLog.findMany({
+      where: {
+        event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+        pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+        createdAt: {
+          gte: new Date(rangeStart.getTime() - DEPLOYMENT_CORRELATION_WINDOW_MS),
+          lt: new Date(
+            rangeEndExclusive.getTime() + DEPLOYMENT_CORRELATION_WINDOW_MS,
+          ),
+        },
+      },
+      select: {
+        candidate_id: true,
+        createdAt: true,
+        actor_label: true,
+        actorUser: {
+          select: { id: true, role: true, first_name: true, last_name: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const auditByCandidate = new Map<string, DeploymentAuditRow[]>();
+    for (const row of auditRows) {
+      const list = auditByCandidate.get(row.candidate_id) ?? [];
+      list.push(row);
+      auditByCandidate.set(row.candidate_id, list);
+    }
+    return auditByCandidate;
+  }
+
+  private correlateDeploymentActor(
+    auditByCandidate: Map<string, DeploymentAuditRow[]>,
+    candidateId: string,
+    panelUpdatedAt: Date,
+  ): DeploymentActor | null {
+    const rows = auditByCandidate.get(candidateId) ?? [];
+    let best: DeploymentAuditRow | undefined;
+    let bestDelta = Infinity;
+    for (const row of rows) {
+      const delta = Math.abs(row.createdAt.getTime() - panelUpdatedAt.getTime());
+      if (delta <= DEPLOYMENT_CORRELATION_WINDOW_MS && delta < bestDelta) {
+        best = row;
+        bestDelta = delta;
+      }
+    }
+    if (!best) return null;
+    return {
+      role: best.actorUser?.role ?? null,
+      actorUserId: best.actorUser?.id ?? null,
+      actorLabel:
+        best.actor_label ??
+        (best.actorUser
+          ? [best.actorUser.first_name, best.actorUser.last_name]
+              .filter(Boolean)
+              .join(' ') || null
+          : null),
+    };
+  }
+
+  private classifyDeploymentActor(actor: DeploymentActor | null): 'admin' | 'client' {
+    if (!actor || !actor.role) return 'admin';
+    return CLIENT_ROLES.includes(actor.role) ? 'client' : 'admin';
+  }
 
   async getPanelData(dateFrom?: string, dateTo?: string): Promise<any> {
     const dateFilterCreated: any = {};
@@ -440,6 +544,27 @@ export class PanelService {
       }
     }
 
+    // Prefetch once for the whole range: PanelCandidate rows deployed to a client
+    // (status=selected_by_client) plus the CandidateAuditLog rows that correlate to
+    // them, so the admin/client split below doesn't re-query per month.
+    const deploymentRangeStart = monthsToIterate[0];
+    const deploymentRangeEndExclusive = new Date(
+      monthsToIterate[monthsToIterate.length - 1].getFullYear(),
+      monthsToIterate[monthsToIterate.length - 1].getMonth() + 1,
+      1,
+    );
+    const deployedPanelCandidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        status: PanelCandidateStatus.selected_by_client,
+        updatedAt: { gte: deploymentRangeStart, lt: deploymentRangeEndExclusive },
+      },
+      select: { candidate_id: true, updatedAt: true },
+    });
+    const deploymentAuditIndex = await this.buildDeploymentActorIndex(
+      deploymentRangeStart,
+      deploymentRangeEndExclusive,
+    );
+
     for (const date of monthsToIterate) {
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
@@ -513,6 +638,27 @@ export class PanelService {
       });
       const talentsEndorsed = endorsementRows.length;
 
+      const monthDeployed = deployedPanelCandidates.filter(
+        (pc): pc is typeof pc & { updatedAt: Date } =>
+          pc.updatedAt !== null &&
+          pc.updatedAt >= monthStart &&
+          pc.updatedAt < monthEnd,
+      );
+      let talentsDeployedByAdmin = 0;
+      let talentsDeployedByClient = 0;
+      for (const pc of monthDeployed) {
+        const actor = this.correlateDeploymentActor(
+          deploymentAuditIndex,
+          pc.candidate_id,
+          pc.updatedAt,
+        );
+        if (this.classifyDeploymentActor(actor) === 'client') {
+          talentsDeployedByClient++;
+        } else {
+          talentsDeployedByAdmin++;
+        }
+      }
+
       if (!result.monthlyData) result.monthlyData = [];
 
       result.monthlyData.push({
@@ -527,6 +673,8 @@ export class PanelService {
         talentsSelectedAsWinner,
         talentsRemoved,
         talentsEndorsed,
+        talentsDeployedByAdmin,
+        talentsDeployedByClient,
       });
     }
 
@@ -570,13 +718,6 @@ export class PanelService {
         accessUsers: accessUsers,
       });
     }
-
-    const CLIENT_ROLES = [
-      'organization_super_admin',
-      'organization_admin',
-      'affiliate',
-    ];
-    const ADMIN_ROLES = ['system_admin', 'system_super_admin'];
 
     for (const date of monthsToIterate) {
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -711,6 +852,113 @@ export class PanelService {
         total: fullTime + partTime,
       }))
       .sort((a, b) => b.total - a.total);
+  }
+
+  async getClientSelectedCandidates(
+    query: ClientSelectedCandidatesQueryDto,
+  ): Promise<ClientSelectedCandidatesResponseDto> {
+    const page = query.page ?? 1;
+    const perPage = query.perPage ?? 10;
+    const sortBy = query.sortBy ?? 'selectedAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const rangeEnd = query.dateTo ? new Date(query.dateTo) : new Date();
+    const rangeStart = query.dateFrom
+      ? new Date(query.dateFrom)
+      : new Date(
+          rangeEnd.getFullYear(),
+          rangeEnd.getMonth() - DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS,
+          rangeEnd.getDate(),
+        );
+
+    const panelCandidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        status: PanelCandidateStatus.selected_by_client,
+        updatedAt: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: {
+        id: true,
+        candidate_id: true,
+        updatedAt: true,
+        candidate: {
+          select: { id: true, first_name: true, last_name: true, name: true },
+        },
+        panel: {
+          select: {
+            hireRequest: {
+              select: {
+                id: true,
+                title: true,
+                organization: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: sortOrder },
+    });
+
+    const auditIndex = await this.buildDeploymentActorIndex(
+      rangeStart,
+      new Date(rangeEnd.getTime() + 1),
+    );
+
+    const clientRows = panelCandidates
+      // updatedAt is nullable in the schema, but every row here matched the
+      // updatedAt-range where clause above, so it is always set in practice.
+      .filter((pc): pc is typeof pc & { updatedAt: Date } => pc.updatedAt !== null)
+      .map((pc) => {
+        const actor = this.correlateDeploymentActor(
+          auditIndex,
+          pc.candidate_id,
+          pc.updatedAt,
+        );
+        return { pc, actor };
+      })
+      .filter(({ actor }) => this.classifyDeploymentActor(actor) === 'client')
+      .map(({ pc, actor }) => ({
+        id: pc.id,
+        candidateId: pc.candidate.id,
+        candidateName:
+          pc.candidate.name ||
+          [pc.candidate.first_name, pc.candidate.last_name]
+            .filter(Boolean)
+            .join(' '),
+        hireRequestId: pc.panel.hireRequest.id,
+        hireRequestTitle: pc.panel.hireRequest.title,
+        organizationId: pc.panel.hireRequest.organization.id,
+        organizationName: pc.panel.hireRequest.organization.name,
+        selectedAt: pc.updatedAt.toISOString(),
+        selectedByUserId: actor?.actorUserId ?? null,
+        selectedByName: actor?.actorLabel ?? null,
+        selectedByRole: actor?.role ?? null,
+      }));
+
+    if (sortBy === 'candidateName') {
+      clientRows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.candidateName.localeCompare(b.candidateName)
+          : b.candidateName.localeCompare(a.candidateName),
+      );
+    } else if (sortBy === 'organizationName') {
+      clientRows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.organizationName.localeCompare(b.organizationName)
+          : b.organizationName.localeCompare(a.organizationName),
+      );
+    }
+    // sortBy === 'selectedAt' is already applied via the pre-sorted panelCandidate query.
+
+    if (query.export) {
+      return { data: clientRows };
+    }
+
+    const total = clientRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const start = (page - 1) * perPage;
+    const data = clientRows.slice(start, start + perPage);
+
+    return { data, meta: { total, totalPages, page, perPage } };
   }
 
   /**

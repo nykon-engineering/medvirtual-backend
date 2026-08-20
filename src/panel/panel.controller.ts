@@ -12,6 +12,8 @@ import { AuthGuard } from '../auth/auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
+import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
+import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
 
 @ApiTags('Panel')
 @ApiBearerAuth()
@@ -74,5 +76,28 @@ export class PanelController {
   })
   async getTalentAvailabilityByRole(): Promise<TalentAvailabilityByRoleDto[]> {
     return this.panelService.getTalentAvailabilityByRole();
+  }
+
+  @Get('client-selected-candidates')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'List candidates deployed (selected as winner) by client users, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Client-selected candidates retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getClientSelectedCandidates(
+    @Query() query: ClientSelectedCandidatesQueryDto,
+  ): Promise<ClientSelectedCandidatesResponseDto> {
+    return this.panelService.getClientSelectedCandidates(query);
   }
 }

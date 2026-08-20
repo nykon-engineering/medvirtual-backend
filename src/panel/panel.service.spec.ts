@@ -37,6 +37,7 @@ describe('PanelService', () => {
       },
       panelCandidate: {
         count: jest.fn(),
+        findMany: jest.fn(),
       },
       candidateAuditLog: {
         findMany: jest.fn(),
@@ -137,12 +138,17 @@ describe('PanelService', () => {
     const mockCandidateNoHeadshot = { ...mockCandidateFailed, id: 2, avatar_url: null };
     (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([mockCandidateNoHeadshot]);
     
+    // Prefetch for the admin/client deployment split (once for the whole range, before the loop):
+    // panelCandidate.findMany (deployed candidates), candidateAuditLog.findMany (correlated audit rows)
+    (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([]);
+    (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([]);
+
     // Loops for monthly data (12 months):
     // candidate.count (12 times)
     // hireRequest.count (12 times) -> created
     // hireRequest.count (12 times) -> endorsed
     // interview.count (12 times)
-    
+
     // organization.count (12 times) -> new clients
     // session.count (12 times) -> access users
 
@@ -226,6 +232,8 @@ describe('PanelService', () => {
       talentsSelectedAsWinner: 6,
       talentsRemoved: 1,
       talentsEndorsed: 2,
+      talentsDeployedByAdmin: 0,
+      talentsDeployedByClient: 0,
     });
     expect(result.clientEngagement[0]).toEqual({
       month: expect.any(String),
@@ -265,6 +273,7 @@ describe('PanelService', () => {
     (prisma.session.count as jest.Mock).mockResolvedValue(0);
     (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.panelCandidate.count as jest.Mock).mockResolvedValue(0);
+    (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValue([]);
 
     await service.getPanelData(dateFrom, dateTo);
@@ -299,6 +308,310 @@ describe('PanelService', () => {
              }
         })
     }));
+  });
+
+  describe('talents deployed by admin vs. client (getPanelData)', () => {
+    const setupCommonMocks = () => {
+      (prisma.uSER.count as jest.Mock).mockResolvedValue(0);
+      (prisma.hireRequest.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.hireRequest.count as jest.Mock).mockResolvedValue(0);
+      (prisma.organization.count as jest.Mock).mockResolvedValue(0);
+      (prisma.staff.count as jest.Mock).mockResolvedValue(0);
+      (prisma.candidate.count as jest.Mock).mockResolvedValue(0);
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.interview.count as jest.Mock).mockResolvedValue(0);
+      (prisma.session.count as jest.Mock).mockResolvedValue(0);
+      (prisma.sessionActivity.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.panelCandidate.count as jest.Mock).mockResolvedValue(0);
+    };
+
+    it('counts a candidate with a client-role correlated audit row as deployed-by-client', async () => {
+      setupCommonMocks();
+      const deployedAt = new Date('2026-01-15T10:00:00Z');
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { candidate_id: 'cand-1', updatedAt: deployedAt },
+      ]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockImplementation(
+        (args) =>
+          args?.select?.actorUser
+            ? Promise.resolve([
+                {
+                  candidate_id: 'cand-1',
+                  createdAt: deployedAt,
+                  actor_label: null,
+                  actorUser: {
+                    id: 'user-1',
+                    role: 'organization_admin',
+                    first_name: 'Jane',
+                    last_name: 'Doe',
+                  },
+                },
+              ])
+            : Promise.resolve([]),
+      );
+
+      const result = await service.getPanelData('2026-01-01', '2026-01-31');
+
+      const month = result.monthlyData.find(
+        (m: any) => m.talentsDeployedByClient + m.talentsDeployedByAdmin > 0,
+      );
+      expect(month.talentsDeployedByClient).toBe(1);
+      expect(month.talentsDeployedByAdmin).toBe(0);
+    });
+
+    it('counts a candidate with an admin-role correlated audit row as deployed-by-admin', async () => {
+      setupCommonMocks();
+      const deployedAt = new Date('2026-01-15T10:00:00Z');
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { candidate_id: 'cand-2', updatedAt: deployedAt },
+      ]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockImplementation(
+        (args) =>
+          args?.select?.actorUser
+            ? Promise.resolve([
+                {
+                  candidate_id: 'cand-2',
+                  createdAt: deployedAt,
+                  actor_label: null,
+                  actorUser: {
+                    id: 'user-2',
+                    role: 'system_admin',
+                    first_name: 'Sam',
+                    last_name: 'Admin',
+                  },
+                },
+              ])
+            : Promise.resolve([]),
+      );
+
+      const result = await service.getPanelData('2026-01-01', '2026-01-31');
+
+      const month = result.monthlyData.find(
+        (m: any) => m.talentsDeployedByClient + m.talentsDeployedByAdmin > 0,
+      );
+      expect(month.talentsDeployedByAdmin).toBe(1);
+      expect(month.talentsDeployedByClient).toBe(0);
+    });
+
+    it('defaults to deployed-by-admin when no correlated audit row exists (e.g. admin-only manual staffing tool)', async () => {
+      setupCommonMocks();
+      const deployedAt = new Date('2026-01-15T10:00:00Z');
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { candidate_id: 'cand-3', updatedAt: deployedAt },
+      ]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValue([]);
+
+      const result = await service.getPanelData('2026-01-01', '2026-01-31');
+
+      const month = result.monthlyData.find(
+        (m: any) => m.talentsDeployedByClient + m.talentsDeployedByAdmin > 0,
+      );
+      expect(month.talentsDeployedByAdmin).toBe(1);
+      expect(month.talentsDeployedByClient).toBe(0);
+    });
+
+    it('picks the closest-in-time audit row when a candidate has multiple correlated rows, and totals still sum correctly', async () => {
+      setupCommonMocks();
+      const firstDeployAt = new Date('2026-01-05T10:00:00Z');
+      const secondDeployAt = new Date('2026-01-20T10:00:00Z');
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { candidate_id: 'cand-4', updatedAt: firstDeployAt },
+        { candidate_id: 'cand-4', updatedAt: secondDeployAt },
+      ]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockImplementation(
+        (args) =>
+          args?.select?.actorUser
+            ? Promise.resolve([
+                {
+                  candidate_id: 'cand-4',
+                  createdAt: firstDeployAt,
+                  actor_label: null,
+                  actorUser: { id: 'u-admin', role: 'system_admin', first_name: 'A', last_name: 'B' },
+                },
+                {
+                  candidate_id: 'cand-4',
+                  createdAt: secondDeployAt,
+                  actor_label: null,
+                  actorUser: { id: 'u-client', role: 'organization_admin', first_name: 'C', last_name: 'D' },
+                },
+              ])
+            : Promise.resolve([]),
+      );
+
+      const result = await service.getPanelData('2026-01-01', '2026-01-31');
+
+      const month = result.monthlyData.find(
+        (m: any) => m.talentsDeployedByClient + m.talentsDeployedByAdmin > 0,
+      );
+      // one deployment correlates to the admin row, the other to the client row
+      expect(month.talentsDeployedByAdmin).toBe(1);
+      expect(month.talentsDeployedByClient).toBe(1);
+      expect(
+        month.talentsDeployedByAdmin + month.talentsDeployedByClient,
+      ).toBe(2);
+    });
+
+    it('does not match an audit row outside the correlation window (falls through to admin default)', async () => {
+      setupCommonMocks();
+      const deployedAt = new Date('2026-01-15T10:00:00Z');
+      const farAuditRow = new Date(deployedAt.getTime() + 60 * 60 * 1000); // 1 hour later
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { candidate_id: 'cand-5', updatedAt: deployedAt },
+      ]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockImplementation(
+        (args) =>
+          args?.select?.actorUser
+            ? Promise.resolve([
+                {
+                  candidate_id: 'cand-5',
+                  createdAt: farAuditRow,
+                  actor_label: null,
+                  actorUser: {
+                    id: 'user-far',
+                    role: 'organization_admin',
+                    first_name: 'Far',
+                    last_name: 'Away',
+                  },
+                },
+              ])
+            : Promise.resolve([]),
+      );
+
+      const result = await service.getPanelData('2026-01-01', '2026-01-31');
+
+      const month = result.monthlyData.find(
+        (m: any) => m.talentsDeployedByClient + m.talentsDeployedByAdmin > 0,
+      );
+      expect(month.talentsDeployedByAdmin).toBe(1);
+      expect(month.talentsDeployedByClient).toBe(0);
+    });
+  });
+
+  describe('getClientSelectedCandidates', () => {
+    const buildPanelCandidateRow = (
+      overrides: Partial<{
+        id: string;
+        candidate_id: string;
+        updatedAt: Date;
+        candidateName: string;
+        orgName: string;
+      }> = {},
+    ) => ({
+      id: overrides.id ?? 'pc-1',
+      candidate_id: overrides.candidate_id ?? 'cand-1',
+      updatedAt: overrides.updatedAt ?? new Date('2026-01-15T10:00:00Z'),
+      candidate: {
+        id: overrides.candidate_id ?? 'cand-1',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        name: overrides.candidateName ?? 'Jane Doe',
+      },
+      panel: {
+        hireRequest: {
+          id: 'hr-1',
+          title: 'Bookkeeper',
+          organization: { id: 'org-1', name: overrides.orgName ?? 'Acme Inc' },
+        },
+      },
+    });
+
+    const mockClientAuditRow = (candidateId: string, createdAt: Date) => ({
+      candidate_id: candidateId,
+      createdAt,
+      actor_label: null,
+      actorUser: {
+        id: 'user-client',
+        role: 'organization_admin',
+        first_name: 'Jane',
+        last_name: 'Client',
+      },
+    });
+
+    it('returns only client-attributed rows, with pagination meta', async () => {
+      const row = buildPanelCandidateRow();
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([row]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([
+        mockClientAuditRow('cand-1', row.updatedAt),
+      ]);
+
+      const result = await service.getClientSelectedCandidates({
+        page: 1,
+        perPage: 10,
+        sortBy: 'selectedAt',
+        sortOrder: 'desc',
+        export: false,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toMatchObject({
+        candidateId: 'cand-1',
+        candidateName: 'Jane Doe',
+        organizationName: 'Acme Inc',
+        selectedByRole: 'organization_admin',
+      });
+      expect(result.meta).toEqual({ total: 1, totalPages: 1, page: 1, perPage: 10 });
+    });
+
+    it('excludes admin-deployed rows (no correlated audit row)', async () => {
+      const row = buildPanelCandidateRow({ id: 'pc-admin', candidate_id: 'cand-admin' });
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([row]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const result = await service.getClientSelectedCandidates({
+        page: 1,
+        perPage: 10,
+        export: false,
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta?.total).toBe(0);
+    });
+
+    it('export=true bypasses pagination and returns the full filtered set without meta', async () => {
+      const rows = Array.from({ length: 15 }, (_, i) =>
+        buildPanelCandidateRow({ id: `pc-${i}`, candidate_id: `cand-${i}` }),
+      );
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce(rows);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce(
+        rows.map((r) => mockClientAuditRow(r.candidate_id, r.updatedAt)),
+      );
+
+      const result = await service.getClientSelectedCandidates({
+        page: 1,
+        perPage: 10,
+        export: true,
+      });
+
+      expect(result.data).toHaveLength(15);
+      expect(result.meta).toBeUndefined();
+    });
+
+    it('sorts by candidateName when requested', async () => {
+      const rowB = buildPanelCandidateRow({
+        id: 'pc-b',
+        candidate_id: 'cand-b',
+        candidateName: 'Bob',
+      });
+      const rowA = buildPanelCandidateRow({
+        id: 'pc-a',
+        candidate_id: 'cand-a',
+        candidateName: 'Amy',
+      });
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([rowB, rowA]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([
+        mockClientAuditRow('cand-b', rowB.updatedAt),
+        mockClientAuditRow('cand-a', rowA.updatedAt),
+      ]);
+
+      const result = await service.getClientSelectedCandidates({
+        page: 1,
+        perPage: 10,
+        sortBy: 'candidateName',
+        sortOrder: 'asc',
+      });
+
+      expect(result.data.map((r) => r.candidateName)).toEqual(['Amy', 'Bob']);
+    });
   });
 
   describe('getTalentAvailabilityByRole', () => {
