@@ -635,6 +635,114 @@ describe('PanelService', () => {
     });
   });
 
+  describe('getAdminSelectedCandidates', () => {
+    const buildPanelCandidateRow = (
+      overrides: Partial<{
+        id: string;
+        candidate_id: string;
+        updatedAt: Date;
+        candidateName: string;
+        orgName: string;
+      }> = {},
+    ) => ({
+      id: overrides.id ?? 'pc-1',
+      candidate_id: overrides.candidate_id ?? 'cand-1',
+      updatedAt: overrides.updatedAt ?? new Date('2026-01-15T10:00:00Z'),
+      candidate: {
+        id: overrides.candidate_id ?? 'cand-1',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        name: overrides.candidateName ?? 'Jane Doe',
+      },
+      panel: {
+        hireRequest: {
+          id: 'hr-1',
+          title: 'Bookkeeper',
+          organization: { id: 'org-1', name: overrides.orgName ?? 'Acme Inc' },
+        },
+      },
+    });
+
+    const mockAdminAuditRow = (candidateId: string, createdAt: Date) => ({
+      candidate_id: candidateId,
+      createdAt,
+      actor_label: null,
+      actorUser: {
+        id: 'user-admin',
+        role: 'system_admin',
+        first_name: 'Alex',
+        last_name: 'Admin',
+      },
+    });
+
+    it('returns only admin-attributed rows, with pagination meta', async () => {
+      const row = buildPanelCandidateRow();
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([row]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([
+        mockAdminAuditRow('cand-1', row.updatedAt),
+      ]);
+
+      const result = await service.getAdminSelectedCandidates({
+        page: 1,
+        perPage: 10,
+        sortBy: 'selectedAt',
+        sortOrder: 'desc',
+        export: false,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toMatchObject({
+        candidateId: 'cand-1',
+        candidateName: 'Jane Doe',
+        organizationName: 'Acme Inc',
+        selectedByRole: 'system_admin',
+      });
+      expect(result.meta).toEqual({ total: 1, totalPages: 1, page: 1, perPage: 10 });
+    });
+
+    it('includes rows with no correlated audit row (default classification is admin)', async () => {
+      const row = buildPanelCandidateRow({ id: 'pc-noaudit', candidate_id: 'cand-noaudit' });
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([row]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const result = await service.getAdminSelectedCandidates({
+        page: 1,
+        perPage: 10,
+        export: false,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].selectedByRole).toBeNull();
+    });
+
+    it('excludes client-attributed rows', async () => {
+      const row = buildPanelCandidateRow({ id: 'pc-client', candidate_id: 'cand-client' });
+      (prisma.panelCandidate.findMany as jest.Mock).mockResolvedValueOnce([row]);
+      (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          candidate_id: 'cand-client',
+          createdAt: row.updatedAt,
+          actor_label: null,
+          actorUser: {
+            id: 'user-client',
+            role: 'organization_admin',
+            first_name: 'Jane',
+            last_name: 'Client',
+          },
+        },
+      ]);
+
+      const result = await service.getAdminSelectedCandidates({
+        page: 1,
+        perPage: 10,
+        export: false,
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta?.total).toBe(0);
+    });
+  });
+
   describe('getTalentAvailabilityByRole', () => {
     it('aggregates counts by position, splitting full-time and part-time', async () => {
       (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([

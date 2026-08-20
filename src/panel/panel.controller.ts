@@ -102,6 +102,29 @@ export class PanelController {
     return this.panelService.getClientSelectedCandidates(query);
   }
 
+  @Get('admin-selected-candidates')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'List candidates hired (selected as winner) by admin users, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin-selected candidates retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getAdminSelectedCandidates(
+    @Query() query: ClientSelectedCandidatesQueryDto,
+  ): Promise<ClientSelectedCandidatesResponseDto> {
+    return this.panelService.getAdminSelectedCandidates(query);
+  }
+
   @Get('talent-aging')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')

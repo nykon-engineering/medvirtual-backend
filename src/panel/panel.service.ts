@@ -926,6 +926,25 @@ export class PanelService {
   async getClientSelectedCandidates(
     query: ClientSelectedCandidatesQueryDto,
   ): Promise<ClientSelectedCandidatesResponseDto> {
+    return this.getActorSelectedCandidates(query, 'client');
+  }
+
+  async getAdminSelectedCandidates(
+    query: ClientSelectedCandidatesQueryDto,
+  ): Promise<ClientSelectedCandidatesResponseDto> {
+    return this.getActorSelectedCandidates(query, 'admin');
+  }
+
+  /**
+   * Shared by getClientSelectedCandidates/getAdminSelectedCandidates — both list
+   * PanelCandidate rows with status=selected_by_client (the only "hired" status;
+   * there is no separate admin status), split by who actually made the hire per
+   * classifyDeploymentActor.
+   */
+  private async getActorSelectedCandidates(
+    query: ClientSelectedCandidatesQueryDto,
+    actorType: 'admin' | 'client',
+  ): Promise<ClientSelectedCandidatesResponseDto> {
     const page = query.page ?? 1;
     const perPage = query.perPage ?? 10;
     const sortBy = query.sortBy ?? 'selectedAt';
@@ -972,7 +991,7 @@ export class PanelService {
       new Date(rangeEnd.getTime() + 1),
     );
 
-    const clientRows = panelCandidates
+    const actorRows = panelCandidates
       // updatedAt is nullable in the schema, but every row here matched the
       // updatedAt-range where clause above, so it is always set in practice.
       .filter((pc): pc is typeof pc & { updatedAt: Date } => pc.updatedAt !== null)
@@ -984,7 +1003,7 @@ export class PanelService {
         );
         return { pc, actor };
       })
-      .filter(({ actor }) => this.classifyDeploymentActor(actor) === 'client')
+      .filter(({ actor }) => this.classifyDeploymentActor(actor) === actorType)
       .map(({ pc, actor }) => ({
         id: pc.id,
         candidateId: pc.candidate.id,
@@ -1004,13 +1023,13 @@ export class PanelService {
       }));
 
     if (sortBy === 'candidateName') {
-      clientRows.sort((a, b) =>
+      actorRows.sort((a, b) =>
         sortOrder === 'asc'
           ? a.candidateName.localeCompare(b.candidateName)
           : b.candidateName.localeCompare(a.candidateName),
       );
     } else if (sortBy === 'organizationName') {
-      clientRows.sort((a, b) =>
+      actorRows.sort((a, b) =>
         sortOrder === 'asc'
           ? a.organizationName.localeCompare(b.organizationName)
           : b.organizationName.localeCompare(a.organizationName),
@@ -1019,13 +1038,13 @@ export class PanelService {
     // sortBy === 'selectedAt' is already applied via the pre-sorted panelCandidate query.
 
     if (query.export) {
-      return { data: clientRows };
+      return { data: actorRows };
     }
 
-    const total = clientRows.length;
+    const total = actorRows.length;
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const start = (page - 1) * perPage;
-    const data = clientRows.slice(start, start + perPage);
+    const data = actorRows.slice(start, start + perPage);
 
     return { data, meta: { total, totalPages, page, perPage } };
   }
