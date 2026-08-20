@@ -669,6 +669,73 @@ describe('PanelService', () => {
     });
   });
 
+  describe('getTalentAgingReport', () => {
+    const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+
+    it('buckets candidates into 0-30/31-60/61-90/90+ by days since createdAt', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: '1', hubspot_id: 'h1', first_name: 'Amy', last_name: 'A', name: null, pipeline_status: '261075105', approved_positions_pairing: ['Sr Bookkeeper'], createdAt: daysAgo(5) },
+        { id: '2', hubspot_id: 'h2', first_name: 'Bob', last_name: 'B', name: null, pipeline_status: '261075105', approved_positions_pairing: [], createdAt: daysAgo(45) },
+        { id: '3', hubspot_id: 'h3', first_name: 'Cid', last_name: 'C', name: null, pipeline_status: '1087596819', approved_positions_pairing: [], createdAt: daysAgo(75) },
+        { id: '4', hubspot_id: 'h4', first_name: 'Dan', last_name: 'D', name: null, pipeline_status: '1087596819', approved_positions_pairing: [], createdAt: daysAgo(120) },
+      ]);
+
+      const result = await service.getTalentAgingReport();
+
+      expect(result.buckets).toEqual([
+        { bucket: '0-30', count: 1 },
+        { bucket: '31-60', count: 1 },
+        { bucket: '61-90', count: 1 },
+        { bucket: '90+', count: 1 },
+      ]);
+      expect(result.candidates).toHaveLength(4);
+    });
+
+    it('queries only the available pool (pipeline_status in Full-Time/Part-Time)', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([]);
+      await service.getTalentAgingReport();
+      expect(prisma.candidate.findMany).toHaveBeenCalledWith({
+        where: { pipeline_status: { in: ['261075105', '1087596819'] } },
+        select: expect.objectContaining({ createdAt: true, pipeline_status: true }),
+      });
+    });
+
+    it('returns all 4 buckets with zero counts when the pool is empty', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([]);
+      const result = await service.getTalentAgingReport();
+      expect(result.buckets.map((b) => b.count)).toEqual([0, 0, 0, 0]);
+      expect(result.candidates).toEqual([]);
+    });
+
+    it('sorts candidates by daysInPool descending', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: '1', hubspot_id: 'h1', first_name: 'Amy', last_name: null, name: null, pipeline_status: '261075105', approved_positions_pairing: [], createdAt: daysAgo(5) },
+        { id: '2', hubspot_id: 'h2', first_name: 'Bob', last_name: null, name: null, pipeline_status: '261075105', approved_positions_pairing: [], createdAt: daysAgo(95) },
+      ]);
+      const result = await service.getTalentAgingReport();
+      expect(result.candidates.map((c) => c.id)).toEqual(['2', '1']);
+    });
+
+    it('falls back to "(Unspecified)" position when approved_positions_pairing is empty', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: '1', hubspot_id: 'h1', first_name: null, last_name: null, name: 'Fallback Name', pipeline_status: '261075105', approved_positions_pairing: [], createdAt: daysAgo(1) },
+      ]);
+      const result = await service.getTalentAgingReport();
+      expect(result.candidates[0].position).toBe('(Unspecified)');
+      expect(result.candidates[0].name).toBe('Fallback Name');
+    });
+
+    it('treats exactly 30 days as 0-30 and 31 days as 31-60 (inclusive upper boundary)', async () => {
+      (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([
+        { id: '1', hubspot_id: 'h1', first_name: 'A', last_name: null, name: null, pipeline_status: '261075105', approved_positions_pairing: [], createdAt: daysAgo(30) },
+        { id: '2', hubspot_id: 'h2', first_name: 'B', last_name: null, name: null, pipeline_status: '261075105', approved_positions_pairing: [], createdAt: daysAgo(31) },
+      ]);
+      const result = await service.getTalentAgingReport();
+      expect(result.candidates.find((c) => c.id === '1')?.bucket).toBe('0-30');
+      expect(result.candidates.find((c) => c.id === '2')?.bucket).toBe('31-60');
+    });
+  });
+
   describe('getScopedDurationMinutes', () => {
     const monthStart = new Date('2026-01-01');
     const monthEnd = new Date('2026-02-01');

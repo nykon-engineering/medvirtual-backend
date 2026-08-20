@@ -14,6 +14,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
 import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
 import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
+import { TalentAgingReportDto } from './dto/talent-aging-report.dto';
 
 @ApiTags('Panel')
 @ApiBearerAuth()
@@ -99,5 +100,26 @@ export class PanelController {
     @Query() query: ClientSelectedCandidatesQueryDto,
   ): Promise<ClientSelectedCandidatesResponseDto> {
     return this.panelService.getClientSelectedCandidates(query);
+  }
+
+  @Get('talent-aging')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Get an aging report (30/60/90 day buckets) for candidates still in the available talent pool',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Talent aging report retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getTalentAgingReport(): Promise<TalentAgingReportDto> {
+    return this.panelService.getTalentAgingReport();
   }
 }

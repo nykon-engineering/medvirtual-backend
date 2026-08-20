@@ -19,6 +19,11 @@ import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.d
 import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
 import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
 import {
+  TalentAgingReportDto,
+  TalentAgingBucketDto,
+  TalentAgingCandidateRowDto,
+} from './dto/talent-aging-report.dto';
+import {
   CANDIDATE_AUDIT_EVENTS,
   CANDIDATE_LOST_STAGE_ID,
   ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
@@ -34,6 +39,11 @@ const ADMIN_ROLES = ['system_admin', 'system_super_admin'];
 // Same-request writes in changeWinner() land well under a second apart in practice;
 // widened to 5 minutes to tolerate slow requests without risking cross-candidate matches.
 const DEPLOYMENT_CORRELATION_WINDOW_MS = 5 * 60 * 1000;
+
+// Aging Report on Talent 30/60/90 — bucket upper bounds in days (last bucket is open-ended).
+const AGING_BUCKET_THRESHOLDS = [30, 60, 90] as const;
+const AGING_BUCKET_LABELS = ['0-30', '31-60', '61-90', '90+'] as const;
+type AgingBucketLabel = (typeof AGING_BUCKET_LABELS)[number];
 
 interface DeploymentAuditRow {
   candidate_id: string;
@@ -852,6 +862,76 @@ export class PanelService {
         total: fullTime + partTime,
       }))
       .sort((a, b) => b.total - a.total);
+  }
+
+  private classifyAgingBucket(daysInPool: number): AgingBucketLabel {
+    if (daysInPool <= AGING_BUCKET_THRESHOLDS[0]) return '0-30';
+    if (daysInPool <= AGING_BUCKET_THRESHOLDS[1]) return '31-60';
+    if (daysInPool <= AGING_BUCKET_THRESHOLDS[2]) return '61-90';
+    return '90+';
+  }
+
+  async getTalentAgingReport(): Promise<TalentAgingReportDto> {
+    const now = new Date();
+
+    const candidates = await this.prisma.candidate.findMany({
+      where: { pipeline_status: { in: ['261075105', '1087596819'] } },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        pipeline_status: true,
+        approved_positions_pairing: true,
+        createdAt: true,
+      },
+    });
+
+    const bucketCounts = new Map<AgingBucketLabel, number>(
+      AGING_BUCKET_LABELS.map((label) => [label, 0]),
+    );
+
+    const rows: TalentAgingCandidateRowDto[] = candidates.map((candidate) => {
+      const daysInPool = Math.floor(
+        (now.getTime() - candidate.createdAt.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      const bucket = this.classifyAgingBucket(daysInPool);
+      bucketCounts.set(bucket, (bucketCounts.get(bucket) ?? 0) + 1);
+
+      const position = candidate.approved_positions_pairing?.length
+        ? getApprovedPositionLabel(candidate.approved_positions_pairing[0])
+        : '(Unspecified)';
+
+      return {
+        id: candidate.id,
+        hubspot_id: candidate.hubspot_id,
+        name: candidate.first_name
+          ? `${candidate.first_name} ${candidate.last_name ?? ''}`.trim()
+          : (candidate.name ?? '—'),
+        position,
+        employmentType:
+          candidate.pipeline_status === '261075105'
+            ? 'Full-Time'
+            : 'Part-Time',
+        pipeline_status: candidate.pipeline_status,
+        daysInPool,
+        bucket,
+        createdAt: candidate.createdAt.toISOString(),
+      };
+    });
+
+    rows.sort((a, b) => b.daysInPool - a.daysInPool);
+
+    const buckets: TalentAgingBucketDto[] = AGING_BUCKET_LABELS.map(
+      (bucket) => ({
+        bucket,
+        count: bucketCounts.get(bucket) ?? 0,
+      }),
+    );
+
+    return { buckets, candidates: rows };
   }
 
   async getClientSelectedCandidates(
