@@ -113,11 +113,15 @@ describe('PanelService', () => {
     // 9. candidatesAvailable (candidate.count)
     (prisma.candidate.count as jest.Mock).mockResolvedValueOnce(7);
 
-    // 10. candidatesEndorsed (candidate.count)
-    (prisma.candidate.count as jest.Mock).mockResolvedValueOnce(3);
+    // 10. candidatesEndorsed (candidateAuditLog.findMany, deduped by candidate_id)
+    (prisma.candidateAuditLog.findMany as jest.Mock).mockResolvedValueOnce([
+      { candidate_id: 'endorsed-1' },
+      { candidate_id: 'endorsed-2' },
+      { candidate_id: 'endorsed-3' },
+    ]);
 
-    // 11. candidatesHired (candidate.count)
-    (prisma.candidate.count as jest.Mock).mockResolvedValueOnce(2);
+    // 11. candidatesHired (panelCandidate.count)
+    (prisma.panelCandidate.count as jest.Mock).mockResolvedValueOnce(2);
 
     // 12. failedResumeParsing (candidate.findMany)
     const mockCandidateFailed = {
@@ -306,6 +310,23 @@ describe('PanelService', () => {
                 gte: new Date(dateFrom),
                 lte: new Date(dateTo)
              }
+        })
+    }));
+
+    // Verify candidatesEndorsed filters by the audit event's own createdAt
+    // (when the candidate was actually moved to "Endorsed via platform"),
+    // not by an unrelated entity's creation date.
+    expect(prisma.candidateAuditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+            createdAt: { gte: new Date(dateFrom), lte: new Date(dateTo) }
+        })
+    }));
+
+    // Verify candidatesHired filters by PanelCandidate.updatedAt (when the
+    // candidate was actually selected as winner), not by HireRequest.createdAt.
+    expect(prisma.panelCandidate.count).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+            updatedAt: { gte: new Date(dateFrom), lte: new Date(dateTo) }
         })
     }));
   });
