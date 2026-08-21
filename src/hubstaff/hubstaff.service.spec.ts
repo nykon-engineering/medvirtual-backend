@@ -17,7 +17,9 @@ describe('HubstaffService', () => {
 
     const mockConfigService = {
       get: jest.fn((key: string, defaultValue?: any) => {
-        if (key === 'REDIS_BASE_KEY') return 'test:';
+        if (key === 'APP_ENV') return 'local';
+        if (key === 'QUEUES_ENABLED') return 'false';
+        if (key === 'REDIS_KEY_PREFIX') return 'test:';
         return defaultValue;
       }),
     };

@@ -15,7 +15,9 @@ describe('StripeController', () => {
   beforeEach(async () => {
     const mockConfigService = {
       get: jest.fn((key: string, defaultValue?: any) => {
-        if (key === 'REDIS_BASE_KEY') return 'MEDVIRTUAL:LOCAL:MANNY';
+        if (key === 'APP_ENV') return 'local';
+        if (key === 'QUEUES_ENABLED') return 'false';
+        if (key === 'REDIS_KEY_PREFIX') return 'MEDVIRTUAL:LOCAL:MANNY';
         if (key === 'WEBHOOK_URL') return 'https://test-webhook.ngrok.dev';
         return defaultValue;
       }),

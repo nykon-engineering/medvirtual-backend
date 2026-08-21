@@ -9,7 +9,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { DateTime } from 'luxon';
 import { StripeService } from '../stripe/stripe.service';
 import { ConfigService } from '@nestjs/config';
-import { isLocalMode } from '../common/bull.utils';
+import { queuesEnabled } from '../common/app-config';
 
 /**
  * BullMQ worker that does the actual heavy lifting of invoice generation — everything
@@ -125,7 +125,7 @@ export class InvoiceWorker extends WorkerHost {
    * invoice's due date arrives, to trigger an automatic charge attempt).
    */
   async process(job: Job<any, any, string>): Promise<any> {
-    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+    if (!queuesEnabled(this.configService)) {
       this.logger.warn(`LOCAL mode — invoice job '${job.name}' skipped.`);
       return;
     }

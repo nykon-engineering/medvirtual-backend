@@ -8,7 +8,7 @@ import { LedgerDirection, ReconciliationStatus } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { DateTime } from 'luxon';
 import { ConfigService } from '@nestjs/config';
-import { isLocalMode } from '../common/bull.utils';
+import { queuesEnabled } from '../common/app-config';
 
 // ---------------------------------------------------------------------------
 // Lightweight computed line item (no DB ids, pure in-memory) — the "what SHOULD this
@@ -68,7 +68,7 @@ export class InvoicePrebillReconciliationWorker extends WorkerHost {
   // ---------------------------------------------------------------------------
 
   async process(job: Job<PrebillReconciliationJobPayload, any, string>): Promise<any> {
-    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+    if (!queuesEnabled(this.configService)) {
       this.logger.warn('LOCAL mode — prebill reconciliation job skipped.');
       return;
     }

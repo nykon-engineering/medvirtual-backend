@@ -6,21 +6,19 @@ import { HubstaffWorker } from './hubstaff.worker';
 import { SecretsModule } from '../secrets/secrets.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { HubspotModule } from '../hubspot/hubspot.module';
-import { isLocalModeSync } from '../common/bull.utils';
+import { queuesEnabledSync } from '../common/app-config';
 
-const LOCAL = isLocalModeSync();
+const QUEUES = queuesEnabledSync();
 
 @Module({
   imports: [
     SecretsModule,
     PrismaModule,
     HubspotModule,
-    ...(LOCAL
-      ? []
-      : [BullModule.registerQueue({ name: 'hubstaff-sync' })]),
+    ...(QUEUES ? [BullModule.registerQueue({ name: 'hubstaff-sync' })] : []),
   ],
   controllers: [HubstaffController],
-  providers: [HubstaffService, ...(LOCAL ? [] : [HubstaffWorker])],
-  exports: [HubstaffService, ...(LOCAL ? [] : [HubstaffWorker])],
+  providers: [HubstaffService, ...(QUEUES ? [HubstaffWorker] : [])],
+  exports: [HubstaffService, ...(QUEUES ? [HubstaffWorker] : [])],
 })
 export class HubstaffModule {}

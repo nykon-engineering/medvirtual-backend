@@ -37,7 +37,9 @@ describe('StripeService', () => {
 
     const mockConfigService = {
       get: jest.fn((key: string, defaultValue?: any) => {
-        if (key === 'REDIS_BASE_KEY') return 'MEDVIRTUAL:LOCAL:';
+        if (key === 'APP_ENV') return 'local';
+        if (key === 'QUEUES_ENABLED') return 'false';
+        if (key === 'REDIS_KEY_PREFIX') return 'MEDVIRTUAL:LOCAL:';
         if (key === 'STRIPE_SECRET_KEY') return 'sk_test_mock';
         if (key === 'STRIPE_PUBLIC_KEY') return 'pk_test_mock';
         if (key === 'WEBHOOK_URL') return 'https://webhook.test';
@@ -100,8 +102,11 @@ describe('StripeService', () => {
       await service.initiateWebhookHandler();
 
       expect(mockWebhookEndpointsCreate).toHaveBeenCalled();
+      // Single colon: the prefix is normalised centrally now. This previously
+      // asserted "MEDVIRTUAL:LOCAL::stripe_webhook_secret" — a base key ending
+      // in ':' got another ':' appended at the call site.
       expect(redisMock.set).toHaveBeenCalledWith(
-        'MEDVIRTUAL:LOCAL::stripe_webhook_secret',
+        'MEDVIRTUAL:LOCAL:stripe_webhook_secret',
         'whsec_123'
       );
     });
