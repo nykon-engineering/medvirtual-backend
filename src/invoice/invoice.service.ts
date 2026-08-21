@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { CreateInvoiceDto, BulkCreateInvoiceDto } from './dto/create-invoice.dto';
 import { InvoiceJobStatus, InvoiceStatus, Prisma, TicketStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
-import { isLocalMode } from '../common/bull.utils';
+import { queuesEnabled } from '../common/app-config';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 import { UpdateInvoiceVersionDto } from './dto/update-invoice-version.dto';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -45,7 +45,7 @@ export class InvoiceService {
   constructor(
     private readonly prisma: PrismaService,
     // Optional: these queues aren't wired up in local/test environments (see
-    // sendToQueue's isLocalMode check), so they may be null there.
+    // sendToQueue's queuesEnabled check), so they may be null there.
     @Optional() @InjectQueue('invoice') private readonly invoiceQueue: Queue | null,
     @Optional() @InjectQueue('invoice-prebill-reconciliation') private readonly prebillReconQueue: Queue | null,
     private readonly configService: ConfigService,
@@ -770,7 +770,7 @@ export class InvoiceService {
    * a second layer of idempotency below the 60-second DB check in createInvoice.
    */
   private async sendToQueue(message: any) {
-    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+    if (!queuesEnabled(this.configService)) {
       // No Redis/BullMQ available in local dev — log and no-op rather than failing,
       // since invoice generation isn't required for most local development work.
       this.logger.warn('LOCAL mode — invoice generation job NOT enqueued.');

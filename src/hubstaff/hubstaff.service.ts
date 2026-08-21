@@ -4,6 +4,7 @@ import axios, { AxiosResponse } from 'axios';
 import Bottleneck from 'bottleneck';
 import { SecretsService } from '../secrets/secrets.service';
 import * as redis from 'redis';
+import { keyPrefix } from '../common/app-config';
 import { HubstaffMember, HubstaffUser, HubstaffTimeOffRequest } from './hubstaff.interface';
 
 export enum ActivityType {
@@ -36,7 +37,7 @@ export interface ActivityAttributes {
 
 @Injectable()
 export class HubstaffService implements OnModuleInit {
-  private redisBaseKey: string;
+  private readonly keyPrefix: string;
   private globalRefreshLimiter: Bottleneck;
   private refreshQueues: Record<string, Bottleneck>;
   private hubstaffGlobalLimiter: Bottleneck;
@@ -48,7 +49,7 @@ export class HubstaffService implements OnModuleInit {
     private readonly secretsService: SecretsService,
     @Inject('REDIS_CLIENT') private readonly redisClient: redis.RedisClientType,
   ) {
-    this.redisBaseKey = this.configService.get<string>('REDIS_BASE_KEY', 'medvirtual:');
+    this.keyPrefix = keyPrefix(this.configService);
 
     // Layer 1: Global Refresh Limit Gate
     this.globalRefreshLimiter = new Bottleneck({
@@ -102,7 +103,7 @@ export class HubstaffService implements OnModuleInit {
 
   private async isAnyTokenAvailable(): Promise<boolean> {
     for (let i = 1; i <= 4; i++) {
-      const key = `${this.redisBaseKey}hubstaff_token_${i}`;
+      const key = `${this.keyPrefix}hubstaff_token_${i}`;
       const cached = await this.redisGet(key);
       if (cached !== "__RATE_LIMIT__") {
         return true;
@@ -115,7 +116,7 @@ export class HubstaffService implements OnModuleInit {
    * Internal method to exchange refresh token for access token.
    */
   public async _getAccessToken_new(token_endpoint: string, rotation: string) {
-    const key = `${this.redisBaseKey}hubstaff_token_${rotation}`;
+    const key = `${this.keyPrefix}hubstaff_token_${rotation}`;
     const cached = await this.redisGet(key);
 
     if (cached && cached !== "__RATE_LIMIT__") {
@@ -195,7 +196,7 @@ export class HubstaffService implements OnModuleInit {
         await new Promise((resolve) => setTimeout(resolve, pauseTimeMs));
       }
 
-      const rotationKey = `${this.redisBaseKey}hubstaff_token_rotation`;
+      const rotationKey = `${this.keyPrefix}hubstaff_token_rotation`;
 
       // Determine which rotation token to use based on simple round-robin
       let rotation = (await this.redisGet(rotationKey)) || "1";
@@ -276,7 +277,7 @@ export class HubstaffService implements OnModuleInit {
 
           // Explicitly mark the token as rate-limited for 1 hour to skip it
           await this.redisSet(
-            `${this.redisBaseKey}hubstaff_token_${rotation}`,
+            `${this.keyPrefix}hubstaff_token_${rotation}`,
             "__RATE_LIMIT__",
             { EX: 3600 },
           );

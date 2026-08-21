@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { InvoiceStatus, InvoiceVersionStatus, Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { ConfigService } from '@nestjs/config';
-import { isLocalMode } from '../common/bull.utils';
+import { queuesEnabled } from '../common/app-config';
 
 /**
  * Recomputes the three billing-rollup tables (BillingCycleStats, OrganizationBillingStats,
@@ -28,7 +28,7 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
   }
 
   async onModuleInit() {
-    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+    if (!queuesEnabled(this.configService)) {
       this.logger.warn('LOCAL mode — invoice stats recurring job NOT scheduled.');
       return;
     }
@@ -50,7 +50,7 @@ export class InvoiceStatsWorker extends WorkerHost implements OnModuleInit {
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
-    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+    if (!queuesEnabled(this.configService)) {
       this.logger.warn('LOCAL mode — invoice stats job skipped.');
       return;
     }

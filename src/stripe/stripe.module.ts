@@ -4,25 +4,24 @@ import { StripeController } from './stripe.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { InvoiceModule } from '../invoice/invoice.module';
 import { BullModule } from '@nestjs/bullmq';
-import { isLocalModeSync } from '../common/bull.utils';
+import { queuesEnabledSync } from '../common/app-config';
 
 @Global()
 @Module({
   imports: [
     PrismaModule,
     forwardRef(() => InvoiceModule),
-    ...(isLocalModeSync()
-      ? []
-      : [
+    ...(queuesEnabledSync()
+      ? [
           BullModule.registerQueue(
             { name: 'invoice' },
             { name: 'invoice-prebill-reconciliation' },
           ),
-        ]),
+        ]
+      : []),
   ],
   providers: [StripeService],
   controllers: [StripeController],
   exports: [StripeService],
 })
 export class StripeModule {}
-

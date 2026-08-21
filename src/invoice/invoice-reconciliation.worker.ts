@@ -6,7 +6,7 @@ import { StripeService } from '../stripe/stripe.service';
 import { InvoiceStatus } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { ConfigService } from '@nestjs/config';
-import { isLocalMode } from '../common/bull.utils';
+import { queuesEnabled } from '../common/app-config';
 
 /**
  * Stripe → Internal invoice reconciliation.
@@ -42,7 +42,7 @@ export class InvoiceReconciliationWorker extends WorkerHost implements OnModuleI
   }
 
   async onModuleInit() {
-    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+    if (!queuesEnabled(this.configService)) {
       this.logger.warn('LOCAL mode — Stripe reconciliation recurring job NOT scheduled.');
       return;
     }
@@ -75,7 +75,7 @@ export class InvoiceReconciliationWorker extends WorkerHost implements OnModuleI
   }
 
   async process(job: Job<any, any, string>): Promise<any> {
-    if (isLocalMode(this.configService.get<string>('REDIS_BASE_KEY', ''))) {
+    if (!queuesEnabled(this.configService)) {
       this.logger.warn('LOCAL mode — Stripe reconciliation job skipped.');
       return;
     }
