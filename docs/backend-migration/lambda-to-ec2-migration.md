@@ -25,6 +25,7 @@ Este documento tem duas partes:
 | AMI | `ami-09317ccfac89b432d` (Amazon Linux 2023, kernel 6.1) |
 | Regra de acesso ao RDS | `sgr-0b524626967b0ba32` (porta 5432, via source SG) |
 | VPC / Subnet | `vpc-0a86b29ec09c1a424` / `subnet-0b102169f69c1f621` (pública) |
+| IAM instance role | `MedVirtualBackendEC2-DEV-role` (profile `MedVirtualBackendEC2-DEV-profile`) — criada e associada em 2026-08-21 |
 
 Disco: 30 GB gp3 criptografado (26 GB livres). IMDSv2 obrigatório.
 
@@ -69,7 +70,7 @@ Fingerprint esperado do host: `SHA256:Ec0374bBTpxpT8ZsttVekztvLYwXAURr/tKnPp6AJq
 
 ## A5. Pendências antes do deploy
 
-1. **IAM role da instância** — ⚠️ **bloqueante.** A aplicação usa S3, SQS e Textract; hoje essas permissões vêm da role do Lambda. A EC2 **não tem instance profile**, então essas integrações falham até que uma role seja criada e associada.
+1. ~~**IAM role da instância**~~ — **resolvido em 2026-08-21**: criada a role `MedVirtualBackendEC2-DEV-role` (trust policy `ec2.amazonaws.com`, não a da Lambda) com `AmazonS3FullAccess`, `AmazonTextractFullAccess` e a policy inline `SendMessageToDealQueueDev` (espelhando exatamente as permissões da role da Lambda `MedVirtualBackendNest`, exceto `AWSLambdaVPCAccessExecutionRole`, que é específica de Lambda-em-VPC e não se aplica a EC2). Adicionadas também `sqs:ReceiveMessage`/`DeleteMessage`/`GetQueueAttributes` na mesma fila, para o caso do worker (`lambda-sqs.ts`) vir a rodar aqui por polling — mesmo padrão usado em prod (ver `lambda-to-ec2-migration-prod.md`, Parte A3). Profile `MedVirtualBackendEC2-DEV-profile` associado à instância via `associate-iam-instance-profile`, sem necessidade de reboot — confirmado com `aws sts get-caller-identity` rodado dentro da instância, retornando `assumed-role/MedVirtualBackendEC2-DEV-role/i-063760d997e14f60a`.
 2. **`.env`** — não enviado à instância. Recomendado: AWS Secrets Manager.
 3. **nginx como proxy reverso** para `localhost:3000` — não configurado.
 4. **HTTPS** — sem certificado (Let's Encrypt ou ACM + ALB).
@@ -169,7 +170,7 @@ Se as duas coisas ficarem ativas ao mesmo tempo, **as mensagens serão consumida
 - [ ] `pm2 startup` + `pm2 save` configurados — **teste reiniciando a instância** e confirme que o app volta sozinho
 - [ ] nginx faz proxy de 80/443 → `localhost:3000`
 - [ ] HTTPS com certificado válido
-- [ ] IAM role associada à instância (`aws sts get-caller-identity` de dentro da EC2)
+- [x] IAM role associada à instância (`aws sts get-caller-identity` de dentro da EC2) — confirmado em 2026-08-21
 
 ### Aplicação
 - [ ] **Health check**: `GET /start` responde 200 (é o endpoint de saúde do projeto — não existe `/health`)
@@ -179,9 +180,9 @@ Se as duas coisas ficarem ativas ao mesmo tempo, **as mensagens serão consumida
 - [ ] Timeout de 20 min preservado (`server.setTimeout` no `main.ts`) — o nginx tem timeout **padrão de 60s** e vai cortar requisições longas se não for ajustado
 
 ### Integrações externas
-- [ ] **S3** — upload e download (avatar, documentos) — *depende da IAM role*
+- [ ] **S3** — upload e download (avatar, documentos)
 - [ ] **SQS** — mensagem publicada é consumida; confira que a DLQ **não** está acumulando
-- [ ] **Textract** — processamento de currículo ponta a ponta — *depende da IAM role*
+- [ ] **Textract** — processamento de currículo ponta a ponta
 - [ ] **HubSpot** — sincronização e recebimento de webhook
 - [ ] **OpenAI / OpenRouter** — geração funcionando
 - [ ] **Resend** — envio de e-mail chegando de fato na caixa
@@ -276,6 +277,6 @@ Apesar do nome `STAGING_*`, hoje apontam para a mesma (e única) instância EC2 
 ## C4. Pendências abertas para este pipeline
 
 - [x] ~~Confirmar que existe um entrypoint HTTP tradicional~~ — confirmado: `src/main.ts` faz `NestFactory.create(AppModule).listen(process.env.PORT ?? 3000)`, separado do `lambda.ts`. Bate com o que `pm2 start dist/main.js` do workflow espera.
-- [ ] Validar que a IAM role da instância (pendência já listada em **A5.1**) não bloqueia nenhum step do deploy automatizado (o workflow em si não depende de IAM da EC2, mas a aplicação após o restart sim — S3/SQS/Textract).
+- [x] ~~Validar que a IAM role da instância (pendência já listada em **A5.1**) não bloqueia nenhum step do deploy automatizado~~ — resolvido em 2026-08-21: role e instance profile criados e associados (ver **A5.1**), `sts:get-caller-identity` confirmado de dentro da instância. Falta ainda validar S3/SQS/Textract funcionalmente após um deploy real (ver checklist da Parte B).
 - [ ] Definir se o worker SQS (`src/lambda-sqs.ts`, ver **B2.3**) também vai ser deployado por este pipeline em algum momento — hoje o workflow só cobre a API HTTP.
 - [ ] Depois que o deploy automatizado for validado, revisar o corte descrito em **B5** (Lambda dev vs EC2 dev) — este pipeline não faz esse corte sozinho, só adiciona a EC2 como mais um destino de deploy.
