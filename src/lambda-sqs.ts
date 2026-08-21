@@ -4,6 +4,8 @@ import { AppModule } from './app.module';
 import { HandlerDealCreation } from './hubspot/handlers/dealCreation';
 import { PrismaService } from './prisma/prisma.service';
 
+import { InvoiceWorker } from './invoice/invoice.worker';
+
 let app;
 
 async function bootstrap() {
@@ -17,6 +19,7 @@ export const handler = async (event: SQSEvent) => {
   const app = await bootstrap();
   const dealService = app.get(HandlerDealCreation);
   const prisma = app.get(PrismaService);
+  const invoiceWorker = app.get(InvoiceWorker);
 
   for (const record of event.Records) {
     let payload: any = JSON.parse(record.body);
@@ -50,6 +53,10 @@ export const handler = async (event: SQSEvent) => {
           where: { hubspot_id: String(payload.objectId) },
           data: { status: 'active' },
         });
+        break;
+      case 'GENERATE_INVOICE':
+        console.log(`Generating invoice for org ${payload.organization_id} (Job: ${payload.job_id})`);
+        await invoiceWorker.process({ data: payload } as any);
         break;
       default:
         console.warn('Event not handled:', payload);

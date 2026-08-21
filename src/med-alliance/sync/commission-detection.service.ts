@@ -213,6 +213,10 @@ export class CommissionDetectionService {
     let skipped = 0;
 
     for (const snapshot of candidates) {
+      // NOTE(merge): upstream's dev branch simplified this key to
+      // affiliateId+hubspotInvoiceId only (dropping paidAt/baseAmount/commissionPercent
+      // that our branch hashed in). Flagged for review — changes duplicate-commission
+      // semantics if an invoice is resynced with a different amount.
       const idempotencyKey = buildCommissionIdempotencyKey({
         affiliateId: affiliateUserId,
         hubspotInvoiceId: snapshot.hubspot_id,

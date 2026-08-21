@@ -1132,7 +1132,7 @@ export class HireRequestService {
           const years_of_experience = startDate
             ? new Date().getFullYear() - new Date(startDate).getFullYear()
             : 0;
-          const rates_B = computeCandidateRates(pc.candidate, _cfgMap_B);
+          const rates_B = computeCandidateRates(pc.candidate as any, _cfgMap_B);
           return {
             ...pc,
             candidate: {

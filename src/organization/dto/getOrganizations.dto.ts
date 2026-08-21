@@ -139,6 +139,24 @@ export class GetOrganizationsDto {
 
   @ApiProperty({
     required: false,
+    description: 'Filter by Hubstaff connection status',
+    enum: ['true', 'false'],
+  })
+  @IsOptional()
+  @IsEnum(['true', 'false'])
+  hubstaffConnected?: 'true' | 'false';
+
+  @ApiProperty({
+    required: false,
+    description: 'Filter by billing mode',
+    enum: ['arrears', 'prebill'],
+  })
+  @IsOptional()
+  @IsEnum(['arrears', 'prebill'])
+  billing_mode?: 'arrears' | 'prebill';
+
+  @ApiProperty({
+    required: false,
     description: 'Sort field',
     enum: [
       'name',
