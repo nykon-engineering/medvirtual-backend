@@ -3,6 +3,8 @@
 **Ambiente**: DEV · **Instância**: `i-063760d997e14f60a` · **IP**: `54.235.130.27`
 **Situação**: infraestrutura pronta; deploy e migração sob responsabilidade da equipe de desenvolvimento.
 
+> Existe um documento irmão para o ambiente de produção: [`lambda-to-ec2-migration-prod.md`](./lambda-to-ec2-migration-prod.md). As duas migrações avançam de forma independente — trilhas, credenciais e instâncias separadas.
+
 Este documento tem duas partes:
 - **Parte A** — o que já está provisionado (referência para a equipe)
 - **Parte B** — checklist de validação pós-migração (para conferir que tudo voltou a funcionar)
@@ -231,3 +233,49 @@ aws logs tail /aws/lambda/MedVirtualBackendNest --profile medvirtual --region us
 O Lambda e o API Gateway continuam existindo até serem removidos. Se algo crítico falhar, o caminho de volta é reapontar as URLs (frontend, `cron-dispatcher`, webhooks) para o API Gateway e reabilitar o event source mapping do SQS.
 
 **Não remova as Lambdas** até o checklist estar completo, incluindo os crons de baixa frequência.
+
+---
+
+# PARTE C — Deploy automatizado via GitHub Actions (dev)
+
+Implementado em 2026-08-21. Adiciona deploy contínuo na EC2 a cada push na branch `dev`, **sem remover o deploy Lambda existente** — os dois workflows rodam em paralelo por enquanto.
+
+## C1. Workflow
+
+Arquivo: `.github/workflows/deploy-dev-ec2.yml`, modelado sobre o `deploy-dev.yml` já validado na branch `development` (deploy de staging), reaproveitando a mesma estrutura e os mesmos secrets (`STAGING_SERVER_SSH_KEY`, `STAGING_SERVER_HOST`, `SERVER_USER`) — apontam para a única instância existente (`54.235.130.27`).
+
+**Trigger**: só `push` em `dev`. PRs contra `dev` já rodam build/lint/test via `push.yml` (`Tests Pipeline`) — decisão deliberada para não disparar deploy em PR, já que só existe uma EC2 compartilhada e deploys concorrentes de PRs diferentes se sobrescreveriam.
+
+**Fluxo do job**:
+1. Checkout + `npm ci` + `prisma generate` + `npm run build` no runner do GitHub.
+2. Empacota `dist/`, `package.json`, `package-lock.json`, `prisma/schema.prisma` e `prisma/migrations` em `release.tar.gz`.
+3. Autentica via `webfactory/ssh-agent` com a chave do secret; `ssh-keyscan` confia no host antes de conectar.
+4. Envia o tarball via `scp`.
+5. Na própria instância: extrai o release, roda `npm ci --omit=dev`, `prisma generate`, `prisma migrate deploy`, e dá `pm2 reload` (ou `pm2 start` se o processo ainda não existir) + `pm2 save`.
+
+## C2. Decisões e por que
+
+| Decisão | Motivo |
+|---|---|
+| `.env` **não é gerenciado pela pipeline** — fica fixo e persistido em `$DEPLOY_PATH/.env` na instância | Replica o padrão já validado em staging; evita duplicar modelo de config (Lambda usa `.env` embarcado no zip, EC2-dev usaria SSM, EC2-staging usa `.env` fixo — três modelos diferentes seria pior). Cogitamos AWS Parameter Store, descartado por ora em favor de consistência com o que já funciona. |
+| `node_modules` instalado **no servidor**, não enviado pelo runner | Dependências nativas (ex: `@napi-rs/canvas`) precisam de binário compatível com a arquitetura real da instância (t4g.medium = arm64/Graviton), que não bate com o runner Ubuntu x64 do GitHub. |
+| `prisma migrate deploy` roda **no servidor**, não no runner | O RDS só é alcançável de dentro da VPC (mesma razão pela qual o `sg-050d000502f1c4b3a` libera a porta 5432 só por security group, não publicamente) — o runner do GitHub não tem esse acesso de rede. |
+| `pm2 reload --update-env` em vez de `restart` | Reload é zero-downtime (se o processo suportar cluster mode); `--update-env` garante que env vars alteradas manualmente no servidor sejam recarregadas sem precisar derrubar o processo. |
+| Deploy só em `push`, nunca em `pull_request` | Ver C1 — evita PRs concorrentes sobrescrevendo o ambiente compartilhado. |
+
+## C3. Secrets do GitHub reaproveitados
+
+Já cadastrados no repositório (usados também pelo `deploy-dev.yml` de staging):
+
+- `STAGING_SERVER_SSH_KEY` — chave privada da keypair `medvirtual-ec2`
+- `STAGING_SERVER_HOST` — `54.235.130.27`
+- `SERVER_USER` — `ec2-user`
+
+Apesar do nome `STAGING_*`, hoje apontam para a mesma (e única) instância EC2 usada tanto por dev quanto por staging — não há infraestrutura separada ainda.
+
+## C4. Pendências abertas para este pipeline
+
+- [x] ~~Confirmar que existe um entrypoint HTTP tradicional~~ — confirmado: `src/main.ts` faz `NestFactory.create(AppModule).listen(process.env.PORT ?? 3000)`, separado do `lambda.ts`. Bate com o que `pm2 start dist/main.js` do workflow espera.
+- [ ] Validar que a IAM role da instância (pendência já listada em **A5.1**) não bloqueia nenhum step do deploy automatizado (o workflow em si não depende de IAM da EC2, mas a aplicação após o restart sim — S3/SQS/Textract).
+- [ ] Definir se o worker SQS (`src/lambda-sqs.ts`, ver **B2.3**) também vai ser deployado por este pipeline em algum momento — hoje o workflow só cobre a API HTTP.
+- [ ] Depois que o deploy automatizado for validado, revisar o corte descrito em **B5** (Lambda dev vs EC2 dev) — este pipeline não faz esse corte sozinho, só adiciona a EC2 como mais um destino de deploy.
