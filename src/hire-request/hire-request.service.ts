@@ -43,6 +43,11 @@ import axios from 'axios';
 import { HRTicketStatus } from '../common/dictionaries/HRTicket-dicionary';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
 import { dateToTimestamp, timestampToUSDate } from '../common/utils/formatDate';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../candidate/candidate-audit.service';
+import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
 
 @Injectable()
 export class HireRequestService {
@@ -55,6 +60,7 @@ export class HireRequestService {
     private readonly positionRateConfigService: PositionRateConfigService,
     @Inject(forwardRef(() => OfferPanelsService))
     private readonly offerPanelsService: OfferPanelsService,
+    private readonly candidateAudit: CandidateAuditService,
   ) {}
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split('T');
@@ -1753,6 +1759,16 @@ export class HireRequestService {
                 where: { id: c.candidate.id },
                 data: { pipeline_status: pipeline_treated },
               });
+              await this.candidateAudit.log({
+                candidateId: c.candidate.id,
+                hubspotId: c.candidate.hubspot_id,
+                actorUserId: user?.id ?? null,
+                event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+                fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+                before: { pipeline_status: c.candidate.pipeline_status },
+                after: { pipeline_status: pipeline_treated },
+                source: CandidateAuditSource.user,
+              });
               await this.hubspot.updateOneCandidateFromHireRequest(
                 c.candidate.hubspot_id,
                 pipeline_treated,
@@ -1903,6 +1919,16 @@ export class HireRequestService {
             await this.prisma.candidate.update({
               where: { id: c.candidate.id },
               data: { pipeline_status: pipeline_treated },
+            });
+            await this.candidateAudit.log({
+              candidateId: c.candidate.id,
+              hubspotId: c.candidate.hubspot_id,
+              actorUserId: user?.id ?? null,
+              event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+              fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+              before: { pipeline_status: c.candidate.pipeline_status },
+              after: { pipeline_status: pipeline_treated },
+              source: CandidateAuditSource.user,
             });
             await this.hubspot.updateOneCandidateFromHireRequest(
               c.candidate.hubspot_id,
@@ -2407,6 +2433,7 @@ export class HireRequestService {
             select: {
               id: true,
               hubspot_id: true,
+              pipeline_status: true,
             },
           },
         },
@@ -2429,6 +2456,19 @@ export class HireRequestService {
             pipeline_status: pipelineStatus,
           },
         });
+
+        await this.candidateAudit.logMany(
+          panelCandidates.map(pc => ({
+            candidateId: pc.candidate.id,
+            hubspotId: pc.candidate.hubspot_id,
+            actorUserId: user?.id ?? null,
+            event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+            fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+            before: { pipeline_status: pc.candidate.pipeline_status },
+            after: { pipeline_status: pipelineStatus },
+            source: CandidateAuditSource.user,
+          })),
+        );
 
         const candidatesForHubspot = panelCandidates.map(pc => pc.candidate);
         const updateHubspot = await this.hubspot.updateManyCandidatesFromHireRequest(candidatesForHubspot, pipelineStatus, user?.id);
@@ -2941,6 +2981,21 @@ export class HireRequestService {
     const pipelineStatus = Object.keys(dbToStageDictionary).find((key) => {
       return dbToStageDictionary[key] === 'Endorsed via Platform';
     });
+
+    const candidatesBeforeEndorse = await this.prisma.candidate.findMany({
+      where: {
+        id: {
+          in: data.candidates_id,
+        },
+      },
+      select: {
+        id: true,
+        hubspot_id: true,
+        pipeline_status: true,
+      },
+    });
+    if (!candidatesBeforeEndorse) throw new NotFoundException(`Candidates not found`);
+
     //update candidates with pipelinestatus = 'Endorsed via Platform'
     const candidatesUpdated = await this.prisma.candidate.updateMany({
       where: {
@@ -2955,19 +3010,24 @@ export class HireRequestService {
     if (!candidatesUpdated)
       throw new BadRequestException(`Candidates not updated to endorsed`);
 
+    await this.candidateAudit.logMany(
+      candidatesBeforeEndorse.map((c) => ({
+        candidateId: c.id,
+        hubspotId: c.hubspot_id,
+        actorUserId: user?.id ?? null,
+        event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+        fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+        before: { pipeline_status: c.pipeline_status },
+        after: { pipeline_status: pipelineStatus },
+        source: CandidateAuditSource.user,
+      })),
+    );
+
     //select candidates
-    const candidates = await this.prisma.candidate.findMany({
-      where: {
-        id: {
-          in: data.candidates_id,
-        },
-      },
-      select: {
-        id: true,
-        hubspot_id: true,
-      },
-    });
-    if (!candidates) throw new NotFoundException(`Candidates not found`);
+    const candidates = candidatesBeforeEndorse.map((c) => ({
+      id: c.id,
+      hubspot_id: c.hubspot_id,
+    }));
 
     //comunicate with hubspot to update status
     const updateHubspot =
@@ -3221,15 +3281,26 @@ export class HireRequestService {
       },
     });
     candidates.forEach(async (c) => {
+      const revertedPipelineStatus = c.pipeline_status_origin || c.pipeline_status;
       await this.prisma.candidate.update({
         where: { id: c.id },
         data: {
-          pipeline_status: c.pipeline_status_origin || c.pipeline_status,
+          pipeline_status: revertedPipelineStatus,
         },
+      });
+      await this.candidateAudit.log({
+        candidateId: c.id,
+        hubspotId: c.hubspot_id,
+        actorUserId: user?.id ?? null,
+        event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+        fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+        before: { pipeline_status: c.pipeline_status },
+        after: { pipeline_status: revertedPipelineStatus },
+        source: CandidateAuditSource.user,
       });
       await this.hubspot.updateOneCandidateFromHireRequest(
         c.hubspot_id,
-        c.pipeline_status_origin || c.pipeline_status,
+        revertedPipelineStatus,
         user?.id,
         undefined,
         `Hire request ${data.hireRequest_id} marked as panel ready — candidate reverted to origin pipeline status`,
@@ -4206,6 +4277,7 @@ export class HireRequestService {
           select: {
             id: true,
             hubspot_id: true,
+            pipeline_status: true,
             pipeline_status_origin: true,
             panelCandidates: {
               where: {
@@ -4298,6 +4370,16 @@ export class HireRequestService {
             where: { id: c.id },
             data: { pipeline_status: pipeline_treated },
           });
+          await this.candidateAudit.log({
+            candidateId: c.id,
+            hubspotId: c.hubspot_id,
+            actorUserId: user?.id ?? null,
+            event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+            fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+            before: { pipeline_status: c.pipeline_status },
+            after: { pipeline_status: pipeline_treated },
+            source: CandidateAuditSource.user,
+          });
           await this.hubspot.updateOneCandidateFromHireRequest(
             c.hubspot_id,
             pipeline_treated,
@@ -4315,9 +4397,20 @@ export class HireRequestService {
           // if the candidate is already marked as hired, skip updating to avoid conflicts
           if (c.candidate.pipeline_status === pipelineStatusHired) return;
 
+          const previousPipelineStatus = c.candidate.pipeline_status;
           await this.prisma.candidate.update({
             where: { id: c.candidate_id },
             data: { pipeline_status: pipelineStatus },
+          });
+          await this.candidateAudit.log({
+            candidateId: c.candidate_id,
+            hubspotId: c.candidate.hubspot_id,
+            actorUserId: user?.id ?? null,
+            event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+            fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+            before: { pipeline_status: previousPipelineStatus },
+            after: { pipeline_status: pipelineStatus },
+            source: CandidateAuditSource.user,
           });
           await this.hubspot.updateOneCandidateFromHireRequest(
             c.candidate.hubspot_id,

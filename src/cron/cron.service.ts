@@ -43,6 +43,11 @@ import { EmailTemplatesService } from '../email-templates/email-templates.servic
 import { getEmailThemeByBusinessUnit } from '../common/utils/email-templates/theme';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { BusinessUnitsService } from '../business-units/business-units.service';
+import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../candidate/candidate-audit.service';
 
 type Event = {
   objectId?: string;
@@ -78,6 +83,7 @@ export class CronService {
     private readonly contactDeletion: HandlerContactDeletion,
     private readonly businessUnitContext: BusinessUnitContext,
     private readonly businessUnitsService: BusinessUnitsService,
+    private readonly candidateAudit: CandidateAuditService,
   ) {}
 
   // ── EmailTemplatesService fallback helper ─────────────────────────────────
@@ -117,6 +123,8 @@ export class CronService {
         id: true,
         first_name: true,
         last_name: true,
+        hubspot_id: true,
+        processing_status: true,
       },
       orderBy: {
         processed_at: 'desc',
@@ -139,6 +147,16 @@ export class CronService {
             data: {
               processing_status: 'failed',
             },
+          });
+          await this.candidateAudit.log({
+            candidateId: candidate.id,
+            hubspotId: candidate.hubspot_id,
+            actorUserId: null,
+            event: CANDIDATE_AUDIT_EVENTS.PROCESSING_STATUS_CHANGED,
+            fieldGroup: CandidateAuditFieldGroup.processing,
+            before: { processing_status: candidate.processing_status },
+            after: { processing_status: 'failed' },
+            source: CandidateAuditSource.cron,
           });
           console.log(
             `===>Error in Pipeline for the candidate ID: ${candidate.id}`,

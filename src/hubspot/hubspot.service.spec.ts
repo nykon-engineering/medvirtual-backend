@@ -55,6 +55,7 @@ import { HandlerContactPropertyChange } from './handlers/contactPropertyChange';
 import { HandlerContactDeletion } from './handlers/contactDeletion';
 import { HandlerContactMerge } from './handlers/contactMerge';
 import { HubspotAuditService } from './hubspot-audit.service';
+import { CandidateAuditService } from '../candidate/candidate-audit.service';
 
 
 
@@ -287,6 +288,12 @@ const auditServiceMock = {
   log: jest.fn(),
 };
 
+const candidateAuditMock = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  logMany: jest.fn(),
+};
+
 jest.mock('../common/utils/hubspot.util', () => ({
   extractDriveFileId: jest.fn(),
   mapHubspotToDb: jest.fn((props: Record<string, unknown>) => ({ ...props })),
@@ -360,6 +367,7 @@ describe('HubspotService => GetCandidates', () => {
         {provide: HandlerContactDeletion, useValue: handlerContactDeletionMock},
         {provide: HandlerContactMerge, useValue: handlerContactMergeMock},
         {provide: HubspotAuditService, useValue: auditServiceMock},
+        {provide: CandidateAuditService, useValue: candidateAuditMock},
       ],
     }).compile();
 
@@ -451,6 +459,7 @@ describe('HubspotService => changeDataToHubspot', () => {
         {provide: HandlerContactDeletion, useValue: handlerContactDeletionMock},
         {provide: HandlerContactMerge, useValue: handlerContactMergeMock},
         {provide: HubspotAuditService, useValue: auditServiceMock},
+        {provide: CandidateAuditService, useValue: candidateAuditMock},
       ]
     }).compile();
 
@@ -554,6 +563,7 @@ function buildProviders(): any[] {
     { provide: HandlerContactDeletion, useValue: handlerContactDeletionMock },
     { provide: HandlerContactMerge, useValue: handlerContactMergeMock },
     { provide: HubspotAuditService, useValue: auditServiceMock },
+    { provide: CandidateAuditService, useValue: candidateAuditMock },
   ];
 }
 

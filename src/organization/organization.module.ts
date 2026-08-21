@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { SqsModule } from '../sqs/sqs.module';
 import { ContactModule } from '../contacts/contacts.module';
 import { BusinessUnitsModule } from '../business-units/business-units.module';
+import { CandidateAuditModule } from '../candidate/candidate-audit.module';
 
 @Module({
   controllers: [OrganizationController],
@@ -20,6 +21,7 @@ import { BusinessUnitsModule } from '../business-units/business-units.module';
     SqsModule,
     ContactModule,
     BusinessUnitsModule,
+    CandidateAuditModule,
   ],
   exports: [OrganizationService],
 })

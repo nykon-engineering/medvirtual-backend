@@ -15,6 +15,48 @@ import { getApprovedPositionLabel } from '../common/dictionaries/approved-positi
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { activePipelines } from '../common/constant/activeDealPipelines';
+import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
+import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
+import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
+import {
+  TalentAgingReportDto,
+  TalentAgingBucketDto,
+  TalentAgingCandidateRowDto,
+} from './dto/talent-aging-report.dto';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CANDIDATE_LOST_STAGE_ID,
+  ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+} from '../candidate/candidate-audit.service';
+
+// Bound how far back an unfiltered client-selected-candidates query can scan, matching
+// the default window getPanelData() uses when no date range is provided.
+const DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS = 12;
+
+const CLIENT_ROLES = ['organization_super_admin', 'organization_admin', 'affiliate'];
+const ADMIN_ROLES = ['system_admin', 'system_super_admin'];
+
+// Same-request writes in changeWinner() land well under a second apart in practice;
+// widened to 5 minutes to tolerate slow requests without risking cross-candidate matches.
+const DEPLOYMENT_CORRELATION_WINDOW_MS = 5 * 60 * 1000;
+
+// Aging Report on Talent 30/60/90 — bucket upper bounds in days (last bucket is open-ended).
+const AGING_BUCKET_THRESHOLDS = [30, 60, 90] as const;
+const AGING_BUCKET_LABELS = ['0-30', '31-60', '61-90', '90+'] as const;
+type AgingBucketLabel = (typeof AGING_BUCKET_LABELS)[number];
+
+interface DeploymentAuditRow {
+  candidate_id: string;
+  createdAt: Date;
+  actorUser: { id: string; role: string; first_name: string | null; last_name: string | null } | null;
+  actor_label: string | null;
+}
+
+interface DeploymentActor {
+  role: string | null;
+  actorUserId: string | null;
+  actorLabel: string | null;
+}
 
 @Injectable()
 export class PanelService {
@@ -22,6 +64,84 @@ export class PanelService {
     private readonly prisma: PrismaService,
     private readonly positionRateConfigService: PositionRateConfigService,
   ) {}
+
+  /**
+   * PanelCandidate has no field recording who moved it to `selected_by_client` — the
+   * only signal is the CandidateAuditLog row `changeWinner()` writes in the same
+   * request (event=pipeline_status_changed, pipeline_status_new=Endorsed via Platform).
+   * This correlates a PanelCandidate row to that audit row by candidate_id + closest
+   * timestamp within DEPLOYMENT_CORRELATION_WINDOW_MS. No match (e.g. candidates
+   * deployed via the admin-only createStaffWithOptionalHireRequest tool, which writes
+   * no audit row) defaults to 'admin' — see plan risks for why that default is safe.
+   */
+  private async buildDeploymentActorIndex(
+    rangeStart: Date,
+    rangeEndExclusive: Date,
+  ): Promise<Map<string, DeploymentAuditRow[]>> {
+    const auditRows = await this.prisma.candidateAuditLog.findMany({
+      where: {
+        event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+        pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+        createdAt: {
+          gte: new Date(rangeStart.getTime() - DEPLOYMENT_CORRELATION_WINDOW_MS),
+          lt: new Date(
+            rangeEndExclusive.getTime() + DEPLOYMENT_CORRELATION_WINDOW_MS,
+          ),
+        },
+      },
+      select: {
+        candidate_id: true,
+        createdAt: true,
+        actor_label: true,
+        actorUser: {
+          select: { id: true, role: true, first_name: true, last_name: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const auditByCandidate = new Map<string, DeploymentAuditRow[]>();
+    for (const row of auditRows) {
+      const list = auditByCandidate.get(row.candidate_id) ?? [];
+      list.push(row);
+      auditByCandidate.set(row.candidate_id, list);
+    }
+    return auditByCandidate;
+  }
+
+  private correlateDeploymentActor(
+    auditByCandidate: Map<string, DeploymentAuditRow[]>,
+    candidateId: string,
+    panelUpdatedAt: Date,
+  ): DeploymentActor | null {
+    const rows = auditByCandidate.get(candidateId) ?? [];
+    let best: DeploymentAuditRow | undefined;
+    let bestDelta = Infinity;
+    for (const row of rows) {
+      const delta = Math.abs(row.createdAt.getTime() - panelUpdatedAt.getTime());
+      if (delta <= DEPLOYMENT_CORRELATION_WINDOW_MS && delta < bestDelta) {
+        best = row;
+        bestDelta = delta;
+      }
+    }
+    if (!best) return null;
+    return {
+      role: best.actorUser?.role ?? null,
+      actorUserId: best.actorUser?.id ?? null,
+      actorLabel:
+        best.actor_label ??
+        (best.actorUser
+          ? [best.actorUser.first_name, best.actorUser.last_name]
+              .filter(Boolean)
+              .join(' ') || null
+          : null),
+    };
+  }
+
+  private classifyDeploymentActor(actor: DeploymentActor | null): 'admin' | 'client' {
+    if (!actor || !actor.role) return 'admin';
+    return CLIENT_ROLES.includes(actor.role) ? 'client' : 'admin';
+  }
 
   async getPanelData(dateFrom?: string, dateTo?: string): Promise<any> {
     const dateFilterCreated: any = {};
@@ -275,36 +395,25 @@ export class PanelService {
     });
     result.candidatesAvailable = candidatesAvailable;
 
-    const candidatesEndorsed = await this.prisma.candidate.count({
+    // Candidates actually endorsed (moved to the "Endorsed via platform" pipeline
+    // stage) within the searched date range. Deduped by candidate_id in case a
+    // webhook retry logged the same transition twice.
+    const endorsedRows = await this.prisma.candidateAuditLog.findMany({
       where: {
-        panelCandidates: {
-          some: {
-            panel: {
-              hireRequest: {
-                status: HireRequestStatus.awaiting_decision,
-                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
-              },
-            },
-          },
-        },
+        event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+        pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+        ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
       },
+      select: { candidate_id: true },
+      distinct: ['candidate_id'],
     });
+    result.candidatesEndorsed = endorsedRows.length;
 
-    result.candidatesEndorsed = candidatesEndorsed;
-
-    const candidatesHired = await this.prisma.candidate.count({
+    // Candidates actually selected as winner within the searched date range.
+    const candidatesHired = await this.prisma.panelCandidate.count({
       where: {
-        panelCandidates: {
-          some: {
-            status: PanelCandidateStatus.selected_by_client,
-            panel: {
-              hireRequest: {
-                status: { not: HireRequestStatus.deleted },
-                ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
-              },
-            },
-          },
-        },
+        status: PanelCandidateStatus.selected_by_client,
+        ...(hasDateFilter ? { updatedAt: dateFilterCreated } : {}),
       },
     });
 
@@ -434,6 +543,27 @@ export class PanelService {
       }
     }
 
+    // Prefetch once for the whole range: PanelCandidate rows deployed to a client
+    // (status=selected_by_client) plus the CandidateAuditLog rows that correlate to
+    // them, so the admin/client split below doesn't re-query per month.
+    const deploymentRangeStart = monthsToIterate[0];
+    const deploymentRangeEndExclusive = new Date(
+      monthsToIterate[monthsToIterate.length - 1].getFullYear(),
+      monthsToIterate[monthsToIterate.length - 1].getMonth() + 1,
+      1,
+    );
+    const deployedPanelCandidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        status: PanelCandidateStatus.selected_by_client,
+        updatedAt: { gte: deploymentRangeStart, lt: deploymentRangeEndExclusive },
+      },
+      select: { candidate_id: true, updatedAt: true },
+    });
+    const deploymentAuditIndex = await this.buildDeploymentActorIndex(
+      deploymentRangeStart,
+      deploymentRangeEndExclusive,
+    );
+
     for (const date of monthsToIterate) {
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
@@ -469,6 +599,65 @@ export class PanelService {
         },
       });
 
+      const talentsSelectedAsWinner = await this.prisma.panelCandidate.count({
+        where: {
+          status: PanelCandidateStatus.selected_by_client,
+          updatedAt: { gte: monthStart, lt: monthEnd },
+        },
+      });
+
+      // Dedupe by candidate_id in case a webhook retry logged the same removal twice.
+      // "Removed" covers both a move to the Lost pipeline stage and a hard delete.
+      const removalRows = await this.prisma.candidateAuditLog.findMany({
+        where: {
+          createdAt: { gte: monthStart, lt: monthEnd },
+          OR: [
+            {
+              event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+              pipeline_status_new: CANDIDATE_LOST_STAGE_ID,
+            },
+            { event: CANDIDATE_AUDIT_EVENTS.CANDIDATE_DELETED },
+          ],
+        },
+        select: { candidate_id: true },
+        distinct: ['candidate_id'],
+      });
+      const talentsRemoved = removalRows.length;
+
+      // Dedupe by candidate_id: a candidate may flip to Endorsed multiple times in a
+      // month (e.g. re-endorsed after a hire request reopen) — count the talent once.
+      const endorsementRows = await this.prisma.candidateAuditLog.findMany({
+        where: {
+          event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+          pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+          createdAt: { gte: monthStart, lt: monthEnd },
+        },
+        select: { candidate_id: true },
+        distinct: ['candidate_id'],
+      });
+      const talentsEndorsed = endorsementRows.length;
+
+      const monthDeployed = deployedPanelCandidates.filter(
+        (pc): pc is typeof pc & { updatedAt: Date } =>
+          pc.updatedAt !== null &&
+          pc.updatedAt >= monthStart &&
+          pc.updatedAt < monthEnd,
+      );
+      let talentsDeployedByAdmin = 0;
+      let talentsDeployedByClient = 0;
+      for (const pc of monthDeployed) {
+        const actor = this.correlateDeploymentActor(
+          deploymentAuditIndex,
+          pc.candidate_id,
+          pc.updatedAt,
+        );
+        if (this.classifyDeploymentActor(actor) === 'client') {
+          talentsDeployedByClient++;
+        } else {
+          talentsDeployedByAdmin++;
+        }
+      }
+
       if (!result.monthlyData) result.monthlyData = [];
 
       result.monthlyData.push({
@@ -480,6 +669,11 @@ export class PanelService {
         hireRequests_created: hireRequestsCreated,
         hireRequests_endorsed: hireRequestsEndorsed,
         interviews: interviewsScheduled,
+        talentsSelectedAsWinner,
+        talentsRemoved,
+        talentsEndorsed,
+        talentsDeployedByAdmin,
+        talentsDeployedByClient,
       });
     }
 
@@ -521,6 +715,57 @@ export class PanelService {
           year: '2-digit',
         }),
         accessUsers: accessUsers,
+      });
+    }
+
+    for (const date of monthsToIterate) {
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      const monthLabel = date.toLocaleString('default', {
+        month: 'short',
+        year: '2-digit',
+      });
+
+      const clientLogins = await this.prisma.session.count({
+        where: {
+          createdAt: { gte: monthStart, lt: monthEnd },
+          user: { role: { in: CLIENT_ROLES } },
+        },
+      });
+
+      const talentPoolDurationMinutes = await this.getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'talent_pool',
+        CLIENT_ROLES,
+      );
+
+      if (!result.clientEngagement) result.clientEngagement = [];
+      result.clientEngagement.push({
+        month: monthLabel,
+        clientLogins,
+        talentPoolDurationMinutes,
+      });
+
+      const adminLogins = await this.prisma.session.count({
+        where: {
+          createdAt: { gte: monthStart, lt: monthEnd },
+          user: { role: { in: ADMIN_ROLES } },
+        },
+      });
+
+      const platformDurationMinutes = await this.getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'platform',
+        ADMIN_ROLES,
+      );
+
+      if (!result.adminUsage) result.adminUsage = [];
+      result.adminUsage.push({
+        month: monthLabel,
+        adminLogins,
+        platformDurationMinutes,
       });
     }
 
@@ -572,5 +817,282 @@ export class PanelService {
     result.moreThan5Interviews = processed.filter((c) => c.interviewCount > 5);
 
     return result;
+  }
+
+  async getTalentAvailabilityByRole(): Promise<TalentAvailabilityByRoleDto[]> {
+    const candidates = await this.prisma.candidate.findMany({
+      where: { pipeline_status: { in: ['261075105', '1087596819'] } },
+      select: { pipeline_status: true, approved_positions_pairing: true },
+    });
+
+    const counts = new Map<string, { fullTime: number; partTime: number }>();
+    for (const candidate of candidates) {
+      const isFullTime = candidate.pipeline_status === '261075105';
+      const positions = candidate.approved_positions_pairing?.length
+        ? candidate.approved_positions_pairing
+        : ['(Unspecified)'];
+      for (const raw of positions) {
+        const label = getApprovedPositionLabel(raw);
+        const entry = counts.get(label) ?? { fullTime: 0, partTime: 0 };
+        if (isFullTime) {
+          entry.fullTime += 1;
+        } else {
+          entry.partTime += 1;
+        }
+        counts.set(label, entry);
+      }
+    }
+
+    return Array.from(counts.entries())
+      .map(([position, { fullTime, partTime }]) => ({
+        position,
+        fullTime,
+        partTime,
+        total: fullTime + partTime,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  private classifyAgingBucket(daysInPool: number): AgingBucketLabel {
+    if (daysInPool <= AGING_BUCKET_THRESHOLDS[0]) return '0-30';
+    if (daysInPool <= AGING_BUCKET_THRESHOLDS[1]) return '31-60';
+    if (daysInPool <= AGING_BUCKET_THRESHOLDS[2]) return '61-90';
+    return '90+';
+  }
+
+  async getTalentAgingReport(): Promise<TalentAgingReportDto> {
+    const now = new Date();
+
+    const candidates = await this.prisma.candidate.findMany({
+      where: { pipeline_status: { in: ['261075105', '1087596819'] } },
+      select: {
+        id: true,
+        hubspot_id: true,
+        first_name: true,
+        last_name: true,
+        name: true,
+        pipeline_status: true,
+        approved_positions_pairing: true,
+        createdAt: true,
+      },
+    });
+
+    const bucketCounts = new Map<AgingBucketLabel, number>(
+      AGING_BUCKET_LABELS.map((label) => [label, 0]),
+    );
+
+    const rows: TalentAgingCandidateRowDto[] = candidates.map((candidate) => {
+      const daysInPool = Math.floor(
+        (now.getTime() - candidate.createdAt.getTime()) /
+          (1000 * 60 * 60 * 24),
+      );
+      const bucket = this.classifyAgingBucket(daysInPool);
+      bucketCounts.set(bucket, (bucketCounts.get(bucket) ?? 0) + 1);
+
+      const position = candidate.approved_positions_pairing?.length
+        ? getApprovedPositionLabel(candidate.approved_positions_pairing[0])
+        : '(Unspecified)';
+
+      return {
+        id: candidate.id,
+        hubspot_id: candidate.hubspot_id,
+        name: candidate.first_name
+          ? `${candidate.first_name} ${candidate.last_name ?? ''}`.trim()
+          : (candidate.name ?? '—'),
+        position,
+        employmentType:
+          candidate.pipeline_status === '261075105'
+            ? 'Full-Time'
+            : 'Part-Time',
+        pipeline_status: candidate.pipeline_status,
+        daysInPool,
+        bucket,
+        createdAt: candidate.createdAt.toISOString(),
+      };
+    });
+
+    rows.sort((a, b) => b.daysInPool - a.daysInPool);
+
+    const buckets: TalentAgingBucketDto[] = AGING_BUCKET_LABELS.map(
+      (bucket) => ({
+        bucket,
+        count: bucketCounts.get(bucket) ?? 0,
+      }),
+    );
+
+    return { buckets, candidates: rows };
+  }
+
+  async getClientSelectedCandidates(
+    query: ClientSelectedCandidatesQueryDto,
+  ): Promise<ClientSelectedCandidatesResponseDto> {
+    return this.getActorSelectedCandidates(query, 'client');
+  }
+
+  async getAdminSelectedCandidates(
+    query: ClientSelectedCandidatesQueryDto,
+  ): Promise<ClientSelectedCandidatesResponseDto> {
+    return this.getActorSelectedCandidates(query, 'admin');
+  }
+
+  /**
+   * Shared by getClientSelectedCandidates/getAdminSelectedCandidates — both list
+   * PanelCandidate rows with status=selected_by_client (the only "hired" status;
+   * there is no separate admin status), split by who actually made the hire per
+   * classifyDeploymentActor.
+   */
+  private async getActorSelectedCandidates(
+    query: ClientSelectedCandidatesQueryDto,
+    actorType: 'admin' | 'client',
+  ): Promise<ClientSelectedCandidatesResponseDto> {
+    const page = query.page ?? 1;
+    const perPage = query.perPage ?? 10;
+    const sortBy = query.sortBy ?? 'selectedAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const rangeEnd = query.dateTo ? new Date(query.dateTo) : new Date();
+    const rangeStart = query.dateFrom
+      ? new Date(query.dateFrom)
+      : new Date(
+          rangeEnd.getFullYear(),
+          rangeEnd.getMonth() - DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS,
+          rangeEnd.getDate(),
+        );
+
+    const panelCandidates = await this.prisma.panelCandidate.findMany({
+      where: {
+        status: PanelCandidateStatus.selected_by_client,
+        updatedAt: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: {
+        id: true,
+        candidate_id: true,
+        updatedAt: true,
+        candidate: {
+          select: { id: true, first_name: true, last_name: true, name: true },
+        },
+        panel: {
+          select: {
+            hireRequest: {
+              select: {
+                id: true,
+                title: true,
+                organization: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: sortOrder },
+    });
+
+    const auditIndex = await this.buildDeploymentActorIndex(
+      rangeStart,
+      new Date(rangeEnd.getTime() + 1),
+    );
+
+    const actorRows = panelCandidates
+      // updatedAt is nullable in the schema, but every row here matched the
+      // updatedAt-range where clause above, so it is always set in practice.
+      .filter((pc): pc is typeof pc & { updatedAt: Date } => pc.updatedAt !== null)
+      .map((pc) => {
+        const actor = this.correlateDeploymentActor(
+          auditIndex,
+          pc.candidate_id,
+          pc.updatedAt,
+        );
+        return { pc, actor };
+      })
+      .filter(({ actor }) => this.classifyDeploymentActor(actor) === actorType)
+      .map(({ pc, actor }) => ({
+        id: pc.id,
+        candidateId: pc.candidate.id,
+        candidateName:
+          pc.candidate.name ||
+          [pc.candidate.first_name, pc.candidate.last_name]
+            .filter(Boolean)
+            .join(' '),
+        hireRequestId: pc.panel.hireRequest.id,
+        hireRequestTitle: pc.panel.hireRequest.title,
+        organizationId: pc.panel.hireRequest.organization.id,
+        organizationName: pc.panel.hireRequest.organization.name,
+        selectedAt: pc.updatedAt.toISOString(),
+        selectedByUserId: actor?.actorUserId ?? null,
+        selectedByName: actor?.actorLabel ?? null,
+        selectedByRole: actor?.role ?? null,
+      }));
+
+    if (sortBy === 'candidateName') {
+      actorRows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.candidateName.localeCompare(b.candidateName)
+          : b.candidateName.localeCompare(a.candidateName),
+      );
+    } else if (sortBy === 'organizationName') {
+      actorRows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.organizationName.localeCompare(b.organizationName)
+          : b.organizationName.localeCompare(a.organizationName),
+      );
+    }
+    // sortBy === 'selectedAt' is already applied via the pre-sorted panelCandidate query.
+
+    if (query.export) {
+      return { data: actorRows };
+    }
+
+    const total = actorRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const start = (page - 1) * perPage;
+    const data = actorRows.slice(start, start + perPage);
+
+    return { data, meta: { total, totalPages, page, perPage } };
+  }
+
+  /**
+   * Heartbeat pings land roughly every 60s while a tab is visible. Consecutive
+   * pings for the same user within IDLE_GAP_MS are treated as one continuous
+   * active stretch; a larger gap means the tab was hidden/closed, so that gap
+   * is excluded from the total. This avoids needing an explicit session-end
+   * signal, which browsers can't reliably send on tab close.
+   */
+  private async getScopedDurationMinutes(
+    monthStart: Date,
+    monthEnd: Date,
+    scope: 'talent_pool' | 'platform',
+    roles: string[],
+  ): Promise<number> {
+    const HEARTBEAT_INTERVAL_MS = 60_000;
+    const IDLE_GAP_MS = HEARTBEAT_INTERVAL_MS * 2;
+
+    const pings = await this.prisma.sessionActivity.findMany({
+      where: {
+        scope,
+        pingedAt: { gte: monthStart, lt: monthEnd },
+        user: { role: { in: roles } },
+      },
+      select: { userId: true, pingedAt: true },
+      orderBy: { pingedAt: 'asc' },
+    });
+
+    const pingsByUser = new Map<string, Date[]>();
+    for (const ping of pings) {
+      const existing = pingsByUser.get(ping.userId);
+      if (existing) {
+        existing.push(ping.pingedAt);
+      } else {
+        pingsByUser.set(ping.userId, [ping.pingedAt]);
+      }
+    }
+
+    let totalMs = 0;
+    for (const timestamps of pingsByUser.values()) {
+      for (let i = 1; i < timestamps.length; i++) {
+        const gap = timestamps[i].getTime() - timestamps[i - 1].getTime();
+        if (gap <= IDLE_GAP_MS) totalMs += gap;
+      }
+    }
+
+    return Math.round(totalMs / 60_000);
   }
 }

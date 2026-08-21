@@ -13,6 +13,7 @@ import { HireRequestService } from '../hire-request/hire-request.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { CandidateAuditService } from './candidate-audit.service';
 
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
@@ -85,6 +86,12 @@ const businessUnitContextMock = {
   bustCache: jest.fn(),
 };
 
+const candidateAuditMock = {
+  log: jest.fn(),
+  logOrThrow: jest.fn(),
+  logMany: jest.fn(),
+};
+
 const textractMock = {
   startTextractJob: jest.fn(),
   getTextractResult: jest.fn(),
@@ -151,6 +158,7 @@ describe('CandidatesService', () => {
         { provide: NotificationsService, useValue: notificationsMock },
         { provide: PositionRateConfigService, useValue: positionRateConfigMock },
         { provide: BusinessUnitContext, useValue: businessUnitContextMock },
+        { provide: CandidateAuditService, useValue: candidateAuditMock },
         { provide: Logger, useValue: { log: jest.fn(), error: jest.fn(), warn: jest.fn() } },
       ],
     }).compile();
@@ -881,7 +889,7 @@ describe('CandidatesService', () => {
 
       expect(mockPrisma.candidate.findUnique).toHaveBeenCalledWith({
         where: { id: '1' },
-        select: { hubspot_id: true },
+        select: { hubspot_id: true, pipeline_status: true },
       });
       expect(mockedAxios.patch).toHaveBeenCalled();
       expect(mockPrisma.candidate.update).toHaveBeenCalledWith({

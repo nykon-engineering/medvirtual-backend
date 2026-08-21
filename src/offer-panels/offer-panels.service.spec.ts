@@ -693,6 +693,63 @@ describe('OfferPanelsService', () => {
     // Search and the business-unit filter each need their own OR group. Before
     // the conditions were collected in an array, assigning both onto `where.OR`
     // meant the second silently dropped the first.
+    // A panel is created at the moment it is sent, so the period filter is a
+    // window on `createdAt`.
+    it('filters by a created/sent date range, with dateTo covering the whole day', async () => {
+      mockFindAll();
+
+      await service.findAll({ dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+
+      expect(pageWhere().AND).toContainEqual({
+        createdAt: {
+          gte: new Date('2026-01-01T00:00:00.000Z'),
+          // End-of-day, so a panel sent on the 31st is not excluded.
+          lte: new Date('2026-01-31T23:59:59.999Z'),
+        },
+      });
+    });
+
+    it('leaves the range open-ended when only one bound is given', async () => {
+      mockFindAll();
+
+      await service.findAll({ dateFrom: '2026-01-01' });
+
+      expect(pageWhere().AND).toContainEqual({
+        createdAt: { gte: new Date('2026-01-01T00:00:00.000Z') },
+      });
+    });
+
+    it('adds no date condition when neither bound is given', async () => {
+      mockFindAll();
+
+      await service.findAll({});
+
+      expect(pageWhere().AND).not.toContainEqual(
+        expect.objectContaining({ createdAt: expect.anything() }),
+      );
+    });
+
+    // The tabs would otherwise show global totals contradicting the filtered
+    // list, so the window must reach the tallies too.
+    it('applies the date range to the status tallies as well', async () => {
+      mockFindAll();
+
+      await service.findAll({
+        dateFrom: '2026-01-01',
+        dateTo: '2026-01-31',
+        status: 'sent' as any,
+      });
+
+      expect(countsWhere().AND).toContainEqual({
+        createdAt: {
+          gte: new Date('2026-01-01T00:00:00.000Z'),
+          lte: new Date('2026-01-31T23:59:59.999Z'),
+        },
+      });
+      // …while status stays out of the tallies, so each tab keeps its own size.
+      expect(countsWhere().AND).not.toContainEqual({ status: 'sent' });
+    });
+
     it('keeps search and business_unit as independent conditions', async () => {
       mockFindAll();
       businessUnitContextMock.resolveByHubspotValue.mockResolvedValue({
@@ -2157,6 +2214,346 @@ describe('OfferPanelsService', () => {
       const result = await service.findByToken('tok-secret');
 
       expect(result).not.toHaveProperty('public_token');
+    });
+  });
+
+  describe('getStats', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+
+    /** A stats row as selected by getStats (not a full panel). */
+    const makeRow = (overrides: Record<string, any> = {}): any => ({
+      created_by_user_id: 'user-admin-1',
+      status: 'sent',
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      viewed_at: null,
+      decided_at: null,
+      _count: { candidates: 3 },
+      ...overrides,
+    });
+
+    /**
+     * getStats issues $transaction([groupBy, findMany]), then a separate user
+     * lookup, so tests stub the transaction and the creator read together.
+     */
+    const mockStats = (
+      rows: any[] = [],
+      grouped: {
+        created_by_user_id: string;
+        status: string;
+        _count: { status: number };
+      }[] = [],
+      creators: any[] = [
+        {
+          id: 'user-admin-1',
+          first_name: 'Admin',
+          last_name: 'User',
+          email: 'admin@medvirtual.com',
+        },
+      ],
+    ) => {
+      mockPrisma.offerPanel.groupBy.mockReturnValue('grouped-query');
+      mockPrisma.offerPanel.findMany.mockReturnValue('rows-query');
+      mockPrisma.$transaction.mockResolvedValue([grouped, rows]);
+      mockPrisma.uSER.findMany.mockResolvedValue(creators);
+    };
+
+    /** Every number in the payload, flattened, for NaN sweeps. */
+    const numbersIn = (value: any): number[] => {
+      if (typeof value === 'number') return [value];
+      if (Array.isArray(value)) return value.flatMap(numbersIn);
+      if (value && typeof value === 'object')
+        return Object.values(value).flatMap(numbersIn);
+      return [];
+    };
+
+    it('returns a zeroed payload for a window with no panels', async () => {
+      mockStats([], []);
+
+      const result = await service.getStats({});
+
+      expect(result.totals).toEqual({
+        sent: 0,
+        viewed: 0,
+        accepted: 0,
+        declined: 0,
+        total: 0,
+      });
+      expect(result.rates).toEqual({
+        acceptanceRate: 0,
+        declineRate: 0,
+        viewRate: 0,
+      });
+      expect(result.senders).toEqual([]);
+      expect(result.topSenders.mostSent).toBeNull();
+      // The dashboard renders these directly, so NaN must never reach it.
+      expect(numbersIn(result).some(Number.isNaN)).toBe(false);
+    });
+
+    it('reports 0% for a sender with sends but no decisions', async () => {
+      mockStats(
+        [makeRow(), makeRow()],
+        [
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'sent',
+            _count: { status: 2 },
+          },
+        ],
+      );
+
+      const result = await service.getStats({});
+
+      expect(result.senders).toHaveLength(1);
+      expect(result.senders[0].acceptedPct).toBe(0);
+      expect(result.senders[0].declinedPct).toBe(0);
+      expect(result.rates.acceptanceRate).toBe(0);
+      expect(numbersIn(result).some(Number.isNaN)).toBe(false);
+    });
+
+    it('counts the view rate from viewed_at, not from the viewed status', async () => {
+      // An accepted panel was also viewed; its status no longer says so.
+      mockStats(
+        [
+          makeRow({
+            status: 'accepted',
+            viewed_at: new Date('2026-06-01T02:00:00.000Z'),
+            decided_at: new Date('2026-06-02T00:00:00.000Z'),
+          }),
+          makeRow({ status: 'sent' }),
+        ],
+        [
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'accepted',
+            _count: { status: 1 },
+          },
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'sent',
+            _count: { status: 1 },
+          },
+        ],
+      );
+
+      const result = await service.getStats({});
+
+      expect(result.totals.viewed).toBe(0); // no row carries the `viewed` status
+      expect(result.rates.viewRate).toBe(50); // but one of two was in fact viewed
+      expect(result.funnel.viewed).toBe(1);
+      expect(result.rates.acceptanceRate).toBe(100); // 1 of 1 decided
+    });
+
+    it('keeps the funnel monotonically non-increasing', async () => {
+      mockStats(
+        [
+          makeRow({
+            status: 'accepted',
+            viewed_at: new Date('2026-06-01T01:00:00.000Z'),
+            decided_at: new Date('2026-06-01T05:00:00.000Z'),
+          }),
+          makeRow({
+            status: 'declined',
+            viewed_at: new Date('2026-06-01T03:00:00.000Z'),
+            decided_at: new Date('2026-06-01T09:00:00.000Z'),
+          }),
+          makeRow({ status: 'sent' }),
+        ],
+        [
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'accepted',
+            _count: { status: 1 },
+          },
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'declined',
+            _count: { status: 1 },
+          },
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'sent',
+            _count: { status: 1 },
+          },
+        ],
+      );
+
+      const { funnel } = await service.getStats({});
+
+      expect(funnel.sent).toBeGreaterThanOrEqual(funnel.viewed);
+      expect(funnel.viewed).toBeGreaterThanOrEqual(funnel.decided);
+      expect(funnel.decided).toBeGreaterThanOrEqual(funnel.accepted);
+      expect(funnel).toEqual({ sent: 3, viewed: 2, decided: 2, accepted: 1 });
+    });
+
+    it('counts unviewed panels older than 7 days as awaiting a response', async () => {
+      const now = Date.now();
+      mockStats(
+        [
+          makeRow({ createdAt: new Date(now - 10 * DAY) }), // stale
+          makeRow({ createdAt: new Date(now - 2 * DAY) }), // still fresh
+        ],
+        [
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'sent',
+            _count: { status: 2 },
+          },
+        ],
+      );
+
+      const result = await service.getStats({});
+
+      expect(result.speed.awaitingResponse).toBe(1);
+    });
+
+    it('averages durations only over panels that reached the milestone', async () => {
+      mockStats(
+        [
+          makeRow({
+            status: 'accepted',
+            viewed_at: new Date('2026-06-01T02:00:00.000Z'), // 2h
+            decided_at: new Date('2026-06-02T00:00:00.000Z'), // 24h
+          }),
+          makeRow({ status: 'sent' }), // never viewed — must not drag the mean
+        ],
+        [
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'accepted',
+            _count: { status: 1 },
+          },
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'sent',
+            _count: { status: 1 },
+          },
+        ],
+      );
+
+      const { speed } = await service.getStats({});
+
+      expect(speed.avgTimeToViewHours).toBe(2);
+      expect(speed.avgTimeToDecisionHours).toBe(24);
+    });
+
+    it('applies no date filter at all when no period is given', async () => {
+      mockStats();
+
+      await service.getStats({});
+
+      // No `createdAt` clause: the window is every panel ever created, with no
+      // implicit "last 12 months" and no upper bound to exclude future-dated rows.
+      const where = mockPrisma.offerPanel.groupBy.mock.calls[0][0].where;
+      expect(where).toEqual({});
+      expect(JSON.stringify(where)).not.toContain('createdAt');
+    });
+
+    it('leaves the window open-ended when only dateFrom is given', async () => {
+      mockStats();
+
+      await service.getStats({ dateFrom: '2026-06-01' });
+
+      const where = mockPrisma.offerPanel.groupBy.mock.calls[0][0].where;
+      expect(where.AND).toContainEqual({
+        createdAt: { gte: new Date('2026-06-01T00:00:00.000Z') },
+      });
+    });
+
+    it('narrows by creation date, inclusive of the final day', async () => {
+      mockStats();
+
+      await service.getStats({ dateFrom: '2026-06-01', dateTo: '2026-06-30' });
+
+      const where = mockPrisma.offerPanel.groupBy.mock.calls[0][0].where;
+      expect(where.AND).toContainEqual({
+        createdAt: {
+          gte: new Date('2026-06-01T00:00:00.000Z'),
+          lte: new Date('2026-06-30T23:59:59.999Z'),
+        },
+      });
+    });
+
+    it('narrows to nothing when the business unit cannot be resolved', async () => {
+      mockStats();
+      businessUnitContextMock.resolveByHubspotValue.mockResolvedValue(null);
+
+      const result = await service.getStats({ business_unit: 'Nope' });
+
+      expect(result.totals.total).toBe(0);
+      expect(result.senders).toEqual([]);
+      // Never widen to every business unit.
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('ranks top senders and falls back to email for unnamed users', async () => {
+      mockStats(
+        [
+          makeRow({ created_by_user_id: 'u1', status: 'accepted' }),
+          makeRow({ created_by_user_id: 'u1', status: 'accepted' }),
+          makeRow({ created_by_user_id: 'u2', status: 'declined' }),
+        ],
+        [
+          {
+            created_by_user_id: 'u1',
+            status: 'accepted',
+            _count: { status: 2 },
+          },
+          {
+            created_by_user_id: 'u2',
+            status: 'declined',
+            _count: { status: 1 },
+          },
+        ],
+        [
+          { id: 'u1', first_name: 'Ada', last_name: 'Lovelace', email: 'ada@x' },
+          { id: 'u2', first_name: null, last_name: null, email: 'bob@x' },
+        ],
+      );
+
+      const result = await service.getStats({});
+
+      expect(result.topSenders.mostSent).toEqual({
+        userId: 'u1',
+        name: 'Ada Lovelace',
+        count: 2,
+      });
+      expect(result.topSenders.mostAccepted?.name).toBe('Ada Lovelace');
+      expect(result.topSenders.mostDeclined?.name).toBe('bob@x');
+    });
+
+    it('buckets monthly outcomes by creation month', async () => {
+      mockStats(
+        [
+          makeRow({
+            createdAt: new Date('2026-05-10T00:00:00.000Z'),
+            status: 'accepted',
+            decided_at: new Date('2026-06-02T00:00:00.000Z'),
+            viewed_at: new Date('2026-05-11T00:00:00.000Z'),
+          }),
+          makeRow({ createdAt: new Date('2026-06-10T00:00:00.000Z') }),
+        ],
+        [
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'accepted',
+            _count: { status: 1 },
+          },
+          {
+            created_by_user_id: 'user-admin-1',
+            status: 'sent',
+            _count: { status: 1 },
+          },
+        ],
+      );
+
+      const { monthly } = await service.getStats({});
+
+      // Decided in June, but created in May — it counts in May, keeping each
+      // month's outcome bars a subset of that month's sent bar.
+      expect(monthly).toEqual([
+        { month: '2026-05', sent: 1, accepted: 1, declined: 0 },
+        { month: '2026-06', sent: 1, accepted: 0, declined: 0 },
+      ]);
     });
   });
 });

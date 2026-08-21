@@ -39,6 +39,7 @@ import { PusherModule } from './pusher/pusher.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { StripeModule } from './stripe/stripe.module';
 import { bullPrefix, queuesEnabledSync } from './common/app-config';
+import { SessionActivityModule } from './session-activity/session-activity.module';
 
 @Module({
   imports: [
@@ -108,6 +109,7 @@ import { bullPrefix, queuesEnabledSync } from './common/app-config';
     PusherModule,
     InvoiceModule,
     StripeModule,
+    SessionActivityModule,
   ],
   controllers: [AppController],
   providers: [

@@ -38,6 +38,7 @@ import {
   offerPanelPromoMetadata,
 } from '../common/constant/offer-panel-promo.constant';
 import { QueryOfferPanelsDto } from './dto/query-offer-panels.dto';
+import { OfferPanelStatsQueryDto } from './dto/offer-panel-stats.dto';
 import {
   CreateOfferPanelDto,
   RecipientDto,
@@ -53,6 +54,127 @@ function emptyOfferPanelStatusCounts(): OfferPanelStatusCounts {
     (acc, status) => ({ ...acc, [status]: 0 }),
     {} as OfferPanelStatusCounts,
   );
+}
+
+// ── Offer-panel analytics (Operational Dashboard) ───────────────────────────
+
+/** A panel with no view after this many days counts as awaiting a response. */
+const AWAITING_RESPONSE_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MS_PER_HOUR = 60 * 60 * 1000;
+
+export interface OfferPanelSenderStats {
+  userId: string;
+  name: string;
+  email: string;
+  sent: number;
+  viewed: number;
+  accepted: number;
+  declined: number;
+  total: number;
+  acceptedPct: number;
+  declinedPct: number;
+  totalCandidates: number;
+  lastSentAt: string | null;
+}
+
+export interface OfferPanelTopSender {
+  userId: string;
+  name: string;
+  count: number;
+}
+
+export interface OfferPanelMonthlyBucket {
+  month: string;
+  sent: number;
+  accepted: number;
+  declined: number;
+}
+
+export interface OfferPanelStats {
+  totals: {
+    sent: number;
+    viewed: number;
+    accepted: number;
+    declined: number;
+    total: number;
+  };
+  rates: { acceptanceRate: number; declineRate: number; viewRate: number };
+  speed: {
+    avgTimeToViewHours: number;
+    avgTimeToDecisionHours: number;
+    awaitingResponse: number;
+  };
+  funnel: { sent: number; viewed: number; decided: number; accepted: number };
+  topSenders: {
+    mostSent: OfferPanelTopSender | null;
+    mostAccepted: OfferPanelTopSender | null;
+    mostDeclined: OfferPanelTopSender | null;
+  };
+  senders: OfferPanelSenderStats[];
+  monthly: OfferPanelMonthlyBucket[];
+}
+
+/** Mutable per-sender tally, collapsed into `OfferPanelSenderStats` at the end. */
+interface SenderAccumulator {
+  userId: string;
+  counts: OfferPanelStatusCounts;
+  viewed: number;
+  totalCandidates: number;
+  total: number;
+  lastSentAt: Date | null;
+}
+
+/**
+ * A percentage rounded to one decimal. An empty denominator yields 0, never
+ * NaN or Infinity — the dashboard renders these directly.
+ */
+function percentage(part: number, whole: number): number {
+  if (!whole) return 0;
+  return Math.round((part / whole) * 1000) / 10;
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/** Mean of a set of millisecond durations, expressed in hours; 0 when empty. */
+function averageHours(durationsMs: number[]): number {
+  if (!durationsMs.length) return 0;
+  const total = durationsMs.reduce((sum, ms) => sum + ms, 0);
+  return round1(total / durationsMs.length / MS_PER_HOUR);
+}
+
+/** The leading sender by some measure, or null when nobody scores above zero. */
+function topSender(
+  senders: OfferPanelSenderStats[],
+  measure: (sender: OfferPanelSenderStats) => number,
+): OfferPanelTopSender | null {
+  let best: OfferPanelSenderStats | null = null;
+  for (const sender of senders) {
+    if (measure(sender) > 0 && (!best || measure(sender) > measure(best))) {
+      best = sender;
+    }
+  }
+  if (!best) return null;
+  return { userId: best.userId, name: best.name, count: measure(best) };
+}
+
+/** The zero state, shared by the empty-result and unresolvable-BU paths. */
+function emptyOfferPanelStats(): OfferPanelStats {
+  return {
+    totals: { sent: 0, viewed: 0, accepted: 0, declined: 0, total: 0 },
+    rates: { acceptanceRate: 0, declineRate: 0, viewRate: 0 },
+    speed: {
+      avgTimeToViewHours: 0,
+      avgTimeToDecisionHours: 0,
+      awaitingResponse: 0,
+    },
+    funnel: { sent: 0, viewed: 0, decided: 0, accepted: 0 },
+    topSenders: { mostSent: null, mostAccepted: null, mostDeclined: null },
+    senders: [],
+    monthly: [],
+  };
 }
 
 const CANDIDATE_CARD_SELECT = {
@@ -1607,6 +1729,8 @@ export class OfferPanelsService {
       client,
       created_by,
       business_unit,
+      dateFrom,
+      dateTo,
       page = 1,
       limit = 20,
     } = query;
@@ -1657,6 +1781,15 @@ export class OfferPanelsService {
         })),
       });
     }
+
+    // Period filter. A panel is created at the moment it is sent, so the
+    // creation date is also the sent date. `dateTo` covers the whole day (not
+    // midnight) so an end date the user picked is inclusive — same UTC bounds
+    // as getStats(), so the list and the dashboard stats agree.
+    const createdAt: { gte?: Date; lte?: Date } = {};
+    if (dateFrom) createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+    if (dateTo) createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
+    if (dateFrom || dateTo) baseConditions.push({ createdAt });
 
     if (search) {
       baseConditions.push({
@@ -1771,6 +1904,232 @@ export class OfferPanelsService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  /**
+   * Offer-panel analytics for the Operational Dashboard, aggregated by sender
+   * (`created_by_user_id`).
+   *
+   * Two reads are needed and they are deliberate: `groupBy` gives the per-sender
+   * status tallies straight from the index, but Prisma cannot compute date
+   * *differences*, so the duration metrics (time-to-view, time-to-decision) come
+   * from a narrowly-selected `findMany` reduced in JS — the same approach as
+   * `CronService.weeklyOfferPanelReport`.
+   */
+  async getStats(query: OfferPanelStatsQueryDto): Promise<OfferPanelStats> {
+    const { dateFrom, dateTo, business_unit } = query;
+
+    const conditions: any[] = [];
+
+    const createdAt: { gte?: Date; lte?: Date } = {};
+    if (dateFrom) createdAt.gte = new Date(`${dateFrom}T00:00:00.000Z`);
+    // The range is inclusive of its final day: a bare `new Date('2026-08-12')`
+    // is midnight, which would silently drop everything sent that day.
+    if (dateTo) createdAt.lte = new Date(`${dateTo}T23:59:59.999Z`);
+    if (dateFrom || dateTo) conditions.push({ createdAt });
+
+    if (business_unit) {
+      const resolved =
+        await this.businessUnitContext.resolveByHubspotValue(business_unit);
+      // An unrecognized BU must narrow to nothing, never widen to everything.
+      if (!resolved) return emptyOfferPanelStats();
+      // Rows have been written with several spellings over time ("Berry
+      // Virtual" vs "BerryVirtual"). `mode: 'insensitive'` covers casing but
+      // not whitespace, so match every variant explicitly.
+      const variants = new Set(
+        [resolved.hubspot_value, resolved.name, resolved.slug]
+          .filter((value): value is string => !!value)
+          .flatMap((value) => [value, value.replace(/\s+/g, '')]),
+      );
+      conditions.push({
+        OR: [...variants].map((value) => ({
+          business_unit: { equals: value, mode: 'insensitive' as const },
+        })),
+      });
+    }
+
+    const where = conditions.length ? { AND: conditions } : {};
+
+    const groupedQuery = this.prisma.offerPanel.groupBy({
+      by: ['created_by_user_id', 'status'],
+      where,
+      _count: { status: true },
+      orderBy: { created_by_user_id: 'asc' },
+    });
+
+    // Only the columns the derived metrics need — pulling whole rows with
+    // relations here is what made the admin list slow enough to freeze.
+    const rowsQuery = this.prisma.offerPanel.findMany({
+      where,
+      select: {
+        created_by_user_id: true,
+        status: true,
+        createdAt: true,
+        viewed_at: true,
+        decided_at: true,
+        _count: { select: { candidates: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const [grouped, rows] = await this.prisma.$transaction([
+      groupedQuery,
+      rowsQuery,
+    ]);
+
+    if (!rows.length) return emptyOfferPanelStats();
+
+    // ── Per-sender accumulation ──────────────────────────────────────────────
+    const accumulators = new Map<string, SenderAccumulator>();
+    const accumulatorFor = (userId: string): SenderAccumulator => {
+      let acc = accumulators.get(userId);
+      if (!acc) {
+        acc = {
+          userId,
+          counts: emptyOfferPanelStatusCounts(),
+          viewed: 0,
+          totalCandidates: 0,
+          total: 0,
+          lastSentAt: null,
+        };
+        accumulators.set(userId, acc);
+      }
+      return acc;
+    };
+
+    // Status tallies come from the grouped query rather than the row scan: it is
+    // the authoritative count and stays correct even as the select above changes.
+    for (const group of grouped) {
+      const acc = accumulatorFor(group.created_by_user_id);
+      acc.counts[group.status] = group._count.status;
+      acc.total += group._count.status;
+    }
+
+    const totals = emptyOfferPanelStatusCounts();
+    let viewedEver = 0;
+    let awaitingResponse = 0;
+    const timesToView: number[] = [];
+    const timesToDecision: number[] = [];
+    const monthlyBuckets = new Map<string, OfferPanelMonthlyBucket>();
+    const staleBefore = Date.now() - AWAITING_RESPONSE_DAYS * MS_PER_DAY;
+
+    for (const row of rows) {
+      const acc = accumulatorFor(row.created_by_user_id);
+      totals[row.status] += 1;
+
+      acc.totalCandidates += row._count.candidates;
+      if (!acc.lastSentAt || row.createdAt > acc.lastSentAt) {
+        acc.lastSentAt = row.createdAt;
+      }
+
+      const createdMs = row.createdAt.getTime();
+
+      // `viewed` is a terminal status, not a cumulative one: an accepted panel
+      // was also viewed but no longer says so. Counting `viewed_at` instead of
+      // `status === 'viewed'` is what keeps the view rate and the funnel honest.
+      if (row.viewed_at) {
+        viewedEver += 1;
+        acc.viewed += 1;
+        timesToView.push(row.viewed_at.getTime() - createdMs);
+      } else if (
+        row.status === OfferPanelStatus.sent &&
+        createdMs < staleBefore
+      ) {
+        awaitingResponse += 1;
+      }
+
+      if (row.decided_at) {
+        timesToDecision.push(row.decided_at.getTime() - createdMs);
+      }
+
+      // Outcomes are bucketed by creation month, so each month's accepted and
+      // declined bars stay a subset of that month's sent bar.
+      const monthKey = `${row.createdAt.getUTCFullYear()}-${String(
+        row.createdAt.getUTCMonth() + 1,
+      ).padStart(2, '0')}`;
+      let bucket = monthlyBuckets.get(monthKey);
+      if (!bucket) {
+        bucket = { month: monthKey, sent: 0, accepted: 0, declined: 0 };
+        monthlyBuckets.set(monthKey, bucket);
+      }
+      bucket.sent += 1;
+      if (row.status === OfferPanelStatus.accepted) bucket.accepted += 1;
+      if (row.status === OfferPanelStatus.declined) bucket.declined += 1;
+    }
+
+    // ── Sender identities ────────────────────────────────────────────────────
+    const creators = await this.prisma.uSER.findMany({
+      where: { id: { in: [...accumulators.keys()] } },
+      select: { id: true, first_name: true, last_name: true, email: true },
+    });
+    const creatorsById = new Map(creators.map((user) => [user.id, user]));
+
+    const senders: OfferPanelSenderStats[] = [...accumulators.values()]
+      .map((acc) => {
+        const creator = creatorsById.get(acc.userId);
+        const accepted = acc.counts[OfferPanelStatus.accepted];
+        const declined = acc.counts[OfferPanelStatus.declined];
+        return {
+          userId: acc.userId,
+          name:
+            [creator?.first_name, creator?.last_name]
+              .filter(Boolean)
+              .join(' ')
+              .trim() ||
+            creator?.email ||
+            'Unknown user',
+          email: creator?.email ?? '',
+          sent: acc.counts[OfferPanelStatus.sent],
+          viewed: acc.viewed,
+          accepted,
+          declined,
+          total: acc.total,
+          acceptedPct: percentage(accepted, accepted + declined),
+          declinedPct: percentage(declined, accepted + declined),
+          totalCandidates: acc.totalCandidates,
+          lastSentAt: acc.lastSentAt ? acc.lastSentAt.toISOString() : null,
+        };
+      })
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+    const total = rows.length;
+    const accepted = totals[OfferPanelStatus.accepted];
+    const declined = totals[OfferPanelStatus.declined];
+    const decided = accepted + declined;
+
+    return {
+      totals: {
+        sent: totals[OfferPanelStatus.sent],
+        viewed: totals[OfferPanelStatus.viewed],
+        accepted,
+        declined,
+        total,
+      },
+      rates: {
+        // Acceptance is measured against panels that were actually decided —
+        // against `total` a sender would look bad merely for having panels
+        // still in flight.
+        acceptanceRate: percentage(accepted, decided),
+        declineRate: percentage(declined, decided),
+        viewRate: percentage(viewedEver, total),
+      },
+      speed: {
+        avgTimeToViewHours: averageHours(timesToView),
+        avgTimeToDecisionHours: averageHours(timesToDecision),
+        awaitingResponse,
+      },
+      // Cumulative stages, so the funnel is monotonically non-increasing.
+      funnel: { sent: total, viewed: viewedEver, decided, accepted },
+      topSenders: {
+        mostSent: topSender(senders, (s) => s.total),
+        mostAccepted: topSender(senders, (s) => s.accepted),
+        mostDeclined: topSender(senders, (s) => s.declined),
+      },
+      senders,
+      monthly: [...monthlyBuckets.values()].sort((a, b) =>
+        a.month.localeCompare(b.month),
+      ),
     };
   }
 

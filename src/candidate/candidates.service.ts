@@ -49,6 +49,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { latinAmericaCountries } from '../common/constant/latin-america-countries';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from './candidate-audit.service';
+import {
+  CandidateAuditFieldGroup,
+  CandidateAuditSource,
+} from '@prisma/client';
 
 const NON_MEDICAL_POOL = 'non_medical';
 
@@ -153,6 +161,7 @@ export class CandidatesService {
     private readonly notifications: NotificationsService,
     private readonly positionRateConfigService: PositionRateConfigService,
     private readonly businessUnitContext: BusinessUnitContext,
+    private readonly candidateAudit: CandidateAuditService,
   ) {}
 
   /**
@@ -1589,6 +1598,18 @@ export class CandidatesService {
       data.pipeline_status = stageName || 'Unknown Stage';
     }
 
+    const changedKeys = Object.keys(data) as (keyof UpdateCandidateDto)[];
+    const beforeCandidate =
+      changedKeys.length > 0
+        ? await this.prisma.candidate.findUnique({
+            where: { id },
+            select: changedKeys.reduce<Record<string, true>>((acc, key) => {
+              acc[key] = true;
+              return acc;
+            }, {}),
+          })
+        : null;
+
     const updatedCandidate = await this.prisma.candidate.update({
       where: { id: id },
       data: {
@@ -1597,6 +1618,31 @@ export class CandidatesService {
     });
     if (!updatedCandidate)
       throw new BadGatewayException('Failed to update candidate');
+
+    if (changedKeys.length > 0) {
+      const isPipelineStatusChange = changedKeys.includes('pipeline_status');
+      const before: Record<string, unknown> = {};
+      const after: Record<string, unknown> = {};
+      for (const key of changedKeys) {
+        before[key] = (beforeCandidate as Record<string, unknown> | null)?.[
+          key
+        ];
+        after[key] = (updatedCandidate as Record<string, unknown>)[key];
+      }
+      void this.candidateAudit.log({
+        candidateId: updatedCandidate.id,
+        hubspotId: updatedCandidate.hubspot_id,
+        event: isPipelineStatusChange
+          ? CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED
+          : CANDIDATE_AUDIT_EVENTS.PROFILE_UPDATED,
+        fieldGroup: isPipelineStatusChange
+          ? CandidateAuditFieldGroup.pipeline_status
+          : CandidateAuditFieldGroup.profile,
+        before,
+        after,
+        source: CandidateAuditSource.user,
+      });
+    }
 
     // R9 — remove from all OfferPanels when candidate becomes unavailable
     if (
@@ -1646,6 +1692,16 @@ export class CandidatesService {
     status: ProcessingStatus,
     error?: string,
   ): Promise<void> {
+    const beforeCandidate = await this.prisma.candidate.findUnique({
+      where: { id },
+      select: {
+        hubspot_id: true,
+        processing_status: true,
+        processing_error: true,
+        processed_at: true,
+      },
+    });
+
     await this.prisma.candidate.update({
       where: { id },
       data: {
@@ -1653,6 +1709,24 @@ export class CandidatesService {
         processing_error: error || null,
         processed_at: new Date(),
       },
+    });
+
+    void this.candidateAudit.log({
+      candidateId: id,
+      hubspotId: beforeCandidate?.hubspot_id ?? null,
+      event: CANDIDATE_AUDIT_EVENTS.PROCESSING_STATUS_CHANGED,
+      fieldGroup: CandidateAuditFieldGroup.processing,
+      before: {
+        processing_status: beforeCandidate?.processing_status,
+        processing_error: beforeCandidate?.processing_error,
+        processed_at: beforeCandidate?.processed_at,
+      },
+      after: {
+        processing_status: status,
+        processing_error: error || null,
+        processed_at: new Date(),
+      },
+      source: CandidateAuditSource.system,
     });
   }
 
@@ -1713,6 +1787,9 @@ export class CandidatesService {
       select: {
         id: true,
         headshot_url: true,
+        hubspot_id: true,
+        avatar_url: true,
+        processing_cost: true,
       },
     });
     if (!candidate) throw new BadRequestException('Candidate not found');
@@ -1772,6 +1849,22 @@ export class CandidatesService {
           avatar_url: bucketFile,
           processing_cost: { increment: avatarCost },
         },
+      });
+
+      void this.candidateAudit.log({
+        candidateId: id,
+        hubspotId: candidate.hubspot_id,
+        event: CANDIDATE_AUDIT_EVENTS.AVATAR_GENERATED,
+        fieldGroup: CandidateAuditFieldGroup.profile,
+        before: {
+          avatar_url: candidate.avatar_url,
+          processing_cost: candidate.processing_cost,
+        },
+        after: {
+          avatar_url: updatedCandidate.avatar_url,
+          processing_cost: updatedCandidate.processing_cost,
+        },
+        source: CandidateAuditSource.system,
       });
     }
     return true;
@@ -1912,16 +2005,41 @@ export class CandidatesService {
         console.log('Data extracted successfully by OpenAI');
 
         //processing_updateCandidate
-        await this.prisma.candidate.update({
+        const processedAt = new Date();
+        const updatedCandidate = await this.prisma.candidate.update({
           where: { id: id },
           data: {
             processing_status: 'processing_updateCandidate',
             processed_resume_data: transformedData,
-            processed_at: new Date(),
+            processed_at: processedAt,
             about_me: transformedData.bio,
             years_of_experience: transformedData.years_of_experience || 0,
             processing_cost: { increment: resumeCost },
           },
+        });
+
+        void this.candidateAudit.log({
+          candidateId: id,
+          hubspotId: candidate.hubspot_id,
+          event: CANDIDATE_AUDIT_EVENTS.PROCESSING_STATUS_CHANGED,
+          fieldGroup: CandidateAuditFieldGroup.processing,
+          before: {
+            processing_status: candidate.processing_status,
+            processed_resume_data: candidate.processed_resume_data,
+            processed_at: candidate.processed_at,
+            about_me: candidate.about_me,
+            years_of_experience: candidate.years_of_experience,
+            processing_cost: candidate.processing_cost,
+          },
+          after: {
+            processing_status: updatedCandidate.processing_status,
+            processed_resume_data: updatedCandidate.processed_resume_data,
+            processed_at: updatedCandidate.processed_at,
+            about_me: updatedCandidate.about_me,
+            years_of_experience: updatedCandidate.years_of_experience,
+            processing_cost: updatedCandidate.processing_cost,
+          },
+          source: CandidateAuditSource.system,
         });
 
         //call function to populate skills, education, experience....
@@ -2252,7 +2370,7 @@ export class CandidatesService {
 
     const candidate = await this.prisma.candidate.findUnique({
       where: { id: id },
-      select: { hubspot_id: true },
+      select: { hubspot_id: true, pipeline_status: true },
     });
     if (!candidate) throw new NotFoundException('Candidate not found');
 
@@ -2287,6 +2405,16 @@ export class CandidatesService {
     });
     if (!updatedCandidate)
       throw new BadGatewayException('Failed to update candidate status');
+
+    void this.candidateAudit.log({
+      candidateId: id,
+      hubspotId: candidate.hubspot_id,
+      event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+      fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+      before: { pipeline_status: candidate.pipeline_status },
+      after: { pipeline_status: updatedCandidate.pipeline_status },
+      source: CandidateAuditSource.user,
+    });
 
     // R9 — remove from all OfferPanels when candidate becomes unavailable
     if (CandidatesService.UNAVAILABLE_PIPELINE_STATUSES.includes(stageName)) {
@@ -3363,6 +3491,7 @@ export class CandidatesService {
       select: {
         id: true,
         hubspot_id: true,
+        business_unit: true,
       },
     });
 
@@ -3399,6 +3528,17 @@ export class CandidatesService {
               business_unit: businessUnit,
             },
           });
+
+          void this.candidateAudit.log({
+            candidateId: candidate.id,
+            hubspotId: candidate.hubspot_id,
+            event: CANDIDATE_AUDIT_EVENTS.BUSINESS_UNIT_SYNCED,
+            fieldGroup: CandidateAuditFieldGroup.business_unit,
+            before: { business_unit: candidate.business_unit },
+            after: { business_unit: businessUnit },
+            source: CandidateAuditSource.cron,
+          });
+
           updatedCount++;
         }
       } catch (error) {
@@ -3459,6 +3599,10 @@ export class CandidatesService {
       select: {
         id: true,
         hubspot_id: true,
+        ...vaScoreCardProperties.reduce<Record<string, true>>((acc, prop) => {
+          acc[prop] = true;
+          return acc;
+        }, {}),
       },
     });
 
@@ -3494,9 +3638,26 @@ export class CandidatesService {
           updateData[prop] = properties[prop] || null;
         }
 
+        const beforeScoreCard: Record<string, unknown> = {};
+        for (const prop of vaScoreCardProperties) {
+          beforeScoreCard[prop] = (candidate as Record<string, unknown>)[
+            prop
+          ];
+        }
+
         await this.prisma.candidate.update({
           where: { id: candidate.id },
           data: updateData,
+        });
+
+        void this.candidateAudit.log({
+          candidateId: candidate.id,
+          hubspotId: candidate.hubspot_id,
+          event: CANDIDATE_AUDIT_EVENTS.VA_SCORECARD_SYNCED,
+          fieldGroup: CandidateAuditFieldGroup.va_scorecard,
+          before: beforeScoreCard,
+          after: updateData,
+          source: CandidateAuditSource.cron,
         });
 
         updatedCount++;

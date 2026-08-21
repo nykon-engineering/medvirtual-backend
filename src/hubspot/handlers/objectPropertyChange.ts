@@ -7,8 +7,14 @@ import {
   HireRequestStatus,
   PanelCandidateStatus,
   PanelStatus,
+  CandidateAuditFieldGroup,
+  CandidateAuditSource,
 } from '@prisma/client';
 import { read } from 'node:fs';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../../candidate/candidate-audit.service';
 
 @Injectable()
 export class HandlerObjectPropertyChange {
@@ -16,6 +22,7 @@ export class HandlerObjectPropertyChange {
     private readonly prisma: PrismaService,
     private readonly objectCreation: HandlerObjectCreation,
     private readonly candidateService: CandidatesService,
+    private readonly candidateAudit: CandidateAuditService,
   ) {}
 
   async execute(event) {
@@ -106,6 +113,27 @@ export class HandlerObjectPropertyChange {
       await this.prisma.candidate.update({
         where: { id: candidate.id },
         data: updateData,
+      });
+
+      const isPipelineStatusChange = Object.prototype.hasOwnProperty.call(
+        updateData,
+        'pipeline_status',
+      );
+      void this.candidateAudit.log({
+        candidateId: candidate.id,
+        hubspotId: candidate.hubspot_id,
+        actorUserId: null,
+        event: isPipelineStatusChange
+          ? CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED
+          : CANDIDATE_AUDIT_EVENTS.PROFILE_UPDATED,
+        fieldGroup: isPipelineStatusChange
+          ? CandidateAuditFieldGroup.pipeline_status
+          : CandidateAuditFieldGroup.hubspot_sync,
+        before: Object.fromEntries(
+          fields.map((field) => [field, (candidate as Record<string, any>)[field]]),
+        ),
+        after: updateData,
+        source: CandidateAuditSource.webhook,
       });
 
       // R9 — remove candidate from all OfferPanels when they become Hired or Lost

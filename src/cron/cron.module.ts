@@ -12,6 +12,7 @@ import { SyncModule } from '../med-alliance/sync/sync.module';
 import { AllianceNotificationsModule } from '../med-alliance/notifications/notifications.module';
 import { EmailTemplatesModule } from '../email-templates/email-templates.module';
 import { BusinessUnitsModule } from '../business-units/business-units.module';
+import { CandidateAuditModule } from '../candidate/candidate-audit.module';
 
 @Module({
   controllers: [CronController],
@@ -28,6 +29,7 @@ import { BusinessUnitsModule } from '../business-units/business-units.module';
     AllianceNotificationsModule,
     EmailTemplatesModule,
     forwardRef(() => BusinessUnitsModule),
+    CandidateAuditModule,
   ],
 })
 export class CronModule {}

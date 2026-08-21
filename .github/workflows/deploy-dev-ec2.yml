@@ -1,0 +1,81 @@
+name: Build, Push & Deploy (EC2 - Dev)
+
+on:
+  push:
+    branches:
+      - dev
+
+env:
+  DEPLOY_PATH: /home/ec2-user/medvirtual-backend
+  PM2_APP_NAME: medvirtual-backend
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Package release
+        run: |
+          mkdir -p release/prisma
+          cp -r dist package.json package-lock.json release/
+          cp -r prisma/schema.prisma prisma/migrations release/prisma/
+          tar -czf release.tar.gz -C release .
+
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SERVER_SSH_KEY }}
+
+      - name: Trust server host key
+        run: ssh-keyscan -H "${{ secrets.STAGING_SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload release
+        run: |
+          scp release.tar.gz \
+            "${{ secrets.SERVER_USER }}@${{ secrets.STAGING_SERVER_HOST }}:/home/ec2-user/release.tar.gz"
+
+      # dist/, package.json, package-lock.json and prisma/ are replaced on every deploy;
+      # the persisted .env in $DEPLOY_PATH is never touched. node_modules is installed
+      # on the server itself (not shipped from CI) so native deps like @napi-rs/canvas
+      # get binaries matching this box's actual platform/arch, not the GitHub runner's.
+      # Migrations run here too, using the server's own .env, since the DB is only
+      # reachable from inside the VPC.
+      - name: Extract, install, migrate & restart on server
+        run: |
+          ssh "${{ secrets.SERVER_USER }}@${{ secrets.STAGING_SERVER_HOST }}" '
+            set -e
+            mkdir -p "${{ env.DEPLOY_PATH }}"
+            cd "${{ env.DEPLOY_PATH }}"
+            rm -rf dist package.json package-lock.json prisma
+            tar -xzf /home/ec2-user/release.tar.gz -C "${{ env.DEPLOY_PATH }}"
+            rm -f /home/ec2-user/release.tar.gz
+            npm ci --omit=dev
+            npx prisma generate
+            npx prisma migrate deploy
+            if pm2 describe "${{ env.PM2_APP_NAME }}" > /dev/null 2>&1; then
+              pm2 reload "${{ env.PM2_APP_NAME }}" --update-env
+            else
+              pm2 start dist/main.js --name "${{ env.PM2_APP_NAME }}" --cwd "${{ env.DEPLOY_PATH }}"
+            fi
+            pm2 save
+          '

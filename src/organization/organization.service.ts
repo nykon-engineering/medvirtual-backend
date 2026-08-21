@@ -51,6 +51,11 @@ import { SqsService } from '../sqs/sqs.service';
 import { activePipelines } from '../common/constant/activeDealPipelines';
 import { ContactService } from '../contacts/contacts.service';
 import { BusinessUnitContext } from '../business-units/business-unit-context.service';
+import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
+import {
+  CANDIDATE_AUDIT_EVENTS,
+  CandidateAuditService,
+} from '../candidate/candidate-audit.service';
 
 @Injectable()
 export class OrganizationService {
@@ -68,6 +73,7 @@ export class OrganizationService {
     private readonly sqs: SqsService,
     private readonly contactService: ContactService,
     private readonly businessUnitContext: BusinessUnitContext,
+    private readonly candidateAudit: CandidateAuditService,
   ) {}
 
   /**
@@ -2285,6 +2291,7 @@ export class OrganizationService {
                 select: {
                   id: true,
                   hubspot_id: true,
+                  pipeline_status: true,
                   pipeline_status_origin: true,
                 },
               },
@@ -2299,6 +2306,16 @@ export class OrganizationService {
               await this.prisma.candidate.update({
                 where: { id: c.id },
                 data: { pipeline_status: pipeline_treated },
+              });
+              await this.candidateAudit.log({
+                candidateId: c.id,
+                hubspotId: c.hubspot_id,
+                actorUserId: user.id,
+                event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+                fieldGroup: CandidateAuditFieldGroup.pipeline_status,
+                before: { pipeline_status: c.pipeline_status },
+                after: { pipeline_status: pipeline_treated },
+                source: CandidateAuditSource.user,
               });
               await this.hubspot.updateOneCandidateFromHireRequest(
                 c.hubspot_id,

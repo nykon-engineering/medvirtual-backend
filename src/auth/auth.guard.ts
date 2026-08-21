@@ -51,6 +51,7 @@ export class AuthGuard implements CanActivate {
       }
 
       req['user'] = session.user;
+      req['sessionId'] = session.id;
       return true;
     } catch (error) {
       throw new UnauthorizedException('Invalid or expired token');
