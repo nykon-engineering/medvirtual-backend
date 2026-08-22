@@ -71,3 +71,6 @@ CLAUDE.md
 
 #scripts
 /scripts
+
+# local-only migration docs (kept locally, not in the repo)
+/docs/backend-migration
