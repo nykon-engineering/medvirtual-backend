@@ -1,8 +1,7 @@
 import { SQSEvent } from 'aws-lambda';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { HandlerDealCreation } from './hubspot/handlers/dealCreation';
-import { PrismaService } from './prisma/prisma.service';
+import { DealsQueueConsumerService } from './sqs/deals-queue-consumer.service';
 
 import { InvoiceWorker } from './invoice/invoice.worker';
 

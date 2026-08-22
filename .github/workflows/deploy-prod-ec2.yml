@@ -8,6 +8,7 @@ on:
 env:
   DEPLOY_PATH: /home/ec2-user/medvirtual-backend
   PM2_APP_NAME: medvirtual-backend-prod
+  PM2_WORKER_NAME: medvirtual-backend-prod-worker
 
 jobs:
   build-push-deploy:
@@ -76,6 +77,11 @@ jobs:
               pm2 reload "${{ env.PM2_APP_NAME }}" --update-env
             else
               pm2 start dist/src/main.js --name "${{ env.PM2_APP_NAME }}" --cwd "${{ env.DEPLOY_PATH }}"
+            fi
+            if pm2 describe "${{ env.PM2_WORKER_NAME }}" > /dev/null 2>&1; then
+              pm2 reload "${{ env.PM2_WORKER_NAME }}" --update-env
+            else
+              pm2 start dist/src/worker.js --name "${{ env.PM2_WORKER_NAME }}" --cwd "${{ env.DEPLOY_PATH }}" --kill-timeout 25000
             fi
             pm2 save
           '
