@@ -3094,7 +3094,14 @@ export class HireRequestService {
       });
 
       if (existingPanel) {
-        this.assertNoHiredCandidatesInPanel(existingPanel.panelCandidates);
+        // Only block candidates that would still remain on the panel after
+        // this edit — a hired candidate being removed (i.e. left out of
+        // data.candidates_id) must be allowed through, since that's the
+        // very action the guard's error message asks the user to take.
+        const remainingPanelCandidates = existingPanel.panelCandidates.filter(
+          (pc) => data.candidates_id.includes(pc.candidate.id),
+        );
+        this.assertNoHiredCandidatesInPanel(remainingPanelCandidates);
       }
 
       let panelId: string;
