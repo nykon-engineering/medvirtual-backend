@@ -102,6 +102,9 @@ function makePrisma(findFirstResult: unknown = null) {
     emailBranding: {
       findUnique: jest.fn().mockResolvedValue(BRANDING),
     },
+    uSER: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
 }
 
