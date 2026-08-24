@@ -18,6 +18,11 @@ import { activePipelines } from '../common/constant/activeDealPipelines';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
 import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
 import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
+import { CandidateEndorsementsQueryDto } from './dto/candidate-endorsements-query.dto';
+import {
+  CandidateEndorsementRowDto,
+  CandidateEndorsementsResponseDto,
+} from './dto/candidate-endorsement-row.dto';
 import {
   TalentAgingReportDto,
   TalentAgingBucketDto,
@@ -33,7 +38,11 @@ import {
 // the default window getPanelData() uses when no date range is provided.
 const DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS = 12;
 
-const CLIENT_ROLES = ['organization_super_admin', 'organization_admin', 'affiliate'];
+const CLIENT_ROLES = [
+  'organization_super_admin',
+  'organization_admin',
+  'affiliate',
+];
 const ADMIN_ROLES = ['system_admin', 'system_super_admin'];
 
 // Same-request writes in changeWinner() land well under a second apart in practice;
@@ -48,7 +57,12 @@ type AgingBucketLabel = (typeof AGING_BUCKET_LABELS)[number];
 interface DeploymentAuditRow {
   candidate_id: string;
   createdAt: Date;
-  actorUser: { id: string; role: string; first_name: string | null; last_name: string | null } | null;
+  actorUser: {
+    id: string;
+    role: string;
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
   actor_label: string | null;
 }
 
@@ -83,7 +97,9 @@ export class PanelService {
         event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
         pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
         createdAt: {
-          gte: new Date(rangeStart.getTime() - DEPLOYMENT_CORRELATION_WINDOW_MS),
+          gte: new Date(
+            rangeStart.getTime() - DEPLOYMENT_CORRELATION_WINDOW_MS,
+          ),
           lt: new Date(
             rangeEndExclusive.getTime() + DEPLOYMENT_CORRELATION_WINDOW_MS,
           ),
@@ -118,7 +134,9 @@ export class PanelService {
     let best: DeploymentAuditRow | undefined;
     let bestDelta = Infinity;
     for (const row of rows) {
-      const delta = Math.abs(row.createdAt.getTime() - panelUpdatedAt.getTime());
+      const delta = Math.abs(
+        row.createdAt.getTime() - panelUpdatedAt.getTime(),
+      );
       if (delta <= DEPLOYMENT_CORRELATION_WINDOW_MS && delta < bestDelta) {
         best = row;
         bestDelta = delta;
@@ -138,7 +156,9 @@ export class PanelService {
     };
   }
 
-  private classifyDeploymentActor(actor: DeploymentActor | null): 'admin' | 'client' {
+  private classifyDeploymentActor(
+    actor: DeploymentActor | null,
+  ): 'admin' | 'client' {
     if (!actor || !actor.role) return 'admin';
     return CLIENT_ROLES.includes(actor.role) ? 'client' : 'admin';
   }
@@ -269,6 +289,34 @@ export class PanelService {
       },
     });
     result.verifiedClientUsers = verifiedClientUsers;
+
+    // 3b. Active client users split by whether their organization has at least one
+    // active staff placement — "client with staff" (an active customer) vs.
+    // "prospect" (signed up, no placement yet). Mirrors activeStaff's own
+    // status/hubspot_dealstage filter so both counts agree on what "active" means.
+    const activeStaffFilter = {
+      status: 'active',
+      hubspot_dealstage: { in: activePipelines.map(([key]) => String(key)) },
+    };
+    const activeClientUsersWithStaff = await this.prisma.uSER.count({
+      where: {
+        role: { in: ['organization_admin', 'organization_super_admin'] },
+        status: 'active',
+        organization: { staff: { some: activeStaffFilter } },
+        ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
+      },
+    });
+    result.activeClientUsersWithStaff = activeClientUsersWithStaff;
+
+    const activeProspectUsersWithoutStaff = await this.prisma.uSER.count({
+      where: {
+        role: { in: ['organization_admin', 'organization_super_admin'] },
+        status: 'active',
+        organization: { staff: { none: activeStaffFilter } },
+        ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
+      },
+    });
+    result.activeProspectUsersWithoutStaff = activeProspectUsersWithoutStaff;
 
     // 4. Average Ticket Aging (Hire Request Created → Placement Completed)
 
@@ -555,7 +603,10 @@ export class PanelService {
     const deployedPanelCandidates = await this.prisma.panelCandidate.findMany({
       where: {
         status: PanelCandidateStatus.selected_by_client,
-        updatedAt: { gte: deploymentRangeStart, lt: deploymentRangeEndExclusive },
+        updatedAt: {
+          gte: deploymentRangeStart,
+          lt: deploymentRangeEndExclusive,
+        },
       },
       select: { candidate_id: true, updatedAt: true },
     });
@@ -740,11 +791,19 @@ export class PanelService {
         CLIENT_ROLES,
       );
 
+      const clientPlatformDurationMinutes = await this.getScopedDurationMinutes(
+        monthStart,
+        monthEnd,
+        'platform',
+        CLIENT_ROLES,
+      );
+
       if (!result.clientEngagement) result.clientEngagement = [];
       result.clientEngagement.push({
         month: monthLabel,
         clientLogins,
         talentPoolDurationMinutes,
+        platformDurationMinutes: clientPlatformDurationMinutes,
       });
 
       const adminLogins = await this.prisma.session.count({
@@ -883,8 +942,7 @@ export class PanelService {
 
     const rows: TalentAgingCandidateRowDto[] = candidates.map((candidate) => {
       const daysInPool = Math.floor(
-        (now.getTime() - candidate.createdAt.getTime()) /
-          (1000 * 60 * 60 * 24),
+        (now.getTime() - candidate.createdAt.getTime()) / (1000 * 60 * 60 * 24),
       );
       const bucket = this.classifyAgingBucket(daysInPool);
       bucketCounts.set(bucket, (bucketCounts.get(bucket) ?? 0) + 1);
@@ -901,9 +959,7 @@ export class PanelService {
           : (candidate.name ?? '—'),
         position,
         employmentType:
-          candidate.pipeline_status === '261075105'
-            ? 'Full-Time'
-            : 'Part-Time',
+          candidate.pipeline_status === '261075105' ? 'Full-Time' : 'Part-Time',
         pipeline_status: candidate.pipeline_status,
         daysInPool,
         bucket,
@@ -994,7 +1050,9 @@ export class PanelService {
     const actorRows = panelCandidates
       // updatedAt is nullable in the schema, but every row here matched the
       // updatedAt-range where clause above, so it is always set in practice.
-      .filter((pc): pc is typeof pc & { updatedAt: Date } => pc.updatedAt !== null)
+      .filter(
+        (pc): pc is typeof pc & { updatedAt: Date } => pc.updatedAt !== null,
+      )
       .map((pc) => {
         const actor = this.correlateDeploymentActor(
           auditIndex,
@@ -1045,6 +1103,150 @@ export class PanelService {
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const start = (page - 1) * perPage;
     const data = actorRows.slice(start, start + perPage);
+
+    return { data, meta: { total, totalPages, page, perPage } };
+  }
+
+  /**
+   * Per-candidate endorsement count ("endorsements per candidate" +
+   * "endorsed to panel by client" reports). An endorsement is the same
+   * CandidateAuditLog row buildDeploymentActorIndex reads elsewhere
+   * (event=pipeline_status_changed, pipeline_status_new=Endorsed via
+   * Platform) — unlike the monthly dashboard total, this does NOT dedupe by
+   * candidate_id, since a candidate re-endorsed for a reopened/second hire
+   * request should count as 2 endorsements here, not 1. The actor is read
+   * directly off each row (no timestamp correlation needed, unlike the
+   * selected-candidates reports): PanelCandidate has no actor field of its
+   * own, but CandidateAuditLog does.
+   */
+  async getCandidateEndorsements(
+    query: CandidateEndorsementsQueryDto,
+  ): Promise<CandidateEndorsementsResponseDto> {
+    const page = query.page ?? 1;
+    const perPage = query.perPage ?? 10;
+    const sortBy = query.sortBy ?? 'endorsementCount';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const rangeEnd = query.dateTo ? new Date(query.dateTo) : new Date();
+    const rangeStart = query.dateFrom
+      ? new Date(query.dateFrom)
+      : new Date(
+          rangeEnd.getFullYear(),
+          rangeEnd.getMonth() - DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS,
+          rangeEnd.getDate(),
+        );
+
+    const endorsementRows = await this.prisma.candidateAuditLog.findMany({
+      where: {
+        event: CANDIDATE_AUDIT_EVENTS.PIPELINE_STATUS_CHANGED,
+        pipeline_status_new: ENDORSED_VIA_PLATFORM_PIPELINE_STATUS,
+        createdAt: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: {
+        candidate_id: true,
+        createdAt: true,
+        actor_label: true,
+        actorUser: {
+          select: { id: true, role: true, first_name: true, last_name: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const byCandidate = new Map<
+      string,
+      { count: number; client: number; admin: number; lastEndorsedAt: Date }
+    >();
+    for (const row of endorsementRows) {
+      const actor: DeploymentActor | null = row.actorUser
+        ? {
+            role: row.actorUser.role,
+            actorUserId: row.actorUser.id,
+            actorLabel:
+              row.actor_label ??
+              [row.actorUser.first_name, row.actorUser.last_name]
+                .filter(Boolean)
+                .join(' ') ??
+              null,
+          }
+        : null;
+      const isClient = this.classifyDeploymentActor(actor) === 'client';
+
+      const existing = byCandidate.get(row.candidate_id);
+      if (existing) {
+        existing.count += 1;
+        if (isClient) existing.client += 1;
+        else existing.admin += 1;
+        if (row.createdAt > existing.lastEndorsedAt)
+          existing.lastEndorsedAt = row.createdAt;
+      } else {
+        byCandidate.set(row.candidate_id, {
+          count: 1,
+          client: isClient ? 1 : 0,
+          admin: isClient ? 0 : 1,
+          lastEndorsedAt: row.createdAt,
+        });
+      }
+    }
+
+    const candidateIds = Array.from(byCandidate.keys());
+    const candidates = candidateIds.length
+      ? await this.prisma.candidate.findMany({
+          where: { id: { in: candidateIds } },
+          select: { id: true, first_name: true, last_name: true, name: true },
+        })
+      : [];
+    const candidateNameById = new Map(
+      candidates.map((c) => [
+        c.id,
+        c.first_name
+          ? `${c.first_name} ${c.last_name ?? ''}`.trim()
+          : (c.name ?? '—'),
+      ]),
+    );
+
+    const rows: CandidateEndorsementRowDto[] = candidateIds.map(
+      (candidateId) => {
+        const agg = byCandidate.get(candidateId)!;
+        return {
+          candidateId,
+          candidateName: candidateNameById.get(candidateId) ?? '—',
+          endorsementCount: agg.count,
+          endorsedByClientCount: agg.client,
+          endorsedByAdminCount: agg.admin,
+          lastEndorsedAt: agg.lastEndorsedAt.toISOString(),
+        };
+      },
+    );
+
+    if (sortBy === 'candidateName') {
+      rows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.candidateName.localeCompare(b.candidateName)
+          : b.candidateName.localeCompare(a.candidateName),
+      );
+    } else if (sortBy === 'lastEndorsedAt') {
+      rows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.lastEndorsedAt.localeCompare(b.lastEndorsedAt)
+          : b.lastEndorsedAt.localeCompare(a.lastEndorsedAt),
+      );
+    } else {
+      rows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.endorsementCount - b.endorsementCount
+          : b.endorsementCount - a.endorsementCount,
+      );
+    }
+
+    if (query.export) {
+      return { data: rows };
+    }
+
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const start = (page - 1) * perPage;
+    const data = rows.slice(start, start + perPage);
 
     return { data, meta: { total, totalPages, page, perPage } };
   }

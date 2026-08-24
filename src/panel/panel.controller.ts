@@ -14,6 +14,8 @@ import { RolesGuard } from '../auth/roles.guard';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
 import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
 import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
+import { CandidateEndorsementsQueryDto } from './dto/candidate-endorsements-query.dto';
+import { CandidateEndorsementsResponseDto } from './dto/candidate-endorsement-row.dto';
 import { TalentAgingReportDto } from './dto/talent-aging-report.dto';
 
 @ApiTags('Panel')
@@ -123,6 +125,29 @@ export class PanelController {
     @Query() query: ClientSelectedCandidatesQueryDto,
   ): Promise<ClientSelectedCandidatesResponseDto> {
     return this.panelService.getAdminSelectedCandidates(query);
+  }
+
+  @Get('candidate-endorsements')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Per-candidate endorsement counts, split by whether the endorsement is attributed to an admin or a client user, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidate endorsements retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getCandidateEndorsements(
+    @Query() query: CandidateEndorsementsQueryDto,
+  ): Promise<CandidateEndorsementsResponseDto> {
+    return this.panelService.getCandidateEndorsements(query);
   }
 
   @Get('talent-aging')
