@@ -350,7 +350,32 @@ export class BusinessUnitsService {
       take: 50,
     });
 
-    return { status: 200, data: history };
+    // Resolve user display names, mirroring EmailTemplatesService.getHistory() —
+    // changed_by is a raw USER id or the 'sync' sentinel, with no Prisma relation.
+    const userIds = [
+      ...new Set(
+        history.map((h) => h.changed_by).filter((id) => id !== 'sync'),
+      ),
+    ];
+    const users = userIds.length
+      ? await this.prisma.uSER.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, first_name: true, last_name: true },
+        })
+      : [];
+    const userMap = Object.fromEntries(
+      users.map((u) => [u.id, `${u.first_name} ${u.last_name}`]),
+    );
+
+    const enriched = history.map((h) => ({
+      ...h,
+      changed_by_name:
+        h.changed_by === 'sync'
+          ? 'Auto-sync'
+          : (userMap[h.changed_by] ?? h.changed_by),
+    }));
+
+    return { status: 200, data: enriched };
   }
 
   // ── Sync ──────────────────────────────────────────────────────────────────
