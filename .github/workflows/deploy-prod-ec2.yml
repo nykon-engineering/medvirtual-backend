@@ -76,12 +76,12 @@ jobs:
             if pm2 describe "${{ env.PM2_APP_NAME }}" > /dev/null 2>&1; then
               pm2 reload "${{ env.PM2_APP_NAME }}" --update-env
             else
-              pm2 start dist/src/main.js --name "${{ env.PM2_APP_NAME }}" --cwd "${{ env.DEPLOY_PATH }}"
+              pm2 start dist/main.js --name "${{ env.PM2_APP_NAME }}" --cwd "${{ env.DEPLOY_PATH }}"
             fi
             if pm2 describe "${{ env.PM2_WORKER_NAME }}" > /dev/null 2>&1; then
               pm2 reload "${{ env.PM2_WORKER_NAME }}" --update-env
             else
-              pm2 start dist/src/worker.js --name "${{ env.PM2_WORKER_NAME }}" --cwd "${{ env.DEPLOY_PATH }}" --kill-timeout 25000
+              pm2 start dist/worker.js --name "${{ env.PM2_WORKER_NAME }}" --cwd "${{ env.DEPLOY_PATH }}" --kill-timeout 25000
             fi
             pm2 save
           '
