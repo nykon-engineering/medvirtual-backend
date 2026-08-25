@@ -17,6 +17,8 @@ import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candi
 import { CandidateEndorsementsQueryDto } from './dto/candidate-endorsements-query.dto';
 import { CandidateEndorsementsResponseDto } from './dto/candidate-endorsement-row.dto';
 import { TalentAgingReportDto } from './dto/talent-aging-report.dto';
+import { HireRequestsByClientsQueryDto } from './dto/hire-requests-by-clients-query.dto';
+import { HireRequestsByClientsResponseDto } from './dto/hire-request-by-client-row.dto';
 
 @ApiTags('Panel')
 @ApiBearerAuth()
@@ -148,6 +150,29 @@ export class PanelController {
     @Query() query: CandidateEndorsementsQueryDto,
   ): Promise<CandidateEndorsementsResponseDto> {
     return this.panelService.getCandidateEndorsements(query);
+  }
+
+  @Get('hire-requests-by-clients')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Hire requests created by client (organization) users, with creator and organization details, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Hire requests submitted by clients retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getHireRequestsByClients(
+    @Query() query: HireRequestsByClientsQueryDto,
+  ): Promise<HireRequestsByClientsResponseDto> {
+    return this.panelService.getHireRequestsByClients(query);
   }
 
   @Get('talent-aging')

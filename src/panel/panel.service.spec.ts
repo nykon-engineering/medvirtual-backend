@@ -965,6 +965,117 @@ describe('PanelService', () => {
     });
   });
 
+  describe('getHireRequestsByClients', () => {
+    const mockHireRequest = (
+      id: string,
+      overrides: Partial<{
+        title: string;
+        status: string;
+        createdAt: Date;
+        createdByUserId: string;
+        createdBy: { first_name: string; last_name: string } | null;
+        organization: { id: string; name: string } | null;
+      }> = {},
+    ) => ({
+      id,
+      title: overrides.title ?? 'VA Request',
+      status: overrides.status ?? 'new',
+      createdAt: overrides.createdAt ?? new Date('2026-01-05T10:00:00Z'),
+      createdByUserId: overrides.createdByUserId ?? 'user-1',
+      createdBy:
+        overrides.createdBy === undefined
+          ? { first_name: 'Jane', last_name: 'Doe' }
+          : overrides.createdBy,
+      organization:
+        overrides.organization === undefined
+          ? { id: 'org-1', name: 'Acme Inc' }
+          : overrides.organization,
+    });
+
+    it('lists hire requests created by client users with creator and organization details', async () => {
+      (prisma.hireRequest.findMany as jest.Mock).mockResolvedValueOnce([
+        mockHireRequest('hr-1'),
+      ]);
+
+      const result = await service.getHireRequestsByClients({
+        page: 1,
+        perPage: 10,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toMatchObject({
+        hireRequestId: 'hr-1',
+        title: 'VA Request',
+        createdByName: 'Jane Doe',
+        organizationId: 'org-1',
+        organizationName: 'Acme Inc',
+      });
+      expect(result.meta).toEqual({ total: 1, totalPages: 1, page: 1, perPage: 10 });
+
+      const call = (prisma.hireRequest.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.createdBy.role.in).toEqual([
+        'organization_admin',
+        'organization_super_admin',
+      ]);
+      expect(call.where.status.not.in).toEqual(['deleted', 'cancelled']);
+    });
+
+    it('falls back to a placeholder when creator or organization is missing', async () => {
+      (prisma.hireRequest.findMany as jest.Mock).mockResolvedValueOnce([
+        mockHireRequest('hr-2', { createdBy: null, organization: null, createdByUserId: '' }),
+      ]);
+
+      const result = await service.getHireRequestsByClients({ page: 1, perPage: 10 });
+
+      expect(result.data[0]).toMatchObject({
+        createdByName: '—',
+        organizationName: '—',
+        organizationId: '',
+      });
+    });
+
+    it('sorts by organization name', async () => {
+      (prisma.hireRequest.findMany as jest.Mock).mockResolvedValueOnce([
+        mockHireRequest('hr-1', { organization: { id: 'org-1', name: 'Zeta Corp' } }),
+        mockHireRequest('hr-2', { organization: { id: 'org-2', name: 'Acme Inc' } }),
+      ]);
+
+      const result = await service.getHireRequestsByClients({
+        page: 1,
+        perPage: 10,
+        sortBy: 'organizationName',
+        sortOrder: 'asc',
+      });
+
+      expect(result.data.map((r) => r.organizationName)).toEqual(['Acme Inc', 'Zeta Corp']);
+    });
+
+    it('returns the full result set when export is true, ignoring pagination', async () => {
+      (prisma.hireRequest.findMany as jest.Mock).mockResolvedValueOnce([
+        mockHireRequest('hr-1'),
+        mockHireRequest('hr-2'),
+      ]);
+
+      const result = await service.getHireRequestsByClients({
+        page: 1,
+        perPage: 1,
+        export: true,
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(result.meta).toBeUndefined();
+    });
+
+    it('returns an empty result set when there are no matching hire requests', async () => {
+      (prisma.hireRequest.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const result = await service.getHireRequestsByClients({ page: 1, perPage: 10 });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta?.total).toBe(0);
+    });
+  });
+
   describe('getTalentAvailabilityByRole', () => {
     it('aggregates counts by position, splitting full-time and part-time', async () => {
       (prisma.candidate.findMany as jest.Mock).mockResolvedValueOnce([

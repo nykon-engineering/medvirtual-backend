@@ -28,6 +28,11 @@ import {
   TalentAgingBucketDto,
   TalentAgingCandidateRowDto,
 } from './dto/talent-aging-report.dto';
+import { HireRequestsByClientsQueryDto } from './dto/hire-requests-by-clients-query.dto';
+import {
+  HireRequestByClientRowDto,
+  HireRequestsByClientsResponseDto,
+} from './dto/hire-request-by-client-row.dto';
 import {
   CANDIDATE_AUDIT_EVENTS,
   CANDIDATE_LOST_STAGE_ID,
@@ -1245,6 +1250,95 @@ export class PanelService {
         sortOrder === 'asc'
           ? a.endorsementCount - b.endorsementCount
           : b.endorsementCount - a.endorsementCount,
+      );
+    }
+
+    if (query.export) {
+      return { data: rows };
+    }
+
+    const total = rows.length;
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const start = (page - 1) * perPage;
+    const data = rows.slice(start, start + perPage);
+
+    return { data, meta: { total, totalPages, page, perPage } };
+  }
+
+  /**
+   * Hire requests created by client (organization) users, for the "Hire
+   * requests submitted by clients" HR Report list. Uses the same
+   * client-creator definition as the hrSubmittedByClient count above
+   * (createdBy.role in organization_admin/organization_super_admin) and the
+   * same deleted/cancelled exclusion, so the list total always matches that
+   * dashboard count for the same date range.
+   */
+  async getHireRequestsByClients(
+    query: HireRequestsByClientsQueryDto,
+  ): Promise<HireRequestsByClientsResponseDto> {
+    const page = query.page ?? 1;
+    const perPage = query.perPage ?? 10;
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const where = {
+      createdBy: {
+        role: { in: ['organization_admin', 'organization_super_admin'] },
+      },
+      status: {
+        not: { in: [HireRequestStatus.deleted, HireRequestStatus.cancelled] },
+      },
+      ...(query.dateFrom || query.dateTo
+        ? {
+            createdAt: {
+              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const hireRequests = await this.prisma.hireRequest.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        createdByUserId: true,
+        createdBy: { select: { first_name: true, last_name: true } },
+        organization: { select: { id: true, name: true } },
+      },
+      orderBy:
+        sortBy === 'createdAt' ? { createdAt: sortOrder } : undefined,
+    });
+
+    const rows: HireRequestByClientRowDto[] = hireRequests.map((hr) => ({
+      hireRequestId: hr.id,
+      title: hr.title,
+      status: hr.status,
+      createdAt: hr.createdAt.toISOString(),
+      createdByUserId: hr.createdByUserId ?? '',
+      createdByName: hr.createdBy
+        ? [hr.createdBy.first_name, hr.createdBy.last_name]
+            .filter(Boolean)
+            .join(' ')
+        : '—',
+      organizationId: hr.organization?.id ?? '',
+      organizationName: hr.organization?.name ?? '—',
+    }));
+
+    if (sortBy === 'clientName') {
+      rows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.createdByName.localeCompare(b.createdByName)
+          : b.createdByName.localeCompare(a.createdByName),
+      );
+    } else if (sortBy === 'organizationName') {
+      rows.sort((a, b) =>
+        sortOrder === 'asc'
+          ? a.organizationName.localeCompare(b.organizationName)
+          : b.organizationName.localeCompare(a.organizationName),
       );
     }
 
