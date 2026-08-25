@@ -288,8 +288,12 @@ describe('TicketService', () => {
               name: true,
               email: true,
               business_unit: true,
+              organization_role: true,
               status: true,
               admin_id: true,
+              admin: {
+                select: { id: true, first_name: true, last_name: true },
+              },
             }
           },
           user: {
@@ -310,6 +314,9 @@ describe('TicketService', () => {
               last_name: true,
               email: true,
               name: true,
+              specialization: true,
+              years_of_experience: true,
+              country: true,
               gender: true,
               avatar_url: true,
             }
@@ -318,6 +325,7 @@ describe('TicketService', () => {
             select: {
               id: true,
               status: true,
+              salary: true,
               start_date: true,
               terminated_date: true,
               candidate: {
@@ -329,6 +337,7 @@ describe('TicketService', () => {
                   name: true,
                   specialization: true,
                   years_of_experience: true,
+                  country: true,
                   gender: true,
                   avatar_url: true,
                 }
@@ -346,6 +355,19 @@ describe('TicketService', () => {
               recipient_email: true,
               recipient_org_name: true,
               recipient_type: true,
+              recipient_company_id: true,
+              recipientCompany: {
+                select: {
+                  id: true,
+                  name: true,
+                  business_unit: true,
+                  organization_role: true,
+                  status: true,
+                  admin: {
+                    select: { id: true, first_name: true, last_name: true },
+                  },
+                },
+              },
               view_count: true,
               viewed_at: true,
               decided_at: true,
@@ -441,12 +463,14 @@ describe('TicketService', () => {
         status: 'ACTIVE',
         email: 'john@example.com',
       },
+      candidate: null,
+      staff: null,
     };
-  
+
     beforeEach(() => {
       jest.clearAllMocks();
     });
-  
+
     it('should throw BadRequestException if ticket not found', async () => {
       mockPrisma.ticket.findFirst.mockResolvedValueOnce(null);
   
@@ -558,8 +582,9 @@ describe('TicketService', () => {
       id: 'ticket123',
       status: 'in_progress',
       type: 'termination',
-      staff: { id: 'staff1' },
+      staff: { id: 'staff1', candidate: null },
       user: { id: 'user1' },
+      candidate: null,
     };
     
   
@@ -849,7 +874,7 @@ describe('TicketService', () => {
     };
 
     const mockCreatedTicket = { id: 'ticket-new' };
-    const mockFullTicket = { id: 'ticket-new', type: 'support', title: 'Test Ticket', status: 'open' };
+    const mockFullTicket = { id: 'ticket-new', type: 'support', title: 'Test Ticket', status: 'open', candidate: null, staff: null };
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -1432,7 +1457,7 @@ describe('TicketService', () => {
   describe('update', () => {
     const ticketId = 'ticket1';
     const baseTicketRecord = { id: ticketId, created_by: '1', organization: { id: 'org1' } };
-    const updatedTicket = { id: ticketId, title: 'Updated', status: 'open' };
+    const updatedTicket = { id: ticketId, title: 'Updated', status: 'open', candidate: null, staff: null };
 
     beforeEach(() => {
       jest.clearAllMocks();
@@ -1899,7 +1924,11 @@ describe('TicketService', () => {
         systemAdminUser as any,
       );
 
-      expect(result).toEqual(fullTicket);
+      expect(result).toEqual({
+        ...fullTicket,
+        candidate: { id: candidateId, avatar: null },
+        staff: null,
+      });
       expect(mockPrisma.ticket.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ candidate: { connect: { id: candidateId } } }),
@@ -1926,7 +1955,7 @@ describe('TicketService', () => {
         systemAdminUser as any,
       );
 
-      expect(result).toEqual(fullTicket);
+      expect(result).toEqual({ ...fullTicket, candidate: null, staff: null });
       expect(mockPrisma.ticket.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

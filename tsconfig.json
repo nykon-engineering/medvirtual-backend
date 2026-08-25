@@ -19,7 +19,9 @@
     "noFallthroughCasesInSwitch": false,
     "types": ["node", "jest"],
     "moduleResolution": "node",
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "rootDir": "src"
   },
-  "exclude": ["**/*.spec.ts", "test", "node_modules"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test", "prisma", "scripts", "**/*.spec.ts"]
 }

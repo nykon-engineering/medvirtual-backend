@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -31,6 +31,14 @@ import { MedAllianceModule } from './med-alliance/med-alliance.module';
 import { OfferPanelsModule } from './offer-panels/offer-panels.module';
 import { EmailTemplatesModule } from './email-templates/email-templates.module';
 import { BusinessUnitsModule } from './business-units/business-units.module';
+import { SecretsModule } from './secrets/secrets.module';
+import { HubstaffModule } from './hubstaff/hubstaff.module';
+import { BullModule } from '@nestjs/bullmq';
+import { RedisModule } from './redis/redis.module';
+import { PusherModule } from './pusher/pusher.module';
+import { InvoiceModule } from './invoice/invoice.module';
+import { StripeModule } from './stripe/stripe.module';
+import { bullPrefix, queuesEnabledSync } from './common/app-config';
 import { SessionActivityModule } from './session-activity/session-activity.module';
 
 @Module({
@@ -38,6 +46,30 @@ import { SessionActivityModule } from './session-activity/session-activity.modul
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ...(!queuesEnabledSync()
+      ? []
+      : [
+          BullModule.forRootAsync({
+            inject: [ConfigService],
+            useFactory: (configService: ConfigService) => {
+              const prefix = bullPrefix(configService);
+              return {
+                connection: {
+                  host: configService.get<string>('REDIS_HOST', 'localhost'),
+                  port: configService.get<number>('REDIS_PORT', 6379),
+                  password: configService.get<string>('REDIS_PASSWORD'),
+                  username: configService.get<string>(
+                    'REDIS_USERNAME',
+                    'basic',
+                  ),
+                  maxRetriesPerRequest: null, // required by BullMQ
+                  enableReadyCheck: false, // recommended by BullMQ
+                },
+                prefix,
+              };
+            },
+          }),
+        ]),
     ThrottlerModule.forRoot([
       {
         ttl: 60000, // 1 minute
@@ -71,6 +103,12 @@ import { SessionActivityModule } from './session-activity/session-activity.modul
     OfferPanelsModule,
     EmailTemplatesModule,
     BusinessUnitsModule,
+    SecretsModule,
+    HubstaffModule,
+    RedisModule,
+    PusherModule,
+    InvoiceModule,
+    StripeModule,
     SessionActivityModule,
   ],
   controllers: [AppController],

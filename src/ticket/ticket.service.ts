@@ -61,6 +61,9 @@ export class TicketService {
         priority: true,
         createdAt: true,
         created_by: true,
+        deleted_at: true,
+        deleted_by: true,
+        deletion_reason: true,
         organization: {
           select: {
             id: true,
@@ -69,6 +72,7 @@ export class TicketService {
             business_unit: true,
             organization_role: true,
             status: true,
+            admin_id: true,
             admin: {
               select: { id: true, first_name: true, last_name: true },
             },
@@ -116,14 +120,19 @@ export class TicketService {
             status: true,
             salary: true,
             start_date: true,
+            terminated_date: true,
             candidate: {
               select: {
                 id: true,
+                first_name: true,
+                last_name: true,
                 email: true,
                 name: true,
                 specialization: true,
                 years_of_experience: true,
                 country: true,
+                gender: true,
+                avatar_url: true,
               },
             },
           },
@@ -167,6 +176,31 @@ export class TicketService {
       throw new BadRequestException('Ticket not found');
     }
 
+    const ticketWithAvatars: any = {
+      ...ticket,
+      candidate: ticket.candidate
+        ? {
+            ...ticket.candidate,
+            avatar: ticket.candidate.avatar_url
+              ? `${process.env.AVATAR_URL}${ticket.candidate.avatar_url}`
+              : null,
+          }
+        : null,
+      staff: ticket.staff
+        ? {
+            ...ticket.staff,
+            candidate: ticket.staff.candidate
+              ? {
+                  ...ticket.staff.candidate,
+                  avatar: ticket.staff.candidate.avatar_url
+                    ? `${process.env.AVATAR_URL}${ticket.staff.candidate.avatar_url}`
+                    : null,
+                }
+              : null,
+          }
+        : null,
+    };
+
     // Access control: Organization admins can only see tickets they created
     if (user) {
       const isOrganizationAdmin =
@@ -195,7 +229,7 @@ export class TicketService {
       }
     }
 
-    return ticket;
+    return ticketWithAvatars;
   }
 
   async create(createTicketDto: CreateTicketDto, user: USER): Promise<object> {
@@ -504,8 +538,12 @@ export class TicketService {
               name: true,
               email: true,
               business_unit: true,
+              organization_role: true,
               status: true,
               admin_id: true,
+              admin: {
+                select: { id: true, first_name: true, last_name: true },
+              },
             },
           },
           user: {
@@ -537,6 +575,9 @@ export class TicketService {
               last_name: true,
               email: true,
               name: true,
+              specialization: true,
+              years_of_experience: true,
+              country: true,
               gender: true,
               avatar_url: true,
             },
@@ -545,6 +586,7 @@ export class TicketService {
             select: {
               id: true,
               status: true,
+              salary: true,
               start_date: true,
               terminated_date: true,
               candidate: {
@@ -556,6 +598,7 @@ export class TicketService {
                   name: true,
                   specialization: true,
                   years_of_experience: true,
+                  country: true,
                   gender: true,
                   avatar_url: true,
                 },
@@ -573,6 +616,19 @@ export class TicketService {
               recipient_email: true,
               recipient_org_name: true,
               recipient_type: true,
+              recipient_company_id: true,
+              recipientCompany: {
+                select: {
+                  id: true,
+                  name: true,
+                  business_unit: true,
+                  organization_role: true,
+                  status: true,
+                  admin: {
+                    select: { id: true, first_name: true, last_name: true },
+                  },
+                },
+              },
               view_count: true,
               viewed_at: true,
               decided_at: true,

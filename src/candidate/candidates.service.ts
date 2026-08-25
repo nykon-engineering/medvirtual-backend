@@ -3199,7 +3199,7 @@ export class CandidatesService {
     const _pConfigs3 =
       await this.positionRateConfigService.findAllUnpaginated();
     const _configMap3 = buildConfigMap(_pConfigs3);
-    const rates3 = computeCandidateRates(candidate, _configMap3);
+    const rates3 = computeCandidateRates(candidate as any, _configMap3);
 
     const candidateWithFullAvatarUrl = {
       ...candidate,

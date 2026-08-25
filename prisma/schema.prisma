@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL || DATABASE_URL || PROD_DATABASE_URL
+  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL | DATABASE_URL | PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -91,6 +91,21 @@ model USER {
   ticketsDeleted            Ticket[]                     @relation("TicketDeletedBy")
   // MA-006 review cases resolved by this admin user
   resolvedReviewCases       MedAllianceAdminReviewCase[] @relation("ReviewCaseResolvedBy")
+
+  // --- Invoicing relations ---
+  invoicesCreated               Invoice[]                      @relation("InvoiceCreatedBy")
+  invoicesVoided                Invoice[]                      @relation("InvoiceVoidedBy")
+  invoiceVersionsReviewed       InvoiceVersion[]               @relation("InvoiceVersionReviewedBy")
+  invoiceVersionsApproved       InvoiceVersion[]               @relation("InvoiceVersionApprovedBy")
+  invoiceVersionsPublished      InvoiceVersion[]               @relation("InvoiceVersionPublishedBy")
+  invoiceVersionsCreated        InvoiceVersion[]               @relation("InvoiceVersionCreatedBy")
+  invoiceLinesCreated           InvoiceLineItem[]               @relation("InvoiceLineCreatedBy")
+  invoiceLineAdjustments        InvoiceLineAdjustmentHistory[]  @relation("InvoiceLineAdjustmentChangedBy")
+  invoiceReconciliationsCreated InvoiceLineReconciliation[]     @relation("InvoiceReconCreatedBy")
+  invoiceReviewsSubmitted       InvoiceReview[]                 @relation("InvoiceReviewSubmittedBy")
+  invoiceReviewsReviewed        InvoiceReview[]                 @relation("InvoiceReviewReviewedBy")
+  invoiceComments                InvoiceComment[]               @relation("InvoiceCommentAuthor")
+  invoiceAuditActorLogs         InvoiceAuditLog[]               @relation("InvoiceAuditActor")
 
   // --- Offer Panels relations ---
   offerPanelsCreated     OfferPanel[] @relation("OfferPanelCreatedBy")
@@ -264,6 +279,11 @@ model Organization {
   hubspotInvoiceSnapshots HubspotInvoiceSnapshot[]
   // MA-006 admin review cases opened for this referred organization
   adminReviewCases        MedAllianceAdminReviewCase[]
+  // Invoicing relations
+  invoiceConfiguration        InvoiceConfiguration?
+  invoices                    Invoice[]
+  invoiceLineReconciliations  InvoiceLineReconciliation[]
+  billingLedgerEntries        BillingLedgerEntry[]
   contacts                Contact[]
   offerPanelsAsRecipient  OfferPanel[]                 @relation("OfferPanelRecipientCompany")
 
@@ -289,6 +309,7 @@ model Organization {
 model Candidate {
   id                         String           @id @default(uuid())
   hubspot_id                 String           @unique
+  hubstaff_id                                                     String?                 @unique
   email                      String
   first_name                 String?
   last_name                  String?
@@ -535,10 +556,10 @@ model CandidatePanel {
   hire_request_id String
   status          PanelStatus      @default(created)
   scheduled_date  DateTime?
-  decided_date    DateTime?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime?        @updatedAt
   readable        Boolean          @default(false)
+  decided_date    DateTime?
   hireRequest     HireRequest      @relation(fields: [hire_request_id], references: [id], onDelete: Cascade)
   interviews      Interview[]
   panelCandidates PanelCandidate[]
@@ -557,8 +578,8 @@ model PanelCandidate {
   updatedAt       DateTime?            @updatedAt
   createdByUserId String?
   candidate       Candidate            @relation(fields: [candidate_id], references: [id], onDelete: Cascade)
-  panel           CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
   createdBy       USER?                @relation("PanelCandidateCreatedBy", fields: [createdByUserId], references: [id])
+  panel           CandidatePanel       @relation(fields: [panel_id], references: [id], onDelete: Cascade)
 
   @@unique([panel_id, candidate_id], name: "idx_panel_candidates_unique")
   @@index([panel_id], map: "idx_panel_candidates_panel_id")
@@ -610,15 +631,16 @@ model Ticket {
   deleted_at      DateTime?
   deleted_by      String?
   deletion_reason String?
-  candidate       Candidate?    @relation(fields: [candidate_id], references: [id])
-  organization    Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
-  staff           Staff?        @relation(fields: [staff_id], references: [id])
-  hireRequest     HireRequest?  @relation(fields: [hireRequest_id], references: [id])
-  offerPanel      OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
-  user            USER?         @relation(fields: [user_id], references: [id])
-  createdBy       USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
-  deletedBy       USER?         @relation("TicketDeletedBy", fields: [deleted_by], references: [id])
-  TicketNotes     TicketNotes[]
+  candidate      Candidate?    @relation(fields: [candidate_id], references: [id])
+  organization   Organization? @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  staff          Staff?        @relation(fields: [staff_id], references: [id])
+  hireRequest    HireRequest?  @relation(fields: [hireRequest_id], references: [id])
+  offerPanel     OfferPanel?   @relation(fields: [offer_panel_id], references: [id])
+  user           USER?         @relation(fields: [user_id], references: [id])
+  createdBy      USER?         @relation("TicketCreatedBy", fields: [created_by], references: [id])
+  deletedBy      USER?         @relation("TicketDeletedBy", fields: [deleted_by], references: [id])
+  TicketNotes    TicketNotes[]
+  invoiceLineItems InvoiceLineItem[]
 
   @@index([deleted_at], map: "idx_tickets_deleted_at")
   @@index([deleted_at, status], map: "idx_tickets_deleted_at_status")
@@ -725,10 +747,6 @@ model TicketNotes {
 model TalentPoolLead {
   id                  String    @id @default(uuid())
   name                String    @db.VarChar(255)
-  first_name          String?   @db.VarChar(255)
-  last_name           String?   @db.VarChar(255)
-  website_url         String?   @db.VarChar(500)
-  language_preference String?   @db.VarChar(50)
   email               String    @db.VarChar(255)
   organization        String    @db.VarChar(255)
   main_need           String?
@@ -741,6 +759,10 @@ model TalentPoolLead {
   created_at          DateTime  @default(now())
   updated_at          DateTime  @default(now())
   contacted_at        DateTime?
+  first_name          String?   @db.VarChar(255)
+  language_preference String?   @db.VarChar(50)
+  last_name           String?   @db.VarChar(255)
+  website_url         String?   @db.VarChar(500)
   assignedTo          USER?     @relation(fields: [assigned_to_user_id], references: [id])
 
   @@index([assigned_to_user_id], map: "idx_talent_pool_leads_assigned_to_user_id")
@@ -788,7 +810,6 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
-
   user USER @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -797,22 +818,15 @@ model PasswordResetToken {
 model PositionRateConfig {
   id                                 String   @id @default(uuid())
   position                           String   @unique
-  medVirtual_floor_price_english     Decimal?
-  medVirtual_floor_price_bilingual   Decimal?
-  medVirtual_margin_per_hour         Decimal?
-  berryVirtual_floor_price_english   Decimal?
-  berryVirtual_floor_price_bilingual Decimal?
-  berryVirtual_margin_per_hour       Decimal?
   createdAt                          DateTime @default(now())
   updatedAt                          DateTime @updatedAt
+  berryVirtual_floor_price_bilingual Decimal?
+  berryVirtual_floor_price_english   Decimal?
+  medVirtual_floor_price_bilingual   Decimal?
+  medVirtual_floor_price_english     Decimal?
+  berryVirtual_margin_per_hour       Decimal?
+  medVirtual_margin_per_hour         Decimal?
 }
-
-// =============================================================================
-// MED ALLIANCE — new models
-// Referral and commission tracking program for affiliate (Growth Partner) users.
-// Affiliates refer organizations; HubSpot invoices are synced; commissions are
-// detected, reviewed by admin, and paid out on request.
-// =============================================================================
 
 model AffiliateProfile {
   id                          String          @id @default(uuid())
@@ -848,10 +862,6 @@ model AffiliateProfile {
   @@index([deactivated_by_bu], map: "idx_affiliate_profiles_deactivated_by_bu")
 }
 
-// HubspotInvoiceSnapshot
-// Immutable snapshot of a HubSpot invoice pulled during the sync job.
-// Used as the source of truth for commission detection. Never mutated after
-// commission creation; raw_payload enables replay if parsing logic changes.
 model HubspotInvoiceSnapshot {
   id               String    @id @default(uuid())
   hubspot_id       String    @unique
@@ -890,16 +900,11 @@ model HubspotLineItemSnapshot {
   discount    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
   invoice HubspotInvoiceSnapshot @relation(fields: [invoice_id], references: [id])
 
   @@index([invoice_id], map: "idx_hubspot_line_item_snapshots_invoice_id")
 }
 
-// AffiliateCommission
-// Represents a single commission event detected from a paid HubSpot invoice.
-// Lifecycle: detected → pending_admin_confirmation → eligible → requested → paid.
-// The idempotency_key prevents duplicate records on sync retries.
 model AffiliateCommission {
   id                          String           @id @default(uuid())
   affiliate_id                String
@@ -935,11 +940,6 @@ model AffiliateCommission {
   @@index([status], map: "idx_affiliate_commissions_status")
 }
 
-// AffiliatePayoutRequest
-// A payout request submitted by an affiliate for one or more eligible commissions.
-// Lifecycle: requested → under_review → paid  (or rejected at any admin step).
-//            requested → approved → paid  (legacy path kept for backwards compat).
-// The set of commissions included is stored in AffiliatePayoutRequestCommission.
 model AffiliatePayoutRequest {
   id                      String              @id @default(uuid())
   affiliate_id            String
@@ -988,8 +988,6 @@ model AffiliatePayoutRequest {
   @@index([paid_at], map: "idx_affiliate_payout_requests_paid_at")
 }
 
-// PayoutRequestNote
-// Admin-to-admin (internal) or admin-to-affiliate (user) notes attached to a payout request.
 model PayoutRequestNote {
   id                String         @id @default(uuid())
   payout_request_id String
@@ -997,37 +995,25 @@ model PayoutRequestNote {
   type              PayoutNoteType
   content           String
   createdAt         DateTime       @default(now())
-
-  payoutRequest AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
   author        USER?                  @relation("PayoutRequestNoteAuthor", fields: [author_user_id], references: [id])
+  payoutRequest     AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
 
   @@index([payout_request_id], map: "idx_payout_request_notes_request_id")
 }
 
-// AffiliatePayoutRequestCommission
-// Junction table linking a payout request to the specific commissions it covers.
-// Replaces a simple String[] array to enforce referential integrity and allow JOINs.
-// Cascade delete: removing a payout request also removes its junction records.
 model AffiliatePayoutRequestCommission {
   id                String   @id @default(uuid())
   payout_request_id String
   commission_id     String
   createdAt         DateTime @default(now())
-
-  payoutRequest AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
   commission    AffiliateCommission    @relation(fields: [commission_id], references: [id])
+  payoutRequest     AffiliatePayoutRequest @relation(fields: [payout_request_id], references: [id], onDelete: Cascade)
 
-  // A commission can only be linked once per payout request
   @@unique([payout_request_id, commission_id], name: "idx_payout_commission_unique")
   @@index([payout_request_id], map: "idx_prc_payout_request_id")
   @@index([commission_id], map: "idx_prc_commission_id")
 }
 
-// MedAllianceAuditLog
-// Append-only audit trail for all Med Alliance state transitions and decisions.
-// Never soft-delete or mutate records. entity_type + entity_id act as a polymorphic
-// reference since Prisma does not support native polymorphic FKs.
-// Required for: admin review queue (MA-006), timeline display, compliance traceability.
 model MedAllianceAuditLog {
   id            String                 @id @default(uuid())
   actor_user_id String?
@@ -1040,43 +1026,138 @@ model MedAllianceAuditLog {
   source        MedAllianceAuditSource @default(user)
   metadata      Json?
   createdAt     DateTime               @default(now())
-
-  // Actor user relation — null when source is "sync"
   actorUser USER? @relation("MedAllianceAuditActor", fields: [actor_user_id], references: [id])
 
-  // Composite index for timeline queries: "all events for entity X ordered by time"
   @@index([entity_type, entity_id, createdAt], map: "idx_med_alliance_audit_entity_timeline")
   @@index([actor_user_id], map: "idx_med_alliance_audit_actor")
   @@index([source], map: "idx_med_alliance_audit_source")
 }
 
-// MA-006 — Admin review queue for referrals that require manual intervention
 model MedAllianceAdminReviewCase {
   id              String                @id @default(uuid())
   organization_id String
   reason_code     AdminReviewReasonCode
   status          AdminReviewStatus     @default(open)
-
-  // Contextual payload stored at case-creation time (snapshot of trigger data)
   metadata Json?
-
-  // Resolution fields — populated when admin closes the case
   resolved_by_id String?
   resolved_at    DateTime?
-  resolution     String? // free-form note by the admin
-
+  resolution      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relations
   organization Organization @relation(fields: [organization_id], references: [id])
   resolvedBy   USER?        @relation("ReviewCaseResolvedBy", fields: [resolved_by_id], references: [id])
 
-  // Deduplication: at most one open case per (org + reason)
   @@unique([organization_id, reason_code, status], name: "uq_open_review_case")
   @@index([organization_id], map: "idx_review_cases_org")
   @@index([status], map: "idx_review_cases_status")
   @@index([reason_code], map: "idx_review_cases_reason_code")
+}
+
+// Per-organization billing settings. One row per Organization (1:1). Everything the
+// invoice generation worker (InvoiceWorker) needs to know about *how* to bill a given
+// org lives here — cycle timing, pricing fallbacks, automation flags, and Stripe/Hubstaff
+// linkage. Organizations without a row here are not eligible for automated invoicing.
+model InvoiceConfiguration {
+  id                               String             @id @default(uuid())
+  organization_id                  String             @unique
+
+  // Hubstaff org/team id — source of tracked-hours data for hourly billing lines.
+  hubstaff_id                      String?
+  // HubSpot company id — used to keep this configuration's billing fields in sync with CRM.
+  hubspot_id                       String?
+
+  // Determines whether invoices are issued before or after actual cycle close.
+  billing_mode                     BillingMode        @default(arrears)
+
+  // monthly / biweekly / weekly / custom
+  billing_frequency                BillingFrequency   @default(monthly)
+
+  // Currency for invoices
+  billing_currency                 String             @default("USD")
+
+  // Net terms used when generating due_date
+  payment_terms_days               Int                @default(7)
+
+  // Which day cycle starts for monthly billing (1..28 recommended)
+  cycle_anchor_day                 Int?
+
+  // Whether invoices auto-submit for review after generation
+  auto_submit_invoices            Boolean            @default(false)
+
+  // Whether invoices auto-publish after approval
+  auto_publish_invoices           Boolean            @default(false)
+
+  // Whether Stripe sync should happen on publish
+  auto_sync_to_stripe             Boolean            @default(true)
+
+  // ========================================================================
+  // PREBILLING / RECONCILIATION
+  // ========================================================================
+
+  // Whether reconciliation is required after each billed cycle
+  requires_reconciliation         Boolean            @default(false)
+
+  // How many days after cycle end reconciliation should run
+  reconciliation_delay_days       Int                @default(0)
+
+  // Open credit carried forward to future invoices
+  credit_balance                  Decimal            @db.Decimal(14,2) @default(0)
+
+  // Open debit carried forward to future invoices
+  debit_balance                   Decimal            @db.Decimal(14,2) @default(0)
+
+  // If true, apply available credit automatically to next invoice
+  auto_apply_credits              Boolean            @default(true)
+
+  // ========================================================================
+  // PRICING DEFAULTS
+  // ========================================================================
+
+  default_operations_cost         Decimal?           @db.Decimal(14,2)
+  default_medvirtual_fee          Decimal?           @db.Decimal(14,2)
+
+  // default hourly rate fallback when worker line has none
+  default_hourly_rate             Decimal?           @db.Decimal(14,2)
+
+  // ========================================================================
+  // PAYMENT / COLLECTIONS
+  // ========================================================================
+
+  // Stripe customer id
+  stripe_customer_id              String?            @unique
+
+  // If org can accumulate unpaid balances
+  allow_outstanding_balance       Boolean            @default(true)
+
+  // Pause publishing new invoices if unpaid debt exceeds threshold
+  credit_hold_threshold           Decimal?           @db.Decimal(14,2)
+
+  // ========================================================================
+  // OPERATIONS FLAGS
+  // ========================================================================
+
+  // Show fee components separately on rendered invoice
+  show_fee_breakdown_on_invoice   Boolean            @default(false)
+
+  // Require super admin approval before publish
+  require_super_admin_publish     Boolean            @default(false)
+
+  // ========================================================================
+  // AUDIT / STATUS
+  // ========================================================================
+
+  billing_notes                   String?
+
+  billing_activated_at            DateTime?
+  billing_paused_at               DateTime?
+  
+  createdAt                       DateTime           @default(now())
+  updatedAt                       DateTime           @updatedAt
+
+  organization                    Organization       @relation(fields: [organization_id], references: [id])
+
+  @@index([organization_id], map: "idx_invoice_configurations_org_id")
+  @@index([stripe_customer_id], map: "idx_invoice_configurations_stripe_id")
 }
 
 enum Role {
@@ -1234,10 +1315,10 @@ enum CommissionStatus {
 
 enum PayoutRequestStatus {
   requested
-  under_review
   approved
   rejected
   paid
+  under_review
   cancelled
   processing
   failed
@@ -1273,7 +1354,6 @@ enum MedAllianceReferralStatus {
   expired
 }
 
-// MA-006 — Reason why a review case was opened
 enum AdminReviewReasonCode {
   multiple_hubspot_matches // HubSpot returned 2+ company matches — admin must pick the correct one
   reconciliation_invoice_changed // A paid invoice was updated in HubSpot after commission was already detected
@@ -1281,7 +1361,6 @@ enum AdminReviewReasonCode {
   org_deleted_with_pending_payout // Org was deleted in HubSpot while commissions sit in a pending payout request — admin must decide pay vs void
 }
 
-// MA-006 — Lifecycle status of an admin review case
 enum AdminReviewStatus {
   open
   resolved
@@ -1691,4 +1770,791 @@ model EmailBrandingHistory {
 
   @@index([branding_id], map: "idx_email_branding_history_branding_id")
   @@index([changed_at], map: "idx_email_branding_history_changed_at")
+}
+
+// arrears  = invoice issued AFTER the billing cycle closes, for work already performed.
+// prebill  = invoice issued BEFORE the cycle starts, billing in advance; requires
+//            reconciliation afterward to true-up against actual hours/adjustments.
+enum BillingMode {
+  arrears
+  prebill
+}
+
+// How often a new billing cycle (and therefore a new Invoice) is generated for an org.
+// custom = cycle boundaries are set manually per-invoice rather than on a fixed cadence.
+enum BillingFrequency {
+  weekly
+  biweekly
+  monthly
+  custom
+}
+
+// ============================================================================
+// PRODUCTION-GRADE BILLING / INVOICE / RECONCILIATION SYSTEM
+// Designed to plug into your existing schema:
+//
+// Existing models assumed:
+// - USER
+// - Organization
+//
+// References:
+// USER.id
+// Organization.id
+//
+// Philosophy:
+// - Published invoices are immutable
+// - Draft/review invoices editable
+// - Invoice header != source of truth
+// - Line items are source of truth
+// - Worker-centric billing
+// - Per-line reconciliation ledger
+// - Stripe sync isolated
+// - Full auditability
+// ============================================================================
+
+// The stable, long-lived "envelope" for a billing cycle. An Invoice itself carries almost
+// no billable data — it just identifies *which organization* and *which cycle* this is,
+// and points at whichever InvoiceVersion is currently the source of truth. All of the
+// actual money (line items, totals, discounts) lives on InvoiceVersion, because an
+// invoice can be edited (as a new draft version) after its first version was reviewed,
+// without losing the history of prior versions. Once status reaches `published`, the
+// current version is expected to stay immutable (see InvoiceVersion below).
+model Invoice {
+  id                    String        @id @default(uuid())
+
+  // owning organization
+  organization_id       String
+
+  // FK to whichever InvoiceVersion is authoritative right now (usually the latest one
+  // that's been through review). The UI and Stripe sync always read from this version.
+  current_version_id    String?       @unique
+
+  // Lifecycle status of the invoice as a whole (draft -> under_review -> approved ->
+  // published -> paid/voided/cancelled). See InvoiceStatus enum for the full list.
+  status                InvoiceStatus @default(draft)
+
+  // Defines which billing cycle this invoice covers. Combined with organization_id,
+  // this is the idempotency key the invoice-generation worker uses to avoid creating
+  // two invoices for the same org+period.
+  billing_start_date    DateTime
+  billing_end_date      DateTime
+  // True when billing_start_date/billing_end_date don't match the org's normal
+  // recurring cycle (e.g. a one-off custom-range invoice requested manually).
+  is_custom             Boolean       @default(false)
+
+  // Internal, system-generated tracking reference — assigned at creation time,
+  // independent of the client-facing invoice_number (see below).
+  reference             String?       @unique
+
+  // Client-facing sequential invoice number. Deliberately left null until the invoice
+  // is actually published, so draft/rejected invoices never burn a number in the
+  // sequence (see scripts/backfill-invoice-references.ts for the backfill story).
+  invoice_number        String?       @unique
+
+  // Who created the invoice, and — if it was voided — who voided it.
+  created_by            String
+  voided_by             String?
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  voidedAt              DateTime?
+
+  // Denormalized mirror of the linked Stripe invoice (see StripeService), refreshed by
+  // webhook. Lets read paths show payment status without an extra Stripe API call.
+  stripe_invoice_id     String?       @unique
+  stripe_invoice_number String?
+  stripe_status         String?
+
+  // relations
+  organization          Organization  @relation(fields: [organization_id], references: [id], onDelete: Restrict)
+  creator               USER          @relation("InvoiceCreatedBy", fields: [created_by], references: [id])
+  voidedBy              USER?         @relation("InvoiceVoidedBy", fields: [voided_by], references: [id])
+
+  currentVersion        InvoiceVersion? @relation("InvoiceCurrentVersion", fields: [current_version_id], references: [id])
+
+  versions              InvoiceVersion[]
+  reviews               InvoiceReview[]
+  comments              InvoiceComment[]
+  payments              InvoicePayment[]
+  syncs                 InvoiceExternalSync[]
+  audits                InvoiceAuditLog[]
+
+  @@index([organization_id], map: "idx_invoice_org")
+  @@index([status], map: "idx_invoice_status")
+  @@index([createdAt], map: "idx_invoice_created")
+  @@index([organization_id, billing_start_date, billing_end_date], map: "idx_invoice_cycle")
+}
+
+// A single draft/reviewed/published snapshot of an Invoice's actual billable content.
+// This is where line items, totals, and the review/approve/publish audit trail live.
+// Editing a published invoice never mutates this row — it creates a new InvoiceVersion
+// with an incremented version_number, and Invoice.current_version_id is repointed to it.
+// This keeps every historical version (and its line items) permanently intact for audit.
+model InvoiceVersion {
+  id                    String               @id @default(uuid())
+  invoice_id            String
+
+  // 1-based, increments per Invoice — see @@unique below for the idempotency guarantee.
+  version_number        Int
+
+  // Per-version lifecycle, independent of (but usually mirrored up to) Invoice.status.
+  status                InvoiceVersionStatus @default(draft)
+
+  currency              String               @default("USD")
+
+  // issue_date: when this version was actually published/sent.
+  // due_date: internal payment-due date used for aging/collections logic.
+  // public_due_date: the (possibly different, friendlier) due date shown to the client.
+  issue_date            DateTime?
+  due_date              DateTime?
+  public_due_date       DateTime?
+
+  // Usually copied from the parent Invoice at creation time, but stored per-version so a
+  // corrected/re-issued version can (rarely) cover a different range than the original.
+  billing_start_date    DateTime?
+  billing_end_date      DateTime?
+
+  // True if this version was generated ahead of the cycle (see BillingMode.prebill) and
+  // therefore still needs a reconciliation pass once actual hours are known.
+  is_prebill            Boolean              @default(false)
+  // Whether fee line items (setup/software/penalty, etc.) are permitted on this version —
+  // some orgs are configured to never see fee breakdowns (see show_fee_breakdown_on_invoice).
+  allow_fees            Boolean              @default(false)
+
+  // Denormalized rollups computed from line_items — kept in sync by InvoiceService
+  // whenever line items change, so reads don't need to re-sum on every request.
+  subtotal              Decimal              @db.Decimal(14,2) @default(0)
+  tax_total              Decimal              @db.Decimal(14,2) @default(0)
+  total                 Decimal              @db.Decimal(14,2) @default(0)
+
+  // Invoice-level discount applied on top of the line-item subtotal.
+  // discountType: 'dollar' | 'percent'.
+  discountType          String               @default("dollar")
+  discountValue         Decimal              @db.Decimal(14,2) @default(0)
+
+  // Client-visible notes vs. internal-only notes (never rendered on the invoice PDF/email).
+  notes                 String?
+  internal_notes        String?
+
+  // Who moved this version through review -> approval -> publish, and when. All optional
+  // since a version may still be sitting in an earlier stage of the workflow.
+  reviewed_by           String?
+  approved_by           String?
+  published_by          String?
+
+  reviewedAt            DateTime?
+  approvedAt            DateTime?
+  publishedAt           DateTime?
+
+  created_by            String
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  // relations
+  invoice               Invoice              @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  currentForInvoice     Invoice?             @relation("InvoiceCurrentVersion")
+
+  reviewer              USER?                @relation("InvoiceVersionReviewedBy", fields: [reviewed_by], references: [id])
+  approver              USER?                @relation("InvoiceVersionApprovedBy", fields: [approved_by], references: [id])
+  publisher             USER?                @relation("InvoiceVersionPublishedBy", fields: [published_by], references: [id])
+  creator               USER                 @relation("InvoiceVersionCreatedBy", fields: [created_by], references: [id])
+
+  line_items            InvoiceLineItem[]
+
+  @@unique([invoice_id, version_number], map: "uq_invoice_version_number")
+  @@index([invoice_id], map: "idx_invoice_version_invoice")
+  @@index([status], map: "idx_invoice_version_status")
+}
+
+// The source of truth for what's actually being billed. Per the philosophy note above
+// the Invoice model, this — not InvoiceVersion.total — is where the real numbers live;
+// version-level totals are just a cached sum of these rows. Two shapes of row exist:
+// "primary" lines (one per worker per billing cycle, carrying the hours snapshot) and
+// "additional" lines (nested under a primary via parent_line_item_id — one-off charges,
+// credits, fees tied to that worker/ticket).
+model InvoiceLineItem {
+  id                          String              @id @default(uuid())
+
+  invoice_version_id          String
+
+  // Set for "additional" rows nested under a primary worker line — see model comment.
+  parent_line_item_id         String?
+
+  // Support/ops ticket this charge originated from, if any (e.g. a billable one-off task).
+  ticket_id                   String?
+
+  // Which worker this line bills for. Nullable because account-wide fees (setup fees,
+  // software fees) aren't attributable to a single worker.
+  worker_id                   String?
+  // Worker's name at billing time, snapshotted so historical invoices don't change
+  // if the worker is later renamed/reassigned/deleted.
+  worker_name_snapshot        String?
+
+  is_full_time                Boolean             @default(false)
+
+  type                        InvoiceLineType
+  category                    InvoiceLineCategory
+
+  description                 String
+
+  // --------------------------------------------------------------------------
+  // HOURS SNAPSHOT (primary rows mainly)
+  // --------------------------------------------------------------------------
+
+  // Raw hours pulled from Hubstaff (or whichever tracking source) at generation time —
+  // never edited directly, so there's always a record of what was actually tracked.
+  source_worked_hours         Decimal?            @db.Decimal(10,2)
+
+  // Admin-entered override, settable only while the invoice is in draft/review. Used to
+  // correct tracking-tool errors without losing the original source_worked_hours value.
+  manual_override_worked_hours Decimal?           @db.Decimal(10,2)
+
+  // The hours actually billed: manual_override_worked_hours if set, else
+  // source_worked_hours. Every downstream calculation (service_amount, etc.) uses this,
+  // never the raw source directly.
+  effective_worked_hours      Decimal?            @db.Decimal(10,2)
+
+  // totals (can also be broken into child table)
+  total_hours_worked          Decimal?            @db.Decimal(10,2)
+  total_pto_hours             Decimal?            @db.Decimal(10,2)
+  total_holiday_hours         Decimal?            @db.Decimal(10,2)
+  total_hours_payable         Decimal?            @db.Decimal(10,2)
+
+  hourly_rate                 Decimal?            @db.Decimal(14,2)
+
+  // --------------------------------------------------------------------------
+  // MONEY
+  // --------------------------------------------------------------------------
+
+  // Base amount for the line: effective_worked_hours * hourly_rate for hourly lines,
+  // or the flat monthly rate for salaried/full-time lines.
+  service_amount              Decimal             @db.Decimal(14,2) @default(0)
+
+  // Internal cost components, tracked alongside the client-facing amount for margin
+  // reporting (see OrganizationBillingStats/WorkerBillingStats) — not shown to the client
+  // unless InvoiceConfiguration.show_fee_breakdown_on_invoice is enabled.
+  operations_cost             Decimal             @db.Decimal(14,2) @default(0)
+  medvirtual_fees            Decimal             @db.Decimal(14,2) @default(0)
+
+  // service_amount + fees, before adjustment_amount is applied.
+  subtotal_before_adjustment Decimal             @db.Decimal(14,2) @default(0)
+
+  // A single manual adjustment (discount/surcharge) can be applied per line — only one
+  // active at a time; changing it overwrites in place, with the prior value preserved in
+  // InvoiceLineAdjustmentHistory. adjustment_amount is the resolved dollar effect,
+  // computed from adjustment_type/adjustment_value at write time.
+  adjustment_type             AdjustmentType?
+  adjustment_value            Decimal?            @db.Decimal(14,2)
+  adjustment_amount           Decimal             @db.Decimal(14,2) @default(0)
+
+  // subtotal_before_adjustment + adjustment_amount. What actually rolls up into the
+  // InvoiceVersion subtotal.
+  final_total                 Decimal             @db.Decimal(14,2) @default(0)
+
+  // Explicit display order on the rendered invoice (children are grouped under parent).
+  sort_order                  Int                 @default(0)
+
+  created_by                  String
+  createdAt                   DateTime            @default(now())
+  updatedAt                   DateTime            @updatedAt
+
+  // relations
+  invoiceVersion              InvoiceVersion      @relation(fields: [invoice_version_id], references: [id], onDelete: Cascade)
+
+  parent                      InvoiceLineItem?    @relation("InvoiceLineChildren", fields: [parent_line_item_id], references: [id], onDelete: Restrict)
+  children                    InvoiceLineItem[]   @relation("InvoiceLineChildren")
+
+  creator                     USER                @relation("InvoiceLineCreatedBy", fields: [created_by], references: [id])
+  ticket                      Ticket?             @relation(fields: [ticket_id], references: [id], onDelete: SetNull)
+
+  hour_breakdowns             InvoiceLineHourBreakdown[]
+  adjustment_history          InvoiceLineAdjustmentHistory[]
+  reconciliations             InvoiceLineReconciliation[]
+  ledger_entries              BillingLedgerEntry[]
+  appliedLedgerEntries        BillingLedgerEntry[] @relation("AppliedLedgerLine")
+  audits                      InvoiceAuditLog[]
+
+  @@index([invoice_version_id], map: "idx_line_invoice_version")
+  @@index([worker_id], map: "idx_line_worker")
+  @@index([type], map: "idx_line_type")
+  @@index([category], map: "idx_line_category")
+}
+
+// Optional finer-grained split of a line item's total_hours_payable into worked/pto/holiday
+// buckets — one row per hour_type per line. Exists mainly for reporting/audit; the line
+// item's own total_* columns already carry the aggregate values used for billing math.
+model InvoiceLineHourBreakdown {
+  id                String            @id @default(uuid())
+  line_item_id      String
+
+  hour_type         HourBreakdownType
+  hours             Decimal           @db.Decimal(10,2)
+
+  createdAt         DateTime          @default(now())
+
+  lineItem          InvoiceLineItem   @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+
+  @@unique([line_item_id, hour_type], map: "uq_line_hour_type")
+  @@index([line_item_id], map: "idx_line_hour_line")
+}
+
+// Append-only audit trail of every change to a line item's single adjustment slot.
+// Since InvoiceLineItem only ever stores the *current* adjustment, this is the only
+// place the "why did this line's price change" history is recoverable from.
+model InvoiceLineAdjustmentHistory {
+  id                String            @id @default(uuid())
+  line_item_id      String
+
+  old_type          AdjustmentType?
+  old_value         Decimal?          @db.Decimal(14,2)
+
+  new_type          AdjustmentType?
+  new_value         Decimal?          @db.Decimal(14,2)
+
+  changed_by        String
+  // Free-text justification entered by the admin making the change (e.g. "client
+  // reported outage, 4hr credit approved").
+  reason            String?
+
+  createdAt         DateTime         @default(now())
+
+  lineItem          InvoiceLineItem  @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+  actor             USER             @relation("InvoiceLineAdjustmentChangedBy", fields: [changed_by], references: [id])
+
+  @@index([line_item_id], map: "idx_adj_history_line")
+}
+
+// True-up record for prebilled lines (see BillingMode.prebill / InvoiceVersion.is_prebill).
+// When actual hours/amounts become known after the cycle closes, the InvoicePrebillReconciliationWorker
+// compares them against what was originally estimated and writes one row per affected
+// line item, then posts the delta as a BillingLedgerEntry credit/debit to be applied to
+// a future invoice — the original prebilled invoice itself is never retroactively edited.
+model InvoiceLineReconciliation {
+  id                        String            @id @default(uuid())
+
+  line_item_id              String
+
+  organization_id           String
+  worker_id                 String?
+
+  // What the line was originally billed for (prebill estimate).
+  estimated_amount          Decimal           @db.Decimal(14,2)
+  // What it should have been, based on actual tracked hours/adjustments.
+  actual_amount             Decimal           @db.Decimal(14,2)
+  // actual_amount - estimated_amount. Positive = org owes more, negative = credit owed.
+  delta_amount              Decimal           @db.Decimal(14,2)
+
+  status                    ReconciliationStatus @default(pending)
+
+  created_by                String?
+  createdAt                 DateTime          @default(now())
+  completedAt               DateTime?
+
+  lineItem                  InvoiceLineItem   @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+  organization              Organization      @relation(fields: [organization_id], references: [id], onDelete: Restrict)
+  actor                     USER?             @relation("InvoiceReconCreatedBy", fields: [created_by], references: [id])
+
+  ledger_entries            BillingLedgerEntry[]
+
+  @@index([organization_id], map: "idx_recon_org")
+  @@index([worker_id], map: "idx_recon_worker")
+  @@index([status], map: "idx_recon_status")
+}
+
+// The org's running credit/debit balance ledger — every credit or debit event (a
+// reconciliation delta, a manual adjustment, a carried-forward balance) is one row here.
+// This is what InvoiceConfiguration.credit_balance/debit_balance and
+// auto_apply_credits actually draw from/add to when generating the next invoice.
+model BillingLedgerEntry {
+  id                        String            @id @default(uuid())
+
+  organization_id           String
+  worker_id                 String?
+
+  // Where this entry came from, if applicable: the line item that generated it, and/or
+  // the reconciliation run that produced it (see InvoiceLineReconciliation).
+  line_item_id              String?
+  reconciliation_id         String?
+
+  // credit = reduces what the org owes; debit = increases it.
+  direction                 LedgerDirection
+
+  amount                    Decimal           @db.Decimal(14,2)
+  // Tracks partial consumption — e.g. a $500 credit entry can be applied across several
+  // future invoices; this ticks down toward zero as it's used, rather than the row being
+  // deleted or split.
+  remaining_amount          Decimal           @db.Decimal(14,2)
+
+  // Once (fully or partially) applied, points at the line item it was applied to.
+  applied_to_line_item_id   String?
+
+  createdAt                 DateTime          @default(now())
+
+  organization              Organization      @relation(fields: [organization_id], references: [id], onDelete: Restrict)
+
+  sourceLineItem            InvoiceLineItem?  @relation(fields: [line_item_id], references: [id], onDelete: SetNull)
+  reconciliation           InvoiceLineReconciliation? @relation(fields: [reconciliation_id], references: [id], onDelete: SetNull)
+  appliedLineItem          InvoiceLineItem?  @relation("AppliedLedgerLine", fields: [applied_to_line_item_id], references: [id], onDelete: SetNull)
+
+  @@index([organization_id], map: "idx_ledger_org")
+  @@index([worker_id], map: "idx_ledger_worker")
+}
+
+// One row per submit-for-review action on an invoice — a lightweight approval-workflow
+// log, separate from InvoiceVersion's own reviewed_by/approved_by fields (those track
+// the *outcome*; this tracks the *request*, including who was asked and any notes).
+model InvoiceReview {
+  id                  String      @id @default(uuid())
+  invoice_id          String
+
+  submitted_by        String
+  reviewed_by         String?
+
+  status              ReviewStatus @default(submitted)
+
+  notes               String?
+
+  createdAt           DateTime     @default(now())
+  reviewedAt          DateTime?
+
+  invoice             Invoice      @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  submitter           USER         @relation("InvoiceReviewSubmittedBy", fields: [submitted_by], references: [id])
+  reviewer            USER?        @relation("InvoiceReviewReviewedBy", fields: [reviewed_by], references: [id])
+
+  @@index([invoice_id], map: "idx_review_invoice")
+}
+
+// Free-form discussion thread attached to an invoice — used both for internal
+// back-and-forth during review and (when is_internal is false) for client-visible notes.
+model InvoiceComment {
+  id                  String      @id @default(uuid())
+  invoice_id          String
+  author_id           String
+
+  content             String
+  // true = staff-only, never shown to the client; false = visible on the client portal.
+  is_internal         Boolean     @default(true)
+
+  createdAt           DateTime    @default(now())
+
+  invoice             Invoice     @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  author              USER        @relation("InvoiceCommentAuthor", fields: [author_id], references: [id])
+
+  @@index([invoice_id], map: "idx_comment_invoice")
+}
+
+// A record of money actually received against an invoice. Distinct from
+// Invoice.stripe_status (which mirrors Stripe's own invoice state) — this table can also
+// carry non-Stripe/manual payments in the future (see PaymentProvider enum).
+model InvoicePayment {
+  id                  String      @id @default(uuid())
+  invoice_id          String
+
+  provider            PaymentProvider @default(stripe)
+  // Provider-side identifier for this payment (e.g. Stripe PaymentIntent/charge id).
+  provider_reference  String?
+
+  amount              Decimal     @db.Decimal(14,2)
+
+  status              PaymentStatus @default(pending)
+
+  paid_at             DateTime?
+  createdAt           DateTime    @default(now())
+
+  invoice             Invoice     @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@index([invoice_id], map: "idx_payment_invoice")
+  @@index([status], map: "idx_payment_status")
+}
+
+// Log of every attempt to push an invoice to an external payment provider (Stripe).
+// Kept separate from InvoicePayment because a sync can fail before any payment exists —
+// this is the debugging trail for "why didn't this invoice show up in Stripe."
+model InvoiceExternalSync {
+  id                  String      @id @default(uuid())
+  invoice_id          String
+
+  provider            PaymentProvider @default(stripe)
+  status              SyncStatus
+
+  // Raw request/response bodies, kept for debugging failed syncs without needing to
+  // reproduce the call against the live Stripe API.
+  request_payload     Json?
+  response_payload    Json?
+  error_message       String?
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  invoice             Invoice     @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  @@index([invoice_id], map: "idx_sync_invoice")
+}
+
+// Generic append-only audit trail for the entire invoicing system — every meaningful
+// mutation (status change, line edit, adjustment, publish, void...) writes one row here
+// with a free-text `event` name and before/after JSON snapshots. This is the "what
+// happened and when" system of record independent of the more specific history tables
+// above (InvoiceLineAdjustmentHistory, InvoiceExternalSync, etc).
+model InvoiceAuditLog {
+  id                  String      @id @default(uuid())
+
+  // All three are nullable because a single audit event may only be scoped to one level
+  // (e.g. an invoice-level status change has no line_item_id).
+  invoice_id          String?
+  invoice_version_id  String?
+  line_item_id        String?
+
+  // Null when the action was system-initiated (e.g. by the invoice generation worker)
+  // rather than a human user.
+  actor_id            String?
+
+  // Short machine-readable event name, e.g. "status_changed", "line_item_adjusted".
+  event               String
+  old_value           Json?
+  new_value           Json?
+
+  createdAt           DateTime    @default(now())
+
+  invoice             Invoice?        @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  actor               USER?           @relation("InvoiceAuditActor", fields: [actor_id], references: [id])
+  lineItem            InvoiceLineItem? @relation(fields: [line_item_id], references: [id], onDelete: Cascade)
+
+  @@index([invoice_id], map: "idx_audit_invoice")
+  @@index([line_item_id], map: "idx_audit_line")
+  @@index([createdAt], map: "idx_audit_created")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+// Top-level lifecycle of an Invoice. draft/under_review/approved/published mirror the
+// current version's own workflow; partially_paid/paid/voided/cancelled are terminal-ish
+// states driven by InvoicePayment records and manual void/cancel actions.
+enum InvoiceStatus {
+  draft
+  under_review
+  approved
+  published
+  partially_paid
+  paid
+  voided
+  cancelled
+}
+
+// Per-version workflow state — see InvoiceVersion model comment for how versions relate
+// to their parent Invoice. published is the terminal, immutable state for a version.
+enum InvoiceVersionStatus {
+  draft
+  under_review
+  approved
+  published
+  voided
+}
+
+// primary = one per worker per cycle (the hours-driven base charge).
+// additional = a nested one-off row under a primary line (credit, fee, manual charge).
+enum InvoiceLineType {
+  primary
+  additional
+}
+
+// What kind of charge/credit a line item represents. Drives both display grouping and
+// which fields are expected to be populated (e.g. hourly_service lines carry hours data,
+// setup_fee lines don't).
+enum InvoiceLineCategory {
+  monthly_service
+  hourly_service
+  overtime
+  pto
+  holiday
+  bonus
+  reconciliation_credit
+  reconciliation_debit
+  manual_charge
+  manual_credit
+  setup_fee
+  software_fee
+  penalty
+  tax
+}
+
+// fixed = adjustment_value is a flat dollar amount; percent = adjustment_value is a
+// percentage applied to subtotal_before_adjustment.
+enum AdjustmentType {
+  fixed
+  percent
+}
+
+enum HourBreakdownType {
+  worked
+  pto
+  holiday
+}
+
+// Lifecycle of an InvoiceLineReconciliation row, from creation through to the ledger
+// entry being posted (completed), or exception paths (disputed by the client, reversed
+// by an admin).
+enum ReconciliationStatus {
+  pending
+  processing
+  completed
+  disputed
+  reversed
+}
+
+// credit = reduces the org's balance (money owed to them); debit = increases it.
+enum LedgerDirection {
+  credit
+  debit
+}
+
+enum ReviewStatus {
+  submitted
+  approved
+  rejected
+  changes_requested
+}
+
+// Only Stripe is implemented today; the enum exists so a second provider can be added
+// without a breaking schema change to InvoicePayment/InvoiceExternalSync.
+enum PaymentProvider {
+  stripe
+}
+
+enum PaymentStatus {
+  pending
+  partially_paid
+  paid
+  failed
+  refunded
+}
+
+// Status of a single attempt to push/sync an invoice to the external payment provider.
+enum SyncStatus {
+  queued
+  processing
+  success
+  failed
+}
+
+
+// Global, cross-organization rollup for a single billing cycle — one row per
+// (billing_start_date, billing_end_date, currency). Computed and upserted by
+// InvoiceStatsWorker after a cycle's invoices are generated/updated, so admin dashboards
+// don't need to aggregate across every Invoice/InvoiceVersion row on every page load.
+model BillingCycleStats {
+  id                      String   @id @default(uuid())
+
+  billing_start_date      DateTime
+  billing_end_date        DateTime
+
+  currency                String   @default("USD")
+
+  invoice_count           Int      @default(0)
+  published_invoice_count Int      @default(0)
+  paid_invoice_count      Int      @default(0)
+  overdue_invoice_count   Int      @default(0)
+  voided_invoice_count    Int      @default(0)
+
+  organization_count      Int      @default(0)
+  billed_worker_count     Int      @default(0)
+
+  gross_service_amount    Decimal  @db.Decimal(14,2) @default(0)
+  total_operations_cost   Decimal  @db.Decimal(14,2) @default(0)
+  total_medvirtual_fees   Decimal  @db.Decimal(14,2) @default(0)
+
+  total_adjustments       Decimal  @db.Decimal(14,2) @default(0)
+
+  reconciliation_credits  Decimal  @db.Decimal(14,2) @default(0)
+  reconciliation_debits   Decimal  @db.Decimal(14,2) @default(0)
+
+  invoice_total           Decimal  @db.Decimal(14,2) @default(0)
+  payments_received       Decimal  @db.Decimal(14,2) @default(0)
+  outstanding_balance     Decimal  @db.Decimal(14,2) @default(0)
+
+  generated_at            DateTime @default(now())
+
+  @@unique([billing_start_date, billing_end_date, currency])
+}
+
+
+// Same idea as BillingCycleStats but scoped to a single organization per cycle — the
+// numbers behind that org's billing dashboard/history view.
+model OrganizationBillingStats {
+  id                    String   @id @default(uuid())
+
+  organization_id       String
+
+  billing_start_date    DateTime
+  billing_end_date      DateTime
+
+  invoice_total         Decimal  @db.Decimal(14,2)
+  paid_total            Decimal  @db.Decimal(14,2)
+  outstanding_total     Decimal  @db.Decimal(14,2)
+
+  worker_count          Int
+  fees_total            Decimal  @db.Decimal(14,2)
+  adjustments_total     Decimal  @db.Decimal(14,2)
+
+  generated_at          DateTime @default(now())
+
+  @@index([organization_id])
+}
+
+
+// Per-worker rollup for a cycle — powers "revenue per worker" / margin reporting without
+// scanning every InvoiceLineItem for that worker on every request.
+model WorkerBillingStats {
+  id                  String   @id @default(uuid())
+
+  worker_id           String
+  billing_start_date  DateTime
+  billing_end_date    DateTime
+
+  hours_worked        Decimal  @db.Decimal(10,2)
+  pto_hours           Decimal  @db.Decimal(10,2)
+  holiday_hours       Decimal  @db.Decimal(10,2)
+  payable_hours       Decimal  @db.Decimal(10,2)
+
+  revenue_generated   Decimal  @db.Decimal(14,2)
+  fees_generated      Decimal  @db.Decimal(14,2)
+
+  generated_at          DateTime @default(now())
+}
+
+// Tracks a single run of a bulk background invoicing job (e.g. "generate invoices for
+// all orgs in this cycle") — one row per run, with per-task progress counters so the
+// admin UI can show "37/50 orgs processed" and surface which ones failed without
+// re-running the whole batch.
+model InvoiceJob {
+  id                String           @id @default(uuid())
+  status            InvoiceJobStatus @default(queued)
+
+  total_tasks       Int              @default(0)
+  completed_tasks   Int              @default(0)
+  failed_tasks      Int              @default(0)
+
+  // Input parameters for the job (e.g. cycle dates, org filter) and its final output
+  // summary, kept as JSON since the shape varies by job type.
+  payload           Json?
+  result            Json?
+  error_message     String?
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([status])
+}
+
+// partial_success = some tasks in the batch failed but the job as a whole completed —
+// distinct from `failed`, which means the job itself aborted.
+enum InvoiceJobStatus {
+  queued
+  processing
+  completed
+  partial_success
+  failed
 }
