@@ -114,6 +114,9 @@ describe('PanelService', () => {
     // 8. activeStaff (staff.count)
     (prisma.staff.count as jest.Mock).mockResolvedValueOnce(12);
 
+    // 8b. clientsWithActiveStaff (organization.count)
+    (prisma.organization.count as jest.Mock).mockResolvedValueOnce(6);
+
     // 9. candidatesAvailable (candidate.count)
     (prisma.candidate.count as jest.Mock).mockResolvedValueOnce(7);
 
@@ -214,6 +217,7 @@ describe('PanelService', () => {
     expect(result.activeUsers).toBe(20);
     expect(result.activeHireRequests).toBe(5);
     expect(result.activeStaff).toBe(12);
+    expect(result.clientsWithActiveStaff).toBe(6);
 
     expect(result.candidatesAvailable).toBe(7);
     expect(result.candidatesEndorsed).toBe(3);
@@ -558,6 +562,24 @@ describe('PanelService', () => {
       const result = await service.getPanelData();
 
       expect(result.activeProspectUsersWithoutStaff).toBe(7);
+    });
+
+    it('filters clientsWithActiveStaff by organization.count with staff.some(active + in-pipeline)', async () => {
+      setupCommonMocks();
+      (prisma.organization.count as jest.Mock).mockImplementation((args) =>
+        Promise.resolve(args?.where?.staff?.some ? 6 : 0),
+      );
+
+      const result = await service.getPanelData();
+
+      expect(result.clientsWithActiveStaff).toBe(6);
+      const call = (prisma.organization.count as jest.Mock).mock.calls.find(
+        ([args]: any) => args?.where?.staff?.some,
+      );
+      expect(call[0].where.staff.some).toMatchObject({
+        status: 'active',
+      });
+      expect(call[0].where.status).toBe('active');
     });
 
     it('populates clientEngagement.platformDurationMinutes from the platform-scoped, client-role duration', async () => {

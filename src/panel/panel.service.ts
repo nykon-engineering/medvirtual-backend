@@ -432,6 +432,15 @@ export class PanelService {
     });
     result.activeStaff = staffCount;
 
+    const clientsWithActiveStaff = await this.prisma.organization.count({
+      where: {
+        status: OrganizationStatus.active,
+        staff: { some: activeStaffFilter },
+        ...(hasDateFilter ? { createdAt: dateFilterCreated } : {}),
+      },
+    });
+    result.clientsWithActiveStaff = clientsWithActiveStaff;
+
     const candidatesAvailable = await this.prisma.candidate.count({
       where: {
         OR: [
