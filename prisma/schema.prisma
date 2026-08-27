@@ -122,6 +122,11 @@ model USER {
   // (cron reconcile / dormant BU). Cleared on reactivation.
   deactivated_by_bu String?
 
+  // Onboarding tour — set only when the user explicitly checks "Don't show this
+  // again" in the tour card. Global across devices/browsers. Closing/skipping
+  // the tour WITHOUT checking the box does NOT set this.
+  onboarding_tour_dismissed Boolean @default(false)
+
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
   @@index([organization_id], map: "idx_users_organization_id")
