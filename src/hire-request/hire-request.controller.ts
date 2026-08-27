@@ -95,6 +95,16 @@ export class HireRequestController {
     required: false,
     description: 'Filter by business unit',
   })
+  @ApiQuery({
+    name: 'dateFrom',
+    required: false,
+    description: 'Filter by creation date (ISO date), inclusive lower bound',
+  })
+  @ApiQuery({
+    name: 'dateTo',
+    required: false,
+    description: 'Filter by creation date (ISO date), inclusive upper bound',
+  })
   @ApiResponse({
     status: 200,
     description: 'List of hire requests with pagination info',
@@ -111,6 +121,8 @@ export class HireRequestController {
     @Query('perPage') perPage?: string,
     @Query('businessUnit') businessUnit?: string,
     @Query('status') status?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
     const pageNumber = page ? parseInt(page, 10) : 1;
     const perPageNumber = perPage ? parseInt(perPage, 10) : 10;
@@ -121,6 +133,8 @@ export class HireRequestController {
       perPageNumber,
       businessUnit,
       status,
+      dateFrom,
+      dateTo,
     );
     return {
       status: 200,

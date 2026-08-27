@@ -540,6 +540,8 @@ export class HireRequestService {
     perPage: number = 10,
     businessUnit?: string,
     status?: string,
+    dateFrom?: string,
+    dateTo?: string,
   ): Promise<any> {
     if (
       !user ||
@@ -616,7 +618,22 @@ export class HireRequestService {
         }
       : {};
 
-    const whereClause = { ...baseWhere, ...searchWhere, ...businessUnitWhere };
+    const dateWhere =
+      dateFrom || dateTo
+        ? {
+            createdAt: {
+              ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+              ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+            },
+          }
+        : {};
+
+    const whereClause = {
+      ...baseWhere,
+      ...searchWhere,
+      ...businessUnitWhere,
+      ...dateWhere,
+    };
 
     //console.log('HireRequestService.findAll - whereClause:', whereClause);
 
