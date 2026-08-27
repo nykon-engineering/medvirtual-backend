@@ -2756,6 +2756,8 @@ ${getEmailLogoCss()}
 
     const fallbackHtmlOfferClient = this.buildEmail(
       `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
+      ${panel.title ? `<p style="font-size: 16px;"><strong>${panel.title}</strong></p>` : ''}
+      ${panel.description ? `<p style="color: #555555;">${panel.description}</p>` : ''}
       <p>Take a look at their profiles whenever you're ready.</p>
       ${candidateCards}
       <div style="text-align: left; margin: 30px 0;">
@@ -2775,6 +2777,8 @@ ${getEmailLogoCss()}
         '{{candidateCount}}': String(candidateCount),
         '{{panelLink}}': panelUrl,
         '{{candidateCards}}': candidateCards,
+        '{{offerTitle}}': panel.title || '',
+        '{{offerDescription}}': panel.description || '',
       },
       theme,
       panel.business_unit,
@@ -2832,6 +2836,8 @@ ${getEmailLogoCss()}
 
     const html = this.buildEmail(
       `<p><strong>${panel.createdBy.first_name}</strong>, from <strong>${theme.companyName}</strong>, handpicked ${candidateLabel} we think are a great match for your team.</p>
+      ${panel.title ? `<p style="font-size: 16px;"><strong>${panel.title}</strong></p>` : ''}
+      ${panel.description ? `<p style="color: #555555;">${panel.description}</p>` : ''}
       <p>Take a look at their profiles whenever you're ready.</p>
       ${candidateCards}
       <div style="text-align: left; margin: 30px 0;">
@@ -2852,6 +2858,8 @@ ${getEmailLogoCss()}
         '{{candidateCount}}': String(candidateCount),
         '{{panelLink}}': panelUrl,
         '{{candidateCards}}': candidateCards,
+        '{{offerTitle}}': panel.title || '',
+        '{{offerDescription}}': panel.description || '',
       },
       theme,
       panel.business_unit,
