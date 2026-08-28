@@ -78,6 +78,11 @@ export class GetProfileDto {
   @ApiProperty({ description: 'User verification status' })
   verified: boolean;
 
+  @ApiProperty({
+    description: 'Whether the user has permanently dismissed the onboarding tour',
+  })
+  onboarding_tour_dismissed: boolean;
+
   @ApiProperty({ description: 'User creation date' })
   createdAt: Date;
 

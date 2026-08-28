@@ -3,8 +3,8 @@ import { PositionRateConfigService } from './position-rate-config.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockData = [
-  { position: 'Admin VA', medVirtual_floor_price_english: 15, medVirtual_margin_per_hour: 9 },
-  { position: 'Billing VA', medVirtual_floor_price_english: 18, medVirtual_margin_per_hour: 9 },
+  { position: 'Admin VA', medical_floor_price_english: 15, medical_margin_per_hour: 9 },
+  { position: 'Billing VA', medical_floor_price_english: 18, medical_margin_per_hour: 9 },
 ];
 
 const mockPrisma = {
@@ -85,7 +85,7 @@ describe('PositionRateConfigService', () => {
 
   describe('findByPosition', () => {
     it('returns config for a specific position', async () => {
-      const mockConfig = { position: 'Admin VA', medVirtual_floor_price_english: 15 };
+      const mockConfig = { position: 'Admin VA', medical_floor_price_english: 15 };
       mockPrisma.positionRateConfig.findUnique.mockResolvedValue(mockConfig);
 
       const result = await service.findByPosition('Admin VA');
@@ -105,12 +105,12 @@ describe('PositionRateConfigService', () => {
 
   describe('upsert', () => {
     const dto = {
-      medVirtual_floor_price_english: 15,
-      berryVirtual_floor_price_english: 15,
-      medVirtual_floor_price_bilingual: 17,
-      berryVirtual_floor_price_bilingual: 17,
-      medVirtual_margin_per_hour: 9,
-      berryVirtual_margin_per_hour: 9,
+      medical_floor_price_english: 15,
+      non_medical_floor_price_english: 15,
+      medical_floor_price_bilingual: 17,
+      non_medical_floor_price_bilingual: 17,
+      medical_margin_per_hour: 9,
+      non_medical_margin_per_hour: 9,
     };
 
     it('calls prisma upsert with correct create/update payloads', async () => {
@@ -122,36 +122,36 @@ describe('PositionRateConfigService', () => {
       expect(mockPrisma.positionRateConfig.upsert).toHaveBeenCalledWith({
         where: { position: 'Admin VA' },
         update: {
-          medVirtual_floor_price_english: 15,
-          berryVirtual_floor_price_english: 15,
-          medVirtual_floor_price_bilingual: 17,
-          berryVirtual_floor_price_bilingual: 17,
-          medVirtual_margin_per_hour: 9,
-          berryVirtual_margin_per_hour: 9,
+          medical_floor_price_english: 15,
+          non_medical_floor_price_english: 15,
+          medical_floor_price_bilingual: 17,
+          non_medical_floor_price_bilingual: 17,
+          medical_margin_per_hour: 9,
+          non_medical_margin_per_hour: 9,
         },
         create: {
           position: 'Admin VA',
-          medVirtual_floor_price_english: 15,
-          berryVirtual_floor_price_english: 15,
-          medVirtual_floor_price_bilingual: 17,
-          berryVirtual_floor_price_bilingual: 17,
-          medVirtual_margin_per_hour: 9,
-          berryVirtual_margin_per_hour: 9,
+          medical_floor_price_english: 15,
+          non_medical_floor_price_english: 15,
+          medical_floor_price_bilingual: 17,
+          non_medical_floor_price_bilingual: 17,
+          medical_margin_per_hour: 9,
+          non_medical_margin_per_hour: 9,
         },
       });
       expect(result).toEqual(saved);
     });
 
     it('passes undefined for unspecified fields (Prisma will skip updating them)', async () => {
-      const partialDto = { medVirtual_margin_per_hour: 6 };
+      const partialDto = { medical_margin_per_hour: 6 };
       mockPrisma.positionRateConfig.upsert.mockResolvedValue({});
 
       await service.upsert('Admin VA', partialDto);
 
       const call = mockPrisma.positionRateConfig.upsert.mock.calls[0][0];
-      expect(call.update.medVirtual_floor_price_english).toBeUndefined();
-      expect(call.update.berryVirtual_floor_price_english).toBeUndefined();
-      expect(call.update.medVirtual_margin_per_hour).toBe(6);
+      expect(call.update.medical_floor_price_english).toBeUndefined();
+      expect(call.update.non_medical_floor_price_english).toBeUndefined();
+      expect(call.update.medical_margin_per_hour).toBe(6);
     });
   });
 });

@@ -9,7 +9,9 @@ import {
 import {
   buildConfigMap,
   computeCandidateRates,
+  CandidatePool,
 } from '../common/utils/salary.util';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
@@ -23,6 +25,16 @@ import {
   CandidateEndorsementRowDto,
   CandidateEndorsementsResponseDto,
 } from './dto/candidate-endorsement-row.dto';
+import { ClientLoginsQueryDto } from './dto/client-logins-query.dto';
+import {
+  ClientLoginRowDto,
+  ClientLoginsResponseDto,
+} from './dto/client-login-row.dto';
+import { AdminLoginsQueryDto } from './dto/admin-logins-query.dto';
+import {
+  AdminLoginRowDto,
+  AdminLoginsResponseDto,
+} from './dto/admin-login-row.dto';
 import {
   TalentAgingReportDto,
   TalentAgingBucketDto,
@@ -49,6 +61,10 @@ const CLIENT_ROLES = [
   'affiliate',
 ];
 const ADMIN_ROLES = ['system_admin', 'system_super_admin'];
+const ADMIN_ROLE_LABELS: Record<string, string> = {
+  system_admin: 'System Admin',
+  system_super_admin: 'System Owner',
+};
 
 // Same-request writes in changeWinner() land well under a second apart in practice;
 // widened to 5 minutes to tolerate slow requests without risking cross-candidate matches.
@@ -82,7 +98,36 @@ export class PanelService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly positionRateConfigService: PositionRateConfigService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
+
+  /**
+   * Resolves the `candidate_pool` for every distinct `business_unit` present in
+   * `candidates`, in one batch — so a subsequent synchronous `.map()` calling
+   * `computeCandidateRates` can look pools up without ever `await`-ing inside
+   * the loop. Unknown/missing business units fall back to `'medical'`.
+   */
+  private async buildCandidatePoolMap(
+    candidates: { business_unit: string | null }[],
+  ): Promise<Map<string, CandidatePool>> {
+    const distinctBUs = Array.from(
+      new Set(
+        candidates
+          .map((c) => c.business_unit)
+          .filter((bu): bu is string => !!bu),
+      ),
+    );
+    const entries = await Promise.all(
+      distinctBUs.map(
+        async (bu) =>
+          [bu, (await this.businessUnitContext.poolFor(bu)) ?? 'medical'] as [
+            string,
+            CandidatePool,
+          ],
+      ),
+    );
+    return new Map(entries);
+  }
 
   /**
    * PanelCandidate has no field recording who moved it to `selected_by_client` — the
@@ -496,9 +541,16 @@ export class PanelService {
     const positionConfigs =
       await this.positionRateConfigService.findAllUnpaginated();
     const configByPosition = buildConfigMap(positionConfigs);
+    const candidatePoolMap = await this.buildCandidatePoolMap(
+      failedResumeParsing,
+    );
 
     const failedResume = failedResumeParsing.map((candidate) => {
-      const rates = computeCandidateRates(candidate, configByPosition);
+      const rates = computeCandidateRates(
+        candidate,
+        configByPosition,
+        candidatePoolMap.get(candidate.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...candidate,
         employment_type:
@@ -538,8 +590,14 @@ export class PanelService {
       select: selectCandidates,
     });
 
+    const withoutHeadshotPoolMap =
+      await this.buildCandidatePoolMap(withoutHeadshot);
     const CandwithoutHeadshot = withoutHeadshot.map((candidate) => {
-      const rates = computeCandidateRates(candidate, configByPosition);
+      const rates = computeCandidateRates(
+        candidate,
+        configByPosition,
+        withoutHeadshotPoolMap.get(candidate.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...candidate,
         employment_type:
@@ -858,8 +916,16 @@ export class PanelService {
       select: selectCandidates,
     });
 
+    const candidatesWithInterviewsPoolMap = await this.buildCandidatePoolMap(
+      candidatesWithInterviews,
+    );
     const processed = candidatesWithInterviews.map((candidate) => {
-      const rates = computeCandidateRates(candidate, configByPosition);
+      const rates = computeCandidateRates(
+        candidate,
+        configByPosition,
+        candidatesWithInterviewsPoolMap.get(candidate.business_unit ?? '') ??
+          'medical',
+      );
       return {
         ...candidate,
         employment_type:
@@ -1122,6 +1188,194 @@ export class PanelService {
   }
 
   /**
+   * Row-level client login list backing the "Client Logins" table under the
+   * Client Engagement chart — same CLIENT_ROLES + Session-table definition
+   * the chart's clientLogins KPI already uses (getPanelData), just returned
+   * per-row (user + organization + timestamp) instead of counted per month.
+   * organization_name is read directly off USER (denormalized at signup/
+   * invite time) rather than joined through Organization, matching how the
+   * rest of the dashboard displays a user's org name.
+   */
+  async getClientLogins(
+    query: ClientLoginsQueryDto,
+  ): Promise<ClientLoginsResponseDto> {
+    const page = query.page ?? 1;
+    const perPage = query.perPage ?? 10;
+    const sortBy = query.sortBy ?? 'loggedInAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const rangeEnd = query.dateTo ? new Date(query.dateTo) : new Date();
+    const rangeStart = query.dateFrom
+      ? new Date(query.dateFrom)
+      : new Date(
+          rangeEnd.getFullYear(),
+          rangeEnd.getMonth() - DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS,
+          rangeEnd.getDate(),
+        );
+
+    const where = {
+      createdAt: { gte: rangeStart, lte: rangeEnd },
+      user: { role: { in: CLIENT_ROLES } },
+    };
+
+    const orderBy =
+      sortBy === 'userName'
+        ? [
+            { user: { first_name: sortOrder } },
+            { user: { last_name: sortOrder } },
+          ]
+        : sortBy === 'organizationName'
+          ? [{ user: { organization_name: sortOrder } }]
+          : [{ createdAt: sortOrder }];
+
+    const select = {
+      id: true,
+      createdAt: true,
+      user: {
+        select: { first_name: true, last_name: true, organization_name: true },
+      },
+    };
+
+    if (query.export) {
+      const sessions = await this.prisma.session.findMany({
+        where,
+        select,
+        orderBy,
+      });
+      return { data: sessions.map((s) => this.toClientLoginRow(s)) };
+    }
+
+    const [total, sessions] = await Promise.all([
+      this.prisma.session.count({ where }),
+      this.prisma.session.findMany({
+        where,
+        select,
+        orderBy,
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+    return {
+      data: sessions.map((s) => this.toClientLoginRow(s)),
+      meta: { total, totalPages, page, perPage },
+    };
+  }
+
+  private toClientLoginRow(session: {
+    id: string;
+    createdAt: Date;
+    user: {
+      first_name: string;
+      last_name: string;
+      organization_name: string;
+    };
+  }): ClientLoginRowDto {
+    return {
+      id: session.id,
+      userName:
+        [session.user.first_name, session.user.last_name]
+          .filter(Boolean)
+          .join(' ') || '—',
+      organizationName: session.user.organization_name || '—',
+      loggedInAt: session.createdAt.toISOString(),
+    };
+  }
+
+  /**
+   * Row-level admin login list backing the "Admin Logins" table, sitting next
+   * to "Client Logins" in the Users tab. Same Session-table + role-filter
+   * definition as getClientLogins, just ADMIN_ROLES instead of CLIENT_ROLES —
+   * admins have no organization, so the second column is a human-readable
+   * role label (System Admin / System Owner) instead.
+   */
+  async getAdminLogins(
+    query: AdminLoginsQueryDto,
+  ): Promise<AdminLoginsResponseDto> {
+    const page = query.page ?? 1;
+    const perPage = query.perPage ?? 10;
+    const sortBy = query.sortBy ?? 'loggedInAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const rangeEnd = query.dateTo ? new Date(query.dateTo) : new Date();
+    const rangeStart = query.dateFrom
+      ? new Date(query.dateFrom)
+      : new Date(
+          rangeEnd.getFullYear(),
+          rangeEnd.getMonth() - DEFAULT_CLIENT_SELECTED_LOOKBACK_MONTHS,
+          rangeEnd.getDate(),
+        );
+
+    const where = {
+      createdAt: { gte: rangeStart, lte: rangeEnd },
+      user: { role: { in: ADMIN_ROLES } },
+    };
+
+    const orderBy =
+      sortBy === 'userName'
+        ? [
+            { user: { first_name: sortOrder } },
+            { user: { last_name: sortOrder } },
+          ]
+        : sortBy === 'role'
+          ? [{ user: { role: sortOrder } }]
+          : [{ createdAt: sortOrder }];
+
+    const select = {
+      id: true,
+      createdAt: true,
+      user: {
+        select: { first_name: true, last_name: true, role: true },
+      },
+    };
+
+    if (query.export) {
+      const sessions = await this.prisma.session.findMany({
+        where,
+        select,
+        orderBy,
+      });
+      return { data: sessions.map((s) => this.toAdminLoginRow(s)) };
+    }
+
+    const [total, sessions] = await Promise.all([
+      this.prisma.session.count({ where }),
+      this.prisma.session.findMany({
+        where,
+        select,
+        orderBy,
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+    return {
+      data: sessions.map((s) => this.toAdminLoginRow(s)),
+      meta: { total, totalPages, page, perPage },
+    };
+  }
+
+  private toAdminLoginRow(session: {
+    id: string;
+    createdAt: Date;
+    user: { first_name: string; last_name: string; role: string };
+  }): AdminLoginRowDto {
+    return {
+      id: session.id,
+      userName:
+        [session.user.first_name, session.user.last_name]
+          .filter(Boolean)
+          .join(' ') || '—',
+      role: ADMIN_ROLE_LABELS[session.user.role] ?? session.user.role,
+      loggedInAt: session.createdAt.toISOString(),
+    };
+  }
+
+  /**
    * Per-candidate endorsement count ("endorsements per candidate" +
    * "endorsed to panel by client" reports). An endorsement is the same
    * CandidateAuditLog row buildDeploymentActorIndex reads elsewhere
@@ -1309,8 +1563,7 @@ export class PanelService {
         createdBy: { select: { first_name: true, last_name: true } },
         organization: { select: { id: true, name: true } },
       },
-      orderBy:
-        sortBy === 'createdAt' ? { createdAt: sortOrder } : undefined,
+      orderBy: sortBy === 'createdAt' ? { createdAt: sortOrder } : undefined,
     });
 
     const rows: HireRequestByClientRowDto[] = hireRequests.map((hr) => ({

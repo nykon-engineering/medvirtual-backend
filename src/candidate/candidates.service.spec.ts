@@ -1404,12 +1404,12 @@ describe('CandidatesService', () => {
     const positionConfigs = [
       {
         position: 'Medical Assistant',
-        medVirtual_floor_price_english: 10,
-        berryVirtual_floor_price_english: 12,
-        medVirtual_floor_price_bilingual: 14,
-        berryVirtual_floor_price_bilingual: 16,
-        medVirtual_margin_per_hour: 5,
-        berryVirtual_margin_per_hour: 7,
+        medical_floor_price_english: 10,
+        non_medical_floor_price_english: 12,
+        medical_floor_price_bilingual: 14,
+        non_medical_floor_price_bilingual: 16,
+        medical_margin_per_hour: 5,
+        non_medical_margin_per_hour: 7,
       },
     ];
 
@@ -1438,6 +1438,13 @@ describe('CandidatesService', () => {
     beforeEach(() => {
       positionRateConfigMock.findAllUnpaginated.mockResolvedValue(
         positionConfigs,
+      );
+      // Resolve the pool from the actual business_unit passed in, so the
+      // MedVirtual vs. Berry cases below exercise their real branch instead
+      // of both silently falling back to the default 'medical' mock.
+      businessUnitContextMock.poolFor.mockImplementation(
+        async (bu: string) =>
+          bu?.toLowerCase().includes('berry') ? 'non_medical' : 'medical',
       );
     });
 

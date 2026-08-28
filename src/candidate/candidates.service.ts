@@ -41,6 +41,7 @@ import {
   buildConfigMap,
   computeCandidateRates,
   findHourlyPerRate,
+  CandidatePool,
 } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
 import { RemoveCandidateDto } from './dto/remove-candidate.dto';
@@ -163,6 +164,34 @@ export class CandidatesService {
     private readonly businessUnitContext: BusinessUnitContext,
     private readonly candidateAudit: CandidateAuditService,
   ) {}
+
+  /**
+   * Resolves the `candidate_pool` for every distinct `business_unit` present in
+   * `candidates`, in one batch — so a subsequent synchronous `.map()` calling
+   * `computeCandidateRates` can look pools up without ever `await`-ing inside
+   * the loop. Unknown/missing business units fall back to `'medical'`.
+   */
+  private async buildCandidatePoolMap(
+    candidates: { business_unit: string | null }[],
+  ): Promise<Map<string, CandidatePool>> {
+    const distinctBUs = Array.from(
+      new Set(
+        candidates
+          .map((c) => c.business_unit)
+          .filter((bu): bu is string => !!bu),
+      ),
+    );
+    const entries = await Promise.all(
+      distinctBUs.map(
+        async (bu) =>
+          [bu, (await this.businessUnitContext.poolFor(bu)) ?? 'medical'] as [
+            string,
+            CandidatePool,
+          ],
+      ),
+    );
+    return new Map(entries);
+  }
 
   /**
    * Resolves the candidate-visibility restriction for a given business unit
@@ -760,9 +789,14 @@ export class CandidatesService {
       const _pConfigs1 =
         await this.positionRateConfigService.findAllUnpaginated();
       const _configMap1 = buildConfigMap(_pConfigs1);
+      const _poolMap1 = await this.buildCandidatePoolMap(candidates);
 
       const candidatesWithScheduledInterview = candidates.map((candidate) => {
-        const rates = computeCandidateRates(candidate, _configMap1);
+        const rates = computeCandidateRates(
+          candidate,
+          _configMap1,
+          _poolMap1.get(candidate.business_unit ?? '') ?? 'medical',
+        );
         return {
           ...candidate,
           approved_positions_pairing:
@@ -1360,9 +1394,14 @@ export class CandidatesService {
       const _pConfigs1 =
         await this.positionRateConfigService.findAllUnpaginated();
       const _configMap1 = buildConfigMap(_pConfigs1);
+      const _poolMap1 = await this.buildCandidatePoolMap(candidates);
 
       const candidatesWithScheduledInterview = candidates.map((candidate) => {
-        const rates = computeCandidateRates(candidate, _configMap1);
+        const rates = computeCandidateRates(
+          candidate,
+          _configMap1,
+          _poolMap1.get(candidate.business_unit ?? '') ?? 'medical',
+        );
         return {
           ...candidate,
           approved_positions_pairing:
@@ -3028,8 +3067,13 @@ export class CandidatesService {
     const _pConfigs2 =
       await this.positionRateConfigService.findAllUnpaginated();
     const _configMap2 = buildConfigMap(_pConfigs2);
+    const _poolMap2 = await this.buildCandidatePoolMap(randomCandidates);
     const candidatesWithFullAvatarUrl = randomCandidates.map((candidate) => {
-      const rates = computeCandidateRates(candidate, _configMap2);
+      const rates = computeCandidateRates(
+        candidate,
+        _configMap2,
+        _poolMap2.get(candidate.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...candidate,
         avatar_url: candidate.avatar_url
@@ -3199,7 +3243,14 @@ export class CandidatesService {
     const _pConfigs3 =
       await this.positionRateConfigService.findAllUnpaginated();
     const _configMap3 = buildConfigMap(_pConfigs3);
-    const rates3 = computeCandidateRates(candidate as any, _configMap3);
+    const _candidatePool3 =
+      (await this.businessUnitContext.poolFor(candidate.business_unit ?? '')) ??
+      'medical';
+    const rates3 = computeCandidateRates(
+      candidate as any,
+      _configMap3,
+      _candidatePool3,
+    );
 
     const candidateWithFullAvatarUrl = {
       ...candidate,
@@ -3245,11 +3296,16 @@ export class CandidatesService {
     ]);
 
     const configMap = buildConfigMap(positionConfigs);
+    const poolMap = await this.buildCandidatePoolMap(candidates);
 
     return new Map(
       candidates.map((candidate) => [
         candidate.id,
-        this.toCardCandidate(candidate, configMap),
+        this.toCardCandidate(
+          candidate,
+          configMap,
+          poolMap.get(candidate.business_unit ?? '') ?? 'medical',
+        ),
       ]),
     );
   }
@@ -3268,12 +3324,13 @@ export class CandidatesService {
       select: typeof CANDIDATE_LIST_CARD_SELECT;
     }>,
     configMap: Parameters<typeof computeCandidateRates>[1],
+    candidatePool: CandidatePool,
   ): any {
     const AVATAR_BASE_URL =
       'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
 
     // 1. Rates first — needs the raw employment_type and unlabelled positions.
-    const rates = computeCandidateRates(candidate, configMap);
+    const rates = computeCandidateRates(candidate, configMap, candidatePool);
 
     // 2. Then normalize employment_type for display (array, or ";"-joined).
     let employmentTypeValue: unknown = candidate.employment_type;
@@ -3460,7 +3517,14 @@ export class CandidatesService {
     const _pConfigs3 =
       await this.positionRateConfigService.findAllUnpaginated();
     const _configMap3 = buildConfigMap(_pConfigs3);
-    const rates3 = computeCandidateRates(candidate, _configMap3);
+    const _candidatePool3 =
+      (await this.businessUnitContext.poolFor(candidate.business_unit ?? '')) ??
+      'medical';
+    const rates3 = computeCandidateRates(
+      candidate,
+      _configMap3,
+      _candidatePool3,
+    );
 
     const candidateWithFullAvatarUrl = {
       ...candidate,

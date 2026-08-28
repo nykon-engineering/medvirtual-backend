@@ -51,6 +51,8 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{createdByName}}': 'Paulo',
   '{{candidateCount}}': '3',
   '{{panelLink}}': 'https://app.medvirtual.ai/modules/public/offer-panel/sample-token',
+  '{{offerTitle}}': 'Senior RN Opening',
+  '{{offerDescription}}': 'A quick note on why these candidates stood out for your team.',
   // Filled in at preview time by `sampleCandidateCards()` so the grid picks up
   // the previewed business unit's own branding instead of a fixed brand.
   '{{candidateCards}}': '',

@@ -47,6 +47,15 @@ export class UpdateProfileDto {
   @ApiProperty({ required: false, description: 'User verification status' })
   verified?: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  @ApiProperty({
+    required: false,
+    description:
+      'Marks the onboarding tour as permanently dismissed for this user (global, all devices)',
+  })
+  onboarding_tour_dismissed?: boolean;
+
   // Organization Fields (Organization Information)
   // Only available for Organization Admins and Organization Owners
   @IsOptional()

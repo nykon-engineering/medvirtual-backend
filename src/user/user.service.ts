@@ -270,6 +270,7 @@ export class UserService {
       role: user.role,
       status: user.status,
       verified: user.verified,
+      onboarding_tour_dismissed: user.onboarding_tour_dismissed,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       organization: user.organization
@@ -458,6 +459,7 @@ export class UserService {
         role: updatedUser.role,
         status: updatedUser.status,
         verified: updatedUser.verified,
+        onboarding_tour_dismissed: updatedUser.onboarding_tour_dismissed,
         createdAt: updatedUser.createdAt,
         updatedAt: updatedUser.updatedAt,
         organization: updatedUser.organization

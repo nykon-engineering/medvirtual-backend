@@ -7,14 +7,17 @@ const PART_TIME_EMPLOYMENT_TYPE_CODE = '1087596819';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+/** Candidate visibility pool a business unit draws floor prices from. */
+export type CandidatePool = 'medical' | 'non_medical';
+
 /** Minimal shape needed from a PositionRateConfig record. */
 export interface PositionRateConfigLike {
-  medVirtual_floor_price_english: { toNumber(): number } | number | null;
-  berryVirtual_floor_price_english: { toNumber(): number } | number | null;
-  medVirtual_floor_price_bilingual: { toNumber(): number } | number | null;
-  berryVirtual_floor_price_bilingual: { toNumber(): number } | number | null;
-  medVirtual_margin_per_hour: { toNumber(): number } | number | null;
-  berryVirtual_margin_per_hour: { toNumber(): number } | number | null;
+  medical_floor_price_english: { toNumber(): number } | number | null;
+  non_medical_floor_price_english: { toNumber(): number } | number | null;
+  medical_floor_price_bilingual: { toNumber(): number } | number | null;
+  non_medical_floor_price_bilingual: { toNumber(): number } | number | null;
+  medical_margin_per_hour: { toNumber(): number } | number | null;
+  non_medical_margin_per_hour: { toNumber(): number } | number | null;
 }
 
 /** Minimal candidate shape required by computeCandidateRates. */
@@ -46,32 +49,32 @@ function toNum(
   return typeof v === 'number' ? v : v.toNumber();
 }
 
-/** Returns the correct floor price field key based on business unit and language tier. */
+/** Returns the correct floor price field key based on candidate pool and language tier. */
 function floorPriceKey(
   isBilingual: boolean,
-  isBerry: boolean,
+  candidatePool: CandidatePool,
 ): keyof PositionRateConfigLike {
   if (isBilingual) {
-    return isBerry
-      ? 'berryVirtual_floor_price_bilingual'
-      : 'medVirtual_floor_price_bilingual';
+    return candidatePool === 'non_medical'
+      ? 'non_medical_floor_price_bilingual'
+      : 'medical_floor_price_bilingual';
   }
-  return isBerry
-    ? 'berryVirtual_floor_price_english'
-    : 'medVirtual_floor_price_english';
+  return candidatePool === 'non_medical'
+    ? 'non_medical_floor_price_english'
+    : 'medical_floor_price_english';
 }
 
 /**
  * Fallback: returns the config record with the lowest floor price for the given
- * language tier and business unit, scanning the entire map.
+ * language tier and candidate pool, scanning the entire map.
  * Used when a candidate's position is not found in the config table.
  */
 function findMinFloorConfig(
   configMap: Map<string, PositionRateConfigLike>,
   isBilingual: boolean,
-  isBerry: boolean,
+  candidatePool: CandidatePool,
 ): PositionRateConfigLike | undefined {
-  const key = floorPriceKey(isBilingual, isBerry);
+  const key = floorPriceKey(isBilingual, candidatePool);
   let minFloor: number | null = null;
   let minConfig: PositionRateConfigLike | undefined;
 
@@ -101,16 +104,16 @@ export function buildConfigMap<
 export function computeCandidateRates(
   candidate: CandidateLike,
   configMap: Map<string, PositionRateConfigLike>,
+  candidatePool: CandidatePool,
 ): CandidateRates {
   const positions = candidate.approved_positions_pairing ?? [];
   const isBilingual = (candidate.languages?.length ?? 0) > 1;
-  const isBerry =
-    candidate.business_unit?.toLowerCase().includes('berry') ?? false;
   const agreed = toNum(candidate.hourly_pay_rate) ?? 0;
-  const key = floorPriceKey(isBilingual, isBerry);
-  const marginKey = isBerry
-    ? 'berryVirtual_margin_per_hour'
-    : 'medVirtual_margin_per_hour';
+  const key = floorPriceKey(isBilingual, candidatePool);
+  const marginKey =
+    candidatePool === 'non_medical'
+      ? 'non_medical_margin_per_hour'
+      : 'medical_margin_per_hour';
 
   let bestBillH = 0;
 
@@ -119,7 +122,7 @@ export function computeCandidateRates(
       const label = getApprovedPositionLabel(rawPosition);
       const config =
         configMap.get(label) ??
-        findMinFloorConfig(configMap, isBilingual, isBerry);
+        findMinFloorConfig(configMap, isBilingual, candidatePool);
       const minH = toNum(
         config?.[key] as { toNumber(): number } | number | null,
       );
@@ -133,7 +136,7 @@ export function computeCandidateRates(
     }
   } else {
     // No positions — use fallback config
-    const config = findMinFloorConfig(configMap, isBilingual, isBerry);
+    const config = findMinFloorConfig(configMap, isBilingual, candidatePool);
     const minH = toNum(config?.[key] as { toNumber(): number } | number | null);
     const margin =
       toNum(config?.[marginKey] as { toNumber(): number } | number | null) ||

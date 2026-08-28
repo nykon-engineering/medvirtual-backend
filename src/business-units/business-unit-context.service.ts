@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CandidatePool } from '../common/utils/salary.util';
 
 /**
  * Shape of a BusinessUnit row as seen by this resolver.
@@ -116,11 +117,11 @@ export class BusinessUnitContext {
   }
 
   /** candidate_pool of the matching BU (by hubspot_value or slug), or null. */
-  async poolFor(hubspotValueOrSlug: string): Promise<string | null> {
+  async poolFor(hubspotValueOrSlug: string): Promise<CandidatePool | null> {
     const bu = await this.resolveByHubspotValue(hubspotValueOrSlug);
     if (!bu) return null;
     // TODO(Task03): drop the 'medical' default fallback once candidate_pool exists on every row.
-    return bu.candidate_pool ?? 'medical';
+    return bu.candidate_pool === 'non_medical' ? 'non_medical' : 'medical';
   }
 
   /** Lowercase + hyphenate a display value (mirrors orgBusinessUnitToSlug). */

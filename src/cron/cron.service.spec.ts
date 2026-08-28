@@ -232,8 +232,8 @@ describe('CronService', () => {
       expect(prismaServiceMock.positionRateConfig.create).toHaveBeenCalledWith({
         data: {
           position: 'New Position',
-          medVirtual_margin_per_hour: 9,
-          berryVirtual_margin_per_hour: 9,
+          medical_margin_per_hour: 9,
+          non_medical_margin_per_hour: 9,
         },
       });
       expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
@@ -1854,6 +1854,22 @@ describe('CronService', () => {
       expect(html).not.toContain('undefined');
       // recipient_org_name is null, so the contact name is used instead.
       expect(html).toContain('Dr. Smith');
+    });
+
+    it('does not repeat the recipient email when no name or org is available', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([
+        buildPanel({
+          recipient_org_name: null,
+          recipientCompany: null,
+          recipient_name: null,
+        }),
+      ]);
+
+      await service.weeklyOfferPanelReport();
+
+      const html = mailServiceMock.sendMail.mock.calls[0][0].html;
+      const occurrences = html.split('dr.smith@sunrise.example').length - 1;
+      expect(occurrences).toBe(1);
     });
 
     it('sends to all three stakeholders in PROD', async () => {

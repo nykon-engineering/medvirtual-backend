@@ -5,6 +5,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as redis from 'redis';
 import {
   HireRequestStatus,
   PanelCandidateStatus,
@@ -12,6 +14,7 @@ import {
   USER,
 } from '@prisma/client';
 
+import { keyPrefix } from '../common/app-config';
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -32,8 +35,10 @@ import {
   buildConfigMap,
   computeCandidateRates,
   findHourlyPerRate,
+  CandidatePool,
 } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { OfferPanelsService } from '../offer-panels/offer-panels.service';
 import {
   changeLabelAvailability,
@@ -51,6 +56,8 @@ import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
 
 @Injectable()
 export class HireRequestService {
+  private readonly keyPrefix: string;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => HubspotService))
@@ -61,7 +68,59 @@ export class HireRequestService {
     @Inject(forwardRef(() => OfferPanelsService))
     private readonly offerPanelsService: OfferPanelsService,
     private readonly candidateAudit: CandidateAuditService,
-  ) {}
+    private readonly configService: ConfigService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: redis.RedisClientType,
+    private readonly businessUnitContext: BusinessUnitContext,
+  ) {
+    this.keyPrefix = keyPrefix(this.configService);
+  }
+
+  /**
+   * Resolves the `candidate_pool` for every distinct `business_unit` present in
+   * `candidates`, in one batch — so a subsequent synchronous `.map()` calling
+   * `computeCandidateRates` can look pools up without ever `await`-ing inside
+   * the loop. Unknown/missing business units fall back to `'medical'`.
+   */
+  private async buildCandidatePoolMap(
+    candidates: { business_unit: string | null }[],
+  ): Promise<Map<string, CandidatePool>> {
+    const distinctBUs = Array.from(
+      new Set(
+        candidates
+          .map((c) => c.business_unit)
+          .filter((bu): bu is string => !!bu),
+      ),
+    );
+    const entries = await Promise.all(
+      distinctBUs.map(
+        async (bu) =>
+          [bu, (await this.businessUnitContext.poolFor(bu)) ?? 'medical'] as [
+            string,
+            CandidatePool,
+          ],
+      ),
+    );
+    return new Map(entries);
+  }
+
+  /** Redis-like getter using actual Redis client (mirrors HubstaffService). */
+  private async redisGet(key: string): Promise<string | null> {
+    return await this.redisClient.get(key);
+  }
+
+  /** Redis-like setter using actual Redis client (mirrors HubstaffService). */
+  private async redisSet(
+    key: string,
+    value: string,
+    options?: { EX: number },
+  ): Promise<void> {
+    if (options?.EX) {
+      await this.redisClient.set(key, value, { EX: options.EX });
+    } else {
+      await this.redisClient.set(key, value);
+    }
+  }
+
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split('T');
     const [year, month, day] = datePart.split('-').map(Number);
@@ -76,20 +135,29 @@ export class HireRequestService {
     '1087596819', // available part-time
   ];
 
+  /**
+   * candidate_id -> panel_id -> hireRequest.title, for every panel candidate
+   * currently selected_by_client or blocked in ANY panel. A single global
+   * query, reused by callers that previously ran one findFirst per candidate.
+   */
   private async buildCrossPanelSelectedMap(): Promise<
-    Map<string, Set<string>>
+    Map<string, Map<string, string>>
   > {
     const crossPanelSelected = await this.prisma.panelCandidate.findMany({
-      where: { status: { in: ['selected_by_client'] } },
-      select: { candidate_id: true, panel_id: true },
+      where: { status: { in: ['selected_by_client', 'blocked'] } },
+      select: {
+        candidate_id: true,
+        panel_id: true,
+        panel: { select: { hireRequest: { select: { title: true } } } },
+      },
     });
 
-    const map = new Map<string, Set<string>>();
+    const map = new Map<string, Map<string, string>>();
     for (const pc of crossPanelSelected) {
       if (!map.has(pc.candidate_id)) {
-        map.set(pc.candidate_id, new Set());
+        map.set(pc.candidate_id, new Map());
       }
-      map.get(pc.candidate_id)!.add(pc.panel_id);
+      map.get(pc.candidate_id)!.set(pc.panel_id, pc.panel.hireRequest.title);
     }
     return map;
   }
@@ -540,6 +608,8 @@ export class HireRequestService {
     perPage: number = 10,
     businessUnit?: string,
     status?: string,
+    dateFrom?: string,
+    dateTo?: string,
   ): Promise<any> {
     if (
       !user ||
@@ -550,6 +620,17 @@ export class HireRequestService {
       );
     }
     if (!user.role) throw new NotFoundException('User role not found');
+
+    const listCacheKey =
+      `${this.keyPrefix}hire-request-list:${user.role}:` +
+      `${user.role.includes('organization') ? user.organization_id : 'all'}:` +
+      `${search ?? ''}:${page}:${perPage}:${businessUnit ?? ''}:${status ?? ''}:` +
+      `${dateFrom ?? ''}:${dateTo ?? ''}`;
+
+    const cachedList = await this.redisGet(listCacheKey);
+    if (cachedList) {
+      return JSON.parse(cachedList);
+    }
 
     let baseWhere = {};
     switch (user.role) {
@@ -616,7 +697,22 @@ export class HireRequestService {
         }
       : {};
 
-    const whereClause = { ...baseWhere, ...searchWhere, ...businessUnitWhere };
+    const dateWhere =
+      dateFrom || dateTo
+        ? {
+            createdAt: {
+              ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+              ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {}),
+            },
+          }
+        : {};
+
+    const whereClause = {
+      ...baseWhere,
+      ...searchWhere,
+      ...businessUnitWhere,
+      ...dateWhere,
+    };
 
     //console.log('HireRequestService.findAll - whereClause:', whereClause);
 
@@ -815,7 +911,7 @@ export class HireRequestService {
     ]);
 
     if (!hireRequests || hireRequests.length === 0) {
-      return {
+      const emptyResult = {
         data: [],
         meta: {
           total: 0,
@@ -824,17 +920,26 @@ export class HireRequestService {
           totalPages: 0,
         },
       };
+      await this.redisSet(listCacheKey, JSON.stringify(emptyResult), {
+        EX: 20,
+      });
+      return emptyResult;
     }
 
     //Get all users from hirerequests assign_user_id to optimize the next steps
 
     const _pCfgs_A = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_A = buildConfigMap(_pCfgs_A);
+    const _poolMap_A = await this.buildCandidatePoolMap(
+      hireRequests.flatMap((hr) =>
+        hr.panels.flatMap((panel) =>
+          panel.panelCandidates.map((pc) => pc.candidate),
+        ),
+      ),
+    );
 
     const isOrgUser = user.role.includes('organization');
-    const crossPanelMap = isOrgUser
-      ? await this.buildCrossPanelSelectedMap()
-      : null;
+    const crossPanelMap = await this.buildCrossPanelSelectedMap();
 
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
@@ -844,6 +949,26 @@ export class HireRequestService {
           ? timestampToUSDate(hr.hubspot_pairing_date)
           : null,
 
+        hasAvailableCandidates: hr.panels.some((panel) =>
+          panel.panelCandidates.some((pc) => {
+            if (
+              !this.availablePipelineStatuses.includes(
+                pc.candidate.pipeline_status,
+              )
+            ) {
+              return false;
+            }
+            const panelMap = crossPanelMap.get(pc.candidate.id);
+            if (
+              panelMap &&
+              !(panelMap.size === 1 && panelMap.has(panel.id))
+            ) {
+              return false;
+            }
+            return true;
+          }),
+        ),
+
         panels: hr.panels.map((panel) => ({
           ...panel,
           interview_date: panel.interviews[0]?.scheduled_date || null,
@@ -851,17 +976,21 @@ export class HireRequestService {
           interviews: undefined,
           panelCandidates: panel.panelCandidates
             .filter((pc) => {
-              if (!crossPanelMap) return true;
-              const panelSet = crossPanelMap.get(pc.candidate.id);
-              if (panelSet) {
+              if (!isOrgUser) return true;
+              const panelMap = crossPanelMap.get(pc.candidate.id);
+              if (panelMap) {
                 const onlyInCurrentPanel =
-                  panelSet.size === 1 && panelSet.has(panel.id);
+                  panelMap.size === 1 && panelMap.has(panel.id);
                 if (!onlyInCurrentPanel) return false;
               }
               return true;
             })
             .map((pc) => {
-              const rates_A = computeCandidateRates(pc.candidate, _cfgMap_A);
+              const rates_A = computeCandidateRates(
+                pc.candidate,
+                _cfgMap_A,
+                _poolMap_A.get(pc.candidate.business_unit ?? '') ?? 'medical',
+              );
               return {
                 ...pc,
                 candidate: {
@@ -908,7 +1037,7 @@ export class HireRequestService {
       })),
     );
 
-    return {
+    const result = {
       data: formatted,
       meta: {
         total,
@@ -917,6 +1046,10 @@ export class HireRequestService {
         totalPages: Math.ceil(total / perPage),
       },
     };
+
+    await this.redisSet(listCacheKey, JSON.stringify(result), { EX: 20 });
+
+    return result;
   }
 
   async findOne(id: string, user: USER, source?: string): Promise<any> {
@@ -1113,6 +1246,11 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const _pCfgs_B = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_B = buildConfigMap(_pCfgs_B);
+    const _poolMap_B = await this.buildCandidatePoolMap(
+      (hireRequest.panels ?? []).flatMap((panel) =>
+        panel.panelCandidates.map((pc) => pc.candidate as any),
+      ),
+    );
 
     const formatted = {
       ...hireRequest,
@@ -1132,7 +1270,11 @@ export class HireRequestService {
           const years_of_experience = startDate
             ? new Date().getFullYear() - new Date(startDate).getFullYear()
             : 0;
-          const rates_B = computeCandidateRates(pc.candidate as any, _cfgMap_B);
+          const rates_B = computeCandidateRates(
+            pc.candidate as any,
+            _cfgMap_B,
+            _poolMap_B.get(pc.candidate.business_unit ?? '') ?? 'medical',
+          );
           return {
             ...pc,
             candidate: {
@@ -1372,6 +1514,13 @@ export class HireRequestService {
 
     const _pCfgs_C = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_C = buildConfigMap(_pCfgs_C);
+    const _poolMap_C = await this.buildCandidatePoolMap(
+      hireRequests.flatMap((hr) =>
+        hr.panels.flatMap((panel) =>
+          panel.panelCandidates.map((pc) => pc.candidate),
+        ),
+      ),
+    );
 
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
@@ -1387,7 +1536,11 @@ export class HireRequestService {
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
           panelCandidates: panel.panelCandidates.map((pc) => {
-            const rates_C = computeCandidateRates(pc.candidate, _cfgMap_C);
+            const rates_C = computeCandidateRates(
+              pc.candidate,
+              _cfgMap_C,
+              _poolMap_C.get(pc.candidate.business_unit ?? '') ?? 'medical',
+            );
             return {
               ...pc,
               candidate: {
@@ -2895,9 +3048,14 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const _pCfgs_D = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_D = buildConfigMap(_pCfgs_D);
+    const _poolMap_D = await this.buildCandidatePoolMap(scoredCandidates);
 
     const candidatesWithSalary = scoredCandidates.map((c) => {
-      const rates_D = computeCandidateRates(c, _cfgMap_D);
+      const rates_D = computeCandidateRates(
+        c,
+        _cfgMap_D,
+        _poolMap_D.get(c.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...c,
         ...rates_D,
@@ -3518,6 +3676,9 @@ export class HireRequestService {
 
     const _pCfgs_E = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_E = buildConfigMap(_pCfgs_E);
+    const _poolMap_E = await this.buildCandidatePoolMap(
+      panels.flatMap((panel) => panel.panelCandidates.map((pc) => pc.candidate)),
+    );
 
     const candidateSelectedInPanels = await this.buildCrossPanelSelectedMap();
 
@@ -3543,7 +3704,11 @@ export class HireRequestService {
           return true;
         })
         .map((pc) => {
-          const rates_E = computeCandidateRates(pc.candidate, _cfgMap_E);
+          const rates_E = computeCandidateRates(
+            pc.candidate,
+            _cfgMap_E,
+            _poolMap_E.get(pc.candidate.business_unit ?? '') ?? 'medical',
+          );
           return {
             ...pc,
             candidate: {
@@ -4507,6 +4672,9 @@ export class HireRequestService {
 
     const _pCfgs_F = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_F = buildConfigMap(_pCfgs_F);
+    const _poolMap_F = await this.buildCandidatePoolMap(
+      panels.flatMap((panel) => panel.panelCandidates.map((pc) => pc.candidate)),
+    );
 
     const result = panels.map((panel) => ({
       ...panel,
@@ -4515,7 +4683,11 @@ export class HireRequestService {
         const years_of_experience = startDate
           ? new Date().getFullYear() - new Date(startDate).getFullYear()
           : 0;
-        const rates_F = computeCandidateRates(pc.candidate, _cfgMap_F);
+        const rates_F = computeCandidateRates(
+          pc.candidate,
+          _cfgMap_F,
+          _poolMap_F.get(pc.candidate.business_unit ?? '') ?? 'medical',
+        );
         return {
           ...pc,
           candidate: {
@@ -4609,6 +4781,12 @@ export class HireRequestService {
     hireRequestId: string,
     user: USER,
   ): Promise<any> {
+    const availableCandidatesCacheKey = `${this.keyPrefix}available-candidates:${hireRequestId}`;
+    const cachedResult = await this.redisGet(availableCandidatesCacheKey);
+    if (cachedResult) {
+      return JSON.parse(cachedResult);
+    }
+
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -4699,38 +4877,23 @@ export class HireRequestService {
         reason: 'Candidate is no longer available in Hubspot',
       }));
 
-    const availableCandidates = (
-      await Promise.all(
-        filteredCandidates.map(async (pc) => {
-          const existInOtherPanel = await this.prisma.panelCandidate.findFirst({
-            where: {
-              candidate_id: pc.candidate.id,
-              panel_id: { not: pc.panel_id },
-              status: {
-                in: ['selected_by_client', 'blocked'],
-              }, //Dont allow get candidates already selected in other panels
-            },
-            include: {
-              panel: {
-                include: {
-                  hireRequest: {
-                    select: { title: true },
-                  },
-                },
-              },
-            },
-          });
+    const crossPanelMap = await this.buildCrossPanelSelectedMap();
 
-          existInOtherPanel &&
-            unavailableCandidates.push({
-              ...pc.candidate,
-              reason: `Candidate is already selected in panel: ${existInOtherPanel.panel.hireRequest.title}`,
-            });
-
-          return existInOtherPanel ? null : pc;
-        }),
-      )
-    ).filter((pc) => pc !== null);
+    const availableCandidates = filteredCandidates.filter((pc) => {
+      const panelMap = crossPanelMap.get(pc.candidate.id);
+      if (!panelMap) return true;
+      const otherPanelEntry = [...panelMap.entries()].find(
+        ([panelId]) => panelId !== pc.panel_id,
+      );
+      if (otherPanelEntry) {
+        unavailableCandidates.push({
+          ...pc.candidate,
+          reason: `Candidate is already selected in panel: ${otherPanelEntry[1]}`,
+        });
+        return false;
+      }
+      return true;
+    });
 
     const selectedCandidate = panelCandidates.find(
       (pc) => pc.status === 'selected_by_client',
@@ -4741,14 +4904,27 @@ export class HireRequestService {
       selectedCandidate &&
       availableCandidates[0].candidate.id === selectedCandidate.candidate_id
     ) {
-      return [];
+      const emptyResult: any[] = [];
+      await this.redisSet(
+        availableCandidatesCacheKey,
+        JSON.stringify(emptyResult),
+        { EX: 300 },
+      );
+      return emptyResult;
     }
 
     const _pCfgs_G = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_G = buildConfigMap(_pCfgs_G);
+    const _poolMap_G = await this.buildCandidatePoolMap(
+      availableCandidates.map((pc) => pc.candidate),
+    );
 
     const mappedCandidates = availableCandidates.map((pc) => {
-      const rates_G = computeCandidateRates(pc.candidate, _cfgMap_G);
+      const rates_G = computeCandidateRates(
+        pc.candidate,
+        _cfgMap_G,
+        _poolMap_G.get(pc.candidate.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...pc.candidate,
         panelStatus: pc.status,
@@ -4779,10 +4955,18 @@ export class HireRequestService {
       panelScheduledDate: panel.scheduled_date,
     }));
 
-    return {
+    const result = {
       availableCandidates: mappedCandidates,
       unavailableCandidates: mappedUnavailableCandidates,
     };
+
+    await this.redisSet(
+      availableCandidatesCacheKey,
+      JSON.stringify(result),
+      { EX: 300 },
+    );
+
+    return result;
   }
 
   async getVATypes(): Promise<any> {

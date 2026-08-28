@@ -48,13 +48,13 @@ export class PositionRateConfigService {
 
   upsert(position: string, dto: UpdatePositionRateConfigDto) {
     const data = {
-      medVirtual_floor_price_english: dto.medVirtual_floor_price_english,
-      berryVirtual_floor_price_english: dto.berryVirtual_floor_price_english,
-      medVirtual_floor_price_bilingual: dto.medVirtual_floor_price_bilingual,
-      berryVirtual_floor_price_bilingual:
-        dto.berryVirtual_floor_price_bilingual,
-      medVirtual_margin_per_hour: dto.medVirtual_margin_per_hour,
-      berryVirtual_margin_per_hour: dto.berryVirtual_margin_per_hour,
+      medical_floor_price_english: dto.medical_floor_price_english,
+      non_medical_floor_price_english: dto.non_medical_floor_price_english,
+      medical_floor_price_bilingual: dto.medical_floor_price_bilingual,
+      non_medical_floor_price_bilingual:
+        dto.non_medical_floor_price_bilingual,
+      medical_margin_per_hour: dto.medical_margin_per_hour,
+      non_medical_margin_per_hour: dto.non_medical_margin_per_hour,
     };
 
     return this.prisma.positionRateConfig.upsert({

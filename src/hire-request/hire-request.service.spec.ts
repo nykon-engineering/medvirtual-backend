@@ -3,6 +3,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrganizationRole, USER } from '@prisma/client';
 
+import { ConfigService } from '@nestjs/config';
+
 import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -12,6 +14,7 @@ import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto
 import { HubspotService } from '../hubspot/hubspot.service';
 import { OpenaiService } from '../openai/openai.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { OfferPanelsService } from '../offer-panels/offer-panels.service';
 import { CandidateAuditService } from '../candidate/candidate-audit.service';
 
@@ -118,12 +121,27 @@ const candidateAuditServiceMock = {
   logMany: jest.fn(),
 };
 
+const configServiceMock = {
+  get: jest.fn(),
+};
+
+const redisClientMock = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue('OK'),
+};
+
+const businessUnitContextMock = {
+  poolFor: jest.fn().mockResolvedValue('medical'),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    redisClientMock.get.mockResolvedValue(null);
+    redisClientMock.set.mockResolvedValue('OK');
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -135,6 +153,9 @@ describe('HireRequestService', () => {
         { provide: PositionRateConfigService, useValue: positionRateConfigMock },
         { provide: OfferPanelsService, useValue: offerPanelsServiceMock },
         { provide: CandidateAuditService, useValue: candidateAuditServiceMock },
+        { provide: ConfigService, useValue: configServiceMock },
+        { provide: 'REDIS_CLIENT', useValue: redisClientMock },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
       ],
     }).compile();
 
@@ -170,6 +191,7 @@ describe('HireRequestService', () => {
       billcom_remember_me_id: null,
       billcom_device: null,
       deactivated_by_bu: null,
+      onboarding_tour_dismissed: false,
     } ;
   });
 

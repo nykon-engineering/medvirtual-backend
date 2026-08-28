@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PanelService } from './panel.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 describe('PanelService', () => {
   let service: PanelService;
@@ -27,6 +28,7 @@ describe('PanelService', () => {
       },
       session: {
         count: jest.fn(),
+        findMany: jest.fn(),
       },
       sessionActivity: {
         findMany: jest.fn(),
@@ -49,6 +51,10 @@ describe('PanelService', () => {
       findAllUnpaginated: jest.fn().mockResolvedValue([]),
     };
 
+    const businessUnitContextMock = {
+      poolFor: jest.fn().mockResolvedValue('medical'),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PanelService,
@@ -59,6 +65,10 @@ describe('PanelService', () => {
         {
           provide: PositionRateConfigService,
           useValue: positionRateConfigMock,
+        },
+        {
+          provide: BusinessUnitContext,
+          useValue: businessUnitContextMock,
         },
       ],
     }).compile();
@@ -962,6 +972,230 @@ describe('PanelService', () => {
       expect(result.data).toHaveLength(0);
       expect(result.meta?.total).toBe(0);
       expect(prisma.candidate.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getClientLogins', () => {
+    const mockSession = (
+      id: string,
+      createdAt: Date,
+      user: { first_name: string; last_name: string; organization_name: string },
+    ) => ({ id, createdAt, user });
+
+    it('maps sessions to rows with user name, organization and ISO timestamp', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(1);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([
+        mockSession('sess-1', new Date('2026-01-05T10:00:00Z'), {
+          first_name: 'Jane',
+          last_name: 'Doe',
+          organization_name: 'Acme Health',
+        }),
+      ]);
+
+      const result = await service.getClientLogins({ page: 1, perPage: 10 });
+
+      expect(result.data).toEqual([
+        {
+          id: 'sess-1',
+          userName: 'Jane Doe',
+          organizationName: 'Acme Health',
+          loggedInAt: '2026-01-05T10:00:00.000Z',
+        },
+      ]);
+      expect(result.meta).toEqual({ total: 1, totalPages: 1, page: 1, perPage: 10 });
+    });
+
+    it('filters sessions to CLIENT_ROLES users within the requested date range', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(0);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      await service.getClientLogins({
+        page: 1,
+        perPage: 10,
+        dateFrom: '2026-01-01',
+        dateTo: '2026-01-31',
+      });
+
+      expect(prisma.session.count).toHaveBeenCalledWith({
+        where: {
+          createdAt: { gte: new Date('2026-01-01'), lte: new Date('2026-01-31') },
+          user: {
+            role: { in: ['organization_super_admin', 'organization_admin', 'affiliate'] },
+          },
+        },
+      });
+    });
+
+    it('paginates using skip/take derived from page and perPage', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(25);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      await service.getClientLogins({ page: 3, perPage: 10 });
+
+      expect(prisma.session.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 10 }),
+      );
+    });
+
+    it('export=true bypasses pagination and returns the full filtered set without meta', async () => {
+      const sessions = Array.from({ length: 15 }, (_, i) =>
+        mockSession(`sess-${i}`, new Date('2026-01-05T10:00:00Z'), {
+          first_name: 'User',
+          last_name: String(i),
+          organization_name: 'Org',
+        }),
+      );
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce(sessions);
+
+      const result = await service.getClientLogins({ page: 1, perPage: 10, export: true });
+
+      expect(result.data).toHaveLength(15);
+      expect(result.meta).toBeUndefined();
+      expect(prisma.session.count).not.toHaveBeenCalled();
+    });
+
+    it('falls back to "—" when the user has no name or organization', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(1);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([
+        mockSession('sess-1', new Date('2026-01-05T10:00:00Z'), {
+          first_name: '',
+          last_name: '',
+          organization_name: '',
+        }),
+      ]);
+
+      const result = await service.getClientLogins({ page: 1, perPage: 10 });
+
+      expect(result.data[0].userName).toBe('—');
+      expect(result.data[0].organizationName).toBe('—');
+    });
+
+    it('returns an empty result set when there are no sessions in the period', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(0);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const result = await service.getClientLogins({ page: 1, perPage: 10 });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta?.total).toBe(0);
+    });
+  });
+
+  describe('getAdminLogins', () => {
+    const mockSession = (
+      id: string,
+      createdAt: Date,
+      user: { first_name: string; last_name: string; role: string },
+    ) => ({ id, createdAt, user });
+
+    it('maps sessions to rows with user name, human-readable role and ISO timestamp', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(1);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([
+        mockSession('sess-1', new Date('2026-01-05T10:00:00Z'), {
+          first_name: 'Jane',
+          last_name: 'Doe',
+          role: 'system_admin',
+        }),
+      ]);
+
+      const result = await service.getAdminLogins({ page: 1, perPage: 10 });
+
+      expect(result.data).toEqual([
+        {
+          id: 'sess-1',
+          userName: 'Jane Doe',
+          role: 'System Admin',
+          loggedInAt: '2026-01-05T10:00:00.000Z',
+        },
+      ]);
+      expect(result.meta).toEqual({ total: 1, totalPages: 1, page: 1, perPage: 10 });
+    });
+
+    it('maps system_super_admin to the "System Owner" label', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(1);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([
+        mockSession('sess-1', new Date('2026-01-05T10:00:00Z'), {
+          first_name: 'Amy',
+          last_name: 'Lee',
+          role: 'system_super_admin',
+        }),
+      ]);
+
+      const result = await service.getAdminLogins({ page: 1, perPage: 10 });
+
+      expect(result.data[0].role).toBe('System Owner');
+    });
+
+    it('filters sessions to ADMIN_ROLES users within the requested date range', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(0);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      await service.getAdminLogins({
+        page: 1,
+        perPage: 10,
+        dateFrom: '2026-01-01',
+        dateTo: '2026-01-31',
+      });
+
+      expect(prisma.session.count).toHaveBeenCalledWith({
+        where: {
+          createdAt: { gte: new Date('2026-01-01'), lte: new Date('2026-01-31') },
+          user: { role: { in: ['system_admin', 'system_super_admin'] } },
+        },
+      });
+    });
+
+    it('paginates using skip/take derived from page and perPage', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(25);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      await service.getAdminLogins({ page: 3, perPage: 10 });
+
+      expect(prisma.session.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 10 }),
+      );
+    });
+
+    it('export=true bypasses pagination and returns the full filtered set without meta', async () => {
+      const sessions = Array.from({ length: 15 }, (_, i) =>
+        mockSession(`sess-${i}`, new Date('2026-01-05T10:00:00Z'), {
+          first_name: 'User',
+          last_name: String(i),
+          role: 'system_admin',
+        }),
+      );
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce(sessions);
+
+      const result = await service.getAdminLogins({ page: 1, perPage: 10, export: true });
+
+      expect(result.data).toHaveLength(15);
+      expect(result.meta).toBeUndefined();
+      expect(prisma.session.count).not.toHaveBeenCalled();
+    });
+
+    it('falls back to "—" when the user has no name', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(1);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([
+        mockSession('sess-1', new Date('2026-01-05T10:00:00Z'), {
+          first_name: '',
+          last_name: '',
+          role: 'system_admin',
+        }),
+      ]);
+
+      const result = await service.getAdminLogins({ page: 1, perPage: 10 });
+
+      expect(result.data[0].userName).toBe('—');
+    });
+
+    it('returns an empty result set when there are no sessions in the period', async () => {
+      (prisma.session.count as jest.Mock).mockResolvedValueOnce(0);
+      (prisma.session.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const result = await service.getAdminLogins({ page: 1, perPage: 10 });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta?.total).toBe(0);
     });
   });
 

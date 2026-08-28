@@ -6,12 +6,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildConfigMap,
   computeCandidateRates,
+  CandidatePool,
 } from '../../common/utils/salary.util';
 import { HireRequestService } from '../../hire-request/hire-request.service';
 import { dbToStageDictionary } from '../../common/dictionaries/stage-dictionary';
 import { changeLabelAvailability } from '../../common/utils/hubspot.util';
 import { getApprovedPositionLabel } from '../../common/dictionaries/approved-positions-pairing-dictionary';
 import { PositionRateConfigService } from '../../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../../business-units/business-unit-context.service';
 
 @Injectable()
 export class HandlerOrganization {
@@ -19,7 +21,36 @@ export class HandlerOrganization {
     private readonly prisma: PrismaService,
     private readonly hireRequestService: HireRequestService,
     private readonly positionRateConfigService: PositionRateConfigService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
+
+  /**
+   * Resolves the `candidate_pool` for every distinct `business_unit` present in
+   * `candidates`, in one batch — so a subsequent synchronous `.map()` calling
+   * `computeCandidateRates` can look pools up without ever `await`-ing inside
+   * the loop. Unknown/missing business units fall back to `'medical'`.
+   */
+  private async buildCandidatePoolMap(
+    candidates: { business_unit: string | null }[],
+  ): Promise<Map<string, CandidatePool>> {
+    const distinctBUs = Array.from(
+      new Set(
+        candidates
+          .map((c) => c.business_unit)
+          .filter((bu): bu is string => !!bu),
+      ),
+    );
+    const entries = await Promise.all(
+      distinctBUs.map(
+        async (bu) =>
+          [bu, (await this.businessUnitContext.poolFor(bu)) ?? 'medical'] as [
+            string,
+            CandidatePool,
+          ],
+      ),
+    );
+    return new Map(entries);
+  }
 
   async execute(user, page: number = 1, perPage: number = 10): Promise<object> {
     const result: any = {};
@@ -298,6 +329,11 @@ export class HandlerOrganization {
     //change candidate employment_type and calculate salary
     const _pCfgsA = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMapA = buildConfigMap(_pCfgsA);
+    const _poolMapA = await this.buildCandidatePoolMap(
+      awaitingDecision.flatMap((item) =>
+        item.panelCandidates.map((pc) => pc.candidate),
+      ),
+    );
     const awaitingDecisionSanitized = awaitingDecision.map((item) => ({
       ...item,
       panelCandidates: item.panelCandidates
@@ -311,7 +347,11 @@ export class HandlerOrganization {
           return true;
         })
         .map((pc) => {
-          const rates = computeCandidateRates(pc.candidate, _cfgMapA);
+          const rates = computeCandidateRates(
+            pc.candidate,
+            _cfgMapA,
+            _poolMapA.get(pc.candidate.business_unit ?? '') ?? 'medical',
+          );
           return {
             ...pc,
             candidate: {
@@ -395,8 +435,13 @@ export class HandlerOrganization {
 
     const _pCfgsB = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMapB = buildConfigMap(_pCfgsB);
+    const _poolMapB = await this.buildCandidatePoolMap(otherTalents);
     const otherTalentsSalary = otherTalents.map((talent) => {
-      const rates = computeCandidateRates(talent, _cfgMapB);
+      const rates = computeCandidateRates(
+        talent,
+        _cfgMapB,
+        _poolMapB.get(talent.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...talent,
         employment_type:
