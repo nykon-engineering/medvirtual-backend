@@ -821,6 +821,10 @@ export class HubspotService {
         );
         const candidateData = mapHubspotToDb(result.properties);
 
+        if (candidateData.pipeline_status) {
+          candidateData.pipeline_status_origin = candidateData.pipeline_status;
+        }
+
         if (
           candidateData.approved_positions_pairing &&
           typeof candidateData.approved_positions_pairing === 'string'
