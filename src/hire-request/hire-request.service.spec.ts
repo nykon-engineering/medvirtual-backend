@@ -3,6 +3,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { OrganizationRole, USER } from '@prisma/client';
 
+import { ConfigService } from '@nestjs/config';
+
 import { HireRequestService } from './hire-request.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -118,12 +120,23 @@ const candidateAuditServiceMock = {
   logMany: jest.fn(),
 };
 
+const configServiceMock = {
+  get: jest.fn(),
+};
+
+const redisClientMock = {
+  get: jest.fn().mockResolvedValue(null),
+  set: jest.fn().mockResolvedValue('OK'),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    redisClientMock.get.mockResolvedValue(null);
+    redisClientMock.set.mockResolvedValue('OK');
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -135,6 +148,8 @@ describe('HireRequestService', () => {
         { provide: PositionRateConfigService, useValue: positionRateConfigMock },
         { provide: OfferPanelsService, useValue: offerPanelsServiceMock },
         { provide: CandidateAuditService, useValue: candidateAuditServiceMock },
+        { provide: ConfigService, useValue: configServiceMock },
+        { provide: 'REDIS_CLIENT', useValue: redisClientMock },
       ],
     }).compile();
 

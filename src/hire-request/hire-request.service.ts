@@ -5,6 +5,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as redis from 'redis';
 import {
   HireRequestStatus,
   PanelCandidateStatus,
@@ -12,6 +14,7 @@ import {
   USER,
 } from '@prisma/client';
 
+import { keyPrefix } from '../common/app-config';
 import { PrismaService } from '../prisma/prisma.service';
 import { HubspotService } from '../hubspot/hubspot.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -51,6 +54,8 @@ import { CandidateAuditFieldGroup, CandidateAuditSource } from '@prisma/client';
 
 @Injectable()
 export class HireRequestService {
+  private readonly keyPrefix: string;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => HubspotService))
@@ -61,7 +66,30 @@ export class HireRequestService {
     @Inject(forwardRef(() => OfferPanelsService))
     private readonly offerPanelsService: OfferPanelsService,
     private readonly candidateAudit: CandidateAuditService,
-  ) {}
+    private readonly configService: ConfigService,
+    @Inject('REDIS_CLIENT') private readonly redisClient: redis.RedisClientType,
+  ) {
+    this.keyPrefix = keyPrefix(this.configService);
+  }
+
+  /** Redis-like getter using actual Redis client (mirrors HubstaffService). */
+  private async redisGet(key: string): Promise<string | null> {
+    return await this.redisClient.get(key);
+  }
+
+  /** Redis-like setter using actual Redis client (mirrors HubstaffService). */
+  private async redisSet(
+    key: string,
+    value: string,
+    options?: { EX: number },
+  ): Promise<void> {
+    if (options?.EX) {
+      await this.redisClient.set(key, value, { EX: options.EX });
+    } else {
+      await this.redisClient.set(key, value);
+    }
+  }
+
   private toFixedDate(dateStr: string): Date {
     const [datePart, timePart] = dateStr.split('T');
     const [year, month, day] = datePart.split('-').map(Number);
@@ -76,20 +104,29 @@ export class HireRequestService {
     '1087596819', // available part-time
   ];
 
+  /**
+   * candidate_id -> panel_id -> hireRequest.title, for every panel candidate
+   * currently selected_by_client or blocked in ANY panel. A single global
+   * query, reused by callers that previously ran one findFirst per candidate.
+   */
   private async buildCrossPanelSelectedMap(): Promise<
-    Map<string, Set<string>>
+    Map<string, Map<string, string>>
   > {
     const crossPanelSelected = await this.prisma.panelCandidate.findMany({
-      where: { status: { in: ['selected_by_client'] } },
-      select: { candidate_id: true, panel_id: true },
+      where: { status: { in: ['selected_by_client', 'blocked'] } },
+      select: {
+        candidate_id: true,
+        panel_id: true,
+        panel: { select: { hireRequest: { select: { title: true } } } },
+      },
     });
 
-    const map = new Map<string, Set<string>>();
+    const map = new Map<string, Map<string, string>>();
     for (const pc of crossPanelSelected) {
       if (!map.has(pc.candidate_id)) {
-        map.set(pc.candidate_id, new Set());
+        map.set(pc.candidate_id, new Map());
       }
-      map.get(pc.candidate_id)!.add(pc.panel_id);
+      map.get(pc.candidate_id)!.set(pc.panel_id, pc.panel.hireRequest.title);
     }
     return map;
   }
@@ -553,6 +590,17 @@ export class HireRequestService {
     }
     if (!user.role) throw new NotFoundException('User role not found');
 
+    const listCacheKey =
+      `${this.keyPrefix}hire-request-list:${user.role}:` +
+      `${user.role.includes('organization') ? user.organization_id : 'all'}:` +
+      `${search ?? ''}:${page}:${perPage}:${businessUnit ?? ''}:${status ?? ''}:` +
+      `${dateFrom ?? ''}:${dateTo ?? ''}`;
+
+    const cachedList = await this.redisGet(listCacheKey);
+    if (cachedList) {
+      return JSON.parse(cachedList);
+    }
+
     let baseWhere = {};
     switch (user.role) {
       case 'organization_super_admin':
@@ -832,7 +880,7 @@ export class HireRequestService {
     ]);
 
     if (!hireRequests || hireRequests.length === 0) {
-      return {
+      const emptyResult = {
         data: [],
         meta: {
           total: 0,
@@ -841,6 +889,10 @@ export class HireRequestService {
           totalPages: 0,
         },
       };
+      await this.redisSet(listCacheKey, JSON.stringify(emptyResult), {
+        EX: 20,
+      });
+      return emptyResult;
     }
 
     //Get all users from hirerequests assign_user_id to optimize the next steps
@@ -849,9 +901,7 @@ export class HireRequestService {
     const _cfgMap_A = buildConfigMap(_pCfgs_A);
 
     const isOrgUser = user.role.includes('organization');
-    const crossPanelMap = isOrgUser
-      ? await this.buildCrossPanelSelectedMap()
-      : null;
+    const crossPanelMap = await this.buildCrossPanelSelectedMap();
 
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
@@ -861,6 +911,26 @@ export class HireRequestService {
           ? timestampToUSDate(hr.hubspot_pairing_date)
           : null,
 
+        hasAvailableCandidates: hr.panels.some((panel) =>
+          panel.panelCandidates.some((pc) => {
+            if (
+              !this.availablePipelineStatuses.includes(
+                pc.candidate.pipeline_status,
+              )
+            ) {
+              return false;
+            }
+            const panelMap = crossPanelMap.get(pc.candidate.id);
+            if (
+              panelMap &&
+              !(panelMap.size === 1 && panelMap.has(panel.id))
+            ) {
+              return false;
+            }
+            return true;
+          }),
+        ),
+
         panels: hr.panels.map((panel) => ({
           ...panel,
           interview_date: panel.interviews[0]?.scheduled_date || null,
@@ -868,11 +938,11 @@ export class HireRequestService {
           interviews: undefined,
           panelCandidates: panel.panelCandidates
             .filter((pc) => {
-              if (!crossPanelMap) return true;
-              const panelSet = crossPanelMap.get(pc.candidate.id);
-              if (panelSet) {
+              if (!isOrgUser) return true;
+              const panelMap = crossPanelMap.get(pc.candidate.id);
+              if (panelMap) {
                 const onlyInCurrentPanel =
-                  panelSet.size === 1 && panelSet.has(panel.id);
+                  panelMap.size === 1 && panelMap.has(panel.id);
                 if (!onlyInCurrentPanel) return false;
               }
               return true;
@@ -925,7 +995,7 @@ export class HireRequestService {
       })),
     );
 
-    return {
+    const result = {
       data: formatted,
       meta: {
         total,
@@ -934,6 +1004,10 @@ export class HireRequestService {
         totalPages: Math.ceil(total / perPage),
       },
     };
+
+    await this.redisSet(listCacheKey, JSON.stringify(result), { EX: 20 });
+
+    return result;
   }
 
   async findOne(id: string, user: USER, source?: string): Promise<any> {
@@ -4626,6 +4700,12 @@ export class HireRequestService {
     hireRequestId: string,
     user: USER,
   ): Promise<any> {
+    const availableCandidatesCacheKey = `${this.keyPrefix}available-candidates:${hireRequestId}`;
+    const cachedResult = await this.redisGet(availableCandidatesCacheKey);
+    if (cachedResult) {
+      return JSON.parse(cachedResult);
+    }
+
     const hireRequest = await this.prisma.hireRequest.findUnique({
       where: { id: hireRequestId },
       select: {
@@ -4716,38 +4796,23 @@ export class HireRequestService {
         reason: 'Candidate is no longer available in Hubspot',
       }));
 
-    const availableCandidates = (
-      await Promise.all(
-        filteredCandidates.map(async (pc) => {
-          const existInOtherPanel = await this.prisma.panelCandidate.findFirst({
-            where: {
-              candidate_id: pc.candidate.id,
-              panel_id: { not: pc.panel_id },
-              status: {
-                in: ['selected_by_client', 'blocked'],
-              }, //Dont allow get candidates already selected in other panels
-            },
-            include: {
-              panel: {
-                include: {
-                  hireRequest: {
-                    select: { title: true },
-                  },
-                },
-              },
-            },
-          });
+    const crossPanelMap = await this.buildCrossPanelSelectedMap();
 
-          existInOtherPanel &&
-            unavailableCandidates.push({
-              ...pc.candidate,
-              reason: `Candidate is already selected in panel: ${existInOtherPanel.panel.hireRequest.title}`,
-            });
-
-          return existInOtherPanel ? null : pc;
-        }),
-      )
-    ).filter((pc) => pc !== null);
+    const availableCandidates = filteredCandidates.filter((pc) => {
+      const panelMap = crossPanelMap.get(pc.candidate.id);
+      if (!panelMap) return true;
+      const otherPanelEntry = [...panelMap.entries()].find(
+        ([panelId]) => panelId !== pc.panel_id,
+      );
+      if (otherPanelEntry) {
+        unavailableCandidates.push({
+          ...pc.candidate,
+          reason: `Candidate is already selected in panel: ${otherPanelEntry[1]}`,
+        });
+        return false;
+      }
+      return true;
+    });
 
     const selectedCandidate = panelCandidates.find(
       (pc) => pc.status === 'selected_by_client',
@@ -4758,7 +4823,13 @@ export class HireRequestService {
       selectedCandidate &&
       availableCandidates[0].candidate.id === selectedCandidate.candidate_id
     ) {
-      return [];
+      const emptyResult: any[] = [];
+      await this.redisSet(
+        availableCandidatesCacheKey,
+        JSON.stringify(emptyResult),
+        { EX: 300 },
+      );
+      return emptyResult;
     }
 
     const _pCfgs_G = await this.positionRateConfigService.findAllUnpaginated();
@@ -4796,10 +4867,18 @@ export class HireRequestService {
       panelScheduledDate: panel.scheduled_date,
     }));
 
-    return {
+    const result = {
       availableCandidates: mappedCandidates,
       unavailableCandidates: mappedUnavailableCandidates,
     };
+
+    await this.redisSet(
+      availableCandidatesCacheKey,
+      JSON.stringify(result),
+      { EX: 300 },
+    );
+
+    return result;
   }
 
   async getVATypes(): Promise<any> {
