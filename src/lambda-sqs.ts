@@ -1,9 +1,7 @@
 import { SQSEvent } from 'aws-lambda';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { HandlerDealCreation } from './hubspot/handlers/dealCreation';
-import { PrismaService } from './prisma/prisma.service';
-
+import { DealsQueueConsumerService } from './sqs/deals-queue-consumer.service';
 import { InvoiceWorker } from './invoice/invoice.worker';
 
 let app;
@@ -17,8 +15,7 @@ async function bootstrap() {
 
 export const handler = async (event: SQSEvent) => {
   const app = await bootstrap();
-  const dealService = app.get(HandlerDealCreation);
-  const prisma = app.get(PrismaService);
+  const consumer = app.get(DealsQueueConsumerService);
   const invoiceWorker = app.get(InvoiceWorker);
 
   for (const record of event.Records) {
@@ -30,37 +27,14 @@ export const handler = async (event: SQSEvent) => {
 
     const type = payload.Type?.trim();
 
-    switch (type) {
-      case 'CREATE_DEAL_STAFF':
-        console.log(`Creating staff for deal ${payload.objectId}`);
-        //Process deal creation
-        await dealService.execute(payload);
-        break;
-
-      case 'DEACTIVATE_STAFF':
-        console.log(`Deactivating staff for deal ${payload.objectId}`);
-        // Process deactivation
-        await prisma.staff.update({
-          where: { hubspot_id: String(payload.objectId) },
-          data: { status: 'terminated' },
-        });
-        break;
-
-      case 'REACTIVATE_STAFF':
-        console.log(`Reactivating staff for deal ${payload.objectId}`);
-        // Process reactivation
-        await prisma.staff.update({
-          where: { hubspot_id: String(payload.objectId) },
-          data: { status: 'active' },
-        });
-        break;
-      case 'GENERATE_INVOICE':
-        console.log(`Generating invoice for org ${payload.organization_id} (Job: ${payload.job_id})`);
-        await invoiceWorker.process({ data: payload } as any);
-        break;
-      default:
-        console.warn('Event not handled:', payload);
-        break;
+    if (type === 'GENERATE_INVOICE') {
+      console.log(
+        `Generating invoice for org ${payload.organization_id} (Job: ${payload.job_id})`,
+      );
+      await invoiceWorker.process({ data: payload } as any);
+      continue;
     }
+
+    await consumer.handleMessage(record.body);
   }
 };

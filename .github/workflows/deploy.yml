@@ -1,10 +1,13 @@
 name: Deploy at AWS Lambda (Prod Environment)
 
-on:
-  pull_request:
-    types: [closed]
-    branches:
-      - main
+# Lambda deploy temporarily disabled — prod traffic now goes through the EC2
+# pipeline (deploy-prod-ec2.yml). Re-enable by uncommenting the trigger below.
+# on:
+#   pull_request:
+#     types: [closed]
+#     branches:
+#       - main
+on: workflow_dispatch
 
 jobs:
   deploy:

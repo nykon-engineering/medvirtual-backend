@@ -47,6 +47,7 @@ const userfake = {
   billcom_remember_me_id: null,
   billcom_device: null,
   deactivated_by_bu: null,
+  onboarding_tour_dismissed: false,
 }
 
 describe('OrganizationService', () => {

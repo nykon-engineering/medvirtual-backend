@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { EmailTemplatesService } from '../email-templates/email-templates.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -42,6 +43,10 @@ describe('NotificationsService', () => {
     findAllUnpaginated: jest.fn().mockResolvedValue([]),
   };
 
+  const mockBusinessUnitContext = {
+    poolFor: jest.fn().mockResolvedValue('medical'),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +58,7 @@ describe('NotificationsService', () => {
           provide: PositionRateConfigService,
           useValue: mockPositionRateConfigService,
         },
+        { provide: BusinessUnitContext, useValue: mockBusinessUnitContext },
       ],
     }).compile();
 

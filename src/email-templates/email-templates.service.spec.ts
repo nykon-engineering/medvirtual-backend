@@ -69,6 +69,9 @@ const makePrisma = (overrides: Record<string, unknown> = {}) => ({
   emailBranding: {
     findUnique: jest.fn().mockResolvedValue(BRANDING),
   },
+  uSER: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   ...overrides,
 });
 
@@ -272,6 +275,52 @@ describe('EmailTemplatesService.findAll', () => {
         select: expect.objectContaining({ category: true, functionality: true }),
       }),
     );
+  });
+
+  it('resolves updated_by into a display name via a USER lookup', async () => {
+    const { service } = await buildService({
+      emailTemplate: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ ...TEMPLATE, id: 't1', updated_by: 'user-42' }]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      uSER: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'user-42', first_name: 'Jane', last_name: 'Doe' }]),
+      },
+    });
+    const result = await service.findAll(1, 25, '');
+    expect(result.data[0]).toMatchObject({
+      updated_by: 'user-42',
+      updated_by_name: 'Jane Doe',
+    });
+  });
+
+  it('labels sync-originated rows as "Auto-sync" without a USER lookup', async () => {
+    const { service, prisma } = await buildService({
+      emailTemplate: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ ...TEMPLATE, id: 't1', updated_by: 'sync' }]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+    });
+    const result = await service.findAll(1, 25, '');
+    expect(result.data[0]).toMatchObject({ updated_by: 'sync', updated_by_name: 'Auto-sync' });
+    expect(prisma.uSER.findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns null updated_by_name when updated_by is null', async () => {
+    const { service } = await buildService({
+      emailTemplate: {
+        findMany: jest.fn().mockResolvedValue([{ ...TEMPLATE, id: 't1', updated_by: null }]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+    });
+    const result = await service.findAll(1, 25, '');
+    expect(result.data[0]).toMatchObject({ updated_by: null, updated_by_name: null });
   });
 });
 

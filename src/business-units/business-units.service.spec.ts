@@ -66,6 +66,9 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
     },
     uSER: {
       updateMany: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([
+        { id: 'user-1', first_name: 'Jane', last_name: 'Doe' },
+      ]),
     },
     candidate: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -594,6 +597,30 @@ describe('BusinessUnitsService.getBrandingHistory', () => {
     const result = await service.getBrandingHistory('medvirtual');
     expect(result.status).toBe(200);
     expect(Array.isArray(result.data)).toBe(true);
+  });
+
+  it('resolves changed_by into a display name via a USER lookup', async () => {
+    const { service, prisma } = makeService({
+      emailBrandingHistory: {
+        findMany: jest.fn().mockResolvedValue([{ ...BRANDING_HISTORY, changed_by: 'user-1' }]),
+      },
+    });
+    const result = await service.getBrandingHistory('medvirtual');
+    expect(result.data[0]).toMatchObject({ changed_by: 'user-1', changed_by_name: 'Jane Doe' });
+    expect(prisma.uSER.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['user-1'] } } }),
+    );
+  });
+
+  it('labels sync-originated rows as "Auto-sync" without a USER lookup', async () => {
+    const { service, prisma } = makeService({
+      emailBrandingHistory: {
+        findMany: jest.fn().mockResolvedValue([{ ...BRANDING_HISTORY, changed_by: 'sync' }]),
+      },
+    });
+    const result = await service.getBrandingHistory('medvirtual');
+    expect(result.data[0]).toMatchObject({ changed_by: 'sync', changed_by_name: 'Auto-sync' });
+    expect(prisma.uSER.findMany).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException for unknown slug', async () => {

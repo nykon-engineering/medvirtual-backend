@@ -26,12 +26,6 @@ const SEED_KEYS = [
   'med-alliance-invite-signup',
   'med-alliance-invitation',
   'med-alliance-org-invitation',
-  'new-positions-alert',
-  'quarterly-payout-report',
-  'client-users-deactivation',
-  'med-alliance-deployed-companies',
-  'system-report',
-  'cron-job-error',
   'google-token-expired',
   'google-drive-failed',
   'openai-quota-exceeded',
@@ -101,6 +95,9 @@ function makePrisma(findFirstResult: unknown = null) {
     },
     emailBranding: {
       findUnique: jest.fn().mockResolvedValue(BRANDING),
+    },
+    uSER: {
+      findMany: jest.fn().mockResolvedValue([]),
     },
   };
 }

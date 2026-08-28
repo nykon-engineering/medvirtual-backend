@@ -2,11 +2,42 @@ import {
   findPayRateMonthly,
   findBillRateHourly,
   findBillRateMonthly,
+  buildConfigMap,
+  computeCandidateRates,
+  CandidateLike,
+  PositionRateConfigLike,
 } from './salary.util';
 
 const FULL_TIME_HOURS = 176;
 const PART_TIME_HOURS = 88;
 const PART_TIME_CODE = '1087596819';
+
+function makeConfig(
+  position: string,
+  overrides: Partial<PositionRateConfigLike> = {},
+): PositionRateConfigLike & { position: string } {
+  return {
+    position,
+    medical_floor_price_english: 15,
+    non_medical_floor_price_english: 12,
+    medical_floor_price_bilingual: 18,
+    non_medical_floor_price_bilingual: 14,
+    medical_margin_per_hour: 9,
+    non_medical_margin_per_hour: 7,
+    ...overrides,
+  };
+}
+
+function makeCandidate(overrides: Partial<CandidateLike> = {}): CandidateLike {
+  return {
+    hourly_pay_rate: 20,
+    approved_positions_pairing: ['Accountant'],
+    languages: [{ name: 'English' }],
+    employment_type: '',
+    business_unit: 'MedVirtual',
+    ...overrides,
+  };
+}
 
 describe('salary.util', () => {
   describe('findPayRateMonthly', () => {
@@ -78,5 +109,80 @@ describe('salary.util', () => {
     });
   });
 
-  
+  describe('computeCandidateRates', () => {
+    it('uses the medical floor price/margin when candidatePool is "medical"', () => {
+      const configMap = buildConfigMap([makeConfig('Accountant')]);
+      const candidate = makeCandidate({ hourly_pay_rate: 10 });
+
+      const result = computeCandidateRates(candidate, configMap, 'medical');
+
+      // effectiveBase = max(10, 15) = 15; bill_hourly = 15 + 9 = 24
+      expect(result.bill_rate_hourly).toBe(24);
+    });
+
+    it('uses the non_medical floor price/margin when candidatePool is "non_medical"', () => {
+      const configMap = buildConfigMap([makeConfig('Accountant')]);
+      const candidate = makeCandidate({ hourly_pay_rate: 10 });
+
+      const result = computeCandidateRates(candidate, configMap, 'non_medical');
+
+      // effectiveBase = max(10, 12) = 12; bill_hourly = 12 + 7 = 19
+      expect(result.bill_rate_hourly).toBe(19);
+    });
+
+    it('uses the bilingual floor price when the candidate has more than one language', () => {
+      const configMap = buildConfigMap([makeConfig('Accountant')]);
+      const candidate = makeCandidate({
+        hourly_pay_rate: 10,
+        languages: [{ name: 'English' }, { name: 'Spanish' }],
+      });
+
+      const result = computeCandidateRates(candidate, configMap, 'medical');
+
+      // effectiveBase = max(10, 18) = 18; bill_hourly = 18 + 9 = 27
+      expect(result.bill_rate_hourly).toBe(27);
+    });
+
+    it('does not read candidate.business_unit to decide the pool (caller-resolved)', () => {
+      const configMap = buildConfigMap([makeConfig('Accountant')]);
+      const candidate = makeCandidate({
+        hourly_pay_rate: 10,
+        business_unit: 'Berry Virtual',
+      });
+
+      const result = computeCandidateRates(candidate, configMap, 'medical');
+
+      // Even though business_unit says "Berry Virtual", the explicit
+      // candidatePool argument ('medical') must win: 15 + 9 = 24.
+      expect(result.bill_rate_hourly).toBe(24);
+    });
+
+    it('falls back to the lowest-floor config for the pool when the position is unknown', () => {
+      const configMap = buildConfigMap([
+        makeConfig('Accountant', { medical_floor_price_english: 20 }),
+        makeConfig('Nurse', { medical_floor_price_english: 15 }),
+      ]);
+      const candidate = makeCandidate({
+        hourly_pay_rate: 10,
+        approved_positions_pairing: ['Unknown Position'],
+      });
+
+      const result = computeCandidateRates(candidate, configMap, 'medical');
+
+      // Falls back to the config with the lowest medical floor (Nurse, 15) + margin 9 = 24.
+      expect(result.bill_rate_hourly).toBe(24);
+    });
+
+    it('uses the fallback config when the candidate has no approved positions', () => {
+      const configMap = buildConfigMap([makeConfig('Accountant')]);
+      const candidate = makeCandidate({
+        hourly_pay_rate: 10,
+        approved_positions_pairing: [],
+      });
+
+      const result = computeCandidateRates(candidate, configMap, 'medical');
+
+      expect(result.bill_rate_hourly).toBe(24);
+    });
+  });
 });

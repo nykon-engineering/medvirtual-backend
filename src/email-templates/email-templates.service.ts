@@ -51,6 +51,8 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{createdByName}}': 'Paulo',
   '{{candidateCount}}': '3',
   '{{panelLink}}': 'https://app.medvirtual.ai/modules/public/offer-panel/sample-token',
+  '{{offerTitle}}': 'Senior RN Opening',
+  '{{offerDescription}}': 'A quick note on why these candidates stood out for your team.',
   // Filled in at preview time by `sampleCandidateCards()` so the grid picks up
   // the previewed business unit's own branding instead of a fixed brand.
   '{{candidateCards}}': '',
@@ -218,11 +220,47 @@ export class EmailTemplatesService {
       this.prisma.emailTemplate.count({ where }),
     ]);
 
+    const enriched = await this.withUpdatedByName(data);
+
     return {
       status: 200,
-      data,
+      data: enriched,
       meta: { total, page, perPage, totalPages: Math.ceil(total / perPage) },
     };
+  }
+
+  // Resolves `updated_by` (a raw USER id, or the 'sync' sentinel) into a display
+  // name, mirroring the lookup already used for template history entries — there
+  // is no Prisma relation from `updated_by` to USER, so this must be a manual join.
+  private async withUpdatedByName<T extends { updated_by: string | null }>(
+    rows: T[],
+  ): Promise<(T & { updated_by_name: string | null })[]> {
+    const userIds = [
+      ...new Set(
+        rows
+          .map((r) => r.updated_by)
+          .filter((id): id is string => !!id && id !== 'sync'),
+      ),
+    ];
+    const users = userIds.length
+      ? await this.prisma.uSER.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, first_name: true, last_name: true },
+        })
+      : [];
+    const userMap = Object.fromEntries(
+      users.map((u) => [u.id, `${u.first_name} ${u.last_name}`]),
+    );
+
+    return rows.map((r) => ({
+      ...r,
+      updated_by_name:
+        r.updated_by === null
+          ? null
+          : r.updated_by === 'sync'
+            ? 'Auto-sync'
+            : (userMap[r.updated_by] ?? r.updated_by),
+    }));
   }
 
   // ── Detail ────────────────────────────────────────────────────────────────

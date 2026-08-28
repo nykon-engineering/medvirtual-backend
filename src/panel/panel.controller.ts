@@ -14,7 +14,15 @@ import { RolesGuard } from '../auth/roles.guard';
 import { TalentAvailabilityByRoleDto } from './dto/talent-availability-by-role.dto';
 import { ClientSelectedCandidatesQueryDto } from './dto/client-selected-candidates-query.dto';
 import { ClientSelectedCandidatesResponseDto } from './dto/client-selected-candidate-row.dto';
+import { CandidateEndorsementsQueryDto } from './dto/candidate-endorsements-query.dto';
+import { CandidateEndorsementsResponseDto } from './dto/candidate-endorsement-row.dto';
+import { ClientLoginsQueryDto } from './dto/client-logins-query.dto';
+import { ClientLoginsResponseDto } from './dto/client-login-row.dto';
+import { AdminLoginsQueryDto } from './dto/admin-logins-query.dto';
+import { AdminLoginsResponseDto } from './dto/admin-login-row.dto';
 import { TalentAgingReportDto } from './dto/talent-aging-report.dto';
+import { HireRequestsByClientsQueryDto } from './dto/hire-requests-by-clients-query.dto';
+import { HireRequestsByClientsResponseDto } from './dto/hire-request-by-client-row.dto';
 
 @ApiTags('Panel')
 @ApiBearerAuth()
@@ -123,6 +131,98 @@ export class PanelController {
     @Query() query: ClientSelectedCandidatesQueryDto,
   ): Promise<ClientSelectedCandidatesResponseDto> {
     return this.panelService.getAdminSelectedCandidates(query);
+  }
+
+  @Get('candidate-endorsements')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Per-candidate endorsement counts, split by whether the endorsement is attributed to an admin or a client user, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Candidate endorsements retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getCandidateEndorsements(
+    @Query() query: CandidateEndorsementsQueryDto,
+  ): Promise<CandidateEndorsementsResponseDto> {
+    return this.panelService.getCandidateEndorsements(query);
+  }
+
+  @Get('client-logins')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Row-level client (organization) user logins with user name, organization and timestamp, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Client logins retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getClientLogins(
+    @Query() query: ClientLoginsQueryDto,
+  ): Promise<ClientLoginsResponseDto> {
+    return this.panelService.getClientLogins(query);
+  }
+
+  @Get('admin-logins')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Row-level admin user logins with user name, role and timestamp, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin logins retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getAdminLogins(
+    @Query() query: AdminLoginsQueryDto,
+  ): Promise<AdminLoginsResponseDto> {
+    return this.panelService.getAdminLogins(query);
+  }
+
+  @Get('hire-requests-by-clients')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('system_super_admin', 'system_admin')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Hire requests created by client (organization) users, with creator and organization details, with optional full-result export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Hire requests submitted by clients retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied: insufficient permissions',
+  })
+  async getHireRequestsByClients(
+    @Query() query: HireRequestsByClientsQueryDto,
+  ): Promise<HireRequestsByClientsResponseDto> {
+    return this.panelService.getHireRequestsByClients(query);
   }
 
   @Get('talent-aging')

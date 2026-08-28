@@ -5,7 +5,7 @@ generator client {
 
 datasource db {
   provider          = "postgresql"
-  url               = env("DATABASE_URL")
+  url               = env("DATABASE_URL") // LOCAL_DATABASE_URL | DATABASE_URL | PROD_DATABASE_URL
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -121,6 +121,11 @@ model USER {
   // Multi Business Unit — tags the BU slug that caused this user to be soft-deactivated
   // (cron reconcile / dormant BU). Cleared on reactivation.
   deactivated_by_bu String?
+
+  // Onboarding tour — set only when the user explicitly checks "Don't show this
+  // again" in the tour card. Global across devices/browsers. Closing/skipping
+  // the tour WITHOUT checking the box does NOT set this.
+  onboarding_tour_dismissed Boolean @default(false)
 
   @@index([email], map: "idx_users_email")
   @@index([role], map: "idx_users_role")
@@ -820,12 +825,12 @@ model PositionRateConfig {
   position                           String   @unique
   createdAt                          DateTime @default(now())
   updatedAt                          DateTime @updatedAt
-  berryVirtual_floor_price_bilingual Decimal?
-  berryVirtual_floor_price_english   Decimal?
-  medVirtual_floor_price_bilingual   Decimal?
-  medVirtual_floor_price_english     Decimal?
-  berryVirtual_margin_per_hour       Decimal?
-  medVirtual_margin_per_hour         Decimal?
+  non_medical_floor_price_bilingual  Decimal?
+  non_medical_floor_price_english    Decimal?
+  medical_floor_price_bilingual      Decimal?
+  medical_floor_price_english        Decimal?
+  non_medical_margin_per_hour        Decimal?
+  medical_margin_per_hour            Decimal?
 }
 
 model AffiliateProfile {

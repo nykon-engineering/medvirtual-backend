@@ -578,7 +578,7 @@ async function main() {
       headline: 'Candidates selected for you',
       // {{candidateCards}} expands to the pre-rendered candidate grid. Remove it
       // and the email still sends — just without the cards.
-      body: 'Hi,\n\n{{createdByName}} from {{companyName}} has handpicked {{candidateCount}} candidate(s) specifically for you.\n\n{{candidateCards}}\nReview them at your convenience and let us know your thoughts.',
+      body: 'Hi,\n\n{{createdByName}} from {{companyName}} has handpicked {{candidateCount}} candidate(s) specifically for you.\n\n{{offerTitle}}\n{{offerDescription}}\n\n{{candidateCards}}\nReview them at your convenience and let us know your thoughts.',
       button_label: 'View Candidates',
       button_url: '{{panelLink}}',
       placeholders: [
@@ -588,6 +588,8 @@ async function main() {
         '{{candidateCount}}',
         '{{panelLink}}',
         '{{candidateCards}}',
+        '{{offerTitle}}',
+        '{{offerDescription}}',
       ],
     },
     {
@@ -753,23 +755,6 @@ async function main() {
       ],
     },
     {
-      key: 'med-alliance-expired-eligibility',
-      name: 'Med Alliance — Expired Eligibility Report',
-      description:
-        'Sent to admins summarizing referred companies whose commission eligibility window expired.',
-      subject: 'Med Alliance — Expired Eligibility Report ({{reportDate}})',
-      headline: 'Expired Eligibility Report',
-      body: 'Report date: {{reportDate}}\nExpired: {{expiredCount}}\nErrors: {{errorCount}}\n\n{{reportContent}}',
-      button_label: null,
-      button_url: null,
-      placeholders: [
-        '{{reportDate}}',
-        '{{expiredCount}}',
-        '{{errorCount}}',
-        '{{reportContent}}',
-      ],
-    },
-    {
       key: 'alliance-admin-payout-requested',
       name: 'Med Alliance — Admin: New Payout Request',
       description: 'Sent to admins when an affiliate submits a payout request.',
@@ -861,25 +846,6 @@ async function main() {
       ],
     },
     {
-      key: 'alliance-admin-commission-summary',
-      name: 'Med Alliance — Admin: Daily Commission Review Summary',
-      description: 'Daily summary sent to admins with all pending commissions.',
-      subject:
-        'Daily commission review — {{commissionCount}} pending (${{totalAmount}})',
-      headline:
-        '{{commissionCount}} commission(s) are pending your review as of {{reportDate}}.',
-      body: 'Total pending: ${{totalAmount}}\n\nCommissions pending review:\n{{commissionsTable}}',
-      button_label: 'Review Commissions',
-      button_url: '{{commissionsUrl}}',
-      placeholders: [
-        '{{commissionCount}}',
-        '{{totalAmount}}',
-        '{{reportDate}}',
-        '{{commissionsTable}}',
-        '{{commissionsUrl}}',
-      ],
-    },
-    {
       key: 'alliance-admin-mark-paid-error',
       name: 'Med Alliance — Admin: markPaid() Error',
       description:
@@ -929,43 +895,6 @@ async function main() {
       button_label: null,
       button_url: null,
       placeholders: [],
-    },
-    // ── Cron Reports ─────────────────────────────────────────────────────────
-    {
-      key: 'quarterly-payout-report',
-      name: 'Quarterly Payout Report',
-      description:
-        'Sent to admins with quarterly automatic payout requests summary.',
-      subject: 'Quarterly Report — Automatic Payout Requests',
-      headline: 'Quarterly Report — Automatic Payout Requests',
-      body: 'Generated on {{reportDate}}\n\nSuccessfully created: {{successCount}}\nTotal amount: {{totalAmount}}\nFailed: {{failureCount}}\n\nDetails:\n{{reportContent}}',
-      button_label: null,
-      button_url: null,
-      placeholders: [
-        '{{reportDate}}',
-        '{{successCount}}',
-        '{{totalAmount}}',
-        '{{failureCount}}',
-        '{{reportContent}}',
-      ],
-    },
-    {
-      key: 'med-alliance-deployed-companies',
-      name: 'Med Alliance — Deployed Companies Report',
-      description:
-        'Daily report sent to admins of companies promoted in Med Alliance.',
-      subject: 'Med Alliance — Deployed Companies Report',
-      headline: 'Med Alliance — Deployed Companies Report',
-      body: 'Daily cron run on {{reportDate}}\n\nCompanies Promoted: {{promotedCount}}\nCommissions Promoted: {{totalCommissions}}\nErrors: {{errorCount}}\n\nDetails:\n{{reportContent}}',
-      button_label: null,
-      button_url: null,
-      placeholders: [
-        '{{reportDate}}',
-        '{{promotedCount}}',
-        '{{totalCommissions}}',
-        '{{errorCount}}',
-        '{{reportContent}}',
-      ],
     },
   ];
 

@@ -16,6 +16,9 @@ import quarterlyPayoutReport, {
 import medAllianceExpiredEligibilityReport, {
   ExpiredCompanyEntry,
 } from '../common/utils/email-templates/med-alliance-expired-eligibility-report';
+import medAllianceSyncReport, {
+  SyncReportEntry,
+} from '../common/utils/email-templates/med-alliance-sync-report';
 import offerPanelWeeklyReport, {
   OfferPanelReportRow,
   OfferPanelReportSection,
@@ -610,8 +613,8 @@ export class CronService {
         await this.prisma.positionRateConfig.create({
           data: {
             position,
-            medVirtual_margin_per_hour: 9,
-            berryVirtual_margin_per_hour: 9,
+            medical_margin_per_hour: 9,
+            non_medical_margin_per_hour: 9,
           },
         });
         console.log(
@@ -1202,8 +1205,13 @@ export class CronService {
     if (organizationId) {
       orgIds = [organizationId];
     } else {
+      //Since this cron goals is to ingest invoice and create commissions, 
+      // we only retrieve active organizations which have referred_by_affiliate_id set (i.e. referred companies)
       const orgs = await this.prisma.organization.findMany({
-        where: { status: 'active' },
+        where: { 
+          status: 'active',
+          referred_by_affiliate_id: { not: null }   
+        },
         select: { id: true },
         orderBy: { updatedAt: 'asc' },
       });
@@ -1215,6 +1223,7 @@ export class CronService {
     );
 
     const syncResults: SyncResult[] = [];
+    const syncFailures: { organizationId: string; error: string }[] = [];
     let syncFailed = 0;
 
     for (const orgId of orgIds) {
@@ -1223,8 +1232,10 @@ export class CronService {
         syncResults.push(result);
       } catch (err) {
         syncFailed++;
+        const message = err instanceof Error ? err.message : String(err);
+        syncFailures.push({ organizationId: orgId, error: message });
         console.error(
-          `syncOrganizationsWithHubspot: error syncing org ${orgId} — ${err instanceof Error ? err.message : err}`,
+          `syncOrganizationsWithHubspot: error syncing org ${orgId} — ${message}`,
         );
       }
     }
@@ -1233,11 +1244,92 @@ export class CronService {
       `syncOrganizationsWithHubspot: processed=${orgIds.length} syncFailed=${syncFailed}`,
     );
 
+    try {
+      await this.sendSyncReportEmail(orgIds.length, syncResults, syncFailures);
+    } catch (mailError) {
+      console.error(
+        'syncOrganizationsWithHubspot: failed to send report email:',
+        mailError,
+      );
+    }
+
     return {
       processed: orgIds.length,
       syncFailed,
       syncResults,
     };
+  }
+
+  private async sendSyncReportEmail(
+    processed: number,
+    syncResults: SyncResult[],
+    syncFailures: { organizationId: string; error: string }[],
+  ): Promise<void> {
+    const orgIdsInReport = [
+      ...syncResults.map((r) => r.organizationId),
+      ...syncFailures.map((f) => f.organizationId),
+    ];
+
+    const orgs = orgIdsInReport.length
+      ? await this.prisma.organization.findMany({
+          where: { id: { in: orgIdsInReport } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const orgNameById = new Map(orgs.map((o) => [o.id, o.name]));
+
+    const attentionOutcomes = new Set(['error', 'multiple_matches']);
+
+    const allEntries: SyncReportEntry[] = [
+      ...syncResults.map((r) => ({
+        organizationId: r.organizationId,
+        organizationName: orgNameById.get(r.organizationId) ?? r.organizationId,
+        outcome: r.phaseA.outcome,
+        hubspotCompanyId: r.phaseA.hubspotCompanyId,
+        invoices: r.phaseB?.invoices,
+        commissions: r.phaseB?.commissions,
+        error: r.phaseA.error,
+      })),
+      ...syncFailures.map((f) => ({
+        organizationId: f.organizationId,
+        organizationName: orgNameById.get(f.organizationId) ?? f.organizationId,
+        outcome: 'sync_failed',
+        error: f.error,
+      })),
+    ];
+
+    const needsAttention = allEntries.filter(
+      (e) => attentionOutcomes.has(e.outcome) || e.outcome === 'sync_failed',
+    );
+
+    const totals = allEntries.reduce(
+      (acc, e) => {
+        acc.invoicesCreated += e.invoices?.created ?? 0;
+        acc.commissionsCreated += e.commissions?.created ?? 0;
+        return acc;
+      },
+      { invoicesCreated: 0, commissionsCreated: 0 },
+    );
+
+    const runAt = new Date();
+    const runDate = runAt.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+
+    await this.mailService.sendMail({
+      from: 'MedVirtual <noreply@medvirtual.ai>',
+      to: ['paulo@regenta.ai'],
+      subject: `Med Alliance — HubSpot Sync Report (${runDate})`,
+      html: medAllianceSyncReport(
+        processed,
+        allEntries,
+        needsAttention,
+        totals,
+        runAt,
+      ),
+    });
   }
 
   async detectCommissionsByAffiliate(affiliateProfileId: string): Promise<{
@@ -1428,18 +1520,24 @@ export class CronService {
       }
 
       const createdMs = panel.createdAt.getTime();
+      // recipient_org_name is null for recipient_type 'email' and often for
+      // client_user panels, so fall through to the contact then the address.
+      const recipientLabel =
+        panel.recipient_org_name ||
+        panel.recipientCompany?.name ||
+        panel.recipient_name ||
+        panel.recipient_email ||
+        '—';
       const row: OfferPanelReportRow = {
         panelId: panel.id,
         title: panel.title,
-        // recipient_org_name is null for recipient_type 'email' and often for
-        // client_user panels, so fall through to the contact then the address.
-        recipientLabel:
-          panel.recipient_org_name ||
-          panel.recipientCompany?.name ||
-          panel.recipient_name ||
-          panel.recipient_email ||
-          '—',
-        recipientSub: panel.recipient_email ?? '',
+        recipientLabel,
+        // Omit the sub-line when the label already is the email address,
+        // otherwise the recipient cell shows the same email twice.
+        recipientSub:
+          recipientLabel === panel.recipient_email
+            ? ''
+            : (panel.recipient_email ?? ''),
         businessUnit: panel.business_unit ?? '—',
         status: panel.status,
         isPublic: panel.is_public,

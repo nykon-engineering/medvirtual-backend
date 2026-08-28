@@ -308,4 +308,22 @@ export class UpdateHireRequestDto {
   @IsString()
   @IsOptional()
   staff_to_be_replaced_id?: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Client Signed Contract Ticket Submission',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  client_signed_contract_ticket_submission?: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Client Signed Contract Closing Ticket',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  client_signed_contract_closing_ticket?: string;
 }

@@ -1,9 +1,12 @@
-name: Deploy at AWS Lambda (Dev environment) 
+name: Deploy at AWS Lambda (Dev environment)
 
-on:
-  push:
-    branches:
-      - dev
+# Lambda deploy temporarily disabled — dev traffic now goes through the EC2
+# pipeline (deploy-dev-ec2.yml). Re-enable by uncommenting the trigger below.
+# on:
+#   push:
+#     branches:
+#       - dev
+on: workflow_dispatch
 
 jobs:
   deploy:

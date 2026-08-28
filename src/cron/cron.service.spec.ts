@@ -124,13 +124,11 @@ describe('CronService', () => {
     };
 
     positionRateConfigServiceMock = {
-      findAll: jest
-        .fn()
-        .mockResolvedValue({
-          status: 200,
-          data: [],
-          meta: { total: 0, page: 1, perPage: 10, totalPages: 0 },
-        }),
+      findAll: jest.fn().mockResolvedValue({
+        status: 200,
+        data: [],
+        meta: { total: 0, page: 1, perPage: 10, totalPages: 0 },
+      }),
       findAllUnpaginated: jest.fn().mockResolvedValue([]),
     };
 
@@ -234,8 +232,8 @@ describe('CronService', () => {
       expect(prismaServiceMock.positionRateConfig.create).toHaveBeenCalledWith({
         data: {
           position: 'New Position',
-          medVirtual_margin_per_hour: 9,
-          berryVirtual_margin_per_hour: 9,
+          medical_margin_per_hour: 9,
+          non_medical_margin_per_hour: 9,
         },
       });
       expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
@@ -1254,12 +1252,13 @@ describe('CronService', () => {
       };
     });
 
-    it('should process a single org when organization_id is provided, without querying findMany', async () => {
+    it('should process a single org when organization_id is provided', async () => {
       const syncResult = {
         organizationId: 'org-1',
         phaseA: { outcome: 'already_matched' },
       };
       referralSyncServiceMock.run.mockResolvedValue(syncResult);
+      mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.syncOrganizationsWithHubspot('org-1');
 
@@ -1268,9 +1267,6 @@ describe('CronService', () => {
       expect(result.processed).toBe(1);
       expect(result.syncFailed).toBe(0);
       expect(result.syncResults).toHaveLength(1);
-      // The old inline 30-day-promotion block is gone — findMany is never
-      // called on this path anymore.
-      expect(prismaServiceMock.organization.findMany).not.toHaveBeenCalled();
     });
 
     it('should query all active orgs when no organization_id is given', async () => {
@@ -1282,12 +1278,15 @@ describe('CronService', () => {
         organizationId: 'x',
         phaseA: { outcome: 'already_matched' },
       });
+      mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.syncOrganizationsWithHubspot();
 
       expect(referralSyncServiceMock.run).toHaveBeenCalledTimes(2);
       expect(result.processed).toBe(2);
-      expect(prismaServiceMock.organization.findMany).toHaveBeenCalledTimes(1);
+      // Called once for the active-org list and once to resolve org names
+      // for the report email.
+      expect(prismaServiceMock.organization.findMany).toHaveBeenCalledTimes(2);
     });
 
     it('should increment syncFailed and continue when referralSync.run throws', async () => {
@@ -1301,6 +1300,7 @@ describe('CronService', () => {
           organizationId: 'org-ok',
           phaseA: { outcome: 'synced' },
         });
+      mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.syncOrganizationsWithHubspot();
 
@@ -1314,6 +1314,7 @@ describe('CronService', () => {
         organizationId: 'org-1',
         phaseA: { outcome: 'already_matched' },
       });
+      mailServiceMock.sendMail.mockResolvedValue(true);
 
       const result = await service.syncOrganizationsWithHubspot('org-1');
 
@@ -1322,6 +1323,60 @@ describe('CronService', () => {
         'syncFailed',
         'syncResults',
       ]);
+    });
+
+    it('should send a report email to paulo@regenta.ai summarizing the run', async () => {
+      referralSyncServiceMock.run.mockResolvedValue({
+        organizationId: 'org-1',
+        phaseA: { outcome: 'synced', hubspotCompanyId: 'hs-1' },
+        phaseB: {
+          invoices: { created: 2, updated: 0, skipped: 0 },
+          commissions: { created: 1, skipped: 0 },
+        },
+      });
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      await service.syncOrganizationsWithHubspot('org-1');
+
+      expect(mailServiceMock.sendMail).toHaveBeenCalledTimes(1);
+      expect(mailServiceMock.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: 'MedVirtual <noreply@medvirtual.ai>',
+          to: ['paulo@regenta.ai'],
+          subject: expect.stringContaining(
+            'Med Alliance — HubSpot Sync Report',
+          ),
+          html: expect.any(String),
+        }),
+      );
+    });
+
+    it('should still send the report email when no organizations were processed', async () => {
+      prismaServiceMock.organization.findMany.mockResolvedValue([]);
+      mailServiceMock.sendMail.mockResolvedValue(true);
+
+      const result = await service.syncOrganizationsWithHubspot();
+
+      expect(result.processed).toBe(0);
+      expect(mailServiceMock.sendMail).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not throw and should keep the normal return value when sending the report email fails', async () => {
+      referralSyncServiceMock.run.mockResolvedValue({
+        organizationId: 'org-1',
+        phaseA: { outcome: 'already_matched' },
+      });
+      mailServiceMock.sendMail.mockRejectedValue(new Error('resend down'));
+
+      const result = await service.syncOrganizationsWithHubspot('org-1');
+
+      expect(result).toEqual({
+        processed: 1,
+        syncFailed: 0,
+        syncResults: [
+          { organizationId: 'org-1', phaseA: { outcome: 'already_matched' } },
+        ],
+      });
     });
   });
 
@@ -1799,6 +1854,22 @@ describe('CronService', () => {
       expect(html).not.toContain('undefined');
       // recipient_org_name is null, so the contact name is used instead.
       expect(html).toContain('Dr. Smith');
+    });
+
+    it('does not repeat the recipient email when no name or org is available', async () => {
+      prismaServiceMock.offerPanel.findMany.mockResolvedValue([
+        buildPanel({
+          recipient_org_name: null,
+          recipientCompany: null,
+          recipient_name: null,
+        }),
+      ]);
+
+      await service.weeklyOfferPanelReport();
+
+      const html = mailServiceMock.sendMail.mock.calls[0][0].html;
+      const occurrences = html.split('dr.smith@sunrise.example').length - 1;
+      expect(occurrences).toBe(1);
     });
 
     it('sends to all three stakeholders in PROD', async () => {
