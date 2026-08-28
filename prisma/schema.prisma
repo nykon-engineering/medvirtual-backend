@@ -825,12 +825,12 @@ model PositionRateConfig {
   position                           String   @unique
   createdAt                          DateTime @default(now())
   updatedAt                          DateTime @updatedAt
-  berryVirtual_floor_price_bilingual Decimal?
-  berryVirtual_floor_price_english   Decimal?
-  medVirtual_floor_price_bilingual   Decimal?
-  medVirtual_floor_price_english     Decimal?
-  berryVirtual_margin_per_hour       Decimal?
-  medVirtual_margin_per_hour         Decimal?
+  non_medical_floor_price_bilingual  Decimal?
+  non_medical_floor_price_english    Decimal?
+  medical_floor_price_bilingual      Decimal?
+  medical_floor_price_english        Decimal?
+  non_medical_margin_per_hour        Decimal?
+  medical_margin_per_hour            Decimal?
 }
 
 model AffiliateProfile {

@@ -14,6 +14,7 @@ import { ConfirmPanelHireRequestDto } from './dto/confirm-panel-hire-request.dto
 import { HubspotService } from '../hubspot/hubspot.service';
 import { OpenaiService } from '../openai/openai.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { OfferPanelsService } from '../offer-panels/offer-panels.service';
 import { CandidateAuditService } from '../candidate/candidate-audit.service';
 
@@ -129,6 +130,10 @@ const redisClientMock = {
   set: jest.fn().mockResolvedValue('OK'),
 };
 
+const businessUnitContextMock = {
+  poolFor: jest.fn().mockResolvedValue('medical'),
+};
+
 describe('HireRequestService', () => {
   let service: HireRequestService;
   let user: USER;
@@ -150,6 +155,7 @@ describe('HireRequestService', () => {
         { provide: CandidateAuditService, useValue: candidateAuditServiceMock },
         { provide: ConfigService, useValue: configServiceMock },
         { provide: 'REDIS_CLIENT', useValue: redisClientMock },
+        { provide: BusinessUnitContext, useValue: businessUnitContextMock },
       ],
     }).compile();
 

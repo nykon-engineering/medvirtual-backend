@@ -613,8 +613,8 @@ export class CronService {
         await this.prisma.positionRateConfig.create({
           data: {
             position,
-            medVirtual_margin_per_hour: 9,
-            berryVirtual_margin_per_hour: 9,
+            medical_margin_per_hour: 9,
+            non_medical_margin_per_hour: 9,
           },
         });
         console.log(

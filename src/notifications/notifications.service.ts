@@ -10,7 +10,9 @@ import { PositionRateConfigService } from '../position-rate-config/position-rate
 import {
   buildConfigMap,
   computeCandidateRates,
+  CandidatePool,
 } from '../common/utils/salary.util';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { dbToStageDictionary } from '../common/dictionaries/stage-dictionary';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
@@ -41,6 +43,7 @@ export class NotificationsService {
     private readonly mail: MailService,
     private readonly emailTemplates: EmailTemplatesService,
     private readonly positionRateConfig: PositionRateConfigService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
 
   // ── EmailTemplatesService fallback helper ─────────────────────────────────
@@ -2668,6 +2671,24 @@ ${getEmailLogoCss()}
         process.env.AVATAR_URL ??
         'https://medvirtual-avatar.s3.us-east-1.amazonaws.com/';
 
+      const distinctBUs = Array.from(
+        new Set(
+          candidates
+            .map((c) => c.business_unit)
+            .filter((bu): bu is string => !!bu),
+        ),
+      );
+      const poolEntries = await Promise.all(
+        distinctBUs.map(
+          async (bu) =>
+            [bu, (await this.businessUnitContext.poolFor(bu)) ?? 'medical'] as [
+              string,
+              CandidatePool,
+            ],
+        ),
+      );
+      const poolMap = new Map(poolEntries);
+
       // Preserve the order the panel stores them in.
       const byId = new Map(candidates.map((c) => [c.id, c]));
 
@@ -2678,7 +2699,11 @@ ${getEmailLogoCss()}
           // Rates first: computeCandidateRates reads the RAW employment_type and
           // unlabelled positions, so normalizing either one before this point
           // yields silently wrong billing.
-          const rates = computeCandidateRates(candidate, configMap);
+          const rates = computeCandidateRates(
+            candidate,
+            configMap,
+            poolMap.get(candidate.business_unit ?? '') ?? 'medical',
+          );
 
           return {
             id: candidate.id,

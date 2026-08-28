@@ -8,6 +8,7 @@ import { EmailTemplatesModule } from '../email-templates/email-templates.module'
 // imports this one and would be circular) so the offer-panel email can compute
 // candidate bill rates for its cards.
 import { PositionRateConfigModule } from '../position-rate-config/position-rate-config.module';
+import { BusinessUnitsModule } from '../business-units/business-units.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PositionRateConfigModule } from '../position-rate-config/position-rate-
     PrismaModule,
     EmailTemplatesModule,
     PositionRateConfigModule,
+    BusinessUnitsModule,
   ],
   controllers: [NotificationsController],
   providers: [NotificationsService],

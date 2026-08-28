@@ -9,7 +9,9 @@ import {
 import {
   buildConfigMap,
   computeCandidateRates,
+  CandidatePool,
 } from '../common/utils/salary.util';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { changeLabelAvailability } from '../common/utils/hubspot.util';
 import { getApprovedPositionLabel } from '../common/dictionaries/approved-positions-pairing-dictionary';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
@@ -96,7 +98,36 @@ export class PanelService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly positionRateConfigService: PositionRateConfigService,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {}
+
+  /**
+   * Resolves the `candidate_pool` for every distinct `business_unit` present in
+   * `candidates`, in one batch — so a subsequent synchronous `.map()` calling
+   * `computeCandidateRates` can look pools up without ever `await`-ing inside
+   * the loop. Unknown/missing business units fall back to `'medical'`.
+   */
+  private async buildCandidatePoolMap(
+    candidates: { business_unit: string | null }[],
+  ): Promise<Map<string, CandidatePool>> {
+    const distinctBUs = Array.from(
+      new Set(
+        candidates
+          .map((c) => c.business_unit)
+          .filter((bu): bu is string => !!bu),
+      ),
+    );
+    const entries = await Promise.all(
+      distinctBUs.map(
+        async (bu) =>
+          [bu, (await this.businessUnitContext.poolFor(bu)) ?? 'medical'] as [
+            string,
+            CandidatePool,
+          ],
+      ),
+    );
+    return new Map(entries);
+  }
 
   /**
    * PanelCandidate has no field recording who moved it to `selected_by_client` — the
@@ -510,9 +541,16 @@ export class PanelService {
     const positionConfigs =
       await this.positionRateConfigService.findAllUnpaginated();
     const configByPosition = buildConfigMap(positionConfigs);
+    const candidatePoolMap = await this.buildCandidatePoolMap(
+      failedResumeParsing,
+    );
 
     const failedResume = failedResumeParsing.map((candidate) => {
-      const rates = computeCandidateRates(candidate, configByPosition);
+      const rates = computeCandidateRates(
+        candidate,
+        configByPosition,
+        candidatePoolMap.get(candidate.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...candidate,
         employment_type:
@@ -552,8 +590,14 @@ export class PanelService {
       select: selectCandidates,
     });
 
+    const withoutHeadshotPoolMap =
+      await this.buildCandidatePoolMap(withoutHeadshot);
     const CandwithoutHeadshot = withoutHeadshot.map((candidate) => {
-      const rates = computeCandidateRates(candidate, configByPosition);
+      const rates = computeCandidateRates(
+        candidate,
+        configByPosition,
+        withoutHeadshotPoolMap.get(candidate.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...candidate,
         employment_type:
@@ -872,8 +916,16 @@ export class PanelService {
       select: selectCandidates,
     });
 
+    const candidatesWithInterviewsPoolMap = await this.buildCandidatePoolMap(
+      candidatesWithInterviews,
+    );
     const processed = candidatesWithInterviews.map((candidate) => {
-      const rates = computeCandidateRates(candidate, configByPosition);
+      const rates = computeCandidateRates(
+        candidate,
+        configByPosition,
+        candidatesWithInterviewsPoolMap.get(candidate.business_unit ?? '') ??
+          'medical',
+      );
       return {
         ...candidate,
         employment_type:

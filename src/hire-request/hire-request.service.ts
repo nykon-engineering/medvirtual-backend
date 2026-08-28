@@ -35,8 +35,10 @@ import {
   buildConfigMap,
   computeCandidateRates,
   findHourlyPerRate,
+  CandidatePool,
 } from '../common/utils/salary.util';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 import { OfferPanelsService } from '../offer-panels/offer-panels.service';
 import {
   changeLabelAvailability,
@@ -68,8 +70,37 @@ export class HireRequestService {
     private readonly candidateAudit: CandidateAuditService,
     private readonly configService: ConfigService,
     @Inject('REDIS_CLIENT') private readonly redisClient: redis.RedisClientType,
+    private readonly businessUnitContext: BusinessUnitContext,
   ) {
     this.keyPrefix = keyPrefix(this.configService);
+  }
+
+  /**
+   * Resolves the `candidate_pool` for every distinct `business_unit` present in
+   * `candidates`, in one batch — so a subsequent synchronous `.map()` calling
+   * `computeCandidateRates` can look pools up without ever `await`-ing inside
+   * the loop. Unknown/missing business units fall back to `'medical'`.
+   */
+  private async buildCandidatePoolMap(
+    candidates: { business_unit: string | null }[],
+  ): Promise<Map<string, CandidatePool>> {
+    const distinctBUs = Array.from(
+      new Set(
+        candidates
+          .map((c) => c.business_unit)
+          .filter((bu): bu is string => !!bu),
+      ),
+    );
+    const entries = await Promise.all(
+      distinctBUs.map(
+        async (bu) =>
+          [bu, (await this.businessUnitContext.poolFor(bu)) ?? 'medical'] as [
+            string,
+            CandidatePool,
+          ],
+      ),
+    );
+    return new Map(entries);
   }
 
   /** Redis-like getter using actual Redis client (mirrors HubstaffService). */
@@ -899,6 +930,13 @@ export class HireRequestService {
 
     const _pCfgs_A = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_A = buildConfigMap(_pCfgs_A);
+    const _poolMap_A = await this.buildCandidatePoolMap(
+      hireRequests.flatMap((hr) =>
+        hr.panels.flatMap((panel) =>
+          panel.panelCandidates.map((pc) => pc.candidate),
+        ),
+      ),
+    );
 
     const isOrgUser = user.role.includes('organization');
     const crossPanelMap = await this.buildCrossPanelSelectedMap();
@@ -948,7 +986,11 @@ export class HireRequestService {
               return true;
             })
             .map((pc) => {
-              const rates_A = computeCandidateRates(pc.candidate, _cfgMap_A);
+              const rates_A = computeCandidateRates(
+                pc.candidate,
+                _cfgMap_A,
+                _poolMap_A.get(pc.candidate.business_unit ?? '') ?? 'medical',
+              );
               return {
                 ...pc,
                 candidate: {
@@ -1204,6 +1246,11 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const _pCfgs_B = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_B = buildConfigMap(_pCfgs_B);
+    const _poolMap_B = await this.buildCandidatePoolMap(
+      (hireRequest.panels ?? []).flatMap((panel) =>
+        panel.panelCandidates.map((pc) => pc.candidate as any),
+      ),
+    );
 
     const formatted = {
       ...hireRequest,
@@ -1223,7 +1270,11 @@ export class HireRequestService {
           const years_of_experience = startDate
             ? new Date().getFullYear() - new Date(startDate).getFullYear()
             : 0;
-          const rates_B = computeCandidateRates(pc.candidate as any, _cfgMap_B);
+          const rates_B = computeCandidateRates(
+            pc.candidate as any,
+            _cfgMap_B,
+            _poolMap_B.get(pc.candidate.business_unit ?? '') ?? 'medical',
+          );
           return {
             ...pc,
             candidate: {
@@ -1463,6 +1514,13 @@ export class HireRequestService {
 
     const _pCfgs_C = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_C = buildConfigMap(_pCfgs_C);
+    const _poolMap_C = await this.buildCandidatePoolMap(
+      hireRequests.flatMap((hr) =>
+        hr.panels.flatMap((panel) =>
+          panel.panelCandidates.map((pc) => pc.candidate),
+        ),
+      ),
+    );
 
     const formatted = await Promise.all(
       hireRequests.map(async (hr) => ({
@@ -1478,7 +1536,11 @@ export class HireRequestService {
           interview_link: panel.interviews[0]?.link || null,
           interviews: undefined,
           panelCandidates: panel.panelCandidates.map((pc) => {
-            const rates_C = computeCandidateRates(pc.candidate, _cfgMap_C);
+            const rates_C = computeCandidateRates(
+              pc.candidate,
+              _cfgMap_C,
+              _poolMap_C.get(pc.candidate.business_unit ?? '') ?? 'medical',
+            );
             return {
               ...pc,
               candidate: {
@@ -2986,9 +3048,14 @@ export class HireRequestService {
     //Add salary with automatic calculation
     const _pCfgs_D = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_D = buildConfigMap(_pCfgs_D);
+    const _poolMap_D = await this.buildCandidatePoolMap(scoredCandidates);
 
     const candidatesWithSalary = scoredCandidates.map((c) => {
-      const rates_D = computeCandidateRates(c, _cfgMap_D);
+      const rates_D = computeCandidateRates(
+        c,
+        _cfgMap_D,
+        _poolMap_D.get(c.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...c,
         ...rates_D,
@@ -3609,6 +3676,9 @@ export class HireRequestService {
 
     const _pCfgs_E = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_E = buildConfigMap(_pCfgs_E);
+    const _poolMap_E = await this.buildCandidatePoolMap(
+      panels.flatMap((panel) => panel.panelCandidates.map((pc) => pc.candidate)),
+    );
 
     const candidateSelectedInPanels = await this.buildCrossPanelSelectedMap();
 
@@ -3634,7 +3704,11 @@ export class HireRequestService {
           return true;
         })
         .map((pc) => {
-          const rates_E = computeCandidateRates(pc.candidate, _cfgMap_E);
+          const rates_E = computeCandidateRates(
+            pc.candidate,
+            _cfgMap_E,
+            _poolMap_E.get(pc.candidate.business_unit ?? '') ?? 'medical',
+          );
           return {
             ...pc,
             candidate: {
@@ -4598,6 +4672,9 @@ export class HireRequestService {
 
     const _pCfgs_F = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_F = buildConfigMap(_pCfgs_F);
+    const _poolMap_F = await this.buildCandidatePoolMap(
+      panels.flatMap((panel) => panel.panelCandidates.map((pc) => pc.candidate)),
+    );
 
     const result = panels.map((panel) => ({
       ...panel,
@@ -4606,7 +4683,11 @@ export class HireRequestService {
         const years_of_experience = startDate
           ? new Date().getFullYear() - new Date(startDate).getFullYear()
           : 0;
-        const rates_F = computeCandidateRates(pc.candidate, _cfgMap_F);
+        const rates_F = computeCandidateRates(
+          pc.candidate,
+          _cfgMap_F,
+          _poolMap_F.get(pc.candidate.business_unit ?? '') ?? 'medical',
+        );
         return {
           ...pc,
           candidate: {
@@ -4834,9 +4915,16 @@ export class HireRequestService {
 
     const _pCfgs_G = await this.positionRateConfigService.findAllUnpaginated();
     const _cfgMap_G = buildConfigMap(_pCfgs_G);
+    const _poolMap_G = await this.buildCandidatePoolMap(
+      availableCandidates.map((pc) => pc.candidate),
+    );
 
     const mappedCandidates = availableCandidates.map((pc) => {
-      const rates_G = computeCandidateRates(pc.candidate, _cfgMap_G);
+      const rates_G = computeCandidateRates(
+        pc.candidate,
+        _cfgMap_G,
+        _poolMap_G.get(pc.candidate.business_unit ?? '') ?? 'medical',
+      );
       return {
         ...pc.candidate,
         panelStatus: pc.status,

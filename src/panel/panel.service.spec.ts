@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PanelService } from './panel.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PositionRateConfigService } from '../position-rate-config/position-rate-config.service';
+import { BusinessUnitContext } from '../business-units/business-unit-context.service';
 
 describe('PanelService', () => {
   let service: PanelService;
@@ -50,6 +51,10 @@ describe('PanelService', () => {
       findAllUnpaginated: jest.fn().mockResolvedValue([]),
     };
 
+    const businessUnitContextMock = {
+      poolFor: jest.fn().mockResolvedValue('medical'),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PanelService,
@@ -60,6 +65,10 @@ describe('PanelService', () => {
         {
           provide: PositionRateConfigService,
           useValue: positionRateConfigMock,
+        },
+        {
+          provide: BusinessUnitContext,
+          useValue: businessUnitContextMock,
         },
       ],
     }).compile();
