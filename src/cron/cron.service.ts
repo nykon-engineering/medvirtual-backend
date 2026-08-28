@@ -1520,18 +1520,24 @@ export class CronService {
       }
 
       const createdMs = panel.createdAt.getTime();
+      // recipient_org_name is null for recipient_type 'email' and often for
+      // client_user panels, so fall through to the contact then the address.
+      const recipientLabel =
+        panel.recipient_org_name ||
+        panel.recipientCompany?.name ||
+        panel.recipient_name ||
+        panel.recipient_email ||
+        '—';
       const row: OfferPanelReportRow = {
         panelId: panel.id,
         title: panel.title,
-        // recipient_org_name is null for recipient_type 'email' and often for
-        // client_user panels, so fall through to the contact then the address.
-        recipientLabel:
-          panel.recipient_org_name ||
-          panel.recipientCompany?.name ||
-          panel.recipient_name ||
-          panel.recipient_email ||
-          '—',
-        recipientSub: panel.recipient_email ?? '',
+        recipientLabel,
+        // Omit the sub-line when the label already is the email address,
+        // otherwise the recipient cell shows the same email twice.
+        recipientSub:
+          recipientLabel === panel.recipient_email
+            ? ''
+            : (panel.recipient_email ?? ''),
         businessUnit: panel.business_unit ?? '—',
         status: panel.status,
         isPublic: panel.is_public,
