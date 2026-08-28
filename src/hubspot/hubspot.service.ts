@@ -279,7 +279,6 @@ export class HubspotService {
   }
 
   async changeDataFromHubspot(data: any): Promise<any> {
-    console.log('Received data:', data);
 
     const expectedAppId = Number(process.env.HUBSPOT_APP_ID);
     if (expectedAppId && data[0]?.appId != expectedAppId) {

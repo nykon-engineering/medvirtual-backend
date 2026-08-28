@@ -129,6 +129,7 @@ export class HubstaffService implements OnModuleInit {
       return this.refreshQueues[rotation].schedule(async () => {
         // Check cache *again* after waiting in the two queues
         const cachedInside = await this.redisGet(key);
+        console.log(cachedInside)
         if (cachedInside && cachedInside !== "__RATE_LIMIT__") {
           return cachedInside;
         }
@@ -156,6 +157,7 @@ export class HubstaffService implements OnModuleInit {
 
           const { access_token, expires_in } = res.data;
           await this.redisSet(key, access_token, { EX: expires_in });
+          console.log(access_token)
           return access_token;
         } catch (err: any) {
           const errorData = err.response?.data;
