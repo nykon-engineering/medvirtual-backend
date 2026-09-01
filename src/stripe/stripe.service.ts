@@ -734,17 +734,33 @@ export class StripeService implements OnModuleInit {
     );
   }
 
-  /** Lists Stripe customers for the admin UI's "link existing customer" picker. */
-  public async listCustomers() {
+  /** Lists Stripe customers for the admin UI's "link existing customer" picker.
+   * Without `search`, returns the 100 most recent customers (fast, no extra
+   * round-trip). With `search`, uses Stripe's Search API instead of List so
+   * customers outside that first page can still be found by name/email. */
+  public async listCustomers(search?: string) {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
     }
-    const response = await this.stripe.customers.list({ limit: 100 });
+    const trimmed = search?.trim();
+    const response = trimmed
+      ? await this.stripe.customers.search({
+          query: this.buildCustomerSearchQuery(trimmed),
+          limit: 100,
+        })
+      : await this.stripe.customers.list({ limit: 100 });
     return response.data.map((c) => ({
       id: c.id,
       name: c.name || (c as any).description || c.email || 'Unnamed Customer',
       email: c.email || '',
     }));
+  }
+
+  /** Escapes single quotes so the search term can't break out of the Stripe
+   * Search Query Language string literal it's interpolated into. */
+  private buildCustomerSearchQuery(term: string): string {
+    const escaped = term.replace(/'/g, "\\'");
+    return `name~'${escaped}' OR email~'${escaped}'`;
   }
 
   /** Creates a new Stripe customer — used when linking an org to Stripe for the first
