@@ -137,7 +137,6 @@ export class HubstaffService implements OnModuleInit {
         const secrets = await this.secretsService.getAllSecrets();
         const hubstaffKeys = secrets.hubstaff;
         const refreshToken = hubstaffKeys[`key0${rotation}` as keyof typeof hubstaffKeys];
-
         if (!refreshToken) {
           console.warn(`[Hubstaff] ⚠️ Refresh token for rotation ${rotation} not found in secrets.`);
           return null;
