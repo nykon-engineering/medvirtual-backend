@@ -1140,6 +1140,7 @@ export class StripeService implements OnModuleInit {
       amountCents: number;
       description: string;
       type: 'LINE_ITEM';
+      discountCents?: number;
     }>
   > {
     const result: Array<{
@@ -1147,25 +1148,35 @@ export class StripeService implements OnModuleInit {
       amountCents: number;
       description: string;
       type: 'LINE_ITEM';
+      discountCents?: number;
     }> = [];
 
     const lineItems = invoice.currentVersion?.line_items || [];
 
     for (const item of lineItems) {
-      const amount = Number(item.final_total || 0);
-      if (Math.round(amount * 100) === 0) {
+      const finalTotal = Number(item.final_total || 0);
+      const adjustmentAmount = Number(item.adjustment_amount || 0);
+      const isDiscount = adjustmentAmount < 0;
+
+      // When the line carries a real discount, Stripe must see the GROSS amount and
+      // apply the discount itself via a coupon — otherwise the discount would be
+      // subtracted twice (once in our own final_total, again by Stripe).
+      const grossAmount = isDiscount ? finalTotal - adjustmentAmount : finalTotal;
+
+      if (Math.round(grossAmount * 100) === 0) {
         continue;
       }
 
       result.push({
         internalItemId: `${invoice.reference}:${item.id}`,
-        amountCents: Math.round(amount * 100),
+        amountCents: Math.round(grossAmount * 100),
         description: this.stripHtml(item.description || 'Line Item'),
         type: 'LINE_ITEM',
+        ...(isDiscount && {
+          discountCents: Math.round(Math.abs(adjustmentAmount) * 100),
+        }),
       });
     }
-
-    const version = invoice.currentVersion;
 
     return result;
   }
@@ -1218,6 +1229,31 @@ export class StripeService implements OnModuleInit {
         continue;
       }
 
+      // A negative per-line adjustment becomes its own single-use Stripe coupon,
+      // attached directly to this invoice item — Stripe then renders it as a
+      // discount sub-line under this specific item (applied before any
+      // whole-invoice discount, which is handled separately in
+      // createStripeInvoiceOnly). idempotencyKey is tied to our own
+      // internalItemId so a retry reuses the same coupon instead of minting a
+      // new (orphaned) one each time.
+      const discounts: Array<{ coupon: string }> = [];
+      if (item.discountCents && item.discountCents > 0) {
+        const coupon = await this.safeStripeCall(() =>
+          this.stripe.coupons.create(
+            {
+              amount_off: item.discountCents,
+              currency: 'usd',
+              duration: 'once',
+              name: `Line discount - ${item.description}`,
+            },
+            {
+              idempotencyKey: `line-discount-coupon-${invoice.reference}-${item.internalItemId}`,
+            },
+          ),
+        );
+        discounts.push({ coupon: coupon.id });
+      }
+
       await this.safeStripeCall(() =>
         this.stripe.invoiceItems.create(
           {
@@ -1226,6 +1262,7 @@ export class StripeService implements OnModuleInit {
             currency: 'usd',
             amount: item.amountCents,
             description: item.description,
+            ...(discounts.length > 0 && { discounts }),
             metadata: {
               internal_item_id: item.internalItemId,
               type: item.type,
