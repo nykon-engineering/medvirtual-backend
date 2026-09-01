@@ -734,17 +734,33 @@ export class StripeService implements OnModuleInit {
     );
   }
 
-  /** Lists Stripe customers for the admin UI's "link existing customer" picker. */
-  public async listCustomers() {
+  /** Lists Stripe customers for the admin UI's "link existing customer" picker.
+   * Without `search`, returns the 100 most recent customers (fast, no extra
+   * round-trip). With `search`, uses Stripe's Search API instead of List so
+   * customers outside that first page can still be found by name/email. */
+  public async listCustomers(search?: string) {
     if (!this.stripe) {
       throw new BadRequestException('Stripe is not initialized');
     }
-    const response = await this.stripe.customers.list({ limit: 100 });
+    const trimmed = search?.trim();
+    const response = trimmed
+      ? await this.stripe.customers.search({
+          query: this.buildCustomerSearchQuery(trimmed),
+          limit: 100,
+        })
+      : await this.stripe.customers.list({ limit: 100 });
     return response.data.map((c) => ({
       id: c.id,
       name: c.name || (c as any).description || c.email || 'Unnamed Customer',
       email: c.email || '',
     }));
+  }
+
+  /** Escapes single quotes so the search term can't break out of the Stripe
+   * Search Query Language string literal it's interpolated into. */
+  private buildCustomerSearchQuery(term: string): string {
+    const escaped = term.replace(/'/g, "\\'");
+    return `name~'${escaped}' OR email~'${escaped}'`;
   }
 
   /** Creates a new Stripe customer — used when linking an org to Stripe for the first
@@ -1124,6 +1140,7 @@ export class StripeService implements OnModuleInit {
       amountCents: number;
       description: string;
       type: 'LINE_ITEM';
+      discountCents?: number;
     }>
   > {
     const result: Array<{
@@ -1131,25 +1148,35 @@ export class StripeService implements OnModuleInit {
       amountCents: number;
       description: string;
       type: 'LINE_ITEM';
+      discountCents?: number;
     }> = [];
 
     const lineItems = invoice.currentVersion?.line_items || [];
 
     for (const item of lineItems) {
-      const amount = Number(item.final_total || 0);
-      if (Math.round(amount * 100) === 0) {
+      const finalTotal = Number(item.final_total || 0);
+      const adjustmentAmount = Number(item.adjustment_amount || 0);
+      const isDiscount = adjustmentAmount < 0;
+
+      // When the line carries a real discount, Stripe must see the GROSS amount and
+      // apply the discount itself via a coupon — otherwise the discount would be
+      // subtracted twice (once in our own final_total, again by Stripe).
+      const grossAmount = isDiscount ? finalTotal - adjustmentAmount : finalTotal;
+
+      if (Math.round(grossAmount * 100) === 0) {
         continue;
       }
 
       result.push({
         internalItemId: `${invoice.reference}:${item.id}`,
-        amountCents: Math.round(amount * 100),
+        amountCents: Math.round(grossAmount * 100),
         description: this.stripHtml(item.description || 'Line Item'),
         type: 'LINE_ITEM',
+        ...(isDiscount && {
+          discountCents: Math.round(Math.abs(adjustmentAmount) * 100),
+        }),
       });
     }
-
-    const version = invoice.currentVersion;
 
     return result;
   }
@@ -1202,6 +1229,31 @@ export class StripeService implements OnModuleInit {
         continue;
       }
 
+      // A negative per-line adjustment becomes its own single-use Stripe coupon,
+      // attached directly to this invoice item — Stripe then renders it as a
+      // discount sub-line under this specific item (applied before any
+      // whole-invoice discount, which is handled separately in
+      // createStripeInvoiceOnly). idempotencyKey is tied to our own
+      // internalItemId so a retry reuses the same coupon instead of minting a
+      // new (orphaned) one each time.
+      const discounts: Array<{ coupon: string }> = [];
+      if (item.discountCents && item.discountCents > 0) {
+        const coupon = await this.safeStripeCall(() =>
+          this.stripe.coupons.create(
+            {
+              amount_off: item.discountCents,
+              currency: 'usd',
+              duration: 'once',
+              name: `Line discount - ${item.description}`,
+            },
+            {
+              idempotencyKey: `line-discount-coupon-${invoice.reference}-${item.internalItemId}`,
+            },
+          ),
+        );
+        discounts.push({ coupon: coupon.id });
+      }
+
       await this.safeStripeCall(() =>
         this.stripe.invoiceItems.create(
           {
@@ -1210,6 +1262,7 @@ export class StripeService implements OnModuleInit {
             currency: 'usd',
             amount: item.amountCents,
             description: item.description,
+            ...(discounts.length > 0 && { discounts }),
             metadata: {
               internal_item_id: item.internalItemId,
               type: item.type,
@@ -1345,6 +1398,38 @@ export class StripeService implements OnModuleInit {
       this.stripe.invoices.retrieve(stripeInvoiceId),
     );
     return { url: invoice.hosted_invoice_url || null };
+  }
+
+  /** Name + email of the org's Stripe customer record, for display on the invoice's
+   * "Billed to" card (the account Stripe actually bills/emails, which can differ from
+   * the organization's own contact info). */
+  public async getBillingContact(organizationId: string) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not initialized');
+    }
+
+    const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
+      where: { organization_id: organizationId },
+    });
+
+    if (!invoiceConfig || !invoiceConfig.stripe_customer_id) {
+      throw new BadRequestException(
+        'Stripe customer ID not found for this organization',
+      );
+    }
+
+    const customer = await this.safeStripeCall(() =>
+      this.stripe.customers.retrieve(invoiceConfig.stripe_customer_id as string),
+    );
+
+    if (customer.deleted) {
+      throw new BadRequestException('Stripe customer has been deleted');
+    }
+
+    return {
+      name: customer.name || null,
+      email: customer.email || null,
+    };
   }
 
   /** Lists an org's saved Stripe payment methods for the billing portal, flagging which
