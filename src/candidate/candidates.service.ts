@@ -174,6 +174,17 @@ const CORE_SKILLS_FIELDS = new Set([
   'upsell__crosssell',
   'account_onboarding',
   'issue_resolution',
+  // Medical/Dental Core Skills (Biller) — non-rating fields. HubSpot types
+  // these as booleancheckbox/select/number rather than a 0-10 rating, but the
+  // filter mechanism is identical (exact string equality), so they share this
+  // Set. `notes_*` fields are the only Core Skills properties intentionally
+  // excluded from filtering (free text). See docs/hubspot-core-skills-fields.md.
+  'n2_years_healthcare_billing_experience',
+  'total_years_on_healthcare_billing_experience',
+  'patient_phone_communication',
+  'role_type',
+  'insurance_verification_knowledge',
+  'prior_authorizations_experience',
 ]);
 
 // All ~92 Core Skills properties synced from HubSpot (superset of
