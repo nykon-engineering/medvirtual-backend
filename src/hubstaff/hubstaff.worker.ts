@@ -5,6 +5,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Logger } from '@nestjs/common';
 import { HubspotService } from '../hubspot/hubspot.service';
 
+/**
+ * The only fields this sync reads off a HubSpot candidate: `vaid` to match against
+ * the Hubstaff profile and `hs_object_id` to find our local Candidate row. Fetching
+ * the full candidate dictionary here would pull ~54 properties per record and throw
+ * all but two away.
+ */
+const IDENTITY_PROPERTIES = ['vaid', 'hs_object_id'];
+
 @Processor('hubstaff-sync')
 export class HubstaffWorker extends WorkerHost {
   private readonly logger = new Logger(HubstaffWorker.name);
@@ -56,7 +64,10 @@ export class HubstaffWorker extends WorkerHost {
       }
 
       this.logger.log('📡 Fetching matched candidates from HubSpot...');
-      const hubspotResult = await this.hubspotService.fetchPropertiesAndCandidates(vaIds);
+      const hubspotResult = await this.hubspotService.fetchPropertiesAndCandidates(
+        vaIds,
+        IDENTITY_PROPERTIES,
+      );
       this.logger.log(`HubSpot candidates fetched: ${hubspotResult.candidates.length}`);
 
       let updateCount = 0;
