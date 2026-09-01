@@ -1871,10 +1871,12 @@ enum BillingMode {
 
 // How often a new billing cycle (and therefore a new Invoice) is generated for an org.
 // custom = cycle boundaries are set manually per-invoice rather than on a fixed cadence.
+
 enum BillingFrequency {
   weekly
   biweekly
   monthly
+  bimonthly
   custom
 }
 
