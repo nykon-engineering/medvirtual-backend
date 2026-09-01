@@ -48,6 +48,15 @@ export class StripeController {
     return { success: true };
   }
 
+  @Get('stripe/organizations/:organizationId/billing-contact')
+  @UseGuards(AuthGuard)
+  async getBillingContact(@Param('organizationId') organizationId: string) {
+    if (!organizationId) {
+      throw new BadRequestException('Organization ID is required');
+    }
+    return this.stripeService.getBillingContact(organizationId);
+  }
+
   @Get('stripe/organizations/:organizationId/payment-methods')
   @UseGuards(AuthGuard)
   async getCustomerPaymentMethods(@Param('organizationId') organizationId: string) {

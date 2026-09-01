@@ -924,6 +924,19 @@ export class InvoiceService {
         { timeout: 40000 },
       );
 
+      // The "Billed to" card also fires a client-side call for the org's Stripe billing
+      // contact once the invoice loads. Wait for it too so the PDF doesn't get captured
+      // mid-fetch — but don't hard-fail PDF generation if the org has no Stripe customer
+      // linked (that call 400s and is simply skipped by the frontend).
+      await page
+        .waitForResponse(
+          (response) =>
+            response.url().includes('/billing-contact') &&
+            (response.status() === 200 || response.status() === 400),
+          { timeout: 10000 },
+        )
+        .catch(() => {});
+
       const divSelector = ".invoice-template";
 
       // Print-specific CSS injected at render time (not baked into the frontend's own

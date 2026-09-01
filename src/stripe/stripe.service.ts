@@ -1400,6 +1400,38 @@ export class StripeService implements OnModuleInit {
     return { url: invoice.hosted_invoice_url || null };
   }
 
+  /** Name + email of the org's Stripe customer record, for display on the invoice's
+   * "Billed to" card (the account Stripe actually bills/emails, which can differ from
+   * the organization's own contact info). */
+  public async getBillingContact(organizationId: string) {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe is not initialized');
+    }
+
+    const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
+      where: { organization_id: organizationId },
+    });
+
+    if (!invoiceConfig || !invoiceConfig.stripe_customer_id) {
+      throw new BadRequestException(
+        'Stripe customer ID not found for this organization',
+      );
+    }
+
+    const customer = await this.safeStripeCall(() =>
+      this.stripe.customers.retrieve(invoiceConfig.stripe_customer_id as string),
+    );
+
+    if (customer.deleted) {
+      throw new BadRequestException('Stripe customer has been deleted');
+    }
+
+    return {
+      name: customer.name || null,
+      email: customer.email || null,
+    };
+  }
+
   /** Lists an org's saved Stripe payment methods for the billing portal, flagging which
    * one is the customer's default (used for automatic collection — see payInvoice). */
   public async getCustomerPaymentMethods(organizationId: string) {
