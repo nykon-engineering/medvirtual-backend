@@ -1347,6 +1347,45 @@ export class StripeService implements OnModuleInit {
     return { url: invoice.hosted_invoice_url || null };
   }
 
+  /**
+   * Retrieves the Stripe customer linked to an organization, or null.
+   *
+   * Deliberately non-throwing, unlike the other methods here: this is meant to
+   * decorate a response that must still succeed when Stripe cannot answer. It
+   * returns null — rather than raising — when Stripe is unconfigured, when the
+   * org has no invoice configuration, when no stripe_customer_id is assigned
+   * yet, when the customer was deleted on Stripe's side, or when the API call
+   * itself fails. Callers that require a customer should keep using the
+   * throwing paths (e.g. getCustomerPaymentMethods).
+   */
+  public async findCustomerForOrganization(organizationId: string) {
+    if (!this.stripe) return null;
+
+    const invoiceConfig = await this.prisma.invoiceConfiguration.findUnique({
+      where: { organization_id: organizationId },
+      select: { stripe_customer_id: true },
+    });
+
+    const stripeCustomerId = invoiceConfig?.stripe_customer_id;
+    if (!stripeCustomerId) return null;
+
+    try {
+      const customer = await this.safeStripeCall(() =>
+        this.stripe.customers.retrieve(stripeCustomerId),
+      );
+      // A customer deleted in Stripe still resolves, as a stub with deleted:true
+      // and none of the fields a caller would want.
+      return customer.deleted ? null : customer;
+    } catch (err) {
+      this.logger.warn(
+        `Could not retrieve Stripe customer ${stripeCustomerId} for org ${organizationId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }
+  }
+
   /** Lists an org's saved Stripe payment methods for the billing portal, flagging which
    * one is the customer's default (used for automatic collection — see payInvoice). */
   public async getCustomerPaymentMethods(organizationId: string) {
