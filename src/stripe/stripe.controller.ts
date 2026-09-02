@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Headers, BadRequestException, Get, UseGuards, Body, Param, Put, Delete } from '@nestjs/common';
+import { Controller, Post, Req, Headers, BadRequestException, Get, UseGuards, Body, Param, Put, Delete, Query } from '@nestjs/common';
 import { Request } from 'express';
 import { StripeService } from './stripe.service';
 import { AuthGuard } from '../auth/auth.guard';
@@ -12,8 +12,8 @@ export class StripeController {
   @Get('stripe/customers')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('system_super_admin', 'system_admin')
-  async listCustomers() {
-    return this.stripeService.listCustomers();
+  async listCustomers(@Query('search') search?: string) {
+    return this.stripeService.listCustomers(search);
   }
 
   @Post('stripe/customers')
@@ -46,6 +46,15 @@ export class StripeController {
     }
     await this.stripeService.payInvoice(id, paymentMethodId);
     return { success: true };
+  }
+
+  @Get('stripe/organizations/:organizationId/billing-contact')
+  @UseGuards(AuthGuard)
+  async getBillingContact(@Param('organizationId') organizationId: string) {
+    if (!organizationId) {
+      throw new BadRequestException('Organization ID is required');
+    }
+    return this.stripeService.getBillingContact(organizationId);
   }
 
   @Get('stripe/organizations/:organizationId/payment-methods')
