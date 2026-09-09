@@ -30,6 +30,9 @@ describe('InvoiceWorker', () => {
       invoiceLineItem: {
         create: jest.fn().mockResolvedValue({ id: 'line_item_id' }),
       },
+      invoiceAuditLog: {
+        create: jest.fn().mockResolvedValue({ id: 'audit_log_id' }),
+      },
       billingLedgerEntry: {
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -276,6 +279,56 @@ describe('InvoiceWorker', () => {
       // floor (18) + margin (2) = $20/hr — not the old hardcoded $12/hr fallback.
       expect(primaryLineCall[0].data.hourly_rate.toNumber()).toBe(20);
       expect(primaryLineCall[0].data.hourly_rate.toNumber()).not.toBe(12);
+    });
+
+    it('creates an invoice_created audit log entry when generating an invoice', async () => {
+      const payload = {
+        organization_id: 'org_id',
+        billing_start_date: '2026-06-16',
+        billing_end_date: '2026-06-30',
+        is_prebill: true,
+        created_by: 'user_123',
+      };
+
+      await (worker as any).generateInvoiceRecord(org, payload);
+
+      expect(prismaMock.invoiceAuditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          invoice_id: 'invoice_id',
+          invoice_version_id: 'version_id',
+          actor_id: 'user_123',
+          event: 'invoice_created',
+          new_value: expect.objectContaining({
+            status: 'draft',
+            is_custom: false,
+          }),
+        }),
+      });
+    });
+
+    it('creates an invoice_created audit log entry for custom invoices', async () => {
+      const payload = {
+        organization_id: 'org_id',
+        billing_start_date: '2026-06-16',
+        billing_end_date: '2026-06-30',
+        isCustom: true,
+        created_by: 'user_456',
+      };
+
+      await (worker as any).generateInvoiceRecord(org, payload);
+
+      expect(prismaMock.invoiceAuditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          invoice_id: 'invoice_id',
+          invoice_version_id: 'version_id',
+          actor_id: 'user_456',
+          event: 'invoice_created',
+          new_value: expect.objectContaining({
+            status: 'draft',
+            is_custom: true,
+          }),
+        }),
+      });
     });
   });
 });

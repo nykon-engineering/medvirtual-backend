@@ -323,6 +323,21 @@ export class InvoiceWorker extends WorkerHost {
           data: { current_version_id: version.id },
         });
 
+        // 4. Create Audit Log
+        await tx.invoiceAuditLog.create({
+          data: {
+            invoice_id: invoice.id,
+            invoice_version_id: version.id,
+            actor_id: created_by,
+            event: 'invoice_created',
+            new_value: {
+              status: InvoiceStatus.draft,
+              is_custom: true,
+              is_prebill: is_prebill || false,
+            },
+          },
+        });
+
         return invoice;
       });
     }
@@ -956,6 +971,21 @@ export class InvoiceWorker extends WorkerHost {
       await tx.invoice.update({
         where: { id: invoice.id },
         data: { current_version_id: version.id },
+      });
+
+      // 7. Create Audit Log
+      await tx.invoiceAuditLog.create({
+        data: {
+          invoice_id: invoice.id,
+          invoice_version_id: version.id,
+          actor_id: created_by,
+          event: 'invoice_created',
+          new_value: {
+            status: InvoiceStatus.draft,
+            is_custom: false,
+            is_prebill: is_prebill || false,
+          },
+        },
       });
 
       return invoice;
