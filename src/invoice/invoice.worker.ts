@@ -42,6 +42,7 @@ import {
 @Injectable()
 export class InvoiceWorker extends WorkerHost {
   private readonly logger = new Logger(InvoiceWorker.name);
+  private readonly excludedHubstaffUserIds = new Set([3020409, 1954999, 2548488]);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -396,7 +397,10 @@ export class InvoiceWorker extends WorkerHost {
     // Fetch project members to get names for snapshots — worker_name_snapshot on each
     // line item is populated from this map so historical invoices keep showing the
     // worker's name as of generation time even if they're later renamed in Hubstaff.
-    const members = await this.hubstaff.getProjectMembers(hubstaffId);
+    const members = (await this.hubstaff.getProjectMembers(hubstaffId)).filter(
+      (member: any) =>
+        !this.excludedHubstaffUserIds.has(Number(member.user_id)),
+    );
 
     const memberMap = new Map<number, string>();
     members.forEach((m: any) => {
