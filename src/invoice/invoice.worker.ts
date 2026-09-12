@@ -431,43 +431,43 @@ export class InvoiceWorker extends WorkerHost {
     const staffRecords =
       hubstaffUserIds.length > 0
         ? await this.prisma.staff.findMany({
-            where: {
-              candidate: {
-                hubstaff_id: {
-                  in: hubstaffUserIds,
-                },
-              },
-              OR: [
-                { organization_id: organization_id },
-                ...(org.hubspot_id
-                  ? [{ hubspot_organization_id: org.hubspot_id }]
-                  : []),
-              ],
-            },
-            include: {
-              candidate: {
-                include: {
-                  // Needed by computeCandidateRates (via fallbackHourlyRate) to pick the
-                  // bilingual vs. english floor price when a worker has no salary/hourly_pay_rate.
-                  languages: true,
-                },
-              },
-              tickets: {
-                where: {
-                  type: {
-                    equals: 'bonus',
-                    mode: 'insensitive',
-                  },
-                  org_id: organization_id,
-                  status: 'resolved',
-                  createdAt: {
-                    gte: startOfPeriod,
-                    lte: endOfPeriod,
-                  },
-                },
+          where: {
+            candidate: {
+              hubstaff_id: {
+                in: hubstaffUserIds,
               },
             },
-          })
+            OR: [
+              { organization_id: organization_id },
+              ...(org.hubspot_id
+                ? [{ hubspot_organization_id: org.hubspot_id }]
+                : []),
+            ],
+          },
+          include: {
+            candidate: {
+              include: {
+                // Needed by computeCandidateRates (via fallbackHourlyRate) to pick the
+                // bilingual vs. english floor price when a worker has no salary/hourly_pay_rate.
+                languages: true,
+              },
+            },
+            tickets: {
+              where: {
+                type: {
+                  equals: 'bonus',
+                  mode: 'insensitive',
+                },
+                org_id: organization_id,
+                status: 'resolved',
+                createdAt: {
+                  gte: startOfPeriod,
+                  lte: endOfPeriod,
+                },
+              },
+            },
+          },
+        })
         : [];
 
     // Fallback bill rate source for workers with neither a salary nor a candidate
@@ -576,10 +576,10 @@ export class InvoiceWorker extends WorkerHost {
     const ptoRequests =
       uniqueUserIdsForPto.length > 0
         ? await this.hubstaff.getTimeOffRequests(
-            uniqueUserIdsForPto,
-            startDateISO,
-            endDateISO,
-          )
+          uniqueUserIdsForPto,
+          startDateISO,
+          endDateISO,
+        )
         : [];
 
     const approvedPtos = ptoRequests.filter((pto) => pto.status === 'approved');
@@ -998,8 +998,8 @@ export class InvoiceWorker extends WorkerHost {
                 : new Decimal(0),
               final_total: allowFees
                 ? lineTotal
-                    .add(new Decimal(ops || 0))
-                    .add(new Decimal(fee || 0))
+                  .add(new Decimal(ops || 0))
+                  .add(new Decimal(fee || 0))
                 : lineTotal,
               is_full_time: isFullTime,
               created_by,
