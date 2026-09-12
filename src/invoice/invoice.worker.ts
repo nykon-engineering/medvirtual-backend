@@ -224,15 +224,7 @@ export class InvoiceWorker extends WorkerHost {
     }
 
     const payload = job.data;
-    const {
-      job_id,
-      organization_id,
-      billing_start_date,
-      billing_end_date,
-      created_by,
-      is_prebill,
-      isCustom,
-    } = payload;
+    const { job_id, organization_id, created_by, isCustom } = payload;
 
     try {
       // 1. Mark job as "processing"
@@ -377,6 +369,21 @@ export class InvoiceWorker extends WorkerHost {
           await tx.invoice.update({
             where: { id: invoice.id },
             data: { current_version_id: version.id },
+          });
+
+          // 4. Create Audit Log
+          await tx.invoiceAuditLog.create({
+            data: {
+              invoice_id: invoice.id,
+              invoice_version_id: version.id,
+              actor_id: created_by,
+              event: 'invoice_created',
+              new_value: {
+                status: InvoiceStatus.draft,
+                is_custom: true,
+                is_prebill: is_prebill || false,
+              },
+            },
           });
 
           return invoice;
@@ -658,7 +665,7 @@ export class InvoiceWorker extends WorkerHost {
 
         // 3. Create Line Items — one primary InvoiceLineItem per worker who tracked time
         // or was assumed to (prebill), plus nested overtime/bonus/reconciliation lines.
-        for (const [userId, stats] of userSummary.entries()) {
+        for (const [userId] of userSummary.entries()) {
           // Find Staff & Candidate
           const staff =
             staffRecords.find(
@@ -1136,7 +1143,7 @@ export class InvoiceWorker extends WorkerHost {
         }
 
         // 5. Update Version Totals
-        const finalVersion = await tx.invoiceVersion.update({
+        await tx.invoiceVersion.update({
           where: { id: version.id },
           data: {
             subtotal,
@@ -1148,6 +1155,21 @@ export class InvoiceWorker extends WorkerHost {
         await tx.invoice.update({
           where: { id: invoice.id },
           data: { current_version_id: version.id },
+        });
+
+        // 7. Create Audit Log
+        await tx.invoiceAuditLog.create({
+          data: {
+            invoice_id: invoice.id,
+            invoice_version_id: version.id,
+            actor_id: created_by,
+            event: 'invoice_created',
+            new_value: {
+              status: InvoiceStatus.draft,
+              is_custom: false,
+              is_prebill: is_prebill || false,
+            },
+          },
         });
 
         return invoice;
